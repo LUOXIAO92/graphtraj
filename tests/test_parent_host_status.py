@@ -422,8 +422,10 @@ def test_hook_diagnostics_preserve_native_events_and_do_not_answer_approvals(hos
     """The existing public observer projects native evidence without controlling Main."""
     (host_peer / 'mode').write_text('active')
     (host_peer / 'pending-request').touch()
+    # The deadline also bounds starting the proxy (372); under load 1 s expired before the first
+    # read (491). The observer returns as soon as the host is idle, so 30 s only bounds a stuck run.
     result = bind(host_peer)({'action':'execute', 'feature':'parent_status',
-                             'arguments':{'timeout_seconds':1, 'include_hooks':True}})
+                             'arguments':{'timeout_seconds':30, 'include_hooks':True}})
     assert not result.failed, result.document
     document = result.document
     assert document['native_identity']['source'] == 'appServer'

@@ -121,10 +121,17 @@ def prepare(project: Path) -> int:
     return rc or (0 if roles_ok else 3) or (0 if ready else 4)
 
 
+def exists(path: Path, directory: bool = False) -> bool:
+    try:
+        return path.is_dir() if directory else path.exists()
+    except PermissionError:
+        return False
+
+
 def pisandbox(_unused: str) -> int:
-    missing = [f'{k}={PI[k]}' for k in ('sandbox_python', 'agent_dir') if not Path(PI[k]).exists()]
+    missing = [f'{k}={PI[k]}' for k in ('sandbox_python', 'agent_dir') if not exists(Path(PI[k]))]
     parts = PI['sandbox_path'].split(':')
-    missing += [f'sandbox_path entry {p}' for p in parts if not Path(p).is_dir()]
+    missing += [f'sandbox_path entry {p}' for p in parts if not exists(Path(p), directory=True)]
     srt = next((str(Path(p) / 'srt') for p in parts if os.access(Path(p) / 'srt', os.X_OK)), None)
     if srt is None:
         missing.append('srt on sandbox_path')

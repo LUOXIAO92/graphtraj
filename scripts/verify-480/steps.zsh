@@ -44,7 +44,8 @@ project() {  # project <venv> <dir>: git init, graphtraj setup, roles and Task 1
       && git -c user.name=480 -c user.email=480@invalid commit -qm "Initial source") || return 1
     (cd $proj && print y | clean $venv/bin/graphtraj setup 2>&1 | tail -2) || return 1
   fi
-  probe $venv $proj prepare $proj || { print "STOP: prepare failed in $proj (2 register, 3 roles, 4 not ready)"; return 1; }
+  probe $venv $proj prepare $proj || { print "STOP: prepare failed in $proj (2 register, 3 roles, 4 not ready)"
+    [[ -n ${VERIFY480_NO_MODEL:-} ]] && print "(rehearsal: continuing)" || return 1; }
 }
 
 step_00() {

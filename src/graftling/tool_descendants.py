@@ -88,6 +88,27 @@ def identity(pid: int) -> Identity | None:
     return None
 
 
+def is_zombie(pid: int) -> bool:
+    """Return whether ``pid`` has exited and only waits for its parent to reap it.
+
+    Such a zombie still answers ``kill(pid, 0)`` but runs nothing. A process
+    this user cannot read is not reported as a zombie.
+    """
+    try:
+        if sys.platform == 'darwin':
+            # PROC_PIDTBSDINFO with a nonzero arg includes zombies (XNU findzomb); pbi_status at 4.
+            buffer = ctypes.create_string_buffer(136)
+            if _proc().proc_pidinfo(pid, 3, 1, buffer, 136) < 136:
+                return False
+            return int.from_bytes(buffer.raw[4:8], sys.byteorder) == _ZOMBIE_DARWIN
+        if sys.platform.startswith('linux'):
+            stat = Path(f'/proc/{pid}/stat').read_text()
+            return stat[stat.rindex(')') + 2:].split()[0] in ('Z', 'X')
+    except (OSError, ValueError, IndexError):
+        return False
+    return False
+
+
 def _foreign(pid: int, marker: str) -> bool:
     """Whether ``pid``'s environment is readable and lacks exactly this marker (boundary rule)."""
     view = _process_view(pid)
@@ -128,19 +149,27 @@ def _table() -> dict[int, Identity]:
 
 def _descend(table: dict[int, Identity], roots: set[int], marker: str, foreign: set[tuple[int, int]],
              skip: set[int] | frozenset[int] = frozenset()) -> dict[int, Identity]:
-    """Return the descendants of ``roots`` in ``table`` that pass the boundary rule."""
+    """Return the descendants of ``roots`` in ``table`` that pass the boundary rule.
+
+    A child judged foreign is added to ``foreign`` by its (pid, start) and not
+    judged again, unless it still shows exactly its parent's argv and
+    environment: between fork and exec a child is a copy of its parent, so it
+    is left unjudged and a later sample judges what it executes (496).
+    """
     children: dict[int, list[Identity]] = {}
     for item in table.values():
         children.setdefault(item.ppid, []).append(item)
     found: dict[int, Identity] = {}
     pending = list(roots)
     while pending:
-        for child in children.get(pending.pop(), ()):
+        parent = pending.pop()
+        for child in children.get(parent, ()):
             key = (child.pid, child.start)
             if child.pid in found or child.pid in skip or child.pid in roots or key in foreign:
                 continue
             if _foreign(child.pid, marker):
-                foreign.add(key)
+                if _process_view(child.pid) != _process_view(parent):
+                    foreign.add(key)
                 continue
             found[child.pid] = child
             pending.append(child.pid)

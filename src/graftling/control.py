@@ -199,7 +199,11 @@ def _release_reserved(execution: dict) -> None:
 
 
 def _alive(pid: object) -> bool:
-    """Return whether a process with ``pid`` still exists.
+    """Return whether a process with ``pid`` still exists and has not exited.
+
+    An exited process its parent has not reaped yet (a zombie) still answers
+    ``kill(pid, 0)`` but runs nothing, so it is not alive (496). A dead
+    owner's Runtime is reparented, and its new parent may reap it late.
 
     ponytail: PID reuse is not distinguished; the owned_at fact is kept for a
     consumer that needs to compare process start times.
@@ -215,7 +219,9 @@ def _alive(pid: object) -> bool:
         return False
     except PermissionError:
         return True
-    return True
+    from graftling.tool_descendants import is_zombie
+
+    return not is_zombie(pid)
 
 
 def _group_alive(pid: int) -> bool:

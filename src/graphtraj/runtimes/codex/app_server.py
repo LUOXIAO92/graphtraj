@@ -19,7 +19,8 @@ from graftling.codex import (
     CodexSession,
 )
 
-# The completion checker's fork-only profile: Main's own with Codex managed network enabled.
+# The completion checker's former fork-only profile (Main's own with Codex managed
+# network). Not selected since 485: Codex 0.169.0 fails a fork's model requests with it.
 CHECKER_PERMISSION_PROFILE = 'graphtraj_checker'
 
 _DEFAULT_STOP_INSTRUCTION = (

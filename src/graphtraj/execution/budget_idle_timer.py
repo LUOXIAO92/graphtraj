@@ -9,7 +9,10 @@ Worker starts one detached timer process for that Session. It runs no
 Runtime or model: it sleeps until the threshold and then exits without
 acting if the Session runs an execution again (that execution's own monitor
 observes it), if a newer timer replaced it, if the Session record was
-removed, or if the Task is stopped or its directory removed. Otherwise it observes the thresholds
+removed, or if the Task is stopped or its directory removed. It also exits
+once the watched work ended (490): the member was retired (its active
+``mapping.yml`` is gone), its Team is retiring or retired, or the Task was
+accepted or integrated (cleanup keeps that recorded status). Otherwise it observes the thresholds
 with ``check_elapsed`` (no stopping sample: stops stay with running
 executions) and calls ``deliver_parent_notices`` with the Session as
 observer, so the
@@ -21,6 +24,12 @@ Its life is bounded (454): waiting ends at the last elapsed threshold or at
 one of the exits above, and each delivery attempt is given at most
 ``DELIVERY_SECONDS``: a parent lock or connection that never answers ends the
 timer, and the undelivered notice stays retained for the next execution start.
+
+A delivery to an idle parent resumes it: ``runner_control._send_session``
+starts the parent's Worker as a child of this process and returns once the
+Worker owns the Session. Nothing waits for that Worker, so the timer process
+collects its ended children before each sleep slice (490); otherwise the
+ended Worker stays a zombie that still answers to its recorded pid.
 """
 
 from __future__ import annotations
@@ -46,9 +55,12 @@ from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_models import MEMBER_RUN_ENV
 
 TIMER_FILE_NAME = "budget-timer.yml"
-# Sleep in short slices so a replaced or cleaned Session's timer exits soon.
-SLICE_SECONDS = 30.0
+# Sleep in short slices so a timer whose work ended exits soon (490: was 30).
+SLICE_SECONDS = 5.0
 MARGIN_SECONDS = 1.0
+# Task statuses after acceptance: the Team's work ended (490). A rework moves
+# the Task back to ``reworking`` and its next execution starts a new timer.
+ENDED_TASK_STATUSES = frozenset({"awaiting-integration", "integrating", "integrated"})
 # Upper bound of one delivery attempt (flock waits and parent send included).
 DELIVERY_SECONDS = 300.0
 
@@ -101,6 +113,33 @@ def _current_token(session_directory: Path) -> str | None:
     return record.get("token") if isinstance(record, dict) else None
 
 
+def _read_record(path: Path) -> dict | None:
+    """Read one YAML mapping; None when it is missing or unreadable."""
+    try:
+        record = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def _work_ended(session_directory: Path, task_directory: Path) -> bool:
+    """Whether the watched member's work ended (490).
+
+    Retirement removes the member's active ``mapping.yml``; a Team being
+    closed is ``retiring`` or ``retired``; an accepted or integrated Task
+    keeps that status, also after cleanup.
+    """
+    mapping = _read_record(session_directory / "mapping.yml")
+    if mapping is None:
+        return True
+    task = _read_record(task_directory / "task.yml") or {}
+    if task.get("status") in ENDED_TASK_STATUSES:
+        return True
+    team_file = task_directory / "teams" / str(mapping.get("team_generation")) / "team.yml"
+    team = _read_record(team_file) or {}
+    return team.get("status") in {"retiring", "retired"}
+
+
 def _running(session_directory: Path, ended_worker: int | None) -> bool:
     """Whether a later execution owns the Session; the ending Worker does not count."""
     heartbeat = read_heartbeat(session_directory)
@@ -112,6 +151,7 @@ def _should_exit(session_directory: Path, token: str, monitor: ExecutionBudgetMo
                  ended_worker: int | None) -> bool:
     return (not session_directory.is_dir() or not monitor.task_directory.is_dir()
             or _current_token(session_directory) != token
+            or _work_ended(session_directory, monitor.task_directory)
             or _running(session_directory, ended_worker) or monitor.is_stopped())
 
 
@@ -154,7 +194,30 @@ def run_idle_budget_timer(
             return delivered  # Not crossed after all (clock skew); never spin.
 
 
+def _collect_ended_children() -> None:
+    """Collect every ended child of this process without blocking (490).
+
+    The timer's only children are parent Workers that a delivery started.
+    Only the timer process calls this: in another process it could collect
+    children that their own owner still waits for.
+    """
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if pid == 0:
+            return
+
+
+def _sleep_collecting_children(seconds: float) -> None:
+    """Collect ended children, then sleep one slice."""
+    _collect_ended_children()
+    time.sleep(seconds)
+
+
 def main(argv: list[str]) -> int:
+    """Run the timer process: ``<session directory> <token> <ended Worker pid>``."""
     session_directory, token, ended_worker = Path(argv[0]), argv[1], int(argv[2])
     try:
         from graphtraj.execution.runner_status import read_alias_mapping
@@ -165,7 +228,7 @@ def main(argv: list[str]) -> int:
         if monitor is None or not isinstance(role, str) or not role:
             return 0
         run_idle_budget_timer(session_directory, token, monitor, role, ended_worker=ended_worker,
-                              delivery_seconds=DELIVERY_SECONDS)
+                              sleep=_sleep_collecting_children, delivery_seconds=DELIVERY_SECONDS)
     except (RunnerError, OSError, ValueError, KeyError, yaml.YAMLError):
         return 1
     return 0

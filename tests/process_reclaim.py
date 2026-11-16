@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -40,6 +41,34 @@ def reclaim_test_run(value: str | None = None) -> dict:
     """Stop the processes carrying this run's value; report what was found."""
     value = value or os.environ.get(TEST_RUN_ENV, "")
     return stop_marked_processes(value, exclude=ancestor_pids(), variable=TEST_RUN_ENV)
+
+
+def end_budget_timers(directory: Path) -> int:
+    """End the idle budget timers whose Sessions live under ``directory`` (490).
+
+    Removing a Session's ``budget-timer.yml`` is the timer's own exit: the
+    timer that no longer finds its record exits at its next sleep slice
+    without acting. No process is signalled. Returns how many records went.
+    """
+    from graphtraj.execution.budget_idle_timer import TIMER_FILE_NAME
+
+    records = list(directory.rglob(TIMER_FILE_NAME))
+    for record in records:
+        record.unlink(missing_ok=True)
+    return len(records)
+
+
+@pytest.fixture(autouse=True)
+def end_test_budget_timers(request: pytest.FixtureRequest):
+    """Timers a test's Runner Sessions started end with that test (490).
+
+    pytest keeps recent temporary directories, so without this a timer of a
+    passed test would wait for its last elapsed threshold.
+    """
+    yield
+    directory = (request.node.funcargs or {}).get("tmp_path")
+    if isinstance(directory, Path) and directory.is_dir():
+        end_budget_timers(directory)
 
 
 def pytest_configure(config: pytest.Config) -> None:

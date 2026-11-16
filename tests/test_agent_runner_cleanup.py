@@ -971,6 +971,31 @@ def test_installed_cleanup_refuses_an_executing_task_agent_without_partial_clean
     ).returncode == 0
 
 
+def test_installed_cleanup_does_not_count_an_ended_uncollected_worker_as_executing(
+    integrated_task: DeliveredTask,
+) -> None:
+    """A recorded Worker that ended but its parent never collected (a zombie) is not busy (490)."""
+    task = integrated_task
+    mapping_directory = _task_mappings(task)[0]
+    mapping_file = mapping_directory / "mapping.yml"
+    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    ended = subprocess.Popen([sys.executable, "-c", "pass"])
+    try:
+        # Wait for its end without collecting it, so it stays <defunct>.
+        os.waitid(os.P_PID, ended.pid, os.WEXITED | os.WNOWAIT)
+        mapping["worker_pid"] = ended.pid
+        mapping["runtime_pid"] = ended.pid
+        mapping_file.write_text(yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8")
+
+        result = _cleanup(task)
+    finally:
+        ended.wait(timeout=5)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert yaml.safe_load(result.stdout)["cleanup_status"] == "cleaned"
+    assert not task.worktree.exists()
+
+
 @pytest.mark.parametrize("change", ("worktree", "branch"))
 def test_installed_cleanup_refuses_noncanonical_task_resources_without_partial_cleanup(
     change: str,

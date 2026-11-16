@@ -35,7 +35,8 @@ RTSP=$RT/lib/python3.13/site-packages
 DEPS=$BASE/deps
 STEP=${1:-help}
 REDACTION=tests/test_tool_descendants_459.py::test_recorded_and_reported_command_lines_are_redacted
-TARGETS=(tests/test_tool_descendants_459.py tests/test_tool_descendant_argv_refresh_495.py)
+REFRESH=tests/test_tool_descendant_argv_refresh_495.py
+TARGETS=(tests/test_tool_descendants_459.py $REFRESH)
 [[ -n ${VERIFY495_TESTS:-} ]] && TARGETS=(${(s:,:)VERIFY495_TESTS})   # rehearsal only
 mkdir -p $OUT $BASE
 say() { print -r -- ""; print -r -- "### $*"; }
@@ -125,13 +126,21 @@ step_R1() {
   for name in R0 R1; do
     print -r -- "491 $name: $(grep -F -- $REDACTION $R491/$name-repeat/counts.txt 2>/dev/null || print 'not found')"
   done
-  local row=$(grep -F -- $REDACTION $res/counts.txt 2>/dev/null)
-  local failed=${${(z)row}[1]:-} passed=${${(z)row}[2]:-}
-  print -r -- "495 R1: ${row:-not found}"
-  if [[ -n $row && $failed == 0 && ${passed:-0} -gt 0 ]]; then
-    print "PASS R1 redaction test: 0 failures in $passed results (491: dev 16/180, 491 candidate 13/180)"
+  # PASS needs 0 failures (and >0 passes) for the redaction test and for every test of the 495 file;
+  # the other rows are printed above as they are.
+  local ids=($REDACTION ${(f)"$(grep -o -- "$REFRESH::[A-Za-z0-9_]*" $res/counts.txt 2>/dev/null)"})
+  (( ${#ids} >= 3 )) || print "FAIL R1: the 495 file's tests are missing from $res/counts.txt"
+  local ok=$(( ${#ids} >= 3 )) id row failed passed
+  for id in $ids; do
+    row=$(grep -F -- "$id" $res/counts.txt 2>/dev/null | head -1)
+    failed=${${(z)row}[1]:-} passed=${${(z)row}[2]:-}
+    print -r -- "495 R1: ${row:-not found: $id}"
+    [[ -n $row && $failed == 0 && ${passed:-0} -gt 0 ]] || ok=0
+  done
+  if (( ok )); then
+    print "PASS R1: 0 failures for the redaction test (491: dev 16/180, 491 candidate 13/180) and every 495 test"
   else
-    print "FAIL R1 redaction test: ${failed:-no} failures, ${passed:-no} passes (raw text in $res/failures/)"
+    print "FAIL R1: a failing or missing redaction/495 test above (raw text in $res/failures/)"
   fi
   next "zsh $THIS SUITE 2>&1 | tee $OUT/SUITE.txt"
 }

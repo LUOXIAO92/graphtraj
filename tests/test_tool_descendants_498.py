@@ -33,7 +33,16 @@ import pytest
 import graftling.tool_descendants
 from graftling.member_processes import MEMBER_RUN_ENV, _process_view
 from graftling.tool_descendants import DescendantSampler, Identity, identity, stop_tool_processes
-from test_tool_descendants_459 import argv, is_alive, stop_own, wait_for
+from test_tool_descendants_459 import argv, is_alive, stop_own as _stop_own_459, wait_for
+
+
+def stop_own(items) -> None:
+    """459's cleanup (only processes this test started, pid and start checked), tolerating one that exits meanwhile."""
+    for item in items:
+        try:
+            _stop_own_459([item])
+        except ProcessLookupError:
+            pass  # it exited between the identity check and the kill
 
 pytestmark = pytest.mark.skipif(not (sys.platform == 'darwin' or sys.platform.startswith('linux')),
                                 reason='macOS and Linux process tables')

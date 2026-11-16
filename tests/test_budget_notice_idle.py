@@ -300,7 +300,9 @@ def _timer_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, overdue: 
     harness = tmp_path / "harness"
     task = harness / "tasks" / "490-timed"
     task.mkdir(parents=True)
-    (task / "task.md").write_text(_budget_body(total=1))
+    # 60 minutes: after the planned end the next threshold is minutes away,
+    # so no later delivery's process start collects the first child.
+    (task / "task.md").write_text(_budget_body(total=60))
     (task / "task.yml").write_text(yaml.safe_dump({"current_definition": "task.md",
                                                   "status": "implementing"}))
     _set_status(task / "teams" / "1" / "team.yml", "active")
@@ -318,7 +320,7 @@ def _timer_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, overdue: 
     monitor.check("team_leader", "team_leader")
     if overdue:
         state = _state(task)
-        state["started_at"] -= 61
+        state["started_at"] -= 60 * 60 + 1
         (task / "execution-budget.yml").write_text(yaml.safe_dump(state))
     log = tmp_path / "notices.log"
     script = tmp_path / "timer.py"
@@ -378,7 +380,7 @@ def test_timer_process_collects_the_worker_its_delivery_started_and_ends_with_it
     try:
         assert _wait_until(lambda: log.is_file() and log.read_text().strip(), 30)
         child, key = log.read_text().split()
-        assert key == "elapsed_minutes:1"
+        assert key == "elapsed_minutes:60"
         # The child ended at once; the timer, still waiting for its next
         # threshold, collected it instead of leaving it <defunct>.
         assert _wait_until(lambda: _state_of(int(child)) == "gone", timers.SLICE_SECONDS + 5), \

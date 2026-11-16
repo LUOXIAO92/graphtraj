@@ -177,6 +177,23 @@ print(c[-1]["session"], (c[-1].get("connection") or {}).get("codex_home", "")) i
 step_S() {
   say "[S] full suite of the candidate checkout $SRC ($(git -C $SRC rev-parse HEAD)) in its own test venv $VT, 6 shards (scripts/run_test_shards.py). Dialog: none. Limit 1500 s (stops the whole process group)."
   make_venv $VT -e $SRC/src/graftling -e $SRC || { print "STOP: test venv install failed (text above)"; return 1; }
+  # The suite's installed-environment tests make a nested venv whose .pth names only $VT's own purelib
+  # (tests/conftest.py _install_commands); a .pth inside a .pth-added directory is not read, so the
+  # dependencies must be in $VT's purelib itself, not behind 484-deps.pth.
+  local site=$($VT/bin/python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+  for x in $DEPS/*(N); do [[ -e $site/${x:t} ]] || ln -s ${x:A} $site/${x:t}; done
+  rm -f $site/484-deps.pth
+  local nest=$BASE/nested-check
+  rm -rf $nest && $VT/bin/python -m venv --system-site-packages $nest \
+    && print -r -- $site > $($nest/bin/python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/graphtraj_test_dependencies.pth \
+    && clean $nest/bin/python -I -c 'import websockets, click, yaml' \
+    && print "nested venv imports: OK (websockets, click, yaml via $site; conftest installs the graphtraj/graftling wheels there itself)" \
+    || { print "STOP: nested venv imports failed (error above)"; return 1; }
+  clean $VT/bin/python -I -c 'import sys, graphtraj, graftling
+ok = all(m.__file__.startswith(sys.argv[1]) for m in (graphtraj, graftling))
+print("test venv imports the checkout:", "OK" if ok else "NO", graphtraj.__file__, graftling.__file__); sys.exit(0 if ok else 1)' $SRC/src \
+    || { print "STOP: the test venv does not import the checkout"; return 1; }
+  rm -rf $nest
   local tmp=${TMPDIR:-/tmp} L=$OUT/S-shards
   print "pytest temp base: ${tmp:A} | outside the Harness $H: $([[ ${tmp:A} != $H* ]] && print YES || print NO)"
   [[ ${tmp:A} != $H* ]] || { print "STOP: TMPDIR is inside the Harness"; return 1; }

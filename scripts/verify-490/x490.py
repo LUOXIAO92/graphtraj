@@ -1,10 +1,16 @@
 """Task 490 real-host helper, run by steps.zsh with the candidate venv's Python inside the isolated project.
 
-    python -I x490.py prepare <project>            roles + Task 1 (1-minute budget, B) and Task 2 (30 minutes, A), ready
+    python -I x490.py prepare <project>            roles + Task 2 (30 minutes, A) and Task 3 (5 minutes, B), ready
     python -I x490.py accept <project> <task id>    implementing -> reviewing -> awaiting-integration, then task integrate
     python -I x490.py timers <project>              budget_idle_timer processes whose Session lies in <project>
-    python -I x490.py watch <project> <alias> <s>   follow the Leader's Worker a timer delivery started (B)
+    python -I x490.py ended <project> <alias> <s>   the Session's current execution has its terminal record
+    python -I x490.py settle <project> <leader> <engineer> <s>   both ended and no new execution for 20 s
+    python -I x490.py engineer-timer <project> <engineer> <task id>   its timer runs with the current token, threshold ahead
+    python -I x490.py watch <project> <leader> <engineer> <s>   the Leader Worker a timer delivery starts: parent, collection
+    python -I x490.py delivered <project> <engineer> <leader>   the Engineer's budget notice reached the Leader
     python -I x490.py notices <project>             execution-budget-exceeded records per Session (time, key, delivery)
+
+Task 1 (1 minute) of an earlier 00 is left registered and unused: its thresholds pass while the Team runs (R1).
 
 It never signals a process. Exit status: 0 = the observation passed, 1 = it failed, 2 = could not observe.
 """
@@ -36,7 +42,7 @@ execution_budget:
 
 Reply with one line DONE. Use no tool.
 '''
-TASKS = {'1': ('timer-b', 1), '2': ('timer-a', 30)}
+TASKS = {'2': ('timer-a', 30), '3': ('timer-b5', 5)}
 
 
 def run(*argv: str, cwd: Path) -> subprocess.CompletedProcess:
@@ -148,6 +154,98 @@ def timers(project: Path) -> int:
     return 0
 
 
+def session_dir(project: Path, alias: str) -> Path:
+    return project / '.graphtraj/runner/sessions' / alias
+
+
+def read(path: Path) -> dict:
+    try:
+        record = yaml.safe_load(path.read_text())
+    except (OSError, yaml.YAMLError):
+        return {}
+    return record if isinstance(record, dict) else {}
+
+
+def execution_state(project: Path, alias: str) -> tuple[str | None, bool]:
+    """(current execution id from mapping.yml, whether execution.yml is that execution's terminal record).
+
+    execution.yml keeps the previous execution's outcome after a resume, so only a
+    matching execution_id says the current execution ended.
+    """
+    directory = session_dir(project, alias)
+    current = read(directory / 'mapping.yml').get('execution_id')
+    terminal = read(directory / 'execution.yml')
+    return current, current is not None and terminal.get('execution_id') == current and 'outcome' in terminal
+
+
+def ended(project: Path, alias: str, seconds: float) -> int:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        current, done = execution_state(project, alias)
+        if done:
+            print(f'{alias}: execution {current} ended ({read(session_dir(project, alias) / "execution.yml").get("outcome")})')
+            return 0
+        time.sleep(1)
+    print(f'{alias}: current execution {execution_state(project, alias)[0]} did not end within {seconds:.0f} s')
+    return 2
+
+
+def settle(project: Path, leader: str, engineer: str, seconds: float) -> int:
+    """Both Sessions ended and no new execution started for 20 s (the Engineer's completion resumes the Leader)."""
+    deadline = time.time() + seconds
+    stable_since, last = None, None
+    while time.time() < deadline:
+        states = (execution_state(project, leader), execution_state(project, engineer))
+        if all(done for _, done in states):
+            if states != last:
+                stable_since, last = time.time(), states
+            elif time.time() - stable_since >= 20:
+                print(f'settled: Leader execution {states[0][0]} and Engineer execution {states[1][0]} ended, '
+                      f'no new execution for 20 s')
+                return 0
+        else:
+            stable_since, last = None, None
+        time.sleep(1)
+    print(f'not settled within {seconds:.0f} s: Leader {execution_state(project, leader)}, '
+          f'Engineer {execution_state(project, engineer)}')
+    return 2
+
+
+def engineer_timer(project: Path, engineer: str, task_id: str) -> int:
+    """The Engineer's timer process runs with the token its budget-timer.yml names, and a threshold is ahead."""
+    from graphtraj.execution.execution_budget import ExecutionBudgetMonitor
+
+    directory = session_dir(project, engineer)
+    token = read(directory / 'budget-timer.yml').get('token')
+    rows = [row for row in timer_rows(project) if f' {directory} ' in f' {row[3]} ']
+    current = [row for row in rows if token is not None and f' {token} ' in f' {row[3]} ']
+    name = TASKS[task_id][0]
+    monitor = ExecutionBudgetMonitor(project / '.graphtraj/state/tasks' / f'{task_id}-{name}', task_id, name)
+    due = monitor.next_elapsed_threshold_at()
+    print(f'Engineer timer record token: {token or "none"}; timer processes for its Session: '
+          f'{[row[0] for row in rows]}; with the current token: {[row[0] for row in current]}')
+    print('next threshold: ' + (time.strftime('%H:%M:%S', time.localtime(due)) + f' (in {due - time.time():.0f} s)'
+                                if due is not None else 'none'))
+    if due is None:
+        print('STOP reason: thresholds passed while running (no threshold ahead)')
+        return 2
+    if not current:
+        print('STOP reason: no Engineer timer with the current token (none started, or it already exited)')
+        return 2
+    return 0
+
+
+def delivered(project: Path, engineer: str, leader: str) -> int:
+    path = session_dir(project, engineer) / 'parent-notices.jsonl'
+    rows = [json.loads(line) for line in path.read_text().splitlines()] if path.is_file() else []
+    hits = [row for row in rows if (row.get('identity') or {}).get('type') == 'execution-budget-exceeded'
+            and row.get('parent') == leader and row.get('delivery') == 'received']
+    for row in hits:
+        print(f'  {time.strftime("%H:%M:%S", time.localtime(row["at"]))} {row["identity"].get("key")} '
+              f'-> {row["parent"]} ({row.get("input")})')
+    return 0 if hits else 1
+
+
 def heartbeat_pid(project: Path, alias: str) -> int | None:
     try:
         return yaml.safe_load((project / '.graphtraj/runner/sessions' / alias / 'heartbeat.yml').read_text())['worker_pid']
@@ -155,43 +253,44 @@ def heartbeat_pid(project: Path, alias: str) -> int | None:
         return None
 
 
-def watch(project: Path, alias: str, seconds: float) -> int:
-    """Follow the Worker that a timer's delivery starts for ``alias``: who its parent is, and how it ends."""
-    first = heartbeat_pid(project, alias)
-    print(f'{alias}: worker before the delivery {first}; waiting up to {seconds:.0f} s for a new Worker')
+def watch(project: Path, leader: str, engineer: str, seconds: float) -> int:
+    """Follow the Leader Worker that the Engineer's timer delivery starts: its parent, then its collection."""
+    first = heartbeat_pid(project, leader)
+    engineer_directory = str(session_dir(project, engineer))
+    print(f'{leader}: Worker before the delivery {first}; waiting up to {seconds:.0f} s for a new Worker')
     deadline = time.time() + seconds
     worker = None
     while time.time() < deadline:
-        pid = heartbeat_pid(project, alias)
+        pid = heartbeat_pid(project, leader)
         if pid is not None and pid != first:
             worker = pid
             break
         time.sleep(0.5)
     if worker is None:
-        print('no new Worker of the Leader appeared (no delivery resumed it)')
-        return 2
+        print('parent: NO (no new Leader Worker appeared; no delivery resumed it)')
+        print('collected: NO (nothing to observe)')
+        return 1
     table = {pid: (ppid, state, command) for pid, ppid, state, command in processes()}
     parent = table.get(worker, (None, '', ''))[0]
-    parent_command = table.get(parent, (None, '', ''))[2] if parent else ''
-    print(f'new Leader Worker {worker}: parent {parent} '
-          f'({"a budget_idle_timer" if "budget_idle_timer" in parent_command else parent_command[:100] or "gone"})')
+    command = table.get(parent, (None, '', ''))[2] if parent else ''
+    timer_parent = 'graphtraj.execution.budget_idle_timer' in command and f' {engineer_directory} ' in f' {command} '
+    print(f'parent: {"OK" if timer_parent else "NO"} (new Leader Worker {worker}, parent {parent}: '
+          f'{command[:200] or "not found"})')
     ended_at = None
-    zombie_seconds = 0.0
-    while time.time() < deadline + 240:
-        row = {pid: state for pid, _, state, _ in processes()}.get(worker)
+    while time.time() < deadline + 300:
+        state = {pid: row for pid, _, row, _ in processes()}.get(worker)
         now = time.time()
-        if row is None:
-            print(f'Worker {worker}: gone (collected) {0 if ended_at is None else now - ended_at:.1f} s after it ended')
-            return 0
-        if row.startswith('Z'):
+        if state is None:
+            print(f'collected: OK (Worker {worker} gone {0 if ended_at is None else now - ended_at:.1f} s after it ended)')
+            return 0 if timer_parent else 1
+        if state.startswith('Z'):
             ended_at = ended_at or now
-            zombie_seconds = now - ended_at
-            if zombie_seconds > 15:
-                print(f'Worker {worker}: ZOMBIE for {zombie_seconds:.0f} s (parent {parent})')
+            if now - ended_at > 15:
+                print(f'collected: NO (Worker {worker} ZOMBIE for {now - ended_at:.0f} s under {parent})')
                 return 1
         time.sleep(1)
-    print(f'Worker {worker}: still running after the watch window')
-    return 2
+    print(f'collected: NO (Worker {worker} still running after the watch window)')
+    return 1
 
 
 def notices(project: Path) -> int:
@@ -213,8 +312,16 @@ def main() -> int:
         return accept(project, sys.argv[3])
     if command == 'timers':
         return timers(project)
+    if command == 'ended':
+        return ended(project, sys.argv[3], float(sys.argv[4]))
+    if command == 'settle':
+        return settle(project, sys.argv[3], sys.argv[4], float(sys.argv[5]))
+    if command == 'engineer-timer':
+        return engineer_timer(project, sys.argv[3], sys.argv[4])
+    if command == 'delivered':
+        return delivered(project, sys.argv[3], sys.argv[4])
     if command == 'watch':
-        return watch(project, sys.argv[3], float(sys.argv[4]))
+        return watch(project, sys.argv[3], sys.argv[4], float(sys.argv[5]))
     if command == 'notices':
         return notices(project)
     print(__doc__)

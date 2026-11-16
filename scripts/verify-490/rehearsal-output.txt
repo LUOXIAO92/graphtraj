@@ -69,3 +69,113 @@ budget timers of run none still running now: 0
 CHECK SUITE-timers: no run id in /tmp/claude-501/o490/SUITE-suite.txt (scan not meaningful)
 
 ==> next: report /tmp/claude-501/o490/00.txt A.txt B.txt SUITE.txt to the 490 Leader
+
+
+# Round 1 correction rehearsal (step B, x490 ended/settle/engineer-timer/watch/delivered), set -u, 2026-11-16 ~18:52-18:58
+# stub claude as before; stub ps prints $TMPDIR/stub490/ps.txt, rewritten by background jobs to play a Worker's start, end (Z) and collection; Session records fabricated under the rehearsal project (3-fake-leader@l1, 3-fake-engineer@e1, removed afterwards).
+
+## step B on the rehearsal project made by the earlier 00 (which has Task 1 at 1 minute): prepare registers Task 3; the stub host refuses the launch -> STOP
+
+### [B] Task 3 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the planned end and delivers to the idle Lead
+roles OK
+task 3 timer-b5: budget 5 min, status ready
+STOP: launch failed:
+retained_batch_file: /private/tmp/claude-501/b490/project/.graphtraj/state/batches/20261116T185157.497410+0900.yml
+tasks:
+- task_id: '3'
+  task_name: timer-b5
+  role: leader
+  launch_status: failed
+  error:
+    code: invalid-config
+    message: Claude Code 2.1.299 or later is required.
+Claude Code 2.1.299 or later is required.
+
+## x490 checks (driver /tmp/claude-501/r1-drive.zsh; 'nice(5) failed' lines are the driver's background jobs in the sandbox)
+== ended: stale outcome of an earlier execution (mapping names a newer one) -> not ended
+3-fake-leader@l1: current execution new1 did not end within 3 s
+  -> rc 2
+== ended: terminal record of the current execution -> ended
+3-fake-leader@l1: execution new1 ended (completed)
+  -> rc 0
+== settle: Engineer still running -> not settled within 5 s
+not settled within 5 s: Leader ('new1', True), Engineer ('e1', False)
+  -> rc 2
+== settle: both ended, stable for 20 s -> settled
+settled: Leader execution new1 and Engineer execution e1 ended, no new execution for 20 s
+  -> rc 0
+== engineer-timer: no budget accounting yet (no threshold ahead) -> STOP reason
+Engineer timer record token: tok1; timer processes for its Session: []; with the current token: []
+next threshold: none
+STOP reason: thresholds passed while running (no threshold ahead)
+  -> rc 2
+== engineer-timer: threshold ahead but no timer process with the current token -> STOP reason
+Engineer timer record token: tok1; timer processes for its Session: []; with the current token: []
+next threshold: 18:57:45 (in 300 s)
+STOP reason: no Engineer timer with the current token (none started, or it already exited)
+  -> rc 2
+== engineer-timer: timer process with the current token -> OK
+Engineer timer record token: tok1; timer processes for its Session: [700]; with the current token: [700]
+next threshold: 18:57:45 (in 300 s)
+  -> rc 0
+== watch: new Leader Worker 701 whose parent 700 is the Engineer's timer; it ends (Z), then is collected
+/tmp/claude-501/r1-drive.zsh:25: nice(5) failed: operation not permitted
+3-fake-leader@l1: Worker before the delivery 600; waiting up to 30 s for a new Worker
+parent: OK (new Leader Worker 701, parent 700: /v/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/b490/project/.graphtraj/runner/sessions/3-fake-engineer@e1 tok1 650)
+collected: OK (Worker 701 gone 3.0 s after it ended)
+  -> rc 0
+== watch: the new Worker's parent is not a timer (the Engineer's completion resumed the Leader) -> parent NO
+/tmp/claude-501/r1-drive.zsh:32: nice(5) failed: operation not permitted
+3-fake-leader@l1: Worker before the delivery 701; waiting up to 30 s for a new Worker
+parent: NO (new Leader Worker 702, parent 690: /v/python -I -m graphtraj.execution.runner_worker e.yml)
+collected: OK (Worker 702 gone 0.0 s after it ended)
+  -> rc 1
+== watch: Worker stays a zombie > 15 s -> collected NO
+/tmp/claude-501/r1-drive.zsh:38: nice(5) failed: operation not permitted
+3-fake-leader@l1: Worker before the delivery 702; waiting up to 30 s for a new Worker
+parent: OK (new Leader Worker 703, parent 700: /v/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/b490/project/.graphtraj/runner/sessions/3-fake-engineer@e1 tok1 650)
+collected: NO (Worker 703 ZOMBIE for 15 s under 700)
+  -> rc 1
+== delivered: none -> rc 1; then a received notice to the Leader -> rc 0
+  -> rc 1
+  18:40:00 elapsed_minutes:5 -> 3-fake-leader@l1 (started-parent-turn)
+  -> rc 0
+
+## B result lines and verdict (the block of step_B sourced with fabricated watch/cleanup outputs and return codes)
+== all hold
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: OK (Task 3; cleanup_status: cleaned)
+PASS B
+== parent not a timer
+### B results
+parent: NO (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: OK (Task 3; cleanup_status: cleaned)
+FAIL B (a line above is NO)
+== cleanup refused
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: NO (Task 3; cleanup_status: refused)
+FAIL B (a line above is NO)
+== notice not delivered
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: NO (Engineer execution-budget-exceeded notice received by L1)
+cleanup: OK (Task 3; cleanup_status: cleaned)
+FAIL B (a line above is NO)
+
+## cleanup line after showing the refusal code
+== cleanup refused
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: NO (Task 3; cleanup_status: refused code: worktree-busy )
+FAIL B (a line above is NO)

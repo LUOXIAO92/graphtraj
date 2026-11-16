@@ -66,13 +66,9 @@ launch() {
   grep -m1 "alias:" $OUT/$STEP-launch-$1.yml | awk '{print $NF}'
   return $rc
 }
-# wait_end <alias> <seconds>: the Session's execution.yml shows a terminal outcome.
-wait_end() {
-  local f=$P/.graphtraj/runner/sessions/$1/execution.yml i=0
-  while (( i < $2 )); do [[ -f $f ]] && grep -q "outcome:" $f && { print "$1 ended: $(grep -m1 'outcome:' $f)"; return 0; }
-    sleep 2; (( i += 2 )); done
-  print "STOP: $1 did not end within $2 s"; return 1
-}
+# wait_end <alias> <seconds>: the Session's CURRENT execution (mapping.yml execution_id) has its terminal
+# execution.yml; an earlier execution's outcome left in execution.yml after a resume does not count (R1).
+wait_end() { x490 ended $1 $2 || { print "STOP: $1 did not end within $2 s"; return 1; }; }
 cleanup() { (cd $P && clean $V/bin/agent-runner cleanup --task-id $1) > $OUT/$STEP-cleanup-$1.yml 2>&1; local rc=$?
   print "cleanup $1: rc $rc | $(grep -m1 -E 'cleanup_status|code:' $OUT/$STEP-cleanup-$1.yml)"; return $rc; }
 
@@ -134,22 +130,38 @@ step_A() {
 }
 
 step_B() {
-  say "[B] Task 1 (1-minute budget): a Leader launches one Engineer; both end. The steps remove the Leader's own timer record (its exit without a signal) so the Engineer's timer is the observer. At the planned end it delivers to the idle Leader, starting the Leader's Worker as the timer's child. The Worker must be collected (no <defunct>), and the Task then cleans up. Dialog: none expected (the Leader's agents launch is inside role_tree). Waits: Leader <= 300 s, delivery <= 180 s, watch 240 s."
-  local alias=$(launch 1 timer-b leader "Use your GraphTraj agents tool to launch exactly one child with role engineer for this Task and the instruction: Reply with one line DONE. Use no tool. Wait for its result, then reply with one line DONE.")
-  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/B-launch-1.yml; return 1; }
+  say "[B] Task 3 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the planned end and delivers to the idle Leader, starting the Leader's Worker as the timer's child. Dialog: expected none (the Leader's agents launch of one engineer is inside role_tree and the role runs permission_mode auto); if a native permission request for launching one engineer appears, the user approves it. Waits: Leader start <= 300 s, settle <= 300 s, delivery <= 420 s, collection <= 300 s."
+  # A project from an earlier 00 may lack Task 3 (it had Task 1 at 1 minute, left unused): register what is missing.
+  x490 prepare > $OUT/B-prepare.txt; local prc=$?
+  grep -E "task 3|roles" $OUT/B-prepare.txt
+  (( prc == 0 )) || { print "STOP B: roles or Task 3 not ready ($OUT/B-prepare.txt)"; return 1; }
+  local alias=$(launch 3 timer-b5 leader "Use your GraphTraj agents tool to launch exactly one child with role engineer for this Task and the instruction: Reply with one line DONE. Use no tool. Wait for its result, then reply with one line DONE.")
+  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/B-launch-3.yml; return 1; }
   print "Leader alias: $alias"
   wait_end $alias 300 || return 1
-  local eng=$(ls $P/.graphtraj/runner/sessions | grep -m1 "engineer")
-  [[ -n $eng ]] && wait_end $eng 120 || { print "STOP B: no Engineer Session was launched (Leader output in $P/.graphtraj/runner/sessions/$alias)"; return 1; }
+  local eng=$(ls $P/.graphtraj/runner/sessions | grep "^3-" | grep -m1 "engineer")
+  [[ -n $eng ]] || { print "STOP B: no Engineer Session of Task 3 was launched (Leader records: $P/.graphtraj/runner/sessions/$alias)"; return 1; }
+  print "Engineer alias: $eng"
+  say "settling: both executions ended (by execution_id) and no new execution for 20 s"
+  x490 settle $alias $eng 300 || { print "STOP B: the Leader and Engineer did not settle"; return 1; }
   sleep 2; x490 timers | tee $OUT/B-timers.txt
-  rm -f $P/.graphtraj/runner/sessions/$alias/budget-timer.yml && print "removed the Leader's own timer record"
+  say "the Engineer's timer before watching"
+  x490 engineer-timer $eng 3 || { print "STOP B: nothing to observe (reason above)"; return 1; }
+  rm -f $P/.graphtraj/runner/sessions/$alias/budget-timer.yml && print "removed the Leader's own timer record (it exits at its next 5 s slice)"
   say "watching the Leader for the Worker the Engineer's timer starts"
-  x490 watch $alias 180; local wrc=$?
+  x490 watch $alias $eng 420 | tee $OUT/B-watch.txt
   x490 notices | tee $OUT/B-notices.txt
-  say "accept + integrate + cleanup Task 1"
-  x490 accept 1 && cleanup 1; local crc=$?
+  say "the Engineer's budget notice delivered to the Leader"
+  x490 delivered $eng $alias; local drc=$?
+  say "accept + integrate + cleanup Task 3"
+  x490 accept 3; cleanup 3; local crc=$?
   sleep 8; x490 timers
-  [[ $wrc == 0 && $crc == 0 ]] && print "PASS B" || print "FAIL B (watch $wrc, cleanup $crc)"
+  say "B results"
+  grep -E "^(parent|collected):" $OUT/B-watch.txt
+  print "delivered: $([[ $drc == 0 ]] && print OK || print NO) (Engineer execution-budget-exceeded notice received by $alias)"
+  print "cleanup: $([[ $crc == 0 ]] && print OK || print NO) (Task 3; $(grep -E 'cleanup_status|code:' $OUT/B-cleanup-3.yml | tr -s ' \n' ' '))"
+  if grep -q "^parent: OK" $OUT/B-watch.txt && grep -q "^collected: OK" $OUT/B-watch.txt && [[ $drc == 0 && $crc == 0 ]]; then
+    print "PASS B"; else print "FAIL B (a line above is NO)"; fi
   next SUITE
 }
 

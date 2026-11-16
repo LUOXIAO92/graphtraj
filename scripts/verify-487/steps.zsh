@@ -1,12 +1,13 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 487: failure rates of the suite's intermittent tests, before (dev) and after (candidate), and the full suite.
-#   zsh <this file> <R0|R1|SUITE>      (from any directory; Harness root or this Worktree)
+#   zsh <this file> <R0|R1|SUITE|R463>      (from any directory; Harness root or this Worktree)
 # R0: dev 5a451267; R1: the candidate commit (this checkout's HEAD, or VERIFY487_CANDIDATE); SUITE: candidate full suite.
 # Each step: a fresh git clone of the exact commit under Harness tmp/487, its own test venv (dependencies linked
 # read-only from production .venv-runtime into the venv's own site-packages, as verify-482/484), pytest temp in
 # ${TMPDIR:-/tmp} (refused if inside the Harness). Dialog: none (no model, no native host). Run one at a time,
 # not alongside another Task's suite. Bounded waits: R0/R1 900 s + 20 s stop (about 15 min with setup);
+# R463: tests/test_dsh_tool_reclaim_463.py on dev and candidate at once, 3 workers x10 each, 300 s (+20 s) + builds if missing.
 # SUITE 1500 s + a 600 s rerun of its failing files on dev (+ a dev build if R0's clone is missing): plan 35 min.
 # R0/R1 runs: 6 workers x (core set x6 = 36 runs each, slow D/G x2 = 12 each, observe-only files x1 = 6 each, last).
 set -u
@@ -133,11 +134,67 @@ except subprocess.TimeoutExpired:
   next "report $OUT/R0.txt, R1.txt, SUITE.txt to the 487 Leader"
 }
 
+# Reuse tmp/487/<name> when its clone is at <commit> and its venv exists; else build it.
+ensure() {
+  local name=$1 commit=$2 D=$BASE/$1
+  if [[ $(git -C $D/src rev-parse HEAD 2>/dev/null) == $(git -C $SRC rev-parse $commit) && -x $D/venv/bin/python ]]; then
+    print "$name clone reused: $D/src at $(git -C $D/src rev-parse HEAD)"
+  else build $commit $D || return 1; fi
+}
+
+step_R463() {
+  # The candidate is the commit SUITE ran on (its R1 clone is reused); src/ and tests/ are unchanged after it.
+  local T=tests/test_dsh_tool_reclaim_463.py CAND=${VERIFY487_CANDIDATE:-3d748267ca71d6d1242450c58eeb56b61bc2edc3}
+  say "[R463] $T on dev $DEV and candidate $CAND at the same time (3 workers each, x${VERIFY487_R463_PASSES:-10} passes per worker). Dialog: none. Limit 300 s (+20 s stop) per side."
+  check_tmp || return 1
+  ensure R0 $DEV || return 1
+  ensure R1 $CAND || return 1
+  local side
+  for side in dev cand; do rm -rf $OUT/R463-$side; mkdir -p $OUT/R463-$side; done
+  print "== start $(date +%T)"
+  (cd $BASE/R0/src && clean $BASE/R0/venv/bin/python -I $SD/repeat.py $BASE/R0/src $OUT/R463-dev \
+     --tests $T --workers 3 --fast ${VERIFY487_R463_PASSES:-10} --limit 300 > $OUT/R463-dev/run.txt 2>&1) &
+  local dev_pid=$!
+  (cd $BASE/R1/src && clean $BASE/R1/venv/bin/python -I $SD/repeat.py $BASE/R1/src $OUT/R463-cand \
+     --tests $T --workers 3 --fast ${VERIFY487_R463_PASSES:-10} --limit 300 > $OUT/R463-cand/run.txt 2>&1) &
+  local cand_pid=$!
+  wait $dev_pid $cand_pid
+  print "== end $(date +%T); logs $OUT/R463-dev/run.txt, $OUT/R463-cand/run.txt"
+  grep -h "limit reached" $OUT/R463-dev/run.txt $OUT/R463-cand/run.txt
+  say "counts: dev $DEV (left) | candidate $CAND (right)"
+  touch $OUT/R463-dev/counts.txt $OUT/R463-cand/counts.txt
+  paste -d '|' $OUT/R463-dev/counts.txt $OUT/R463-cand/counts.txt | awk -F'|' '{printf "%-110s | %s\n", $1, $2}'
+  clean $BASE/R0/venv/bin/python -I -c '
+import sys
+def rows(path):
+    out = {}
+    for line in open(path):
+        parts = line.split()
+        if len(parts) == 4 and parts[0].isdigit():
+            out[parts[3]] = (int(parts[0]), int(parts[1]), int(parts[2]))
+    return out
+dev, cand = rows(sys.argv[1]), rows(sys.argv[2])
+worse = 0
+for node in sorted(set(dev) | set(cand)):
+    d, c = dev.get(node), cand.get(node)
+    if d is None or c is None:
+        side = "dev" if c is None else "candidate"
+        print(f"VERDICT {node}: only on {side}"); worse += c is not None and c[0] > 0; continue
+    word = "candidate MORE failures" if c[0] > d[0] else "candidate fewer failures" if c[0] < d[0] else "same failures"
+    worse += c[0] > d[0]
+    print(f"VERDICT {node}: dev {d[0]}/{sum(d)} failed, candidate {c[0]}/{sum(c)} failed -> {word}")
+print("PASS R463 the candidate fails no test more often than dev" if dev and cand and not worse
+      else "CHECK R463 (no results on a side)" if not (dev and cand) else f"FAIL R463 {worse} test(s) fail more often on the candidate")
+' $OUT/R463-dev/counts.txt $OUT/R463-cand/counts.txt
+  print "raw failures: $OUT/R463-dev/failures/, $OUT/R463-cand/failures/"
+  next "report $OUT/R463.txt to the 487 Leader"
+}
+
 dispatch() {
 case $STEP in
   R0) step_R0 ;;
-  R1|SUITE) step_$STEP ;;
-  *) print "usage: zsh $THIS <R0|R1|SUITE>   e.g. zsh $THIS R0 2>&1 | tee $OUT/R0.txt" ;;
+  R1|SUITE|R463) step_$STEP ;;
+  *) print "usage: zsh $THIS <R0|R1|SUITE|R463>   e.g. zsh $THIS R0 2>&1 | tee $OUT/R0.txt" ;;
 esac
 }
 dispatch; exit $?

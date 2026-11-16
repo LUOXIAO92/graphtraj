@@ -1,6 +1,8 @@
 """Task 487: repeat the scoped intermittent tests under parallel load and count failures per test.
 
-    python -I repeat.py <checkout> <out-dir> [--workers 6] [--fast 5] [--slow 2] [--observe 1] [--limit 900]
+    python -I repeat.py <checkout> <out-dir> [--workers 6] [--fast 5] [--slow 2] [--observe 1] [--limit 900] [--tests a,b]
+
+``--tests`` replaces the sets with those node ids or files, run as the FAST set only.
 
 Run with the test venv's Python, from anywhere. ``--workers`` processes run at
 once (the load: comparable to the 6 suite shards). Each worker runs the FAST
@@ -55,6 +57,8 @@ def main() -> int:
     parser.add_argument('--slow', type=int, default=2)
     parser.add_argument('--observe', type=int, default=1)
     parser.add_argument('--limit', type=float, default=900)
+    parser.add_argument('--tests', default='',
+                        help='comma-separated node ids or files replacing the sets: fast set only, no slow/observe')
     args = parser.parse_args()
     checkout, out = args.checkout.resolve(), args.out.resolve()
     junit, failures = out / 'junit', out / 'failures'
@@ -65,6 +69,9 @@ def main() -> int:
         file = checkout / path
         return file.is_file() and (not name or f'def {name}(' in file.read_text(encoding='utf-8'))
 
+    global FAST, SLOW, OBSERVE
+    if args.tests:
+        FAST, SLOW, OBSERVE = [node for node in args.tests.split(',') if node], [], []
     present = [node for node in FAST + SLOW + OBSERVE if exists(node)]
     print('left out (not in this checkout):', [node for node in FAST + SLOW + OBSERVE if node not in present] or 'none')
     fast = [node for node in FAST if node in present]

@@ -92,6 +92,9 @@ def _executed(pid: int) -> bool:
     return not int(stat[stat.rindex(')') + 2:].split()[6]) & 0x40
 
 
+EXECUTED = 'import time; time.sleep(300)'  # the last argument of the image MIRROR and CASCADE exec
+
+
 def recorded(sampler: DescendantSampler) -> set[int]:
     return {entry['pid'] for entry in sampler.entries.values()}
 
@@ -185,8 +188,9 @@ def test_a_fork_copy_with_this_marker_that_execs_another_execution_is_not_kept_n
 
         runtime.stdin.write(b'x')
         runtime.stdin.flush()
-        # The new arguments can read before P_EXEC is set; the rule must hold either way (correction 2).
-        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(launch)), 10), 'exec'
+        # The new image's exact argv (the fork copy's script text also holds 'time.sleep(300)'). Its
+        # arguments can read before P_EXEC is set; the rule must hold either way (correction 2).
+        assert wait_for(lambda: argv(launch)[-1:] == [EXECUTED], 10), 'exec'
         sampler.sample()
         sampler.sample()
         report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)
@@ -283,8 +287,8 @@ def test_a_provisional_entry_that_settles_foreign_is_dropped_with_everything_rec
 
         runtime.stdin.write(b'x')
         runtime.stdin.flush()
-        # The new arguments can read before P_EXEC is set; the rule must hold either way (correction 2).
-        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(copy)), 10), 'exec of the copy'
+        # The new image's exact argv (not the fork copy's script text); P_EXEC may still be clear.
+        assert wait_for(lambda: argv(copy)[-1:] == [EXECUTED], 10), 'exec of the copy'
         own = own_tree(runtime.pid)
         sampler.sample()
         report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)

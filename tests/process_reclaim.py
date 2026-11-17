@@ -16,6 +16,7 @@ cleanup never touches another shard's processes.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import time
@@ -24,7 +25,9 @@ from pathlib import Path
 
 import pytest
 
-from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes
+# graftling.member_processes is imported where it is used, not at load: conftest
+# loads this module before pytest_sessionstart, whose check names an interpreter
+# that lacks graftling or GraphTraj's installed metadata with its fix (504).
 
 # The name avoids KEY, SECRET and TOKEN, which credential filters drop, and the
 # GRAPHTRAJ_ prefix, which the isolated_runner_environment fixture removes per test.
@@ -41,6 +44,8 @@ def mark_test_run() -> str:
 
 def reclaim_test_run(value: str | None = None) -> dict:
     """Stop the processes carrying this run's value; report what was found."""
+    from graftling.member_processes import ancestor_pids, stop_marked_processes
+
     value = value or os.environ.get(TEST_RUN_ENV, "")
     return stop_marked_processes(value, exclude=ancestor_pids(), variable=TEST_RUN_ENV)
 
@@ -79,6 +84,7 @@ def await_ended_timers(value: str) -> None:
     Only waits; whatever still runs afterwards is left to the reclaim, whose
     report then names it.
     """
+    from graftling.member_processes import ancestor_pids, find_marked_processes
     from graphtraj.execution.budget_idle_timer import SLICE_SECONDS
 
     deadline = time.monotonic() + SLICE_SECONDS + 1
@@ -98,6 +104,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session: pytest.Session) -> None:
+    if importlib.util.find_spec("graftling") is None:
+        return  # pytest_sessionstart stopped this run, naming the missing graftling; no test started anything.
     value = os.environ.get(TEST_RUN_ENV, "")
     if value:
         await_ended_timers(value)

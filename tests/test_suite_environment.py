@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -95,14 +96,22 @@ def _installation_problem(executable: Path, scripts: Path) -> str:
 
 
 def _metadata_less_venv(tmp_path: Path) -> Path:
-    """A venv whose .pth imports this checkout but carries no graphtraj metadata or commands (Task 390)."""
+    """A venv whose .pth imports this checkout but carries no graphtraj metadata or commands (Task 390).
+
+    It has the suite's installed graftling, and only that package, so the start
+    check reaches the metadata rather than stopping at a missing graftling (504).
+    """
     venv = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", "--without-pip", "--system-site-packages", str(venv)],
                    check=True, timeout=120)
     python = venv / "bin" / "python"
     site = subprocess.run([str(python), "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
                           capture_output=True, text=True, check=True).stdout.strip()
-    Path(site, "zz_checkout.pth").write_text(str((PROJECT_ROOT / "src").resolve()) + "\n")
+    graftling_only = tmp_path / "graftling-only"
+    graftling_only.mkdir()
+    (graftling_only / "graftling").symlink_to(Path(importlib.util.find_spec("graftling").origin).parent)
+    Path(site, "zz_checkout.pth").write_text(
+        str((PROJECT_ROOT / "src").resolve()) + "\n" + str(graftling_only) + "\n")
     metadata = subprocess.run([str(python), "-I", "-c", "import importlib.metadata as m; "
                                "print(len(m.entry_points(group='graftling.hosts', name='graphtraj')))"],
                               capture_output=True, text=True, check=True).stdout.strip()

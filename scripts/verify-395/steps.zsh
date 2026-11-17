@@ -106,13 +106,19 @@ G)
   [[ -d $G/src/graftling ]] || { print "STOP: run C first"; return 1; }
   local others=$(ps -axww -o pid=,command= | grep -E 'run_test_shards' | grep -v grep || true)
   [[ -z $others ]] || { print "STOP: another run_test_shards is running; queue G and rerun later:"; print -r -- $others; return 1; }
-  local V=$T/venv-gt R=$T/suite-$(git -C $WT rev-parse --short HEAD) N=$T/wheels-gt
-  [[ -e $V || -e $N ]] && { print "STOP: $V or $N exists; move them to $H/tmp/.trash/ first"; return 1; }
+  # Everything is named by candidate, so a new candidate never meets an earlier run's
+  # directories; a rerun on the same candidate reuses its venv and gets a new result directory.
+  local C=$(git -C $WT rev-parse --short HEAD)
+  local V=$T/venv-gt-$C N=$T/wheels-gt-$C R=$T/suite-$C-$(date +%H%M%S)
   [[ -e $WT/src/graftling ]] && { print "STOP: $WT/src/graftling exists; GraphTraj must use the installed graftling"; return 1; }
-  $CONDA -m venv --system-site-packages $V && copy_deps $V
-  local wheel=$(graftling_wheel $N)
-  $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
-    $wheel -e $WT 2>&1 | grep -vi cache || true
+  if [[ -x $V/bin/python ]]; then
+    print "reusing $V (made for candidate $C)"
+  else
+    $CONDA -m venv --system-site-packages $V && copy_deps $V
+    local wheel=$(graftling_wheel $N)
+    $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
+      $wheel -e $WT 2>&1 | grep -vi cache || true
+  fi
   (cd $PYTEST_TMP && $V/bin/python -I -c 'import graphtraj, graftling; print("graphtraj", graphtraj.__file__); print("graftling", graftling.__file__, graftling.__version__)')
   mkdir -p $R
   (cd $WT && TMPDIR=$PYTEST_TMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
@@ -122,8 +128,9 @@ G)
 I)
   say "[I] production install path: graftling wheel from $G, graphtraj wheel from $WT, installed offline into a throwaway venv. Dialog: none."
   [[ -d $G/src/graftling ]] || { print "STOP: run C first"; return 1; }
-  local V=$T/venv-install N=$T/wheels
-  [[ -e $V || -e $N ]] && { print "STOP: $V or $N exists; move them to $H/tmp/.trash/ first"; return 1; }
+  local C=$(git -C $WT rev-parse --short HEAD)
+  local V=$T/venv-install-$C N=$T/wheels-$C
+  [[ -e $V || -e $N ]] && { print "STOP: $V or $N exists for candidate $C; step I already ran on it (its output above names its result)"; return 1; }
   $CONDA -m venv $V && copy_deps $V
   graftling_wheel $N >/dev/null
   $CONDA -m pip wheel -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -w $N $WT

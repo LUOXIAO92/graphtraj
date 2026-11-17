@@ -133,6 +133,20 @@ Changed samples go to `raw/Nw498-samples.jsonl`.
   - FAIL when a recorded entry reads readable without this execution's marker.
   - BLOCKED (not met) when a recorded entry was never seen under the Runtime and has no recorded parent chain to it.
 - `CHECK 498 recorded tool processes stopped at the execution end (gone; listed under found and stopped)`.
+  This check was changed in Correction 1. Its verdicts:
+  - **FAIL** only when a recorded process that is not an unsettled read is still alive after the end, or when a pid
+    is in both `found` and `remaining`.
+  - **PASS** when every recorded long-lived probe process is listed under `stopped`.
+  - **NOT OBSERVED** otherwise. That case is an observation gap for Main to report, not a defect. Nr prints the
+    reason for each pid, classified from watch498's samples:
+    - absent in a later sample while the execution still ran: `ended before the execution end, not by this
+      execution's stop`. Claude Code may end detached processes at the Bash tool's end.
+    - present until the end, absent after, and not in `found`: `ended at the end without the tool-process stop
+      (process-group close?)`, with the stop record's `process_group_closed`. `_close()` closes the Runtime's process
+      group before `stop_tool_processes` runs.
+    - no sample decides it: `unknown`.
+
+  Every row is still printed.
 - `CHECK 498 unsettled reads only under remaining, not signalled`. An unsettled read is remaining minus found. One
   that is gone before its own end (start + its sleep) means it was signalled: FAIL. One still alive passes. Its pid
   and the time it ends by itself are printed, and nothing is signalled.
@@ -207,7 +221,7 @@ Run `zsh scripts/adopt-499/rehearse.zsh` (set -u; in `$TMPDIR`). It uses stub `c
 production venv built from 2da634af wheels, and fixtures in the real result shapes (`rehearse_fixtures.py`, plus
 `rehearse498.py` for the watcher samples and the `claude-termination-*.yml` stop record).
 
-Result: **ALL PASS (134 checks)**, saved in `rehearsal-output.txt`. It covers all of adopt-497's checks, retargeted,
+Result: **ALL PASS (137 checks)** (Correction 1; Round 1: 134), saved in `rehearsal-output.txt`. It covers all of adopt-497's checks, retargeted,
 plus these for 499:
 - **Markers:** both ways (8/8), with both negatives.
 - **Timer 3(a):** for 2da634af → 871aaaa9.
@@ -228,6 +242,10 @@ plus these for 499:
   - positive: six `CHECK 498 …: PASS` inside Nr;
   - a foreign entry in the record: FAIL;
   - a recorded process alive after the end: FAIL, with its pid reported and the process left running;
+  - Correction 1, the stop check:
+    - a probe gone while the execution still ran and not under `stopped`: NOT OBSERVED;
+    - a probe present until the end, gone after, and not in `found`, with `process_group_closed: true`: NOT OBSERVED;
+    - a mix, with one probe gone at the end and one recorded process still alive: FAIL;
   - an unsettled process alive: PASS;
   - an unsettled process gone before its own end (signalled): FAIL;
   - Runtime environment unreadable: reported `env ['None']`;
@@ -238,8 +256,8 @@ plus these for 499:
 
 **Not rehearsed:**
 - real Claude Code (00/Vc `claude -p`, Vu's dialog, N's member and child, Main's notices);
-- whether Claude Code's Bash tool really leaves the Step 01b processes running past the call (if it ends them,
-  nr498's stop check reports them as not listed under stopped);
+- whether Claude Code's Bash tool really leaves the Step 01b processes running past the call. If it ends them,
+  nr498's stop check reports NOT OBSERVED with the reason;
 - whether the real tool shell is a platform image (zsh/bash from /bin: provisional; a Homebrew shell: later, so the
   subshell would not be recorded and the "lists" check FAILs);
 - whether Main's Bash can read the child Runtime's environment (the observation reports `None` if not);

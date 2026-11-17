@@ -161,9 +161,24 @@ else:
     print(f"498 stop record {tpath}: found {sorted(pids['found'])} stopped {sorted(pids['stopped'])} remaining {sorted(pids['remaining'])}"
           f"{' error ' + str(escaped.get('error')) if escaped.get('error') else ''}")
     now = time.time()
-    bad, rows = [], []
+    bad, rows, gaps = [], [], []
     unsettled = pids['remaining'] - pids['found']
     long_lived = {key for kind, key in mine.items() if kind in ('subshell', 'sub-sleep', 'bg', 'sh', 'sh-sleep')}
+
+    def why_gone(key):
+        """Correction 1: from the watcher's samples, why a gone probe process is not listed under stopped."""
+        present = [i for i, s in enumerate(samples)
+                   if any((f['pid'], f['start']) == key for f in (s.get('tree') or []) + (s.get('outside') or []))]
+        if not present:
+            return 'unknown (never seen alive in a sample)'
+        later = samples[present[-1] + 1:]
+        if any(s.get('state') != 'ended' for s in later):
+            return 'ended before the execution end, not by this execution\'s stop (absent in a later running sample)'
+        if later:
+            return (f"ended at the end without the tool-process stop (process-group close?); "
+                    f"process_group_closed={term.get('process_group_closed')}")
+        return 'unknown (no sample after it was last seen)'
+
     for key in sorted(recorded):
         pid, start = key
         alive = (lambda i: i is not None and i.start == start)(identity(pid))
@@ -177,15 +192,26 @@ else:
                     f"{' (unsettled read: only reported)' if pid in unsettled else ''}")
         if pid in unsettled:
             continue
-        # Alive after the end and not an unsettled read: not stopped. One of the probe's long-lived processes that
-        # is gone must be listed as stopped (it cannot have ended by itself). A short tool command (the tool shell)
-        # that ended by itself before the stop is not listed, and that is right.
-        if alive or (key in long_lived and pid not in pids['stopped']):
+        # Alive after the end and not an unsettled read: not stopped (FAIL). A long-lived probe process that is gone
+        # but not listed under stopped is an observation gap, not evidence of a defect (Correction 1): Claude Code may
+        # end it at the Bash tool's end, or _close()'s process-group close (before stop_tool_processes) may end it.
+        if alive:
             bad.append(pid)
+        elif key in long_lived and pid not in pids['stopped']:
+            reason = why_gone(key)
+            gaps.append(f'{pid}: {reason}')
+            rows.append(f"    pid {pid} gone, not listed under stopped: {reason}")
     print('\n'.join(rows) or '  (no recorded entry)')
-    check('498 recorded tool processes stopped at the execution end (gone; listed under found and stopped)',
-          bool(recorded) and not bad and not (pids['found'] & pids['remaining']),
-          f"not stopped or not listed: {bad}; signalled but still alive: {sorted(pids['found'] & pids['remaining'])}")
+    both = sorted(pids['found'] & pids['remaining'])
+    if not recorded or bad or both:
+        verdict = 'FAIL'
+    elif gaps:
+        verdict = 'NOT OBSERVED'
+    else:
+        verdict = 'PASS'
+    check('498 recorded tool processes stopped at the execution end (gone; listed under found and stopped)', verdict,
+          f"alive after the end, not stopped: {bad}; signalled but still alive: {both}"
+          + (f"; gone without the stop listing them: {'; '.join(gaps)}" if gaps else ''))
     wrong = []
     for pid in sorted(unsettled):
         key = next((k for k in procs if k[0] == pid), None)

@@ -2,7 +2,7 @@
 ======== setup: old wheels from 2da634af052273180dfeef4d920a2911364a05e5, fake production venv, plugin, configuration
 graftling-0.5.0-py3-none-any.whl
 graphtraj-0.1.0-py3-none-any.whl
-Create dev from a9a0d580cd41bdd5b53fc4d7161cbc57aa732d35? [y/N]: Created Integration Worktree on dev.
+Create dev from ae71d3c8e5bfbc93e089161aec58997603e75d5b? [y/N]: Created Integration Worktree on dev.
 GraphTraj project setup complete.
 
 ======== README 3(a): a timer started under 2da634af052273180dfeef4d920a2911364a05e5 wakes after the 871aaaa9ea7f63998990cb6600ca098d320e18c8 files replace it (sandbox import check)
@@ -72,7 +72,7 @@ REHEARSAL PASS: 00 named the Tasks that may run now (466, 470; not 465)
 inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
 credential-like exported names (values never printed): ['CLOUDSDK_PROXY_PASSWORD']
 ### isolated project /tmp/claude-501/adopt499-rehearsal/project/tmp/499/vproject: own git, own .graphtraj (setup by production graphtraj; Vc regenerates its entries), own settings (489)
-Create dev from 26d0538b93243dff2d3b9056060443ceb8a3cf6d? [y/N]: Created Integration Worktree on dev.
+Create dev from 5859c378f9bf9ab0826aa3cb833167f252a18895? [y/N]: Created Integration Worktree on dev.
 graphtraj project root: /private/tmp/claude-501/adopt499-rehearsal/project/tmp/499/vproject | isolated: True
 git top level: /private/tmp/claude-501/adopt499-rehearsal/project/tmp/499/vproject | isolated: True
 AGENTS.md above the project (Claude Code does not load AGENTS.md; graphtraj stops at the project): ['/private/tmp/claude-501/adopt499-rehearsal/project/AGENTS.md']
@@ -84,8 +84,8 @@ answer: MODEL-OK claude-opus-5-5, logged in | is_error: False | models: ['claude
 instruction files the model reported: ['NONE'] | Harness files among them: none
 ### 490 / known interference: every budget_idle_timer now (listed only, never signalled)
 budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-  timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-  timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+  timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+  timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 agents: {"command": "/tmp/claude-501/adopt499-rehearsal/project/.venv-runtime/bin/python", "args": ["-m", "graphtraj.runtimes.claude.host", "serve", "--config", "/private/tmp/claude-501/adopt499-rehearsal/project/.graphtraj/claude-host/config.json"]}
 other entries: []
 ### production holds 497's 2da634af: the 499 markers (496, 498) must be absent now
@@ -98,10 +98,10 @@ stopped: false
 MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt499-rehearsal/project/tmp/499/main.session)
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
-  [Main's Claude host] 87831 4241 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/claude-host/config
+  [Main's Claude host] 91345 4241 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.claude.host serve --config /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/claude-host/config
 [member Worker of Task 451 (451-x); child of budget_idle_timer 5151] 5353 5151 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.runner_worker /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x/r
 ### 418: inherited GRAFTLING_CLAUDE_HOST_* / GRAPHTRAJ_CLAUDE_HOST_* (name=path; unset for every child command of this script)
 inherited: GRAFTLING_CLAUDE_HOST_CONFIG=/elsewhere/.agents-control/claude-host.json
@@ -115,8 +115,8 @@ answer: MODEL-OK claude-opus-5-5, logged in | is_error: False | models: ['claude
 instruction files the model reported: ['NONE'] | Harness files among them: none
 ### 490 / known interference: every budget_idle_timer now (listed only, never signalled)
 budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-  timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-  timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+  timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+  timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 markers expected absent: PASS (8/8)
 ### Tasks whose members may run now (status not integrated): 466, 470
 running lines: 0 (other Tasks' members may run now; I waits for them)
@@ -124,8 +124,8 @@ stopped: false
 MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt499-rehearsal/project/tmp/499/main.session)
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 [member Worker of Task 451 (451-x); child of budget_idle_timer 5151] 5353 5151 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime/bin/python -I -m graphtraj.execution.runner_worker /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x/r
 成功: 'claude:' 行给出路径与版本（默认 claude，现为 ）；ZSH_VERSION 有值；'answer check (expect clean): OK'（answer 以 MODEL-OK 开头、models 含 claude-opus-5-5、is_error False、cc-plugin-agents-md loaded: NO、无 Harness AGENTS.md、不是 prompt 回显）；'control records snapshot 00.json'；'guard: budget_idle_timer processes: n …' 与每个计时器一行（pid、ppid、stat、start、exe、session、children；照实记录，不发信号）；graphtraj 0.1.0 与 graftling 0.5.0；pip check rc=0；'markers expected absent: PASS (8/8)'（生产仍是 9faa0274）；'task graph rc=0' 且 'Task 497 named' 不为 0；'expected 2.1.325: yes'；
@@ -134,14 +134,14 @@ guard: the timers themselves never make I refuse. Only a LIVE child of a timer u
 
 ======== B
 REHEARSAL PASS: B exit 0
-  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=595624 sha256=350aec65f57c9da2592cb3236fa129e36776d2b3da1361e92f320b593568b161
-  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=471023 sha256=aacdb6e31df22bb663a0d60e51bd4da57cb7ff0495c3863c4074a68d8e22e51e
-aacdb6e31df22bb663a0d60e51bd4da57cb7ff0495c3863c4074a68d8e22e51e  graftling-0.5.0-py3-none-any.whl
-350aec65f57c9da2592cb3236fa129e36776d2b3da1361e92f320b593568b161  graphtraj-0.1.0-py3-none-any.whl
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=595624 sha256=43151e78c1758b5e25894c36defbfc0a982802b859fe999e0488db2f81cdf748
+  Created wheel for graftling: filename=graftling-0.5.0-py3-none-any.whl size=471023 sha256=0cbb3fe309dbff9e825d3d62b39b872f0bb471f2c1c15d6570a1a9c8d3edd419
+0cbb3fe309dbff9e825d3d62b39b872f0bb471f2c1c15d6570a1a9c8d3edd419  graftling-0.5.0-py3-none-any.whl
+43151e78c1758b5e25894c36defbfc0a982802b859fe999e0488db2f81cdf748  graphtraj-0.1.0-py3-none-any.whl
 ### no build/ or __pycache__ inside the wheels (expect leaked: 0)
 leaked: 0
-aacdb6e31df22bb663a0d60e51bd4da57cb7ff0495c3863c4074a68d8e22e51e  graftling-0.5.0-py3-none-any.whl
-350aec65f57c9da2592cb3236fa129e36776d2b3da1361e92f320b593568b161  graphtraj-0.1.0-py3-none-any.whl
+0cbb3fe309dbff9e825d3d62b39b872f0bb471f2c1c15d6570a1a9c8d3edd419  graftling-0.5.0-py3-none-any.whl
+43151e78c1758b5e25894c36defbfc0a982802b859fe999e0488db2f81cdf748  graphtraj-0.1.0-py3-none-any.whl
 ### no build/ or __pycache__ inside the wheels (expect leaked: 0)
 leaked: 0
 成功: graphtraj-0.1.0 与 graftling-0.5.0 各一个 wheel 及 sha256；leaked: 0。
@@ -239,20 +239,20 @@ REHEARSAL PASS: 499 S refused by a pytest of our test venv (ours: 1)
 ======== S background quiet wait (_Srun, ADOPT499_S_DRYRUN: the suite itself is not run): high then low load starts; always high or a running suite STOPs
 scripts/adopt-499/rehearse.zsh:239: nice(5) failed: operation not permitted
 == quiet wait: every 1 s, up to 0 min (20 s): no running pytest/shard runner and 1-minute load <= 4 (CPUs 8)
-quiet check 11:35:28 loadavg { 14.74 28.21 19.52 } | running suites 0
-quiet check 11:35:29 loadavg { 14.74 28.21 19.52 } | running suites 0
-quiet check 11:35:30 loadavg { 14.74 28.21 19.52 } | running suites 0
-quiet check 11:35:31 loadavg { 1.10 9.00 12.00 } | running suites 0
-== quiet at 11:35:31 start
+quiet check 11:43:40 loadavg { 14.74 28.21 19.52 } | running suites 0
+quiet check 11:43:41 loadavg { 14.74 28.21 19.52 } | running suites 0
+quiet check 11:43:42 loadavg { 14.74 28.21 19.52 } | running suites 0
+quiet check 11:43:43 loadavg { 1.10 9.00 12.00 } | running suites 0
+== quiet at 11:43:43 start
 leftover test processes (information; never signalled; not a running suite): 2
   leftover: 51001 2-22:01:10 /private/var/folders/xx/T/pytest-of-luoxiao/pytest-968/installed-environment0/venv/bin/python -I -m graphtraj.execution.budget_idle_timer /private/var/folders/xx/T/pytest-of-luoxiao/pytest-968/install
   leftover: 51006 2-22:03:00 /private/var/folders/xx/T/pytest-of-luoxiao/pytest-1794/test_x0/venv/bin/python -I -m graphtraj.execution.runner_worker /private/var/folders/xx/T/pytest-of-luoxiao/pytest-1794/test_x0/project/.graphtr
 == DRYRUN: quiet wait done, suite not run (rehearsal)
 REHEARSAL PASS: quiet wait: logged 'quiet check HH:MM:SS loadavg { 14.74 … } | running suites 0' while high, then '== quiet at … start'; leftovers listed; exit 0
 == quiet wait: every 1 s, up to 0 min (2 s): no running pytest/shard runner and 1-minute load <= 4 (CPUs 8)
-quiet check 11:35:31 loadavg { 14.74 28.21 19.52 } | running suites 0
-quiet check 11:35:33 loadavg { 14.74 28.21 19.52 } | running suites 0
-quiet check 11:35:34 loadavg { 14.74 28.21 19.52 } | running suites 0
+quiet check 11:43:44 loadavg { 14.74 28.21 19.52 } | running suites 0
+quiet check 11:43:45 loadavg { 14.74 28.21 19.52 } | running suites 0
+quiet check 11:43:46 loadavg { 14.74 28.21 19.52 } | running suites 0
 leftover test processes (information; never signalled; not a running suite): 2
   leftover: 51001 2-22:01:10 /private/var/folders/xx/T/pytest-of-luoxiao/pytest-968/installed-environment0/venv/bin/python -I -m graphtraj.execution.budget_idle_timer /private/var/folders/xx/T/pytest-of-luoxiao/pytest-968/install
   leftover: 51006 2-22:03:00 /private/var/folders/xx/T/pytest-of-luoxiao/pytest-1794/test_x0/venv/bin/python -I -m graphtraj.execution.runner_worker /private/var/folders/xx/T/pytest-of-luoxiao/pytest-1794/test_x0/project/.graphtr
@@ -289,32 +289,32 @@ REHEARSAL PASS: I: the 497 import lines (488, 490, 494, 495)
 REHEARSAL PASS: I: the 492 import lines (481, 484, 486, 485, 480, 487)
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
-11:35:36 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+11:43:48 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
          Waiting for members of Tasks that may run now (466, 470), listed above as BLOCKING. Do not kill them; this step continues by itself.
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
-11:35:37 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+11:43:49 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
          Waiting for members of Tasks that may run now (466, 470), listed above as BLOCKING. Do not kill them; this step continues by itself.
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 2 个进程在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime（或是 Main 11111111-2222-3333-4444-555555555555）:
-11:35:38 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
+11:43:51 正在等待：可能有成员在运行的 Task（466、470）的成员还在运行（上面列出的 BLOCKING 进程）。不要结束（kill）这些进程；它们结束后本步自动继续。
          Waiting for members of Tasks that may run now (466, 470), listed above as BLOCKING. Do not kill them; this step continues by itself.
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime。
 -rw------- /tmp/claude-501/adopt499-rehearsal/project/tmp/499/backup/entries/.claude__settings.local.json
@@ -322,8 +322,8 @@ guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt499-re
 -rw------- /tmp/claude-501/adopt499-rehearsal/project/tmp/499/backup/entries/.mcp.json
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime。
       Successfully uninstalled graphtraj-0.1.0
@@ -346,11 +346,11 @@ plugin bytes as before the install: no trust dialog expected
 bytes unchanged: .mcp.json
 bytes unchanged: .claude/settings.local.json
 bytes unchanged: .graphtraj/claude-host/config.json
-### BLOCKING processes started during the install window (11:35:40 → 11:35:42); information for Main
+### BLOCKING processes started during the install window (11:43:53 → 11:43:55); information for Main
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 2, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [old] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [old] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime。
 -rw------- /tmp/claude-501/adopt499-rehearsal/project/tmp/499/backup/entries/.claude__settings.local.json
@@ -358,8 +358,8 @@ guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt499-re
 -rw------- /tmp/claude-501/adopt499-rehearsal/project/tmp/499/backup/entries/.mcp.json
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 0, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [unknown start] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime。
       Successfully uninstalled graphtraj-0.1.0
@@ -382,11 +382,11 @@ plugin bytes as before the install: no trust dialog expected
 bytes unchanged: .mcp.json
 bytes unchanged: .claude/settings.local.json
 bytes unchanged: .graphtraj/claude-host/config.json
-### BLOCKING processes started during the install window (11:35:40 → 11:35:42); information for Main
+### BLOCKING processes started during the install window (11:43:53 → 11:43:55); information for Main
 guard: budget_idle_timer processes (NON-BLOCKING; never signalled; README 3(a)):
 guard: budget_idle_timer processes: 2 (production .venv-runtime 1, old 2, new 0; children 1, zombie children 1) - NON-BLOCKING, never signalled
-guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
-guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:35:10 [old] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
+guard:   timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 1: 5252(Z)
+guard:   timer pid 7777 ppid 1 stat S start 2026-11-17 09:43:20 [old] exe other: /usr/bin/python3 | session /elsewhere/sessions/9-y token 99999999… | children 0: none
 guard: the timers themselves never make I refuse. Only a LIVE child of a timer under /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime is BLOCKING (listed below as 'child of budget_idle_timer'); this script never signals a timer or its child — if one stays, USER decides (wait, or Ctrl-C and tell Main).
 guard: BLOCKING 0 — 没有成员或 host 在使用 /tmp/claude-501/adopt499-rehearsal/project/.venv-runtime。
 成功: Successfully installed graftling-0.5.0 graphtraj-0.1.0；PASS n FAIL 0；三个 -rw------- 备份入口文件；'markers expected present: PASS (8/8)'；'control records snapshot I.json'；464 的两行 import（457…463 仍在）、478 的三行 '466 session_read DEFAULT_COUNT 5 …'、'468 archive _identity …'、'477 take_push …'、492 的四行（481/484、486、485/480、487）与 497 的三行 '488 _worker_arguments _worker_arguments | _process_ended _process_ended'、'490 _work_ended … | SLICE_SECONDS 5.0 | cleanup uses process_is_zombie: True'、'494 Claude host receiver defers_push: True | hold thread started in the lock: True' 与 '495 argv refreshed each sample: True'；
@@ -406,37 +406,37 @@ REHEARSAL PASS: I printed claude --continue
 Task 499 Sessions under /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions: 2
   499-production_adoption_496_498-handover0-advisor@advisor: budget-timer.yml token feedbeef
   499-production_adoption_496_498-handover0-team_leader@team_leader: budget-timer.yml token 1eade71e
-  Task 499 timer pid 6464: present | start 2026-11-17 09:35:10 [old] | production .venv-runtime | 499-production_adoption_496_498-handover0-team_leader@team_leader | token is the Session's current one: True
+  Task 499 timer pid 6464: present | start 2026-11-17 09:43:20 [old] | production .venv-runtime | 499-production_adoption_496_498-handover0-team_leader@team_leader | token is the Session's current one: True
 CHECK 490 a timer started by the new version for a Task 499 Session is listed (start after the install, production .venv-runtime): FAIL (0 new of 1 recorded; 1 present now)
 REHEARSAL PASS: Nt negative: only an old timer of a 499 Session gives FAIL (exit 1)
 REHEARSAL PASS: Nt negative: no install window gives BLOCKED
-at 2026-11-17 11:35:47
+at 2026-11-17 11:44:00
 Task 499 Sessions under /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions: 2
   499-production_adoption_496_498-handover0-advisor@advisor: budget-timer.yml token feedbeef
   499-production_adoption_496_498-handover0-team_leader@team_leader: budget-timer.yml token 1eade71e
-  Task 499 timer pid 6363: present | start 2026-11-17 11:36:12 [new] | production .venv-runtime | 499-production_adoption_496_498-handover0-advisor@advisor | token is the Session's current one: True
-  Task 499 timer pid 6464: present | start 2026-11-17 09:35:10 [old] | production .venv-runtime | 499-production_adoption_496_498-handover0-team_leader@team_leader | token is the Session's current one: True
+  Task 499 timer pid 6363: present | start 2026-11-17 11:44:24 [new] | production .venv-runtime | 499-production_adoption_496_498-handover0-advisor@advisor | token is the Session's current one: True
+  Task 499 timer pid 6464: present | start 2026-11-17 09:43:20 [old] | production .venv-runtime | 499-production_adoption_496_498-handover0-team_leader@team_leader | token is the Session's current one: True
 CHECK 490 a timer started by the new version for a Task 499 Session is listed (start after the install, production .venv-runtime): PASS (1 new of 2 recorded; 2 present now)
 REHEARSAL PASS: Nt positive: the new timer 6363 (after the install, production exe, current token) present; PASS
 REHEARSAL PASS: Nt: the 451 timer (not a Task 499 Session) is not recorded
 Task 499 Sessions under /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions: 2
   499-production_adoption_496_498-handover0-advisor@advisor: budget-timer.yml token feedbeef
   499-production_adoption_496_498-handover0-team_leader@team_leader: budget-timer.yml token 1eade71e
-  Task 499 timer pid 6363: absent | start 2026-11-17 11:36:12 [new] | production .venv-runtime | 499-production_adoption_496_498-handover0-advisor@advisor | token is the Session's current one: True
-  Task 499 timer pid 6464: present | start 2026-11-17 09:35:10 [old] | production .venv-runtime | 499-production_adoption_496_498-handover0-team_leader@team_leader | token is the Session's current one: True
+  Task 499 timer pid 6363: absent | start 2026-11-17 11:44:24 [new] | production .venv-runtime | 499-production_adoption_496_498-handover0-advisor@advisor | token is the Session's current one: True
+  Task 499 timer pid 6464: present | start 2026-11-17 09:43:20 [old] | production .venv-runtime | 499-production_adoption_496_498-handover0-team_leader@team_leader | token is the Session's current one: True
 CHECK 490 a timer started by the new version for a Task 499 Session is listed (start after the install, production .venv-runtime): PASS (1 new of 2 recorded; 1 present now)
 REHEARSAL PASS: Nt rerun after the member's retire: 6363 recorded as absent, the old 6464 still present, CHECK still PASS
 
 ======== T (490): after the Task end, every new-version timer of a 499 Session gone, no budget notice after the end; old ones not judged
 REHEARSAL PASS: T before the Task end: PENDING, no end time recorded
-end time recorded from task.yml mtime at status awaiting-integration: 2026-11-17 11:35:48
-at 2026-11-17 11:35:48 status awaiting-integration
+end time recorded from task.yml mtime at status awaiting-integration: 2026-11-17 11:44:00
+at 2026-11-17 11:44:00 status awaiting-integration
 all timers now (old ones listed, not judged):
 budget_idle_timer processes: 2 (production .venv-runtime 2, old 2, new 0; children 0, zombie children 0) - NON-BLOCKING, never signalled
-  timer pid 5151 ppid 1 stat S start 2026-11-17 09:35:10 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 0: none
-  timer pid 6464 ppid 1 stat S start 2026-11-17 09:35:10 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/499-production_adoption_496_498-handover0-team_leader@team_leader token 1eade71e… | children 0: none
-Task 499 status: awaiting-integration | end time 2026-11-17 11:35:48
-  old/not judged: timer pid 6464 ppid 1 stat S start 2026-11-17 09:35:10 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/499-production_adoption_496_498-handover0-team_leader@team_leader token 1eade71e… | children 0: none
+  timer pid 5151 ppid 1 stat S start 2026-11-17 09:43:20 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/451-x token 0123abcd… | children 0: none
+  timer pid 6464 ppid 1 stat S start 2026-11-17 09:43:20 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/499-production_adoption_496_498-handover0-team_leader@team_leader token 1eade71e… | children 0: none
+Task 499 status: awaiting-integration | end time 2026-11-17 11:44:00
+  old/not judged: timer pid 6464 ppid 1 stat S start 2026-11-17 09:43:20 [old] exe production .venv-runtime | session /tmp/claude-501/adopt499-rehearsal/project/.graphtraj/core/runner/sessions/499-production_adoption_496_498-handover0-team_leader@team_leader token 1eade71e… | children 0: none
   Task 499 new-version timer pid 6363 (499-production_adoption_496_498-handover0-advisor@advisor): gone
 CHECK 490 every new-version timer of a Task 499 Session is gone after the Task end: PASS (0 of 1 still present)
 Task 499 budget parent_notices: 1; after the end: 0
@@ -445,7 +445,7 @@ REHEARSAL PASS: T positive: end time recorded once from task.yml; 6363 gone; old
   Task 499 new-version timer pid 6363 (499-production_adoption_496_498-handover0-advisor@advisor): PRESENT
 CHECK 490 every new-version timer of a Task 499 Session is gone after the Task end: FAIL (1 of 1 still present)
 Task 499 budget parent_notices: 2; after the end: 1
-  after the end: key=additional_allowance:5 observer=499-production_adoption_496_498-handover0-advisor@advisor delivered=True occurred_at=2026-11-17T11:35:48+09:00
+  after the end: key=additional_allowance:5 observer=499-production_adoption_496_498-handover0-advisor@advisor delivered=True occurred_at=2026-11-17T11:44:00+09:00
 CHECK 490 no budget notice for Task 499 Sessions after the end: FAIL (1 after the end, 1 delivered)
 REHEARSAL PASS: T negative: a new timer still PRESENT 100 s after the end FAIL; a delivered notice after the end FAIL; exit non-zero
 REHEARSAL PASS: T within 30 s of the end with the timer still there: PENDING with a rerun hint (no foreground wait)
@@ -557,7 +557,7 @@ CHECK 486 member end normal (execution.yml outcome completed): PASS (outcome=com
 CHECK 498 Runtime environment and marker observed: PASS (env ['readable'] marker ['this'])
 CHECK 498 record lists this execution's tool commands (subshell, background sleeps): PASS (recorded: subshell, sub-sleep, bg, sh)
 CHECK 498 record contains no other execution's process: PASS (recorded entries 6; not seen under the Runtime []; readable without this marker [])
-CHECK 498 recorded tool processes stopped at the execution end (gone; listed under found and stopped): PASS (not stopped or not listed: []; signalled but still alive: [])
+CHECK 498 recorded tool processes stopped at the execution end (gone; listed under found and stopped): PASS (alive after the end, not stopped: []; signalled but still alive: [])
 CHECK 498 unsettled reads only under remaining, not signalled: PASS (none unsettled)
 CHECK 498 credential masked in the record and the stop record (value 0; the sh -c entry shows [redacted]): PASS (value occurrences 0; recorded sh -c entry has [redacted])
 494: executions of child n499 in Nr.json: 1
@@ -600,7 +600,7 @@ CHECK 486 member end normal (execution.yml outcome completed): PASS (outcome=com
 CHECK 498 Runtime environment and marker observed: PASS (env ['readable'] marker ['this'])
 CHECK 498 record lists this execution's tool commands (subshell, background sleeps): PASS (recorded: subshell, sub-sleep, bg, sh)
 CHECK 498 record contains no other execution's process: PASS (recorded entries 6; not seen under the Runtime []; readable without this marker [])
-CHECK 498 recorded tool processes stopped at the execution end (gone; listed under found and stopped): PASS (not stopped or not listed: []; signalled but still alive: [])
+CHECK 498 recorded tool processes stopped at the execution end (gone; listed under found and stopped): PASS (alive after the end, not stopped: []; signalled but still alive: [])
 CHECK 498 unsettled reads only under remaining, not signalled: PASS (none unsettled)
 CHECK 498 credential masked in the record and the stop record (value 0; the sh -c entry shows [redacted]): PASS (value occurrences 0; recorded sh -c entry has [redacted])
 CHECK 494 child n499 ended execution has notification delivered: PASS (['delivered'])
@@ -718,8 +718,14 @@ REHEARSAL PASS: 498 negative: a recorded entry readable with another execution's
 scripts/adopt-499/rehearse.zsh:495: nice(5) failed: operation not permitted
 498 fixture alive: 3 samples, 7 recorded, found 5, remaining 0
 REHEARSAL PASS: 498 negative: a recorded process alive after the end (not in found) FAILs; its pid and own end are reported, no signal
+498 fixture mix: 3 samples, 7 recorded, found 4, remaining 0
+REHEARSAL PASS: 498 Correction 1 mix: one probe gone at the end (not stopped) plus a recorded process alive after the end FAILs
 498 fixture unsettled-ok: 3 samples, 6 recorded, found 4, remaining 1
 REHEARSAL PASS: 498: an unsettled read only under remaining and still alive PASSes (not signalled)
+498 fixture gone-running: 4 samples, 6 recorded, found 4, remaining 0
+REHEARSAL PASS: 498 Correction 1 (a): a probe gone while the execution still ran, not under stopped, gives NOT OBSERVED with its reason
+498 fixture gone-end: 3 samples, 6 recorded, found 4, remaining 0
+REHEARSAL PASS: 498 Correction 1 (b): a probe present until the end, gone after, not in found gives NOT OBSERVED with process_group_closed
 498 fixture unsettled: 3 samples, 6 recorded, found 4, remaining 1
 REHEARSAL PASS: 498 negative: an unsettled (remaining-only) sleep 1202 gone before its own end FAILs (signalled)
 498 fixture unreadable: 3 samples, 6 recorded, found 5, remaining 0
@@ -727,16 +733,16 @@ REHEARSAL PASS: 498: the Runtime's environment unreadable from the watcher is re
 REHEARSAL PASS: 498: no samples gives BLOCKED for every 498 check and exit 1 (unobserved is not met)
 
 ======== 498: watch498.py on a live process tree started by the rehearsal (read only; it never signals)
-scripts/adopt-499/rehearse.zsh:512: nice(5) failed: operation not permitted
+scripts/adopt-499/rehearse.zsh:519: nice(5) failed: operation not permitted
 zsh:1: nice(5) failed: operation not permitted
 zsh:1: nice(5) failed: operation not permitted
-scripts/adopt-499/rehearse.zsh:516: nice(5) failed: operation not permitted
-{"at": 1794882962.5809548, "execution": "w1e", "state": "running", "runtime": {"pid": 90301, "alive": true, "env": "empty", "marker": "n/a"}, "tree": [{"pid": 90304, "ppid": 90301, "start": 1794882961464034, "P_EXEC": true, "platform": true, "env": "empty", "marker": "n/a", "argv": "sleep 62"}, {"pid": 90303, "ppid": 90301, "start": 1794882961463671, "P_EXEC": false, "platform": true, "env": "empty", "marker": "n/a", "argv": "zsh -c ( sleep 61; true ) & sleep 62 & wait"}, {"pid": 90305, "ppid": 90303, "start": 1794882961464081, "P_EXEC": true, "platform": true, "env": "empty", "marker": "n/a",
-11:36:02 start: watching /tmp/claude-501/adopt499-rehearsal/w498/agents-proj/.graphtraj/swarm/control/agents for n499 (read only; at most 20 s; 1 s after the end)
-11:36:02 execution w1e: runtime alive=True tree=3 recorded=0 outside=0
-11:36:04 execution w1e: runtime alive=True tree=3 recorded=0 outside=0
-11:36:04 every execution ended or the child is retired; sampling 1 s more
-11:36:05 == END (every execution ended); samples: 2
+scripts/adopt-499/rehearse.zsh:523: nice(5) failed: operation not permitted
+{"at": 1794883455.224734, "execution": "w1e", "state": "running", "runtime": {"pid": 93834, "alive": true, "env": "empty", "marker": "n/a"}, "tree": [{"pid": 93837, "ppid": 93834, "start": 1794883454122540, "P_EXEC": true, "platform": true, "env": "empty", "marker": "n/a", "argv": "sleep 62"}, {"pid": 93836, "ppid": 93834, "start": 1794883454122184, "P_EXEC": false, "platform": true, "env": "empty", "marker": "n/a", "argv": "zsh -c ( sleep 61; true ) & sleep 62 & wait"}, {"pid": 93838, "ppid": 93836, "start": 1794883454122583, "P_EXEC": true, "platform": true, "env": "empty", "marker": "n/a", 
+11:44:15 start: watching /tmp/claude-501/adopt499-rehearsal/w498/agents-proj/.graphtraj/swarm/control/agents for n499 (read only; at most 20 s; 1 s after the end)
+11:44:15 execution w1e: runtime alive=True tree=3 recorded=0 outside=0
+11:44:17 execution w1e: runtime alive=True tree=3 recorded=0 outside=0
+11:44:17 every execution ended or the child is retired; sampling 1 s more
+11:44:18 == END (every execution ended); samples: 2
 REHEARSAL PASS: watch498: sampled the live tree (subshell P_EXEC false, sleep 61 and 62), ended by itself, never wrote the marker value; the tree was stopped
 
 ======== 497's backup (tmp/497) is unchanged
@@ -744,4 +750,4 @@ REHEARSAL PASS: 497 backup unchanged
 REHEARSAL PASS: this run's backup is under tmp/499
 entries-871aaaa9.sha256 raw-871aaaa9 S-basetemp-before-871aaaa9 src-871aaaa9 V-marker-871aaaa9 ventries-871aaaa9 vplug-871aaaa9 wheels-871aaaa9 
 
-REHEARSAL RESULT: ALL PASS (134 checks)
+REHEARSAL RESULT: ALL PASS (137 checks)

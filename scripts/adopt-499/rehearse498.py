@@ -13,6 +13,9 @@ Scenarios:
   unsettled       sleep 1202 listed only under remaining (unsettled) but gone long before its own end (signalled).
   unsettled-ok    sleep 1202 (live pid) listed only under remaining and still alive (not signalled).
   unreadable      positive, but the Runtime's environment reads None from the watcher.
+  gone-running    (Correction 1 a) sleep 1202 absent in a later running sample, not in found/stopped.
+  gone-end        (Correction 1 b) sleep 1202 present until the end, absent after, not in found; group closed.
+  mix             gone-end plus a recorded process alive after the end, not in found (<live pid> <live start>).
 """
 import json, sys, time
 from pathlib import Path
@@ -43,7 +46,7 @@ runtime = {'pid': R, 'alive': True, 'env': 'None' if scenario == 'unreadable' el
 outside = []
 if scenario == 'foreign':
     tree.append(fact(R + 20, R + 5, 'python other_execution_tool.py', marker='other'))
-if scenario == 'alive' and live:
+if scenario in ('alive', 'mix') and live:
     tree.append(fact(live[0], R + 5, 'sleep 30', start=live[1]))
 record = [{'pid': f['pid'], 'ppid': f['ppid'], 'pgid': R + 5, 'uid': 501, 'start': f['start'], 'argv': f['argv']} for f in tree]
 samples = [{'at': now - 50, 'execution': 'e1', 'state': 'running', 'runtime': runtime, 'tree': tree[:1], 'outside': [],
@@ -52,6 +55,9 @@ samples = [{'at': now - 50, 'execution': 'e1', 'state': 'running', 'runtime': ru
             'record': record},
            {'at': now - 5, 'execution': 'e1', 'state': 'ended', 'runtime': {'pid': R, 'alive': False}, 'tree': [],
             'outside': [], 'record': record}]
+if scenario == 'gone-running':   # Correction 1 (a): sleep 1202 gone in a later sample while the execution still ran
+    samples.insert(2, {'at': now - 20, 'execution': 'e1', 'state': 'running', 'runtime': runtime,
+                       'tree': [f for f in tree if f['argv'] != 'sleep 1202'], 'outside': [], 'record': record})
 raw.mkdir(parents=True, exist_ok=True)
 (raw / 'Nw498-samples.jsonl').write_text(''.join(json.dumps(s) + '\n' for s in samples))
 ours = [f for f in tree if f['marker'] == 'this' and f['pid'] != R + 5]
@@ -62,6 +68,12 @@ if scenario in ('unsettled', 'unsettled-ok'):
     remaining = [f for f in ours if f['argv'] == 'sleep 1202']
 if scenario == 'alive':
     found = [f for f in ours if f['argv'] != 'sleep 30']
+# Correction 1: sleep 1202 not in found/stopped: (a) gone while running; (b) gone at the end (process-group close);
+# mix = (b) plus a recorded process still alive after the end.
+if scenario in ('gone-running', 'gone-end'):
+    found = [f for f in ours if f['argv'] != 'sleep 1202']
+if scenario == 'mix':
+    found = [f for f in ours if f['argv'] not in ('sleep 1202', 'sleep 30')]
 side.mkdir(parents=True, exist_ok=True)
 import yaml
 entry = lambda f: {'pid': f['pid'], 'command': f['argv'][:160]}

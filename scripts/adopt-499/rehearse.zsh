@@ -495,10 +495,17 @@ check "498 negative: a recorded entry readable with another execution's marker F
 sleep 30 & LIVE=$!
 LST=$($CONDA -I -c "import sys; sys.path.insert(0, '$W/src-871aaaa9/src'); from graftling.tool_descendants import identity; print(identity($LIVE).start)")
 $CONDA -I $SD/rehearse498.py $RW $ND alive $LIVE $LST; nr498 $F/n498-alive.out
-check "498 negative: a recorded process alive after the end (not in found) FAILs; its pid and own end are reported, no signal" sh -c "grep -q 'CHECK 498 recorded tool processes stopped at the execution end .*: FAIL (not stopped or not listed: \[$LIVE\]' $F/n498-alive.out && grep -q \"recorded pid $LIVE: alive\" $F/n498-alive.out && kill -0 $LIVE"
+check "498 negative: a recorded process alive after the end (not in found) FAILs; its pid and own end are reported, no signal" sh -c "grep -q 'CHECK 498 recorded tool processes stopped at the execution end .*: FAIL (alive after the end, not stopped: \[$LIVE\]' $F/n498-alive.out && grep -q \"recorded pid $LIVE: alive\" $F/n498-alive.out && kill -0 $LIVE"
+# Correction 1: a probe gone but not listed under stopped is an observation gap (NOT OBSERVED), not a defect.
+$CONDA -I $SD/rehearse498.py $RW $ND mix $LIVE $LST; nr498 $F/n498-mix.out
+check "498 Correction 1 mix: one probe gone at the end (not stopped) plus a recorded process alive after the end FAILs" sh -c "grep -q 'CHECK 498 recorded tool processes stopped at the execution end .*: FAIL (alive after the end, not stopped: \[$LIVE\]; signalled but still alive: \[\]; gone without the stop listing them: 70012: ended at the end' $F/n498-mix.out && kill -0 $LIVE"
 $CONDA -I $SD/rehearse498.py $RW $ND unsettled-ok $LIVE $LST; nr498 $F/n498-unsok.out
 check "498: an unsettled read only under remaining and still alive PASSes (not signalled)" sh -c "grep -q 'CHECK 498 unsettled reads only under remaining, not signalled: PASS' $F/n498-unsok.out && grep -q \"unsettled (remaining, not found) pid $LIVE: alive (not signalled)\" $F/n498-unsok.out && grep -q 'CHECK 498 recorded tool processes stopped .*: PASS' $F/n498-unsok.out"
 kill $LIVE 2>/dev/null; wait $LIVE 2>/dev/null   # the rehearsal's own process
+$CONDA -I $SD/rehearse498.py $RW $ND gone-running; nr498 $F/n498-goner.out
+check "498 Correction 1 (a): a probe gone while the execution still ran, not under stopped, gives NOT OBSERVED with its reason" sh -c "grep -q \"CHECK 498 recorded tool processes stopped at the execution end .*: NOT OBSERVED (alive after the end, not stopped: \[\]; signalled but still alive: \[\]; gone without the stop listing them: 70012: ended before the execution end, not by this execution's stop\" $F/n498-goner.out && grep -q '    pid 70012 gone, not listed under stopped: ended before the execution end' $F/n498-goner.out"
+$CONDA -I $SD/rehearse498.py $RW $ND gone-end; nr498 $F/n498-gonee.out
+check "498 Correction 1 (b): a probe present until the end, gone after, not in found gives NOT OBSERVED with process_group_closed" grep -q 'CHECK 498 recorded tool processes stopped at the execution end .*: NOT OBSERVED (alive after the end, not stopped: \[\]; signalled but still alive: \[\]; gone without the stop listing them: 70012: ended at the end without the tool-process stop (process-group close?); process_group_closed=True)' $F/n498-gonee.out
 $CONDA -I $SD/rehearse498.py $RW $ND unsettled; nr498 $F/n498-uns.out
 check "498 negative: an unsettled (remaining-only) sleep 1202 gone before its own end FAILs (signalled)" grep -q 'CHECK 498 unsettled reads only under remaining, not signalled: FAIL (unsettled \[70012\]; gone before their own end (signalled): \[70012\])' $F/n498-uns.out
 $CONDA -I $SD/rehearse498.py $RW $ND unreadable; nr498 $F/n498-unr.out

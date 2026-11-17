@@ -1,0 +1,109 @@
+diff --git a/src/graftling/tool_descendants.py b/src/graftling/tool_descendants.py
+index 72c498b1..3cc63ae3 100644
+--- a/src/graftling/tool_descendants.py
++++ b/src/graftling/tool_descendants.py
+@@ -133,6 +133,40 @@ def shown_command(argv: list[str] | str) -> str:
+     return _command([redact(text)])
+ 
+ 
++def _exec_done(pid: int) -> bool:
++    """Whether ``pid`` has executed an image since its fork (darwin P_EXEC; Linux not PF_FORKNOEXEC)."""
++    try:
++        if sys.platform == 'darwin':
++            buffer = ctypes.create_string_buffer(136)
++            if _proc().proc_pidinfo(pid, 3, 0, buffer, 136) < 136:
++                return False
++            return bool(int.from_bytes(buffer.raw[0:4], sys.byteorder) & 0x4000)
++        stat = Path(f'/proc/{pid}/stat').read_text()
++        return not int(stat[stat.rindex(')') + 2:].split()[6]) & 0x40
++    except (OSError, ValueError, IndexError):
++        return False
++
++
++def _platform(pid: int) -> bool:
++    if sys.platform != 'darwin':
++        return False
++    value = ctypes.c_uint32(0)
++    libc = ctypes.CDLL(ctypes.util.find_library('c'), use_errno=True)
++    return libc.csops(pid, 0, ctypes.byref(value), 4) == 0 and bool(value.value & 0x4000000)
++
++
++def _verdict(pid: int, marker: str) -> str:
++    """'ours', 'foreign' (final), 'copy-ours' (fork copy, provisional), or 'later' (undecided, not cached)."""
++    view = _process_view(pid)
++    if not _exec_done(pid):
++        return 'later' if view is not None and view[1] and f'{MEMBER_RUN_ENV}={marker}' not in view[1] else 'copy-ours'
++    if view is None:
++        return 'later'
++    if not view[1]:
++        return 'ours' if _platform(pid) else 'later'
++    return 'ours' if f'{MEMBER_RUN_ENV}={marker}' in view[1] else 'foreign'
++
++
+ def _argv(pid: int) -> list[str]:
+     view = _process_view(pid)
+     return view[0] if view is not None else []
+@@ -151,11 +185,12 @@ def _table() -> dict[int, Identity]:
+ 
+ 
+ def _descend(table: dict[int, Identity], roots: set[int], marker: str, foreign: set[tuple[int, int]],
+-             skip: set[int] | frozenset[int] = frozenset()) -> dict[int, Identity]:
++             skip: set[int] | frozenset[int] = frozenset(), provisional: set | None = None) -> dict[int, Identity]:
+     """Return the descendants of ``roots`` in ``table`` that pass the boundary rule."""
+     children: dict[int, list[Identity]] = {}
+     for item in table.values():
+         children.setdefault(item.ppid, []).append(item)
++    provisional = set() if provisional is None else provisional
+     found: dict[int, Identity] = {}
+     pending = list(roots)
+     while pending:
+@@ -163,10 +198,14 @@ def _descend(table: dict[int, Identity], roots: set[int], marker: str, foreign:
+             key = (child.pid, child.start)
+             if child.pid in found or child.pid in skip or child.pid in roots or key in foreign:
+                 continue
+-            if _foreign(child.pid, marker):
++            verdict = _verdict(child.pid, marker)
++            if verdict == 'foreign':
+                 foreign.add(key)
++            if verdict in ('foreign', 'later'):
+                 continue
+-            found[child.pid] = child
++            found[child.pid] = child._replace(provisional=verdict == 'copy-ours') if False else child
++            if verdict == 'copy-ours':
++                provisional.add(key)
+             pending.append(child.pid)
+     return found
+ 
+@@ -213,6 +252,7 @@ class DescendantSampler:
+         self.entries: dict[tuple[int, int], dict] = {}
+         self.error: str | None = None
+         self._foreign: set[tuple[int, int]] = set()
++        self._provisional: set[tuple[int, int]] = set()
+         self._stop = threading.Event()
+         self._thread: threading.Thread | None = None
+         self._lock = threading.Lock()
+@@ -246,6 +286,15 @@ class DescendantSampler:
+                 # A first read may come between fork and exec or find argv unreadable: re-read
+                 # each recorded command line; an unreadable read keeps the earlier one.
+                 for key, entry in list(live.items()):
++                    if key in self._provisional:
++                        verdict = _verdict(entry['pid'], self.marker)
++                        if verdict == 'foreign':
++                            self._foreign.add(key)
++                        if verdict in ('foreign', 'later') and _exec_done(entry['pid']):
++                            live.pop(key)
++                            continue
++                        if verdict == 'ours':
++                            self._provisional.discard(key)
+                     if argv := _argv(entry['pid']):
+                         live[key] = {**entry, 'argv': shown_command(argv)}
+                 # The Runtime is a root only while its pid still has its start time.
+@@ -253,7 +302,7 @@ class DescendantSampler:
+                 roots = {entry['pid'] for entry in live.values()}
+                 if runtime is not None and runtime.start == self._runtime_start:
+                     roots.add(self.runtime_pid)
+-                for item in _descend(table, roots, self.marker, self._foreign).values():
++                for item in _descend(table, roots, self.marker, self._foreign, provisional=self._provisional).values():
+                     key = (item.pid, item.start)
+                     if key not in live:
+                         live[key] = {'pid': item.pid, 'ppid': item.ppid, 'pgid': item.pgid, 'uid': item.uid,

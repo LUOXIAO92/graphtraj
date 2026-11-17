@@ -1,6 +1,7 @@
 """Actual multi-member replacement preserves stopped descendants and ownership."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,8 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
         assert {member['alias'] for member in members} == {alias, child}
         original_child = yaml.safe_load((runner / child / 'mapping.yml').read_text())
         marker = (runner / alias / 'stop.yml').read_bytes()
+        # A returned interrupt without a pending record has the terminal record readable (474).
+        assert all('execution_record' not in member for member in members)
         assert yaml.safe_load((runner / child / 'execution.yml').read_text())['outcome'] == 'interrupted'
         # Historical preflight allocation has no launch, identity or owner.
         residue = runner / '154-recovery-handover0-researcher@unstarted'
@@ -81,6 +84,54 @@ def test_replacing_parent_keeps_old_descendants_stopped_and_bound_to_old_session
         assert not after['stopped']
         for field in ('started_at', 'allowance_minutes', 'sessions', 'stopping_checks'):
             assert after[field] == accounting[field]
+    finally:
+        Path(env['RECOVERY_RELEASE']).touch()
+        command(installed_commands, root, env, 'interrupt', alias)
+
+
+SLOW_TERMINAL = '''
+import sys, time
+if 'graphtraj.execution.runner_worker' in sys.orig_argv:
+    from pathlib import Path
+    import graphtraj.execution.runner_io as runner_io
+    original = runner_io.write_yaml_durably
+    def slow_write(path, document):
+        if Path(path).name == 'execution.yml':
+            time.sleep(3)
+        return original(path, document)
+    runner_io.write_yaml_durably = slow_write
+'''
+
+
+def test_interrupt_returns_after_slow_terminal_record(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Worker slow to record its end still has that record readable when interrupt returns."""
+    controls = tmp_path / 'slow-terminal'
+    controls.mkdir()
+    (controls / 'sitecustomize.py').write_text(SLOW_TERMINAL)
+    # The installed test environment loads a PYTHONPATH sitecustomize into -I
+    # Workers only while BUDGET_CLOCK is set (conftest graphtraj_test_clock).
+    monkeypatch.setenv('BUDGET_CLOCK', '1')
+    monkeypatch.setenv('PYTHONPATH', os.pathsep.join(filter(None, [str(controls), os.environ.get('PYTHONPATH')])))
+    root, env, task = prepare(
+        installed_commands, temporary_git_repository, fake_codex, tmp_path, 'researcher', child=True,
+    )
+    alias = task['alias']
+    child = json.loads((Path(task['worktree_path']) / 'child.json').read_text())['alias']
+    runner = root / '.graphtraj/runner/sessions'
+    try:
+        wait_for_file(runner / alias / 'execution.yml', timeout=30)
+        assert not (runner / child / 'execution.yml').exists()
+        stopped = command(installed_commands, root, env, 'interrupt', alias)
+        assert stopped.returncode == 0, stopped.stdout + stopped.stderr
+        member = next(item for item in yaml.safe_load(stopped.stdout)['members'] if item['alias'] == child)
+        assert member == {'alias': child, 'interrupt_status': 'interrupted'}
+        assert yaml.safe_load((runner / child / 'execution.yml').read_text())['outcome'] == 'interrupted'
     finally:
         Path(env['RECOVERY_RELEASE']).touch()
         command(installed_commands, root, env, 'interrupt', alias)

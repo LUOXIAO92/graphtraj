@@ -119,6 +119,9 @@ are for the authorized test executors when source changes require them.
   change can affect the wider product.
 - Use `python -m compileall -q src tests` for a syntax pass and
   `git diff --check` for patch hygiene.
+- A change that adds or alters a GraphTraj import from `graftling` uses only
+  the names in `src/graftling/PUBLIC_API.md` section 1.3 and runs
+  `tests/test_graphtraj_public_agents_api.py`.
 
 ## Working constraints
 

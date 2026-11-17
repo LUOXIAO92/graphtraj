@@ -15,7 +15,18 @@ from typing import Mapping, Optional, Sequence
 import pytest
 
 # Session-end reclaim of the processes this run started (454).
-from process_reclaim import pytest_configure, pytest_sessionfinish  # noqa: F401
+from process_reclaim import mark_test_run, pytest_sessionfinish  # noqa: F401
+# Idle budget timers end with the test that started them (490).
+from process_reclaim import end_test_budget_timers  # noqa: F401
+# Temporary directories outside every enclosing Harness (482).
+import harness_isolation
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config: pytest.Config) -> None:
+    """Move the temporary root out of an enclosing Harness first (482), then mark the run (454)."""
+    harness_isolation.configure(config)
+    mark_test_run()
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -131,6 +142,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     or the interpreter lacks the installed metadata, commands or build backend."""
     import tempfile
 
+    harness_isolation.report(session)
     with tempfile.TemporaryDirectory() as neutral:
         problem = (_checkout_import_problem(Path(neutral)) or _installation_problem()
                    or _build_backend_problem(Path(neutral)))

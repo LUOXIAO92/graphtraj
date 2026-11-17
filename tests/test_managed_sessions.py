@@ -451,22 +451,36 @@ def test_idle_continuation_preserves_alias_and_native_history(managed_project: M
     assert [r['payload']['id'] for r in records if r['type'] == 'session_meta'] == [launched['session']]
 
 
-def test_interrupt_is_targeted_and_terminal_before_service_exit(managed_project: ManagedProject) -> None:
-    """Native cancellation leaves a peer running and confirms only the target turn."""
+def test_interrupt_is_targeted_and_keeps_the_session_for_continuation(managed_project: ManagedProject) -> None:
+    """Interrupting one execution ends only that one, leaves a peer running, and its Session can continue."""
+    from graphtraj.execution.runner_status import read_alias_mapping
+
     root, cause, call, _ = managed_project
     first = call('launch', launch_document(role='first-probe'))['tasks'][0]
     second = call('launch', launch_document(role='second-probe'))['tasks'][0]
     before = observe(call, first['alias'], 'running')
-    assert call('interrupt', [first['alias']]) == {
+    # The public (ordinary) interrupt, which the same direct parent may continue after.
+    assert call('agents', ['interrupt', {'agent': first['alias']}, 'main-a'])['result'] == {
         'alias': first['alias'], 'interrupt_status': 'interrupted',
         'members': [{'alias': first['alias'], 'interrupt_status': 'interrupted'}],
     }
+    # The terminal record is readable once interrupt returns (474).
+    _, directory = read_alias_mapping(root / '.graphtraj/runner', first['alias'])
+    ended = yaml.safe_load((directory / 'execution.yml').read_text())
+    assert ended['outcome'] == 'interrupted'
+    assert ended['execution_id'] == before['execution_id']
     status = observe(call, first['alias'], 'idle', 'interrupted')
     assert status['execution_id'] == before['execution_id']
-    assert not (root / 'native' / (first['session'] + '.closed')).exists()
     observe(call, second['alias'], 'running')
     call('send', [second['alias'], 'complete unaffected peer', [cause]])
     observe(call, second['alias'], 'idle', 'completed')
+    # The interrupted native Session continues in a new execution.
+    call('send', [first['alias'], 'hold', [cause]])
+    continued = observe(call, first['alias'], 'running')
+    assert continued['session'] == before['session'] == first['session']
+    assert continued['execution_id'] != before['execution_id']
+    call('send', [first['alias'], 'complete continued execution', [cause]])
+    observe(call, first['alias'], 'idle', 'completed')
 
 
 def test_interrupted_worker_and_runtime_exit_within_the_stop_window(managed_project: ManagedProject) -> None:

@@ -109,7 +109,7 @@ def test_codex_host_runs_a_claude_child_end_to_end(
             'claude-sonnet-5-5', 'high', 'work-claude')
         assert child['last_result']['outcome'] == 'completed'
         assert child['last_result']['notification'] == 'delivered'
-        assert child['last_result']['last_message'] is None
+        assert child['last_result']['last_message'] == 'hello'  # 477: still shown
         selection = json.loads((tmp_path / 'native-selection.json').read_text())
         assert (selection['model'], selection['effort']) == ('claude-sonnet-5-5', 'high')
         assert events(log) == [{'source': 'agents', 'alias': agent, 'event': 'completed', 'message': 'hello',

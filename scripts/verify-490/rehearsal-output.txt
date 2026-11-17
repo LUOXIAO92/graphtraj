@@ -1,0 +1,417 @@
+# verify-490 rehearsal (Engineer, Claude Code sandbox, set -u, 2026-11-16)
+# env: VERIFY490_BASE=$TMPDIR/b490 VERIFY490_OUT=$TMPDIR/o490 VERIFY490_STUB_BIN=$TMPDIR/stub490 (stub claude prints one CLAUDE-OK line; stub ps lists one timer of another project)
+# Not rehearsable here: real claude Sessions (A launch stops at the stub host's version refusal; B not run), x490 accept/watch, and a real suite.
+
+## 00 (second run; the first run did git init, graphtraj setup and registered Tasks 1/2 ready, roles OK)
+
+### [00] preflight via /bin/zsh. Dialog: none. Waits: claude <= 120 s.
+ZSH_VERSION=5.9; candidate be9774752ca40ebfa0508b449f91498f678cd30c (uncommitted paths in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/490-budget-idle-timer-reaps-worker: 0); BASE=/tmp/claude-501/b490
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+
+### candidate venv /tmp/claude-501/b490/venv: commit archived to /tmp/claude-501/b490/candidate and installed editable from there
+venv already holds be9774752ca40ebfa0508b449f91498f678cd30c: install skipped (rerun)
+candidate imports: /private/tmp/claude-501/b490/candidate/src/graphtraj/__init__.py | from the archived commit: True
+
+### isolated project /tmp/claude-501/b490/project (own git and .graphtraj)
+existing project: git init and setup skipped (rerun)
+graphtraj runner directory: /private/tmp/claude-501/b490/project/.graphtraj/runner | project own: True
+task 1 already registered (ready): register skipped
+task 2 already registered (ready): register skipped
+roles OK
+task 1 timer-b: budget 1 min, status ready
+task 2 timer-a: budget 30 min, status ready
+
+### host the steps use, one read-only call: claude -p --model claude-opus-5-5 (limit 120 s)
+claude answer: OK | CLAUDE-OK claude-opus-5-5 (stub) (logged in)
+
+### timers of this project before A (expected 0)
+budget timers of /tmp/claude-501/b490/project: 0
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/490-budget-idle-timer-reaps-worker/scripts/verify-490/steps.zsh A 2>&1 | tee /tmp/claude-501/o490/A.txt
+
+## A (stub host: launch refused, step stops)
+
+### [A] Task 2 (30-minute budget): a root member ends -> its idle timer waits; the Task is accepted, integrated and cleaned -> the timer is gone within ~10 s and sent nothing. Dialog: none (the member uses no tool). Waits: member <= 300 s, timer <= 30 s.
+STOP: launch failed:
+retained_batch_file: /private/tmp/claude-501/b490/project/.graphtraj/state/batches/20261116T183131.751805+0900.yml
+tasks:
+- task_id: '2'
+  task_name: timer-a
+  role: member
+  launch_status: failed
+  error:
+    code: invalid-config
+    message: Claude Code 2.1.299 or later is required.
+Claude Code 2.1.299 or later is required.
+
+## SUITE with VERIFY490_FAILURES (fake failure id that passes on dev -> NEW; dev clone 1524730b built then reused)
+
+### [SUITE] full suite of candidate be9774752ca40ebfa0508b449f91498f678cd30c from a fresh clone, 6 shards (scripts/run_test_shards.py), failing files once on dev 1524730b (verify-487 devcheck); then timers left by the suite. Dialog: none. Limits: suite 1500 s, dev recheck 600 s.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+REHEARSAL: suite not run; failures from /tmp/claude-501/fake-failures.txt
+== shards exit 1 at 18:42:26; output /tmp/claude-501/o490/SUITE-suite.txt, shard logs /tmp/claude-501/o490/SUITE-shards/
+== failures (1):
+FAILED tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session
+
+### dev comparison: failing files once on dev 1524730b
+dev clone reused: /tmp/claude-501/b490/dev/src
+candidate failures: 1 ids in 1 files; files on dev: 1; limit 600 s; TMPDIR /tmp/claude-501
+dev pytest rc=0: 9 passed, 22 warnings in 0.93s
+  tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session: passes on dev -> NEW
+== NEW failures (fail on the candidate, pass or are absent on dev): 1
+  NEW tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session
+SUITE failures: NEW or unclassified (above)
+
+### timers the suite left: session-end reclaim lines per shard, then a process scan for this run id
+test run id: none
+budget timers the shards' session-end reclaim had to stop: 0
+budget timers of run none still running now: 0
+CHECK SUITE-timers: no run id in /tmp/claude-501/o490/SUITE-suite.txt (scan not meaningful)
+
+==> next: report /tmp/claude-501/o490/00.txt A.txt B.txt SUITE.txt to the 490 Leader
+
+
+# Round 1 correction rehearsal (step B, x490 ended/settle/engineer-timer/watch/delivered), set -u, 2026-11-16 ~18:52-18:58
+# stub claude as before; stub ps prints $TMPDIR/stub490/ps.txt, rewritten by background jobs to play a Worker's start, end (Z) and collection; Session records fabricated under the rehearsal project (3-fake-leader@l1, 3-fake-engineer@e1, removed afterwards).
+
+## step B on the rehearsal project made by the earlier 00 (which has Task 1 at 1 minute): prepare registers Task 3; the stub host refuses the launch -> STOP
+
+### [B] Task 3 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the planned end and delivers to the idle Lead
+roles OK
+task 3 timer-b5: budget 5 min, status ready
+STOP: launch failed:
+retained_batch_file: /private/tmp/claude-501/b490/project/.graphtraj/state/batches/20261116T185157.497410+0900.yml
+tasks:
+- task_id: '3'
+  task_name: timer-b5
+  role: leader
+  launch_status: failed
+  error:
+    code: invalid-config
+    message: Claude Code 2.1.299 or later is required.
+Claude Code 2.1.299 or later is required.
+
+## x490 checks (driver /tmp/claude-501/r1-drive.zsh; 'nice(5) failed' lines are the driver's background jobs in the sandbox)
+== ended: stale outcome of an earlier execution (mapping names a newer one) -> not ended
+3-fake-leader@l1: current execution new1 did not end within 3 s
+  -> rc 2
+== ended: terminal record of the current execution -> ended
+3-fake-leader@l1: execution new1 ended (completed)
+  -> rc 0
+== settle: Engineer still running -> not settled within 5 s
+not settled within 5 s: Leader ('new1', True), Engineer ('e1', False)
+  -> rc 2
+== settle: both ended, stable for 20 s -> settled
+settled: Leader execution new1 and Engineer execution e1 ended, no new execution for 20 s
+  -> rc 0
+== engineer-timer: no budget accounting yet (no threshold ahead) -> STOP reason
+Engineer timer record token: tok1; timer processes for its Session: []; with the current token: []
+next threshold: none
+STOP reason: thresholds passed while running (no threshold ahead)
+  -> rc 2
+== engineer-timer: threshold ahead but no timer process with the current token -> STOP reason
+Engineer timer record token: tok1; timer processes for its Session: []; with the current token: []
+next threshold: 18:57:45 (in 300 s)
+STOP reason: no Engineer timer with the current token (none started, or it already exited)
+  -> rc 2
+== engineer-timer: timer process with the current token -> OK
+Engineer timer record token: tok1; timer processes for its Session: [700]; with the current token: [700]
+next threshold: 18:57:45 (in 300 s)
+  -> rc 0
+== watch: new Leader Worker 701 whose parent 700 is the Engineer's timer; it ends (Z), then is collected
+/tmp/claude-501/r1-drive.zsh:25: nice(5) failed: operation not permitted
+3-fake-leader@l1: Worker before the delivery 600; waiting up to 30 s for a new Worker
+parent: OK (new Leader Worker 701, parent 700: /v/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/b490/project/.graphtraj/runner/sessions/3-fake-engineer@e1 tok1 650)
+collected: OK (Worker 701 gone 3.0 s after it ended)
+  -> rc 0
+== watch: the new Worker's parent is not a timer (the Engineer's completion resumed the Leader) -> parent NO
+/tmp/claude-501/r1-drive.zsh:32: nice(5) failed: operation not permitted
+3-fake-leader@l1: Worker before the delivery 701; waiting up to 30 s for a new Worker
+parent: NO (new Leader Worker 702, parent 690: /v/python -I -m graphtraj.execution.runner_worker e.yml)
+collected: OK (Worker 702 gone 0.0 s after it ended)
+  -> rc 1
+== watch: Worker stays a zombie > 15 s -> collected NO
+/tmp/claude-501/r1-drive.zsh:38: nice(5) failed: operation not permitted
+3-fake-leader@l1: Worker before the delivery 702; waiting up to 30 s for a new Worker
+parent: OK (new Leader Worker 703, parent 700: /v/python -I -m graphtraj.execution.budget_idle_timer /tmp/claude-501/b490/project/.graphtraj/runner/sessions/3-fake-engineer@e1 tok1 650)
+collected: NO (Worker 703 ZOMBIE for 15 s under 700)
+  -> rc 1
+== delivered: none -> rc 1; then a received notice to the Leader -> rc 0
+  -> rc 1
+  18:40:00 elapsed_minutes:5 -> 3-fake-leader@l1 (started-parent-turn)
+  -> rc 0
+
+## B result lines and verdict (the block of step_B sourced with fabricated watch/cleanup outputs and return codes)
+== all hold
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: OK (Task 3; cleanup_status: cleaned)
+PASS B
+== parent not a timer
+### B results
+parent: NO (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: OK (Task 3; cleanup_status: cleaned)
+FAIL B (a line above is NO)
+== cleanup refused
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: NO (Task 3; cleanup_status: refused)
+FAIL B (a line above is NO)
+== notice not delivered
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: NO (Engineer execution-budget-exceeded notice received by L1)
+cleanup: OK (Task 3; cleanup_status: cleaned)
+FAIL B (a line above is NO)
+
+## cleanup line after showing the refusal code
+== cleanup refused
+### B results
+parent: OK (x)
+collected: OK (y)
+delivered: OK (Engineer execution-budget-exceeded notice received by L1)
+cleanup: NO (Task 3; cleanup_status: refused code: worktree-busy )
+FAIL B (a line above is NO)
+
+
+# Round 2 correction rehearsal (A/B acceptance through submit_result + decide-result + task integrate), set -u, 2026-11-16 ~19:04-19:07
+
+## step A on the rehearsal project (Tasks 1-3 from earlier runs): prepare registers Task 4; the stub host refuses the launch -> STOP
+
+### [A] Task 4 (30-minute budget): a root member commits probe-4.txt and submits it, then ends -> its idle timer waits; Main's decision accepts the submission (Task awaiting-integration) -> the timer is gone within ~5 s and sent nothing; then task integrate and cleanup. Dialog: expected none (the probe's one Bash commit and its tasks tool submit_result run under permission_mode auto); if a native 
+roles OK
+task 4 timer-a4: budget 30 min, status ready
+STOP: launch failed:
+retained_batch_file: /private/tmp/claude-501/b490/project/.graphtraj/state/batches/20261116T190447.556981+0900.yml
+tasks:
+- task_id: '4'
+  task_name: timer-a4
+  role: member
+  launch_status: failed
+  error:
+    code: invalid-config
+    message: Claude Code 2.1.299 or later is required.
+Claude Code 2.1.299 or later is required.
+
+## step B: Task 3 already registered; stub host -> STOP
+
+### [B] Task 3 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-3.txt and submits it; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the 
+task 3 already registered (ready): register skipped
+roles OK
+task 3 timer-b5: budget 5 min, status ready
+STOP: launch failed:
+
+## the batch instructions as written (YAML parsed by agent-runner before the host refusal)
+instruction: "In your Worktree run exactly one Bash command: echo 4 > probe-4.txt && git add probe-4.txt && git commit -m 'Add probe 4'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-4.txt], completion = 'probe 4 committed'. Then reply with one line DONE."
+instruction: "Use your GraphTraj agents tool to launch exactly one child with role engineer for this Task and the instruction: Reply with one line DONE. Use no tool. Wait for its result. In your Worktree run exactly one Bash command: echo 3 > probe-3.txt && git add probe-3.txt && git commit -m 'Add probe 3'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-3.txt], completion = 'probe 3 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and use no tool."
+
+## x490 decide / integrate on a fabricated project (driver $TMPDIR/r2-drive.zsh): stub agent-runner (reports from a file; decide-result logs and records awaiting-integration) and stub graphtraj (task integrate logs, runs the validation in the worktree, records integrated) beside a link to the candidate venv's python
+== decide: no submission within 1 s -> rc 2
+m1@x submitted nothing within 1 s; see its Trace
+  -> rc 2
+== decide: latest submission's commit lacks probe-4.txt -> rc 2, no decide-result call
+command failed: git -C $TMPDIR/fp490/wt cat-file -e 2705502e30b3556256743ed8f828b6597f1a4451:probe-4.txt 
+ fatal: path 'probe-4.txt' exists on disk, but not in '2705502e30b3556256743ed8f828b6597f1a4451'
+
+submission s1 candidate 2705502e30b3556256743ed8f828b6597f1a4451 result_refs ['probe-4.txt']; probe-4.txt in the commit: no
+  -> rc 2
+== decide: commit has probe-4.txt -> decide-result with the submission, commit and evidence refs -> rc 0
+submission s2 candidate c08327939a8440485744feeef5d372e19402bd34 result_refs ['probe-4.txt']; probe-4.txt in the commit: yes
+decision: accepted
+decision: OK (task 4 status awaiting-integration)
+  -> rc 0
+decision evidence: Submission s2 candidate c08327939a8440485744feeef5d372e19402bd34: probe-4.txt present in the commit: yes
+== integrate: validation finds probe-4.txt -> rc 0
+integration_status: integrated
+integration: OK (task 4 status integrated)
+  -> rc 0
+== integrate: validation fails (probe missing in the tree) -> rc 2
+command failed: $TMPDIR/stubvenv490/bin/graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file() 
+ validation failed
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from pathlib import Path; assert Path('probe-4.txt').is_file()
+                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+AssertionError
+
+validation failed
+integration: NO (task 4 status awaiting-integration)
+  -> rc 2
+== calls made (stubs):
+agent-runner decide-result --submission-id s2 --commit c08327939a8440485744feeef5d372e19402bd34 --decision accepted --reason 490 probe probe-4.txt committed --evidence-ref decision-4.md --evidence-ref .graphtraj/x/trace.md
+graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file()
+graphtraj task integrate --task-id 4 -- $TMPDIR/stubvenv490/bin/python -c from pathlib import Path; assert Path('probe-4.txt').is_file()
+
+
+# Round 3 correction rehearsal (instruction in the registered Task body; Tasks 6 (A) and 5 (B); decide diagnostics), set -u, 2026-11-16 ~19:17
+
+## step A on the rehearsal project (Tasks 1-4 from earlier runs): prepare registers Tasks 5 and 6; stub host -> STOP
+
+### [A] Task 6 (30-minute budget): a root member commits probe-6.txt and submits it, then ends -> its idle timer waits; Main's decision accepts the submission (Task awaiting-integration) -> the timer is gone within ~5 s and sent nothing; then task integrate and cleanup. Dialog: expected none (the pr
+roles OK
+task 6 timer-a6: budget 30 min, status ready
+STOP: launch failed:
+
+## step B: Task 5 already registered; stub host -> STOP
+
+### [B] Task 5 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-5.txt and submits it; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Lea
+task 5 already registered (ready): register skipped
+roles OK
+task 5 timer-b5n: budget 5 min, status ready
+STOP: launch failed:
+
+## registered body (task.md after the '# 490 probe' heading) vs the launch instruction written by launch() (YAML-parsed); driver $TMPDIR/r3-check.zsh
+== Task 6: registered body (from task.md) == launch instruction: YES
+  body: In your Worktree run exactly one Bash command: echo 6 > probe-6.txt && git add probe-6.txt && git commit -m 'Add probe 6'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-6.txt], completion = 'probe 6 committed'. Then reply with one line DONE.
+  'Use no tool' anywhere in the body: 0
+== Task 5: registered body (from task.md) == launch instruction: YES
+  body: If you are the leader: use your GraphTraj agents tool to launch exactly one child with role engineer for this Task with the instruction: Reply with one line DONE and do nothing else. Wait for its result. In your Worktree run exactly one Bash command: echo 5 > probe-5.txt && git add probe-5.txt && git commit -m 'Add probe 5'. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = the new HEAD, result_refs = [probe-5.txt], completion = 'probe 5 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and do nothing else. If you are the engineer: reply with one line DONE and do nothing else.
+  'Use no tool' anywhere in the body: 0
+
+## x490 decide without a submission (stub agent-runner reports none; fabricated execution.yml); driver $TMPDIR/r3-drive.zsh
+== decide: no submission -> the member's last message and its Session directory, rc 2
+6-timer_a6-handover0-member@member submitted nothing within 1 s
+  last execution e6: outcome completed
+  last_agent_message: 'DONE (no tool used, as the Task body says)'
+  Session directory: $TMPDIR/fp490/.graphtraj/runner/sessions/6-timer_a6-handover0-member@member
+  -> rc 2
+== decide: no submission and no execution.yml (never ended) -> None fields, rc 2
+6-timer_a6-handover0-member@member submitted nothing within 1 s
+  last execution None: outcome None
+  last_agent_message: None
+  Session directory: $TMPDIR/fp490/.graphtraj/runner/sessions/6-timer_a6-handover0-member@member
+  -> rc 2
+
+## Round 3 addition (Main confirmed: submit_result refused the short hash 7801a52): the one Bash command also runs git rev-parse HEAD and the instruction says to pass that full 40-character hash. Rehearsal project recreated (00 with stubs; venv reused) so Tasks 5/6 register with the new body
+graphtraj runner directory: /private/tmp/claude-501/b490/project/.graphtraj/runner | project own: True
+roles OK
+task 5 timer-b5n: budget 5 min, status ready
+task 6 timer-a6: budget 30 min, status ready
+claude answer: OK | CLAUDE-OK claude-opus-5-5 (stub) (logged in)
+A: STOP: launch failed: (stub host)
+B: STOP: launch failed: (stub host)
+== Task 6: registered body (from task.md) == launch instruction: YES
+  body: In your Worktree run exactly one Bash command: echo 6 > probe-6.txt && git add probe-6.txt && git commit -qm 'Add probe 6' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-6.txt], completion = 'probe 6 committed'. Then reply with one line DONE.
+  'Use no tool' anywhere in the body: 0
+== Task 5: registered body (from task.md) == launch instruction: YES
+  body: If you are the leader: use your GraphTraj agents tool to launch exactly one child with role engineer for this Task with the instruction: Reply with one line DONE and do nothing else. Wait for its result. In your Worktree run exactly one Bash command: echo 5 > probe-5.txt && git add probe-5.txt && git commit -qm 'Add probe 5' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-5.txt], completion = 'probe 5 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and do nothing else. If you are the engineer: reply with one line DONE and do nothing else.
+  'Use no tool' anywhere in the body: 0
+
+== the one Bash command, extracted from Task 6's registered body, run in a fresh repository:
+$ echo 6 > probe-6.txt && git add probe-6.txt && git commit -qm 'Add probe 6' && git rev-parse HEAD
+701d6bdafa38efd61c345d8e50cddc894fc2b0b2
+printed: 701d6bdafa38efd61c345d8e50cddc894fc2b0b2 | length 40 | full hex hash: YES
+
+
+# Round 4 correction rehearsal (step B only: unconditional Leader body on Task 7; no-Engineer diagnostics), set -u, stubs, 2026-11-16 ~19:23
+
+## step B on the rehearsal project: prepare registers Task 7; stub host -> STOP; then the registered body vs the launch instruction (driver $TMPDIR/r4-check.zsh)
+
+### [B] Task 7 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader launches one Engineer, then commits probe-7.txt and submits it; both end and settle (th
+roles OK
+task 7 timer-b7: budget 5 min, status ready
+STOP: launch failed:
+STOP: launch failed:
+== Task 7: registered body (from task.md) == launch instruction: YES
+  body: Launch exactly one child with role engineer for this Task using your GraphTraj agents tool, with the instruction: You are the engineer launched by the leader. Ignore the leader steps in the Task body. Reply with one line DONE and do nothing else. Wait for its result. In your Worktree run exactly one Bash command: echo 7 > probe-7.txt && git add probe-7.txt && git commit -qm 'Add probe 7' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-7.txt], completion = 'probe 7 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and do nothing else.
+  'Use no tool' anywhere in the body: 0
+  'If you are' (role branching) in the body: 0
+
+## B's no-Engineer lines (taken from steps.zsh) against a fabricated Leader that ended with DONE (driver $TMPDIR/r4-noeng.zsh)
+== no Engineer Session of Task 7 (fabricated Leader that ended with DONE)
+STOP B: no Engineer Session of Task 7 was launched. The Leader's last turn:
+  last execution x7: outcome completed
+  last_agent_message: 'DONE'
+  Session directory: $TMPDIR/b490/project/.graphtraj/runner/sessions/7-timer_b7-handover0-team_leader@leader
+  -> rc 1
+
+
+# Round 5 correction rehearsal (step B only: Task 8, tasks-tool swarm dispatch, turn ends at LAUNCHED; launch() writes the batch with yaml.safe_dump; Engineer wait 120 s), set -u, stubs, 2026-11-16 ~19:33
+
+## steps A and B to the stub host STOP (A's prepare registered Task 8); registered bodies vs launch instructions; swarm JSON (driver $TMPDIR/r5-check.zsh)
+
+### [B] Task 8 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader dispatches one Engineer through the tasks tool's swarm and ends its turn; on the Engineer's completion notice it commits probe-8.txt and submits it
+task 8 already registered (ready): register skipped
+A: STOP: launch failed:
+B: STOP: launch failed:
+== Task 8: registered body == launch instruction (batch YAML-parsed): YES
+  swarm arguments parse as JSON: YES | {"tasks": [{"task_id": "8", "role": "engineer", "instruction": "You are the engineer launched by the leader. Ignore the leader steps in the Task body. Reply with one line DONE and do nothing else."}]}
+  mentions agents create only as a prohibition: True | ends the turn with LAUNCHED: True
+  body: Step 1, this turn: dispatch exactly one engineer through your GraphTraj tasks tool with action execute, feature swarm and arguments {"tasks": [{"task_id": "8", "role": "engineer", "instruction": "You are the engineer launched by the leader. Ignore the leader steps in the Task body. Reply with one line DONE and do nothing else."}]}. Do not use the agents tool's create, and do not wait in the same turn. When swarm returns launch_status registered, end your turn at once with one line LAUNCHED. The engineer starts after your turn ends, and its completion notice starts your next turn. Step 2, on the engineer's completion notice: In your Worktree run exactly one Bash command: echo 8 > probe-8.txt && git add probe-8.txt && git commit -qm 'Add probe 8' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-8.txt], completion = 'probe 8 committed'. Then reply with one line DONE. If a GraphTraj budget notice arrives later, reply with one line NOTED and do nothing else.
+== Task 6: registered body == launch instruction (batch YAML-parsed): YES
+  body: In your Worktree run exactly one Bash command: echo 6 > probe-6.txt && git add probe-6.txt && git commit -qm 'Add probe 6' && git rev-parse HEAD. It prints the full 40-character commit hash. Then submit the result with the GraphTraj tasks tool feature submit_result: commit = that full 40-character hash exactly as printed (never a short hash), result_refs = [probe-6.txt], completion = 'probe 6 committed'. Then reply with one line DONE.
+
+## B's Engineer wait lines (taken from steps.zsh; driver $TMPDIR/r5-wait.zsh)
+== Engineer directory appears 4 s after the Leader's first turn (the step waits up to 120 s)
+Engineer alias: 8-timer_b8-handover0-engineer@engineer
+  -> rc 0 after 4 s
+== no Engineer directory (120 s shortened to 6 s for the rehearsal)
+STOP B: no Engineer Session of Task 8 appeared within 6 s. The Leader's last turn:
+  last execution l8: outcome completed
+  last_agent_message: 'LAUNCHED'
+  Session directory: $TMPDIR/b490/project/.graphtraj/runner/sessions/8-timer_b8-handover0-team_leader@leader
+  -> rc 1 after 6 s
+
+
+# CLASSIFY step rehearsal, set -u, 2026-11-16 ~20:03-20:06
+
+## real run: two fast ids present on both sides; the candidate clone was missing (built), the dev clone and venv reused
+
+### [CLASSIFY] SUITE's failing node ids ($TMPDIR/o490c/SUITE-shards/failures.txt), one pytest per side: candidate ($TMPDIR/b490/suite) first, then dev 1524730b ($TMPDIR/b490/dev); clones and venvs reused, only missing ones built. Dialog: none. Limits: 1500 s per side.
+pytest temp base: /private$TMPDIR | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+ids (2):
+  tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session
+  tests/test_budget_notice_idle.py::test_timer_delivers_nothing_while_the_task_is_stopped
+clone built: $TMPDIR/b490/suite/src at 95fcdc4a
+venv built: $TMPDIR/b490/suite/venv
+clone reused: $TMPDIR/b490/dev/src at 1524730b
+venv reused: $TMPDIR/b490/dev/venv
+== candidate: 95fcdc4a, PYTEST_GRAPHTRAJ_RUN=classify-candidate-1794826985, TMPDIR $TMPDIR, start 20:03:05
+== candidate: pytest exit 0 at 20:03:06 (2 passed, 22 warnings in 0.31s)
+== dev: 1524730b, PYTEST_GRAPHTRAJ_RUN=classify-dev-1794826986, TMPDIR $TMPDIR, start 20:03:06
+== dev: pytest exit 0 at 20:03:07 (2 passed, 22 warnings in 0.13s)
+
+### per id: candidate | dev | verdict
+tests/test_budget_notice_idle.py::test_timer_exits_after_cleanup_removes_the_session | candidate PASSED | dev PASSED | PASSES-NOW
+tests/test_budget_notice_idle.py::test_timer_delivers_nothing_while_the_task_is_stopped | candidate PASSED | dev PASSED | PASSES-NOW
+
+### leftover-timer reclaim lines (pytest session end; none printed = nothing left)
+candidate: none
+dev: none
+CLASSIFY: NEW 0
+
+==> next: report $TMPDIR/o490c/CLASSIFY.txt to the 490 Leader
+
+## verdicts on fabricated pytest -rA outputs (script sourced, ensure_clone and run_ids replaced; driver $TMPDIR/r6-verdict.zsh). An id that a side did not run (absent, e.g. an alarm or an id missing on dev, which aborts that pytest) is UNCLASSIFIED, not NEW.
+
+### [CLASSIFY] SUITE's failing node ids ($TMPDIR/o490v/SUITE-shards/failures.txt), one pytest per side: candidate ($TMPDIR/b490/suite) first, then dev 1524730b ($TMPDIR/b490/dev); clones and venvs reused, only missing ones built. Dialog: none. Limits: 1500 s per side.
+pytest temp base: /private$TMPDIR | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+ids (4):
+  t.py::new_one
+  t.py::both[x]
+  t.py::now_passes
+  t.py::dev_not_run
+ensure_clone $TMPDIR/b490/suite (stubbed)
+ensure_clone $TMPDIR/b490/dev (stubbed)
+== candidate: fabricated output
+== dev: fabricated output
+
+### per id: candidate | dev | verdict
+t.py::new_one | candidate FAILED | dev PASSED | NEW
+t.py::both[x] | candidate ERROR | dev FAILED | PRE-EXISTING
+t.py::now_passes | candidate PASSED | dev FAILED | PASSES-NOW
+t.py::dev_not_run | candidate FAILED | dev absent | UNCLASSIFIED
+
+### leftover-timer reclaim lines (pytest session end; none printed = nothing left)
+candidate: leftover test processes of PYTEST_GRAPHTRAJ_RUN=classify-candidate-1: found=1 stopped=1 remaining=0
+dev: none
+CLASSIFY: NEW 1
+
+==> next: report $TMPDIR/o490v/CLASSIFY.txt to the 490 Leader

@@ -1254,8 +1254,10 @@ def _send_session_locked(
             time.sleep(0.01)
     read_terminal_outcome(execution_file)
     worktree = Path(mapping["worktree_path"])
-    if not worktree.is_absolute() or worktree.is_symlink() or not worktree.is_dir():
+    if not worktree.is_absolute() or worktree.is_symlink():
         raise _invalid_mapping()
+    if not worktree.is_dir():
+        raise missing_worktree(worktree)
     request, connection, context_evidence = _read_session_resume_request(session_directory, mapping)
     _attest_runtime_session(session_directory, mapping)
     team_environment = _team_runtime_environment(mapping, cwd)
@@ -1611,6 +1613,7 @@ def _interrupt_session(
     if crashed_start(mapping, session_directory) is not None:
         # The Worker died before recording this execution and nothing runs it.
         return {"alias": alias, "interrupt_status": "stopped"}
+    deadline = time.monotonic() + INTERRUPT_RESPONSE_SECONDS
     try:
         session_operation(mapping, "interrupt", response_timeout=INTERRUPT_RESPONSE_SECONDS)
     except RunnerError:
@@ -1648,7 +1651,15 @@ def _interrupt_session(
         # confirmation, retained separately, can then establish stopping.
         _record_owner_exit(alias, session_directory, mapping)
         return _interrupt_session(alias, session_directory, mapping)
-    return {"alias": alias, "interrupt_status": "interrupted"}
+    # The owner answers once the native turn is interrupted and writes the
+    # terminal record only after its turn returns. Wait for that record within
+    # the same bound, so a returned interrupt can read it (474).
+    while (not os.path.lexists(str(execution_file)) and time.monotonic() < deadline
+           and ownership_is_held(session_directory, mapping["worker_pid"])):
+        time.sleep(0.05)
+    if os.path.lexists(str(execution_file)):
+        return {"alias": alias, "interrupt_status": "interrupted"}
+    return {"alias": alias, "interrupt_status": "interrupted", "execution_record": "pending"}
 
 
 def _running_reports_only(directory: Path) -> bool:
@@ -2136,6 +2147,22 @@ def _read_resume_error(error_file: Path) -> RunnerError:
     return RunnerError(
         "operation-failed",
         "The mapped Runtime Session could not be resumed: " + str(failure),
+    )
+
+
+def missing_worktree(worktree: Path, detail: str = "") -> RunnerError:
+    """Name an absent recorded Worktree and the public operations that restore work.
+
+    Cleanup removes an integrated Task's Worktree; the Session record stays
+    valid, so this is not an invalid mapping (Task 476).
+    """
+    return RunnerError(
+        "operation-failed",
+        f"The Session's recorded Worktree {worktree} is missing"
+        + (f" and could not be prepared: {detail}" if detail else "")
+        + ". For a Task reopened by task revise after cleanup, approved_recovery"
+        " (resume true or false) restores it from current dev and swarm dispatches"
+        " a new Team member there; any other Task must first be reopened by task revise.",
     )
 
 

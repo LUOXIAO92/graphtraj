@@ -11,6 +11,7 @@ process gets one that confirms exactly when the recorded Runtime process is
 gone - the fact the real Adapters establish from their own process records.
 """
 
+import contextlib
 import os
 import shutil
 import signal
@@ -137,7 +138,11 @@ def test_unconfirmed_termination_keeps_the_session_stopped(confirming_project: M
         assert not (directory / f"terminal-confirmation-{before['execution_id']}.yml").exists()
         assert len(_abnormal_responses(root, alias)) == 1
     finally:
-        os.kill(before['runtime_pid'], signal.SIGKILL)
+        # Cleanup only: the orphaned Runtime may have exited on its own by now (it was
+        # alive for both refusals above, or a terminal confirmation would exist).
+        if not _gone(before['runtime_pid']):
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(before['runtime_pid'], signal.SIGKILL)
 
 
 def test_running_owner_receives_the_input_without_a_second_execution(

@@ -1,9 +1,10 @@
 /** DSH's native turn-stopping owner: fork, collect, and steer only actionable work. */
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
-const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || process.argv[1]);
+const require = createRequire(process.env.GRAPHTRAJ_DSH_PACKAGE || realpathSync(process.argv[1]));
 const load = name => import(pathToFileURL(require.resolve(name)).href);
 
 /** Keep the open source turn intact; DSH closes only the copied fork tail. */

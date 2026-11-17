@@ -99,3 +99,25 @@ def test_detached_processes_of_a_shard_are_stopped_and_counted(tmp_path: Path) -
             in finished.stdout), finished.stdout
     assert finished.returncode == 0 and 'ABNORMAL' not in finished.stdout
     assert wait_all_gone([int(child)])
+
+
+def test_stop_group_of_only_unreaped_exited_processes(tmp_path: Path) -> None:
+    """A group holding only exited, unreaped processes is stopped without error (472).
+
+    macOS answers killpg on such a group with EPERM, not ESRCH.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('run_test_shards_472', SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    process = subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True,
+                               stdin=subprocess.DEVNULL)
+    try:
+        # Wait for the exit without reaping it: the group now holds only a zombie.
+        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
+        module._stop_group(process)
+        assert process.returncode == 0
+    finally:
+        if process.returncode is None:
+            process.wait(timeout=10)

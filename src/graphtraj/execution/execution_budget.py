@@ -335,24 +335,26 @@ class ExecutionBudgetMonitor:
                 if notice.get("observer", session_directory.name) != session_directory.name:
                     # Another timed Session observed it; its parent is the recipient.
                     continue
+                identity = {"type": "execution-budget-exceeded", "key": notice["key"]}
+                event = notice.get("event", {"message": notice["message"]})
+                if notice.get("superseded"):
+                    identity["superseded"] = True
+                    event = {**event, "message": notice["message"], "superseded": True}
                 if isinstance(mapping.get("parent"), str) or mapping.get("parent_connection") is not None:
                     receipt = notify_direct_parent(
-                        directory, notice["message"],
-                        {"type": "execution-budget-exceeded", "key": notice["key"]},
-                        before_creation=True,
+                        directory, notice["message"], identity, before_creation=True,
                     )
                     if receipt["delivery"] == "received":
                         received.append(notice["key"])
                 elif not notice.get("channel_written", False):
-                    event = notice.get("event", {"message": notice["message"]})
                     if _emit_notice(json.dumps(event, sort_keys=True) + "\n"):
-                        self._mark_channel_written(notice["key"])
+                        self._mark_channel_written(notice["key"], notice.get("superseded", False))
             return received
 
         self.deliver_notices(deliver)
         return False
 
-    def _mark_channel_written(self, key: str) -> None:
+    def _mark_channel_written(self, key: str, superseded: bool = False) -> None:
         """Retain a caller-channel write without asserting native receipt."""
         with (self.task_directory / ".execution-budget.lock").open("a+") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
@@ -364,6 +366,8 @@ class ExecutionBudgetMonitor:
                 for notice in state["parent_notices"]:
                     if notice["key"] == key:
                         notice["channel_written"] = True
+                        if superseded:
+                            notice["superseded"] = True
                 write_yaml_durably(self.task_directory / "execution-budget.yml", state)
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
@@ -383,7 +387,9 @@ class ExecutionBudgetMonitor:
                     return
                 received = deliver(pending)
                 if received:
-                    self.mark_parent_notices_delivered(received)
+                    self.mark_parent_notices_delivered(received, {
+                        notice["key"] for notice in pending if notice.get("superseded")
+                    })
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
@@ -392,6 +398,12 @@ class ExecutionBudgetMonitor:
 
         With ``observer``, only the notices that Session delivers: another
         timed Session's notices are its own to deliver.
+
+        A stop notice still pending once the Task is no longer stopped was
+        superseded by the continuation or approved recovery that cleared it
+        (467). It is returned with ``superseded`` and a message saying so,
+        so no recipient reads it as a stop of the current window; the
+        retained record keeps the original text.
         """
         lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
@@ -402,7 +414,7 @@ class ExecutionBudgetMonitor:
                     return []
                 state, _ = _read_usage(self.task_directory, budget)
                 return [
-                    dict(notice)
+                    _superseded(notice) if _stop_cleared(notice, state) else dict(notice)
                     for notice in state["parent_notices"]
                     if not notice["delivered"]
                     and (observer is None or notice.get("observer", observer) == observer)
@@ -410,8 +422,14 @@ class ExecutionBudgetMonitor:
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
 
-    def mark_parent_notices_delivered(self, keys: list[str]) -> None:
-        """Record only keys acknowledged by the bound parent transport."""
+    def mark_parent_notices_delivered(
+        self, keys: list[str], superseded: set[str] | frozenset[str] = frozenset(),
+    ) -> None:
+        """Record only keys acknowledged by the bound parent transport.
+
+        ``superseded`` names keys delivered as superseded stops; the record
+        says so beside ``delivered`` and keeps the original message.
+        """
         lock_path = self.task_directory / ".execution-budget.lock"
         with lock_path.open("a+", encoding="utf-8") as lock:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
@@ -422,6 +440,8 @@ class ExecutionBudgetMonitor:
                 state, _ = _read_usage(self.task_directory, budget)
                 for notice in state["parent_notices"]:
                     if notice["key"] in keys:
+                        if not notice["delivered"] and notice["key"] in superseded:
+                            notice["superseded"] = True
                         notice["delivered"] = True
                 write_yaml_durably(
                     self.task_directory / "execution-budget.yml", state
@@ -497,6 +517,26 @@ class ExecutionBudgetMonitor:
             finally:
                 file_lock.flock(lock.fileno(), file_lock.LOCK_UN)
         return state["stopped"]
+
+
+def _stop_cleared(notice: dict[str, Any], state: dict[str, Any]) -> bool:
+    """Whether a stop notice's stop was cleared: it is recorded only when stopping."""
+    return notice["key"].startswith("stochastic_stop:") and not state["stopped"]
+
+
+def _superseded(notice: dict[str, Any]) -> dict[str, Any]:
+    occurred = notice.get("event", {}).get("occurred_at")
+    return {
+        **notice,
+        "superseded": True,
+        "message": (
+            "System notice: The budget stop{0} was cleared afterwards by a continuation "
+            "or approved recovery of this Task's budget. That stop notice is superseded "
+            "and does not apply to the current window.".format(
+                f" sampled at {occurred}" if isinstance(occurred, str) else ""
+            )
+        ),
+    }
 
 
 def _ended_by_budget_stop(session_directory: Path | None) -> bool:
@@ -626,10 +666,12 @@ def _read_usage(
             not isinstance(value, dict)
             or not {"key", "message", "delivered"} <= set(value) <= {
                 "key", "message", "delivered", "event", "channel_written", "observer",
+                "superseded",
             }
             or ("event" in value and not isinstance(value["event"], dict))
             or ("channel_written" in value and type(value["channel_written"]) is not bool)
             or ("observer" in value and not _text(value["observer"]))
+            or ("superseded" in value and value["superseded"] is not True)
             or not _text(value["key"])
             or not _text(value["message"])
             or type(value["delivered"]) is not bool

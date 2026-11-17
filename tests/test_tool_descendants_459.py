@@ -138,7 +138,10 @@ def stop_own(items) -> None:
     """Stop only processes this test started, after checking pid and start time."""
     for item in items:
         if is_alive(item):
-            os.kill(item.pid, signal.SIGKILL)
+            try:
+                os.kill(item.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # it exited between the identity check and the kill (500)
     deadline = time.monotonic() + 5
     while any(is_alive(item) for item in items) and time.monotonic() < deadline:
         time.sleep(0.05)
@@ -200,6 +203,7 @@ def test_owner_killed_then_reconciliation_stops_the_recorded_shell_and_sleep(tmp
         execution = json.loads(record_path(root, child).read_text())['executions'][-1]
         report = execution.get('escaped_processes')
         print('escaped_processes:', json.dumps(report))
+        print('execution:', json.dumps({key: execution.get(key) for key in ('state', 'diagnostic', 'process')}))
         assert status['result']['last_result']['error']['code'] == 'owner-exited'
         assert execution['process']['tool_descendants'] == str(sidecar)
         assert sorted(item['pid'] for item in report['found']) == sorted([shell.pid, sleep.pid])

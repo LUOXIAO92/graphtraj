@@ -7,6 +7,7 @@ where the installed DSH and Node are required and said so.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 from pathlib import Path
@@ -86,16 +87,28 @@ def prompts(service: FakeDshService) -> list[str]:
 
 
 def answered(invoke: Callable, agent: str, shown: Sequence[dict] = ()) -> dict:
-    """Wait for an end and return it with the body the Main got, which it must get exactly once.
+    """Wait for an end and return it with the body the Main got; its notice comes at most once.
 
-    The wait shows it, unless an earlier result already carried it as a notice: a
-    quick child can end before its own create, send or resume returns.
+    A quick child can end before its own create, send or resume returns, so that
+    result may carry its notice. The wait that follows still shows the body (477,
+    PUBLIC_API "Claude Code host"), already ``delivered``: it is not a second push.
+    An end the wait shows is never pushed again, so the wait's own result carries
+    no notice for it.
     """
+    before  = len(shown)
     last    = invoke('wait', agent=agent, timeout_seconds=10)['result']['last_result']
-    carried = [notice['event']['message'] for notice in shown
-               if (notice['event']['execution'], notice['event']['event']) == (last['id'], last['outcome'])]
-    bodies  = carried + ([last['last_message']] if last['last_message'] is not None else [])
-    assert len(bodies) == 1, (last, carried)
+    end     = (last['id'], last['outcome'])
+    ours    = lambda notices: [notice['event']['message'] for notice in notices  # noqa: E731
+                               if (notice['event']['execution'], notice['event']['event']) == end]
+    carried = ours(shown[:before])
+    assert not ours(shown[before:]), (last, carried, ours(shown[before:]))
+    assert len(carried) <= 1, (last, carried)
+    if carried:
+        # Carried by the child's own earlier result: settled there, and the wait shows the same body.
+        assert last['notification'] == 'delivered', (last, carried)
+        assert last['last_message'] in (None, carried[0]), (last, carried)
+    bodies = carried + ([last['last_message']] if last['last_message'] is not None else [])
+    assert bodies and len(set(bodies)) == 1, (last, carried)
     return {**last, 'last_message': bodies[0]}
 
 
@@ -225,6 +238,51 @@ def test_a_dsh_childs_end_reaches_the_claude_main_once(tmp_path: Path, dsh: dict
     # Without a choice the host's own DSH settings apply.
     [service] = FakeDshService.instances
     assert (selected(service)['model'], 'reasoningEffort' in selected(service)) == ('deepseek-flash', False)
+
+
+@pytest.mark.parametrize('queued', [False, True])
+def test_a_wait_while_the_host_queues_the_end_is_its_only_delivery(tmp_path: Path, dsh: dict, queued: bool) -> None:
+    """494: the Main's wait runs while the host's receiver is still handling the child's end.
+
+    The receiver is paused just before (``queued=False``) or just after (``True``)
+    it queues the notice, as load did by chance (491 finding A). The wait shows the
+    body; neither that result, nor the mod's claim, nor a later result brings it again.
+    """
+    host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+    invoke, _, session = claude_main(host, tmp_path)
+    receive = host.control.event_receiver
+    created, inside, leave, returned = (threading.Event() for _ in range(4))
+
+    @functools.wraps(receive)
+    def paused(notice: dict) -> bool | str:
+        """Hand the end to the host's own receiver, pausing where the test says."""
+        created.wait(10)  # after create's result: that result cannot carry it
+        try:
+            accepted = receive(notice) if queued else None
+            inside.set()
+            leave.wait(10)
+            return accepted if queued else receive(notice)
+        finally:
+            returned.set()
+
+    host.control.event_receiver = paused
+    try:
+        agent = invoke('create', runtime='dsh', instruction='report once')['agent']
+        created.set()
+        assert inside.wait(10)
+        done = answered(invoke, agent, invoke.shown)
+        assert (done['outcome'], done['last_message']) == ('completed', 'dsh answer: report once')
+        leave.set()
+        assert returned.wait(10)
+        # The mod's claim (the push) comes first, then a later result.
+        claimed = host.context({'operation': 'notices', 'session': session})['notices']
+        status  = invoke('status', agent=agent)
+        again   = [notice for notice in claimed + invoke.shown if notice['event']['execution'] == done['id']]
+        assert again == []
+        assert status['result']['last_result']['notification'] == 'delivered'
+    finally:
+        leave.set()
+        stop_owned(host.control)
 
 
 def test_codex_host_routes_a_dsh_child_with_its_own_choices(
@@ -401,11 +459,20 @@ def run(feature, **arguments):
     return document
 
 def answered(agent):
-    # The wait shows the body, unless an earlier result already carried it: once either way.
+    # As answered() above (487, 491): an earlier result may carry the end's notice, at most once; the wait
+    # then shows the same body as delivered, and the wait's own result never carries a notice for it.
+    before = len(shown)
     last = run('wait', agent=agent, timeout_seconds=10)['result']['last_result']
-    bodies = [notice['event']['message'] for notice in shown if notice['event']['execution'] == last['id']]
-    bodies += [last['last_message']] if last['last_message'] is not None else []
-    assert len(bodies) == 1, (last, bodies)
+    ours = lambda notices: [n['event']['message'] for n in notices
+                            if (n['event']['execution'], n['event']['event']) == (last['id'], last['outcome'])]
+    carried = ours(shown[:before])
+    assert not ours(shown[before:]), (last, carried, ours(shown[before:]))
+    assert len(carried) <= 1, (last, carried)
+    if carried:
+        assert last['notification'] == 'delivered', (last, carried)
+        assert last['last_message'] in (None, carried[0]), (last, carried)
+    bodies = carried + ([last['last_message']] if last['last_message'] is not None else [])
+    assert bodies and len(set(bodies)) == 1, (last, bodies)
     return bodies[0]
 
 agent = run('create', runtime='dsh', instruction='hello')['agent']

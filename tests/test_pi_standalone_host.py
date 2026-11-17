@@ -295,8 +295,8 @@ def test_notice_waiting_at_shutdown_is_held_and_later_ones_are_not_written() -> 
     assert len(pipe.lines) == 1
 
 
-def test_a_body_being_pushed_is_hidden_from_wait_and_status() -> None:
-    """While this host pushes an end, wait/status do not show its body a second time."""
+def test_a_body_being_pushed_is_shown_queueing_with_its_body() -> None:
+    """While this host pushes an end, wait/status show it ``queueing`` and keep its body (477)."""
     sender, _ = notices()
 
     def agent(notification: str, ended_at: float, parent=None, children=()) -> dict:
@@ -309,7 +309,7 @@ def test_a_body_being_pushed_is_hidden_from_wait_and_status() -> None:
     shown = agent('unavailable', now, children=[member])
     for document in (pushing, older, shown):
         sender.hide_pushed(document)
-    assert pushing['last_result']['last_message'] is None
+    assert pushing['last_result'] == {'notification': 'queueing', 'ended_at': now, 'last_message': 'answer'}
     assert older['last_result']['last_message'] == 'answer'
     assert shown['last_result']['last_message'] == 'answer'
     assert member['last_result']['last_message'] == 'answer'
@@ -333,7 +333,7 @@ def test_each_end_is_pushed_once_and_shutdown_ends_are_held(tmp_path: Path, fake
     call = bind(AgentControl(tmp_path / 'data', drivers, event_receiver=sender.receive), MAIN)
     answered = call({'action': 'create', 'runtime': 'claude', 'instruction': 'hi'}).document['agent']
     assert wait_until(lambda: last_result(call, answered)['notification'] == 'delivered')
-    assert last_result(call, answered)['last_message'] is None
+    assert last_result(call, answered)['last_message'] is not None  # 477: still shown
     fakes['codex'].finish = ('failed', None, {'code': 'RUNTIME_REQUEST_FAILED', 'message': 'login expired'})
     failed = call({'action': 'create', 'runtime': 'codex', 'instruction': 'hi'}).document['agent']
     assert wait_until(lambda: last_result(call, failed)['notification'] == 'delivered')

@@ -1,0 +1,5 @@
+# Known failures outside this Task (482). Each run prints its failures not listed here as NEW.
+# Known separate defect (baseline 461@c4cb357d, still open):
+tests/test_run_test_shards.py::test_hanging_shard_is_stopped_and_reported
+# Fixed by Task 470, which this branch (dev ddd80e0c) does not contain yet:
+tests/test_pi_runtime.py::test_srt_gone_before_launch_is_refused

@@ -135,7 +135,7 @@ def test_the_core_records_a_codex_push_as_delivered(tmp_path: Path, sent: list) 
     mc.claim_main(runner_directory(tmp_path), _codex(tmp_path), 'codex:SessionStart:startup')
     result = _finish(tmp_path)
     assert result['notification'] == 'delivered'
-    assert result['last_message'] is None
+    assert result['last_message'] == 'PONG'  # 477: still shown
     assert len(sent) == 1
 
 
@@ -145,3 +145,22 @@ def test_a_refused_codex_push_keeps_the_end_readable(tmp_path: Path, sent: list)
     result = _finish(tmp_path)
     assert result['notification'] == 'unavailable'
     assert result['last_message'] == 'PONG'
+
+
+def test_a_codex_push_the_daemon_refuses_keeps_its_reason(tmp_path: Path, sent: list) -> None:
+    """484: an interactive Codex Main on an embedded app-server is not in the daemon
+    ``codex app-server proxy`` reaches; status names that, not only ``unavailable``."""
+    sent.transport.failure = RuntimeAdapterError(
+        'RUNTIME_RPC_ERROR', f'turn/start failed: thread not found: {SESSION}')
+    mc.claim_main(runner_directory(tmp_path), _codex(tmp_path), 'codex:SessionStart:startup')
+    result = _finish(tmp_path)
+    assert result['notification'] == 'unavailable'
+    assert result['notification_error'] == {
+        'code': 'RUNTIME_RPC_ERROR', 'message': f'turn/start failed: thread not found: {SESSION}'}
+    assert sent == []
+
+
+def test_a_delivered_codex_push_names_no_failure(tmp_path: Path, sent: list) -> None:
+    mc.claim_main(runner_directory(tmp_path), _codex(tmp_path), 'codex:SessionStart:startup')
+    result = _finish(tmp_path)
+    assert result['notification'] == 'delivered' and 'notification_error' not in result

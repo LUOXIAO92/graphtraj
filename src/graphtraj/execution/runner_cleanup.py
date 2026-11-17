@@ -16,6 +16,7 @@ import yaml
 
 from graphtraj.execution.runner_batch import valid_task_id
 from graphtraj.execution.runner_heartbeat import execution_start_lock
+from graphtraj.execution.runner_process import process_is_zombie
 from graphtraj.execution.runner_status import read_alias_mapping, require_stopped_subtree
 from graphtraj.execution.runner_models import CleanupResponse, Project, RunnerError
 from graphtraj.workspace.runner_project import (
@@ -587,13 +588,14 @@ def _valid_mapping(mapping: dict[str, Any], alias: str, task_id: str) -> bool:
 
 
 def _process_alive(pid: int) -> bool:
+    """Whether the recorded process still executes; an uncollected ended one does not (490)."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except OSError:
         return True
-    return True
+    return not process_is_zombie(pid)
 
 
 def _delete_branch_if_dev_unchanged(

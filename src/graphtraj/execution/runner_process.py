@@ -19,6 +19,11 @@ from graftling import process_ancestors, process_executable, process_arguments a
 # The Darwin kernel's process information interface (sys/proc_info.h).
 _PROC_PIDT_SHORTBSDINFO   = 13
 _SHORTBSDINFO_BUFFER_SIZE = 64
+_SZOMB                    = 5    # pbsi_status: exited, not yet reaped
+_PROC_FLAG_INEXIT         = 0x4  # pbsi_flags: the kernel is tearing it down
+# A live process may briefly refuse its argv while it executes a new image.
+_ARGUMENT_RETRY_SECONDS   = 0.5
+_ARGUMENT_RETRY_INTERVAL  = 0.05
 
 
 def _libproc() -> ctypes.CDLL | None:
@@ -48,6 +53,28 @@ def process_is_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def process_is_zombie(pid: int) -> bool:
+    """Return whether the process ended and only waits for its parent to collect it (490).
+
+    Such a zombie still answers ``kill(pid, 0)`` but executes nothing. An
+    identity this user cannot read is not reported as a zombie.
+    """
+    if sys.platform == 'darwin':
+        library = _libproc()
+        if library is None:
+            return False
+        record = ctypes.create_string_buffer(_SHORTBSDINFO_BUFFER_SIZE)
+        # Nonzero arg includes zombies (XNU proc_pidinfo findzomb); SZOMB is 5.
+        if library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 1, record, len(record)) != len(record):
+            return False
+        return int.from_bytes(record.raw[12:16], sys.byteorder) == 5
+    try:
+        state = Path(f'/proc/{pid}/stat').read_text().rpartition(')')[2].split()[0]
+    except (OSError, IndexError):
+        return False
+    return state == 'Z'
 
 
 def stop_worker(pid: int) -> bool:
@@ -89,22 +116,74 @@ def unstarted_worker_processes(job_file: Path) -> list[int]:
     expected = ['-I', '-m', 'graphtraj.execution.runner_worker', str(job_file)]
     matches = []
     for pid, parent, group in processes:
-        try:
-            arguments = _process_arguments(pid)
-        except OSError:
-            if process_is_alive(pid):
-                raise
+        arguments = _worker_arguments(pid)
+        if arguments is None or str(job_file) not in arguments:
             continue
-        if str(job_file) not in arguments:
-            continue
+        executable = process_executable(pid)
+        if executable is None and sys.platform == 'darwin' and _process_ended(pid):
+            continue  # Exited after its argv was read: it can no longer act.
         if (arguments[1:] != expected
-                or process_executable(pid) != Path(sys.executable).resolve()
+                or executable != Path(sys.executable).resolve()
                 or group != pid or any(ppid == pid for _, ppid, _ in processes)):
             raise OSError('Launch process identity or pre-Runtime state is ambiguous')
         matches.append(pid)
     if len(matches) > 1:
         raise OSError('Multiple Workers reference the same launch')
     return matches
+
+
+def _worker_arguments(pid: int) -> list[str] | None:
+    """Read a pid's argv, or None when the kernel shows it has ended.
+
+    An exiting or zombie process can never execute again, so it is no Worker
+    and is never signalled. A live, not-exiting process whose argv stays
+    unreadable for the bounded retry is refused as before.
+    """
+    deadline = time.monotonic() + _ARGUMENT_RETRY_SECONDS
+    while True:
+        try:
+            return _process_arguments(pid)
+        except OSError:
+            if sys.platform != 'darwin':
+                if process_is_alive(pid):
+                    raise
+                return None
+            if _process_ended(pid):
+                return None
+            if time.monotonic() + _ARGUMENT_RETRY_INTERVAL > deadline:
+                raise
+            time.sleep(_ARGUMENT_RETRY_INTERVAL)
+
+
+def _short_bsd_info(pid: int) -> tuple[int, int, int, int, int] | None:
+    """Darwin pid, parent, group, status and flags, zombies included; None if unreadable."""
+    library = _libproc()
+    if library is None:
+        return None
+    record = ctypes.create_string_buffer(_SHORTBSDINFO_BUFFER_SIZE)
+    # Nonzero arg includes zombies and exiting processes (XNU findzomb).
+    if library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 1, record, len(record)) != len(record):
+        return None
+    return tuple(int.from_bytes(record.raw[offset:offset + 4], sys.byteorder)
+                 for offset in (0, 4, 8, 12, 32))
+
+
+def _has_ended(info: tuple[int, int, int, int, int]) -> bool:
+    return info[3] == _SZOMB or bool(info[4] & _PROC_FLAG_INEXIT)
+
+
+def _process_ended(pid: int) -> bool:
+    """Darwin: whether the kernel shows pid as exiting, a zombie, or reaped."""
+    info = _short_bsd_info(pid)
+    if info is not None:
+        return _has_ended(info)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    return False
 
 
 def _current_user_processes() -> list[tuple[int, int, int]]:
@@ -128,16 +207,13 @@ def _current_user_processes() -> list[tuple[int, int, int]]:
         raise OSError('Native process enumeration is incomplete')
     result = []
     for pid in pids[:written // 4]:
-        record = ctypes.create_string_buffer(_SHORTBSDINFO_BUFFER_SIZE)
-        count = library.proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 0, record, len(record))
-        if count != len(record):
+        info = _short_bsd_info(pid)
+        if info is None:
             if process_is_alive(pid):
                 raise OSError('Native process identity is unavailable')
             continue
-        values = [int.from_bytes(record.raw[offset:offset + 4], sys.byteorder)
-                  for offset in (0, 4, 8, 12)]
-        if values[3] != 5:  # SZOMB has exited and cannot execute.
-            result.append(tuple(values[:3]))
+        if not _has_ended(info):  # Exiting or zombie processes cannot execute.
+            result.append(info[:3])
     return result
 
 

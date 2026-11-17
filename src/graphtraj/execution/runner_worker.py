@@ -44,6 +44,10 @@ from graphtraj.runtimes.runtime_adapter import (
 # to reap it; its last notice transport gets the rest of that window.
 STOP_EXIT_MARGIN_SECONDS = 2.0
 DELIVERY_JOIN_SECONDS = OPERATION_TIMEOUT_SECONDS - STOP_EXIT_MARGIN_SECONDS
+# Each budget sample reparses the Task's budget records. Thresholds are counted
+# in minutes and stop checks fall two minutes apart, so once a second is
+# enough; sampling every 50 ms kept an open turn's Worker busy (468).
+BUDGET_SAMPLE_SECONDS = 1.0
 
 
 def run(job_file: Path) -> int:
@@ -317,6 +321,18 @@ def run(job_file: Path) -> int:
                     terminal_published = True
             finally:
                 stop_child_watch()
+                # The turn ended: a child end held for it whose holder process died
+                # is pushed once now, not only at some later read (477).
+                try:
+                    from graphtraj.interfaces.agents import GraphTrajAgents, join_holds
+
+                    # This process's holds see the terminal record and send before it exits.
+                    join_holds(5.0)
+                    GraphTrajAgents(runner_project_root(runner_directory)).reconcile_children(
+                        {base_mapping["alias"], task_agent.run.agent if task_agent is not None
+                         else base_mapping.get("agent")} - {None})
+                except Exception:
+                    pass  # the 451 sweep and later reads remain the backstop
                 heartbeat_stop.set()
                 heartbeat_thread.join()
                 if monitor_stop is not None:
@@ -623,22 +639,26 @@ def _monitor_execution_budget(
                 return
             time.sleep(min(1, remaining))
 
-    while not stop.is_set():
+    while True:
+        # One last pass follows the end of the turn: a stop seen at Session
+        # creation ends it without delivering, and the latest sample may be a
+        # second old. That pass only samples and delivers.
+        ended = stop.is_set()
         stopped = monitor.check(role, execution_budget_stage(role))
         # Termination is requested before any notice lock or transport. The
         # managed execution retains this request even before thread/start ends.
-        if stopped:
+        if stopped and not ended:
             budget_stopped.set()
             terminate()
         if (session_directory / "launch.yml").is_file():
             pending = {notice["key"] for notice in monitor.pending_parent_notices(observer)}
-            if pending and time.monotonic() >= retry_at and (delivery is None or not delivery.is_alive()):
+            if pending and (ended or time.monotonic() >= retry_at) and (delivery is None or not delivery.is_alive()):
                 retry_at = time.monotonic() + 1
                 delivery = threading.Thread(target=deliver, daemon=True)
                 delivery.start()
-        if stopped:
+        if stopped or ended:
             break
-        stop.wait(0.05)
+        stop.wait(BUDGET_SAMPLE_SECONDS)
     # The native execution has already received interruption independently.
     # Allow its outstanding transport to finish, bounded inside the stop's own
     # reap window; an unavailable parent cannot retain the Worker forever.

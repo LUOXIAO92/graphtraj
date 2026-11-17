@@ -42,9 +42,9 @@ def team(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     runner = tmp_path / "runner"
     mappings = {
         "leader-1": {"alias": "leader-1", "task_id": "445", "role": "team_leader",
-                     "parent": None, "parent_connection": ROOT_CONNECTION},
+                     "parent": None, "parent_connection": ROOT_CONNECTION, "team_generation": 1},
         "engineer-1": {"alias": "engineer-1", "task_id": "445", "role": "engineer",
-                       "parent": "leader-1"},
+                       "parent": "leader-1", "team_generation": 1},
     }
     for alias, mapping in mappings.items():
         directory = runner / "sessions" / alias
@@ -244,3 +244,168 @@ def test_a_delivery_that_never_returns_ends_the_timer(team, monkeypatch) -> None
     assert _state(task)["parent_notices"] and not any(
         notice["delivered"] for notice in _state(task)["parent_notices"])
     assert timers.DELIVERY_SECONDS > 0
+
+
+def _set_status(path: Path, status: str) -> None:
+    """Record ``status`` in a Task's task.yml or a Team's team.yml."""
+    record = yaml.safe_load(path.read_text()) if path.is_file() else {}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({**record, "status": status}))
+
+
+@pytest.mark.parametrize("status", ["awaiting-integration", "integrating", "integrated"])
+def test_timer_exits_once_the_task_was_accepted_or_integrated(team, status) -> None:
+    """An accepted, integrated or cleaned Task keeps its status; its timers send nothing (490)."""
+    task, runner, monitor, received = team
+    clock = Clock(_state(task)["started_at"] + 3600)
+    _set_status(task / "task.yml", status)
+    assert _run(runner, "leader-1", monitor, clock) is False
+    assert _run(runner, "engineer-1", monitor, clock) is False
+    assert received == [] and clock.slept == [] and _state(task)["parent_notices"] == []
+
+
+def test_timer_of_ongoing_work_still_delivers(team, monkeypatch) -> None:
+    """While the Task is implementing and its Team active, notices arrive as before (490)."""
+    task, runner, monitor, received = team
+    _set_status(task / "task.yml", "implementing")
+    _set_status(task / "teams" / "1" / "team.yml", "active")
+    clock = Clock(_state(task)["started_at"])
+    monkeypatch.setattr(timers.time, "time", clock)
+    assert _run(runner, "engineer-1", monitor, clock) is True
+    assert [event["key"] for _, _, event in received][0] == "elapsed_minutes:1"
+
+
+@pytest.mark.parametrize("ending", ["member-retired", "team-retiring", "team-retired"])
+def test_timer_exits_once_its_member_or_team_was_retired(team, ending) -> None:
+    """A retired member or a closed Team ends the member's timer (490)."""
+    task, runner, monitor, received = team
+    directory = runner / "sessions" / "engineer-1"
+    if ending == "member-retired":
+        # Retirement keeps the Session record but removes its active mapping.
+        (directory / "mapping.yml").unlink()
+    else:
+        _set_status(task / "teams" / "1" / "team.yml", ending.removeprefix("team-"))
+    clock = Clock(_state(task)["started_at"] + 3600)
+    assert _run(runner, "engineer-1", monitor, clock) is False
+    assert received == [] and clock.slept == []
+
+
+def _timer_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, overdue: bool):
+    """Start a real timer process for a timed Leader under Main; return it and its notice log.
+
+    The timer process stands in only for Main's connection: each notice it
+    delivers starts a short child process, as a delivery to an idle parent
+    starts that parent's Worker. The log names each child pid and notice key.
+    """
+    harness = tmp_path / "harness"
+    task = harness / "tasks" / "490-timed"
+    task.mkdir(parents=True)
+    # 60 minutes: after the planned end the next threshold is minutes away,
+    # so no later delivery's process start collects the first child.
+    (task / "task.md").write_text(_budget_body(total=60))
+    (task / "task.yml").write_text(yaml.safe_dump({"current_definition": "task.md",
+                                                  "status": "implementing"}))
+    _set_status(task / "teams" / "1" / "team.yml", "active")
+    alias = "490-timed-handover0-team_leader@team_leader"
+    directory = harness / "runner" / "sessions" / alias
+    directory.mkdir(parents=True)
+    (directory / "mapping.yml").write_text(yaml.safe_dump({
+        "alias": alias, "runtime": "claude", "session": "s-490", "task_id": "490",
+        "team_generation": 1, "role": "team_leader", "parent": None,
+        "parent_connection": ROOT_CONNECTION, "retained_batch_file": "batch.yml",
+        "worktree_path": str(harness), "trace_file": str(directory / "trace.jsonl"),
+        "worker_pid": 1, "runtime_pid": 1,
+    }))
+    monitor = ExecutionBudgetMonitor(task, "490", "timed")
+    monitor.check("team_leader", "team_leader")
+    if overdue:
+        state = _state(task)
+        state["started_at"] -= 60 * 60 + 1
+        (task / "execution-budget.yml").write_text(yaml.safe_dump(state))
+    log = tmp_path / "notices.log"
+    script = tmp_path / "timer.py"
+    script.write_text(
+        "import os, subprocess, sys\n"
+        "from graphtraj.execution import budget_idle_timer, runner_control\n"
+        "def notify(directory, message, event, **_):\n"
+        "    child = subprocess.Popen([sys.executable, '-c', 'pass'])\n"
+        "    with open(os.environ['NOTICE_LOG'], 'a') as log:\n"
+        "        log.write(f\"{child.pid} {event['key']}\\n\")\n"
+        "    return {'delivery': 'received'}\n"
+        "runner_control.notify_direct_parent = notify\n"
+        "raise SystemExit(budget_idle_timer.main(sys.argv[1:]))\n")
+    started = []
+    real_popen = timers.subprocess.Popen
+
+    def popen(argv: list[str], **kwargs: object):
+        # The same detached start, through the stand-in entry above.
+        started.append(real_popen([argv[0], "-I", str(script), *argv[4:]], **kwargs))
+        return started[-1]
+
+    monkeypatch.setenv("GRAPHTRAJ_EVIDENCE", str(task))
+    monkeypatch.setenv("GRAPHTRAJ_TASK_NAME", "timed")
+    monkeypatch.setenv("NOTICE_LOG", str(log))
+    with monkeypatch.context() as start:
+        start.setattr(timers.subprocess, "Popen", popen)
+        assert timers.start_idle_budget_timer(directory, monitor) is not None
+    return started[0], task, log
+
+
+def _state_of(pid: int) -> str:
+    """Return "gone", "zombie" (ended, not collected) or "running" for ``pid``."""
+    from graphtraj.execution.runner_process import process_is_zombie
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return "gone"
+    return "zombie" if process_is_zombie(pid) else "running"
+
+
+def _wait_until(condition, seconds: float) -> bool:
+    import time as real_time
+
+    deadline = real_time.monotonic() + seconds
+    while real_time.monotonic() < deadline:
+        if condition():
+            return True
+        real_time.sleep(0.1)
+    return condition()
+
+
+def test_timer_process_collects_the_worker_its_delivery_started_and_ends_with_its_task(
+        tmp_path, monkeypatch) -> None:
+    """No zombie of a started Worker remains; an integrated Task's timer exits (490)."""
+    process, task, log = _timer_process(tmp_path, monkeypatch, overdue=True)
+    try:
+        assert _wait_until(lambda: log.is_file() and log.read_text().strip(), 30)
+        child, key = log.read_text().split()
+        assert key == "elapsed_minutes:60"
+        # The child ended at once; the timer, still waiting for its next
+        # threshold, collected it instead of leaving it <defunct>.
+        assert _wait_until(lambda: _state_of(int(child)) == "gone", timers.SLICE_SECONDS + 5), \
+            _state_of(int(child))
+        assert process.poll() is None
+        _set_status(task / "task.yml", "integrated")
+        assert process.wait(timeout=timers.SLICE_SECONDS + 10) == 0
+        assert len(log.read_text().splitlines()) == 1
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+
+
+def test_timer_process_of_a_test_ends_with_the_test(tmp_path, monkeypatch) -> None:
+    """The per-test teardown ends timers under the test's directory without signals (490)."""
+    from process_reclaim import end_budget_timers
+
+    process, task, log = _timer_process(tmp_path, monkeypatch, overdue=False)
+    try:
+        assert not _wait_until(lambda: process.poll() is not None, 1)
+        assert end_budget_timers(tmp_path) == 1
+        assert process.wait(timeout=timers.SLICE_SECONDS + 10) == 0
+        assert not log.exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()

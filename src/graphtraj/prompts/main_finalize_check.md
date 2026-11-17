@@ -10,7 +10,8 @@ and referenced Tasks. Changing tasks does not change Main's identity.
 
 Read the current task sources through their existing tracker/project access.
 Read the applicable local Task and referenced Tasks; use GraphTraj's task_graph
-query (or `graphtraj task graph`) for current DAG and delivery state as needed.
+query through the tasks MCP entry for current DAG and delivery state as needed;
+from a sandboxed checker the `graphtraj` CLI may be unable to verify its caller.
 Keep returned evidence focused on the relevant nodes. No full graph is attached.
 Check required nodes, dependencies, completion states and declared pending work.
 Use the local records as the state authority. Remote Issue references do not

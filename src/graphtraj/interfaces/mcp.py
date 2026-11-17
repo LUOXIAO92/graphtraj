@@ -18,6 +18,7 @@ import sys
 import hashlib
 import json
 import queue
+import signal
 import threading
 import time
 import uuid
@@ -588,8 +589,49 @@ def serve(input_stream: TextIO, output_stream: TextIO) -> None:
     serve_stdio(input_stream, output_stream, respond)
 
 
+def _owns_running(path: Path) -> bool:
+    """Whether the Agent record at ``path`` has a running execution this process owns (read without lock)."""
+    try:
+        executions = json.loads(path.read_text(encoding='utf-8'))['executions']
+        return (bool(executions) and executions[-1]['state'] == 'running'
+                and executions[-1]['process'].get('worker_pid') == os.getpid())
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
+def stop_owned_agents() -> None:
+    """Stop the Agents whose execution this server process runs, as its host closes it (486).
+
+    An Agent created through this server, such as a DSH Main's root Agent, runs
+    its execution here, so it cannot outlive the process. Each stop records an
+    ``interrupted`` end, which reaches its parent or the current Main's notice
+    queue as any end does. A process that owns nothing changes nothing.
+    """
+    from graftling import exit_if_owned_unconfirmed, stop_owned
+    from graphtraj.interfaces.agents import GraphTrajAgents, swarm_root
+    from graphtraj.workspace.runner_project import discover_project_root
+
+    try:
+        root = discover_project_root(Path.cwd())
+    except Exception:
+        return  # outside a project this process created nothing
+    if any(_owns_running(path) for path in (swarm_root(root) / 'control' / 'agents').glob('*.json')):
+        exit_if_owned_unconfirmed(stop_owned(GraphTrajAgents(root).control))
+
+
+def _terminated(signum: int, frame: object) -> None:
+    """End serving on SIGTERM, so the stop in :func:`main` still runs."""
+    raise SystemExit(128 + signum)
+
+
 def main() -> None:
-    """Run the MCP stdio server installed as the ``graphtraj-mcp`` command."""
+    """Run the MCP stdio server installed as the ``graphtraj-mcp`` command.
+
+    A host closes it with input EOF, then SIGTERM (DSH: 2 s later, then SIGKILL
+    2 s after that). Either ends serving, and the Agents this process runs are
+    stopped and their ends recorded before it exits; a later SIGTERM does not
+    cut that stop short.
+    """
     from graftling import client_native_context
 
     if 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
@@ -598,7 +640,12 @@ def main() -> None:
         native = client_native_context()
         if native is not None and native['runtime'] == 'dsh':
             os.environ['GRAFTLING_NATIVE_RUNTIME'] = 'dsh'
-    serve(sys.stdin, sys.stdout)
+    signal.signal(signal.SIGTERM, _terminated)
+    try:
+        serve(sys.stdin, sys.stdout)
+    finally:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        stop_owned_agents()
 
 
 if __name__ == '__main__':

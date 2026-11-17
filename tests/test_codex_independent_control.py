@@ -143,7 +143,8 @@ def test_external_root_reply_uses_existing_receiver(tmp_path: Path) -> None:
     assert result['parent'] is None
     assert result['creator']['session'] == 'parent-session'
     assert result['last_result']['notification'] == 'delivered'
-    assert result['last_result']['last_message'] is None
+    assert result['last_result']['last_message'] == 'child body'  # 477: still shown
+    assert len(notices) == 1
 
 
 def test_lost_parent_acknowledgement_does_not_repeat_child_body(
@@ -169,7 +170,7 @@ def test_lost_parent_acknowledgement_does_not_repeat_child_body(
         assert time.monotonic() < deadline
         time.sleep(0.01)
     assert child['last_result']['notification'] == 'unconfirmed'
-    assert child['last_result']['last_message'] is None
+    assert child['last_result']['last_message'] is not None  # 477: still shown; not pushed again
 
 
 def test_host_cli_reports_native_turn_failure(tmp_path: Path, native_settings: dict) -> None:

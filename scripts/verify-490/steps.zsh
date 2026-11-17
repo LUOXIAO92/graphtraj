@@ -1,0 +1,296 @@
+#!/bin/zsh
+[ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
+# Task 490: the idle budget timer ends when its work ends and collects the Worker its delivery starts;
+# cleanup does not count an ended (zombie) Worker as executing; tests leave no timer behind.
+#   zsh <this file> <00|A|B|SUITE|CLASSIFY>      order: 00 -> A -> B -> SUITE -> CLASSIFY (from any directory)
+# ISOLATED project under the Harness tmp/490 (own git and .graphtraj); candidate commit archived and installed into
+# tmp/490/venv; production .venv-runtime only read (dependencies linked). The steps never signal a process they did
+# not start. pytest temp: ${TMPDIR:-/tmp}, refused if inside the Harness.
+set -u
+H=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
+SD=${0:A:h}
+THIS=${0:A}
+SRC=${SD:h:h}
+BASE=${VERIFY490_BASE:-$H/tmp/490}
+P=$BASE/project
+V=$BASE/venv
+PY=$V/bin/python
+DEPS=$BASE/deps
+OUT=${VERIFY490_OUT:-$H/.graphtraj/core/state/tasks/490-budget-idle-timer-reaps-worker/realhost}
+RT=$H/.venv-runtime
+RTSP=$RT/lib/python3.13/site-packages
+DEV=1524730b
+CAND=${VERIFY490_CANDIDATE:-$(git -C $SRC rev-parse HEAD)}
+MODEL=claude-opus-5-5
+STEP=${1:-help}
+TMPB=${TMPDIR:-/tmp}
+# VERIFY490_STUB_BIN (rehearsal only) puts stub claude/ps first.
+path=(${VERIFY490_STUB_BIN:+$VERIFY490_STUB_BIN} /opt/homebrew/bin $HOME/.local/bin /usr/bin /bin /usr/sbin /sbin)
+mkdir -p $OUT $BASE
+say() { print -r -- ""; print -r -- "### $*"; }
+next() { print -r -- ""; print -r -- "==> next (Main pastes): zsh $THIS $1 2>&1 | tee $OUT/$1.txt"; }
+# No GraphTraj/Graftling Session variables of Main leak in.
+clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=$TMPB \
+  LANG=${LANG:-en_US.UTF-8} "$@"; }
+# x490 <command> [args]: the helper with the candidate venv, inside the project.
+x490() { local command=$1; shift; (cd $P && clean $PY -I $SD/x490.py $command $P "$@"); }
+base_python() { print -r -- "$($RT/bin/python -I -c 'import sys; print(sys.base_prefix)')/bin/python3"; }
+check_tmp() {
+  print "pytest temp base: ${TMPB:A} | outside the Harness $H: $([[ ${TMPB:A} != $H* ]] && print YES || print NO)"
+  [[ ${TMPB:A} != $H* ]] || { print "STOP: TMPDIR is inside the Harness"; return 1; }
+}
+link_deps() {
+  [[ -d $DEPS ]] || { mkdir -p $DEPS; for x in $RTSP/*(N); do case ${x:t} in
+      graphtraj*|graftling*|__editable__*|*.pth|pip|pip-*|_distutils_hack|__pycache__) ;; *) ln -s $x $DEPS/ ;; esac; done; }
+}
+# venv <dir> <pip args...>: base Python; dependencies linked into the venv's own purelib (484).
+make_venv() {
+  local dir=$1; shift
+  link_deps
+  rm -rf $dir && $(base_python) -m venv --system-site-packages $dir || return 1
+  local site=$($dir/bin/python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+  for x in $DEPS/*(N); do [[ -e $site/${x:t} ]] || ln -s ${x:A} $site/${x:t}; done
+  clean $dir/bin/python -m pip install -q --no-deps --no-build-isolation --no-index "$@" 2>&1 | grep -vi cache
+  return ${pipestatus[1]}
+}
+# launch <task id> <name> <role> <instruction>: one root member through agent-runner; prints its alias.
+launch() {
+  local batch=$P/.graphtraj/probe-490/batch-$1.yml
+  # yaml.safe_dump keeps any quotes in the instruction (B's literal swarm JSON) exactly.
+  clean $PY -I -c 'import sys, yaml
+print(yaml.safe_dump({"tasks": [{"task_id": sys.argv[1], "task_name": sys.argv[2], "role": sys.argv[3],
+                                  "instruction": sys.argv[4]}]}, sort_keys=False, width=100000), end="")' "$@" > $batch
+  (cd $P && clean $V/bin/agent-runner --swarm-input $batch) > $OUT/$STEP-launch-$1.yml 2>&1
+  local rc=$?
+  grep -m1 "alias:" $OUT/$STEP-launch-$1.yml | awk '{print $NF}'
+  return $rc
+}
+# wait_end <alias> <seconds>: the Session's CURRENT execution (mapping.yml execution_id) has its terminal
+# execution.yml; an earlier execution's outcome left in execution.yml after a resume does not count (R1).
+wait_end() { x490 ended $1 $2 || { print "STOP: $1 did not end within $2 s"; return 1; }; }
+cleanup() { (cd $P && clean $V/bin/agent-runner cleanup --task-id $1) > $OUT/$STEP-cleanup-$1.yml 2>&1; local rc=$?
+  print "cleanup $1: rc $rc | $(grep -m1 -E 'cleanup_status|code:' $OUT/$STEP-cleanup-$1.yml)"; return $rc; }
+
+step_00() {
+  say "[00] preflight via /bin/zsh. Dialog: none. Waits: claude <= 120 s."
+  print "ZSH_VERSION=${ZSH_VERSION:-not-zsh}; candidate $CAND (uncommitted paths in $SRC: $(git -C $SRC status --porcelain | wc -l | tr -d ' ')); BASE=$BASE"
+  check_tmp || return 1
+  say "candidate venv $V: commit archived to $BASE/candidate and installed editable from there"
+  if [[ $(cat $V/.candidate 2>/dev/null) != $CAND ]]; then
+    rm -rf $BASE/candidate && mkdir -p $BASE/candidate && git -C $SRC archive $CAND | tar -x -C $BASE/candidate || return 1
+    make_venv $V -e $BASE/candidate/src/graftling -e $BASE/candidate || { print "STOP: candidate install failed (text above)"; return 1; }
+    print -r -- $CAND > $V/.candidate
+  else print "venv already holds $CAND: install skipped (rerun)"; fi
+  clean $PY -I -c 'import sys, graphtraj, graftling
+from pathlib import Path
+ok = all(Path(m.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve()) for m in (graphtraj, graftling))
+print("candidate imports:", graphtraj.__file__, "| from the archived commit:", ok); sys.exit(0 if ok else 1)' $BASE/candidate \
+    || { print "STOP: the venv does not import the candidate"; return 1; }
+  say "isolated project $P (own git and .graphtraj)"
+  if [[ -d $P/.git ]]; then print "existing project: git init and setup skipped (rerun)"; else
+    mkdir -p $P; (cd $P && git init -q -b main && print -r -- "# 490 probe" > README.md && git add README.md \
+      && git -c user.name=490 -c user.email=490@invalid commit -qm "Initial source") || return 1
+    (cd $P && print y | clean $V/bin/graphtraj setup | tail -2) || return 1
+  fi
+  (cd $P && clean $PY -I -c 'import sys
+from pathlib import Path
+from graphtraj.workspace.runner_project import discover_runner_directory
+found = Path(discover_runner_directory(Path.cwd())).resolve(); own = (Path.cwd() / ".graphtraj/runner").resolve()
+print("graphtraj runner directory:", found, "| project own:", found == own); sys.exit(0 if found == own else 1)') \
+    || { print "STOP: GraphTraj does not resolve the project's own .graphtraj"; return 1; }
+  x490 prepare || { print "STOP: roles or probe Tasks not ready (text above)"; return 1; }
+  say "host the steps use, one read-only call: claude -p --model $MODEL (limit 120 s)"
+  (cd $P && clean /usr/bin/perl -e 'alarm 120; exec @ARGV' claude -p --model $MODEL "Reply with exactly one line: CLAUDE-OK $MODEL. Use no tool." > $OUT/00-claude.txt 2>&1)
+  local line=$(grep -v '^\s*$' $OUT/00-claude.txt | tail -1)
+  [[ $line == CLAUDE-OK* ]] && print "claude answer: OK | $line (logged in)" || { print "STOP 00: claude did not answer: ${line:-none}"; return 1; }
+  say "timers of this project before A (expected 0)"; x490 timers
+  next A
+}
+
+DIALOG_COMMIT="Dialog: expected none (the probe's one Bash commit and its tasks tool submit_result run under permission_mode auto); if a native permission request for that Bash commit or the submit_result call appears, the user approves it."
+
+step_A() {
+  say "[A] Task 6 (30-minute budget): a root member commits probe-6.txt and submits it, then ends -> its idle timer waits; Main's decision accepts the submission (Task awaiting-integration) -> the timer is gone within ~5 s and sent nothing; then task integrate and cleanup. $DIALOG_COMMIT Waits: member <= 300 s, submission <= 120 s, timer <= 30 s."
+  # Tasks 2 and 4 of earlier runs cannot be reused (no acceptance; a body saying 'Use no tool'): A uses Task 6.
+  x490 prepare > $OUT/A-prepare.txt; local prc=$?
+  grep -E "task 6|roles" $OUT/A-prepare.txt
+  (( prc == 0 )) || { print "STOP A: roles or Task 6 not ready ($OUT/A-prepare.txt)"; return 1; }
+  local alias=$(launch 6 timer-a6 member "$(x490 instruction 6)")
+  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/A-launch-6.yml; return 1; }
+  print "member alias: $alias"
+  wait_end $alias 300 || return 1
+  sleep 2; x490 timers | tee $OUT/A-timers-before.txt
+  grep -q "session $alias" $OUT/A-timers-before.txt || { print "STOP A: no timer was started for $alias (nothing to observe)"; return 1; }
+  say "Main's decision: accept the member's submission"
+  x490 decide $alias 6 120 | tee $OUT/A-decide.txt
+  grep -q "^decision: OK" $OUT/A-decide.txt || { print "STOP A: the decision did not set awaiting-integration (above)"; return 1; }
+  local t0=$(date +%s) gone=""
+  while (( $(date +%s) - t0 < 30 )); do
+    x490 timers | grep -q "session $alias" || { gone=$(( $(date +%s) - t0 )); break; }; sleep 1; done
+  [[ -n $gone ]] && print "timer of $alias: gone ${gone} s after the decision" || print "timer of $alias: STILL RUNNING 30 s after the decision"
+  say "task integrate, then cleanup"
+  x490 integrate 6 | tee $OUT/A-integrate.txt
+  local after=gone; x490 timers | grep -q "session $alias" && after=RUNNING
+  print "timer of $alias after integration: $after"
+  cleanup 6
+  local crc=$?
+  say "budget notices recorded in this project (expected none for $alias)"; x490 notices | tee $OUT/A-notices.txt
+  if [[ -n $gone && $after == gone && $crc == 0 ]] && grep -q "^integration: OK" $OUT/A-integrate.txt \
+     && ! grep -q " $alias " $OUT/A-notices.txt; then print "PASS A"; else print "FAIL A (above)"; fi
+  next B
+}
+
+step_B() {
+  say "[B] Task 8 (5-minute budget; planned end about 5:00, allowance about 5:45 after the Leader starts): a Leader dispatches one Engineer through the tasks tool's swarm and ends its turn; on the Engineer's completion notice it commits probe-8.txt and submits it; both end and settle (the Engineer's completion resumes the Leader once, not through a timer). The steps then remove the Leader's own timer record (that timer's existing exit, no signal) so the Engineer's timer observes the planned end and delivers to the idle Leader, starting the Leader's Worker as the timer's child. Dialog: expected none (the Leader's agents launch of one engineer is inside role_tree, and its Bash commit and submit_result run under permission_mode auto); if a native permission request for launching one engineer, that Bash commit or the submit_result call appears, the user approves it. Waits: Leader start <= 300 s, settle <= 300 s, delivery <= 420 s, collection <= 300 s."
+  # Tasks 1, 3, 5 and 7 of earlier runs are unused (1-minute budget; 'Use no tool'; role branching; agents create): B uses Task 8.
+  x490 prepare > $OUT/B-prepare.txt; local prc=$?
+  grep -E "task 8|roles" $OUT/B-prepare.txt
+  (( prc == 0 )) || { print "STOP B: roles or Task 8 not ready ($OUT/B-prepare.txt)"; return 1; }
+  local alias=$(launch 8 timer-b8 leader "$(x490 instruction 8)")
+  [[ -n $alias ]] || { print "STOP: launch failed:"; cat $OUT/B-launch-8.yml; return 1; }
+  print "Leader alias: $alias"
+  wait_end $alias 300 || return 1
+  # Registration and start of the swarm-dispatched Engineer may lag the Leader's first turn: wait up to 120 s.
+  local eng="" i=0
+  while (( i < 120 )); do
+    eng=$(ls $P/.graphtraj/runner/sessions | grep "^8-" | grep -m1 "engineer@engineer"); [[ -n $eng ]] && break
+    sleep 2; (( i += 2 )); done
+  [[ -n $eng ]] || { print "STOP B: no Engineer Session of Task 8 appeared within 120 s. The Leader's last turn:"; x490 last $alias; return 1; }
+  print "Engineer alias: $eng"
+  say "settling: both executions ended (by execution_id) and no new execution for 20 s"
+  x490 settle $alias $eng 300 || { print "STOP B: the Leader and Engineer did not settle"; return 1; }
+  sleep 2; x490 timers | tee $OUT/B-timers.txt
+  say "the Engineer's timer before watching"
+  x490 engineer-timer $eng 8 || { print "STOP B: nothing to observe (reason above)"; return 1; }
+  rm -f $P/.graphtraj/runner/sessions/$alias/budget-timer.yml && print "removed the Leader's own timer record (it exits at its next 5 s slice)"
+  say "watching the Leader for the Worker the Engineer's timer starts"
+  x490 watch $alias $eng 420 | tee $OUT/B-watch.txt
+  x490 notices | tee $OUT/B-notices.txt
+  say "the Engineer's budget notice delivered to the Leader"
+  x490 delivered $eng $alias; local drc=$?
+  say "after watch and delivered: Main's decision, task integrate, cleanup of Task 8"
+  x490 decide $alias 8 60 | tee $OUT/B-decide.txt
+  x490 integrate 8 | tee $OUT/B-integrate.txt
+  cleanup 8; local crc=$?
+  sleep 8; x490 timers
+  say "B results"
+  grep -E "^(parent|collected):" $OUT/B-watch.txt
+  print "delivered: $([[ $drc == 0 ]] && print OK || print NO) (Engineer execution-budget-exceeded notice received by $alias)"
+  print "cleanup: $([[ $crc == 0 ]] && print OK || print NO) (Task 8; $(grep -E 'cleanup_status|code:' $OUT/B-cleanup-8.yml | tr -s ' \n' ' '))"
+  if grep -q "^parent: OK" $OUT/B-watch.txt && grep -q "^collected: OK" $OUT/B-watch.txt && [[ $drc == 0 && $crc == 0 ]]; then
+    print "PASS B"; else print "FAIL B (a line above is NO)"; fi
+  next SUITE
+}
+
+step_SUITE() {
+  say "[SUITE] full suite of candidate $CAND from a fresh clone, 6 shards (scripts/run_test_shards.py), failing files once on dev $DEV (verify-487 devcheck); then timers left by the suite. Dialog: none. Limits: suite 1500 s, dev recheck 600 s."
+  check_tmp || return 1
+  local L=$OUT/SUITE-shards rc D=$BASE/suite
+  if [[ -n ${VERIFY490_FAILURES:-} ]]; then
+    print "REHEARSAL: suite not run; failures from $VERIFY490_FAILURES"
+    rm -rf $L; mkdir -p $L; cp $VERIFY490_FAILURES $L/failures.txt; rc=1; : > $OUT/SUITE-suite.txt
+  else
+    rm -rf $D; mkdir -p $D
+    git clone -q --no-checkout $SRC $D/src && git -C $D/src checkout -q --detach $CAND || return 1
+    make_venv $D/venv -e $D/src/src/graftling -e $D/src || { print "STOP: suite venv install failed"; return 1; }
+    rm -rf $L; mkdir -p $L
+    print "== start $(date +%T) commit $(git -C $D/src rev-parse HEAD)"
+    (cd $D/src && env -i HOME=$HOME USER=${USER:-luoxiao} PATH=$D/venv/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$TMPB \
+       LANG=${LANG:-en_US.UTF-8} /usr/bin/perl -e 'alarm 1500; exec @ARGV' $D/venv/bin/python $D/src/scripts/run_test_shards.py \
+       --shards 6 --log-dir $L) > $OUT/SUITE-suite.txt 2>&1
+    rc=$?
+  fi
+  print "== shards exit $rc at $(date +%T); output $OUT/SUITE-suite.txt, shard logs $L/"
+  tail -n 4 $OUT/SUITE-suite.txt
+  touch $L/failures.txt
+  print "== failures ($(wc -l < $L/failures.txt | tr -d ' ')):"; cat $L/failures.txt
+  if [[ -s $L/failures.txt ]]; then
+    say "dev comparison: failing files once on dev $DEV"
+    local DD=$BASE/dev
+    if [[ $(git -C $DD/src rev-parse HEAD 2>/dev/null) != $(git -C $SRC rev-parse $DEV) || ! -x $DD/venv/bin/python ]]; then
+      rm -rf $DD; mkdir -p $DD
+      git clone -q --no-checkout $SRC $DD/src && git -C $DD/src checkout -q --detach $DEV || return 1
+      make_venv $DD/venv -e $DD/src/src/graftling -e $DD/src || return 1
+    else print "dev clone reused: $DD/src"; fi
+    (cd $DD/src && clean $DD/venv/bin/python -I $SRC/scripts/verify-487/devcheck.py $L/failures.txt 600)
+    [[ $? == 0 ]] && print "SUITE failures: none NEW (each fails on dev too)" || print "SUITE failures: NEW or unclassified (above)"
+  else
+    [[ $rc == 0 ]] && print "SUITE failures: none" || print "SUITE: shards exit $rc with no failing id"
+  fi
+  say "timers the suite left: session-end reclaim lines per shard, then a process scan for this run id"
+  local run=$(grep -m1 -o "test run id: [0-9a-f]*" $OUT/SUITE-suite.txt | awk '{print $4}')
+  print "test run id: ${run:-none}"
+  # /dev/null keeps grep off stdin when there is no shard log (rehearsal).
+  local logs=($L/shard-*.log(N) /dev/null)
+  local found=$(cat $logs | grep -c "graphtraj.execution.budget_idle_timer")
+  grep -h "leftover test processes" $logs
+  print "budget timers the shards' session-end reclaim had to stop: $found"
+  local left=$(ps -Eww -x -o pid=,command= | grep "graphtraj.execution.budget_idle_timer" | grep -c "PYTEST_GRAPHTRAJ_RUN=${run:-none}-")
+  print "budget timers of run ${run:-none} still running now: $left"
+  if [[ -z $run ]]; then print "CHECK SUITE-timers: no run id in $OUT/SUITE-suite.txt (scan not meaningful)"
+  elif [[ $left == 0 ]]; then print "PASS SUITE-timers (none left)"
+  else print "FAIL SUITE-timers ($left left)"; fi
+  print ""; print "==> next: report $OUT/00.txt A.txt B.txt SUITE.txt to the 490 Leader"
+}
+
+# CLASSIFY: SUITE's failing node ids once on the candidate, then on dev (SUITE's devcheck reran whole files and hit 600 s).
+# ensure_clone <dir> <commit>: reuse <dir>/src + <dir>/venv when present; build only what is missing.
+ensure_clone() {
+  local dir=$1 commit=$2
+  if [[ -d $dir/src/.git ]]; then print "clone reused: $dir/src at $(git -C $dir/src rev-parse --short HEAD)"
+  else rm -rf $dir/src; mkdir -p $dir
+    git clone -q --no-checkout $SRC $dir/src && git -C $dir/src checkout -q --detach $commit || return 1
+    print "clone built: $dir/src at $(git -C $dir/src rev-parse --short HEAD)"; fi
+  if [[ -x $dir/venv/bin/python ]]; then print "venv reused: $dir/venv"
+  else make_venv $dir/venv -e $dir/src/src/graftling -e $dir/src || { print "STOP: venv install failed in $dir"; return 1; }
+    print "venv built: $dir/venv"; fi
+}
+# run_ids <label> <dir>: one pytest over the ids, 1500 s perl alarm, own PYTEST_GRAPHTRAJ_RUN; output $OUT/CLASSIFY-<label>.txt.
+run_ids() {
+  local label=$1 dir=$2 run=classify-$1-$(date +%s)
+  print "== $label: $(git -C $dir/src rev-parse --short HEAD), PYTEST_GRAPHTRAJ_RUN=$run, TMPDIR $TMPB, start $(date +%T)"
+  (cd $dir/src && env -i HOME=$HOME USER=${USER:-luoxiao} PATH=$dir/venv/bin:/opt/homebrew/bin:/usr/bin:/bin TMPDIR=$TMPB \
+     LANG=${LANG:-en_US.UTF-8} PYTEST_GRAPHTRAJ_RUN=$run /usr/bin/perl -e 'alarm 1500; exec @ARGV' \
+     $dir/venv/bin/python -m pytest -p no:cacheprovider -q -rA $ids) > $OUT/CLASSIFY-$label.txt 2>&1
+  print "== $label: pytest exit $? at $(date +%T) ($(tail -1 $OUT/CLASSIFY-$label.txt))"
+}
+# outcome <label> <id>: FAILED or ERROR if any such line names the id, else PASSED/SKIPPED, else absent (not run).
+outcome() {
+  local f=$OUT/CLASSIFY-$1.txt
+  if grep -qF -- "FAILED $2" $f; then print FAILED; elif grep -qF -- "ERROR $2" $f; then print ERROR
+  elif grep -qF -- "PASSED $2" $f; then print PASSED; elif grep -qF -- "SKIPPED $2" $f; then print SKIPPED
+  else print absent; fi
+}
+
+step_CLASSIFY() {
+  say "[CLASSIFY] SUITE's failing node ids ($OUT/SUITE-shards/failures.txt), one pytest per side: candidate ($BASE/suite) first, then dev $DEV ($BASE/dev); clones and venvs reused, only missing ones built. Dialog: none. Limits: 1500 s per side."
+  check_tmp || return 1
+  local -a ids
+  ids=(${(f)"$(awk 'NF > 1 {print $2}' $OUT/SUITE-shards/failures.txt 2>/dev/null)"})
+  (( $#ids )) || { print "STOP: no failing ids in $OUT/SUITE-shards/failures.txt"; return 1; }
+  print "ids (${#ids}):"; print -l -- "  "${^ids}
+  ensure_clone $BASE/suite $CAND || return 1
+  ensure_clone $BASE/dev $DEV || return 1
+  run_ids candidate $BASE/suite
+  run_ids dev $BASE/dev
+  say "per id: candidate | dev | verdict"
+  local id c d verdict new=0
+  for id in $ids; do
+    c=$(outcome candidate $id); d=$(outcome dev $id)
+    if [[ $c == PASSED ]]; then verdict=PASSES-NOW
+    elif [[ $c == (FAILED|ERROR) && $d == (FAILED|ERROR) ]]; then verdict=PRE-EXISTING
+    elif [[ $c == (FAILED|ERROR) && $d == PASSED ]]; then verdict=NEW; (( new += 1 ))
+    else verdict=UNCLASSIFIED; fi
+    print -r -- "$id | candidate $c | dev $d | $verdict"
+  done
+  say "leftover-timer reclaim lines (pytest session end; none printed = nothing left)"
+  for label in candidate dev; do
+    print "$label: $(grep -h 'leftover test processes' $OUT/CLASSIFY-$label.txt /dev/null || print 'none')"; done
+  print "CLASSIFY: NEW $new"
+  print ""; print "==> next: report $OUT/CLASSIFY.txt to the 490 Leader"
+}
+
+case $STEP in
+  00|A|B|SUITE|CLASSIFY) step_$STEP ;;
+  *) print "usage: zsh $THIS <00|A|B|SUITE|CLASSIFY>   e.g. zsh $THIS 00 2>&1 | tee $OUT/00.txt" ;;
+esac

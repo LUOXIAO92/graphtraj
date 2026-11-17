@@ -174,6 +174,10 @@ for line in sys.stdin:
             threading.Thread(target=finish_later, daemon=True).start()
             (root / 'checker-running').touch()
             continue
+        if options.get('turn_error'):
+            send({'method':'turn/completed','params':{'threadId':params['threadId'],'turn':{
+                  'id':'check-turn','status':'failed','items':[],'error':options['turn_error']}}})
+            continue
         send({'method':'item/completed','params':{'threadId':params['threadId'],'turnId':'check-turn',
               'item':{'id':'answer','type':'agentMessage','text':text}}})
         turn['status'] = 'completed'
@@ -1815,46 +1819,45 @@ def test_fork_with_a_wider_sandbox_never_starts_the_checker(host: tuple[Path, Pa
 
 MAIN_WORKSPACE = {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [], 'networkAccess': False},
                   'activePermissionProfile': {'id': ':workspace', 'extends': None}}
+# The checker profile 388 requested: Main's profile plus managed network.
 CHECKER_WORKSPACE = {'sandbox': {'type': 'workspaceWrite', 'writableRoots': [], 'networkAccess': True},
                      'activePermissionProfile': {'id': 'graphtraj_checker', 'extends': ':workspace'}}
 
 
 @pytest.mark.parametrize('parent_profile', [':workspace', 'task345_validation'])
-def test_checker_profile_enables_managed_network_on_main_profile(
+def test_checker_fork_selects_mains_own_profile_without_override(
     host: tuple[Path, Path], parent_profile: str,
 ) -> None:
-    """The fork extends Main's profile with managed network and Main's socket entry."""
+    """485: no fork-time permission profile; Codex fails every model request of one."""
     root, binding = host
-    (root / 'options.json').write_text(json.dumps({
-        'configuration': {**MAIN_WORKSPACE, 'activePermissionProfile': {'id': parent_profile, 'extends': ':workspace' if not parent_profile.startswith(':') else None}},
-        'fork_configuration': {**CHECKER_WORKSPACE, 'activePermissionProfile': {
-            'id': 'graphtraj_checker', 'extends': parent_profile}},
-    }))
+    main = {**MAIN_WORKSPACE, 'activePermissionProfile': {
+        'id': parent_profile, 'extends': None if parent_profile.startswith(':') else ':workspace'}}
+    (root / 'options.json').write_text(json.dumps({'configuration': main}))
     assert 'Completion Check · completed' in stop(binding)['systemMessage']
     wire = [json.loads(line) for line in (root / 'wire.jsonl').read_text().splitlines()]
     fork = next(message['params'] for message in wire if message['method'] == 'thread/fork')
-    assert fork['permissions'] == 'graphtraj_checker' and 'sandbox' not in fork
-    socket = os.path.realpath(root / 'app-server-control' / 'app-server-control.sock')
-    assert fork['config']['permissions.graphtraj_checker'] == {
-        'extends': parent_profile, 'network': {'enabled': True, 'unix_sockets': {socket: 'allow'}},
-    }
-    # Apply the native dotted override to a profile set with a protected parent.
-    profiles = {parent_profile: {'filesystem': {'/protected': 'deny'}}}
-    for key, value in fork['config'].items():
-        if key == 'permissions':
-            profiles = value
-        elif key.startswith('permissions.'):
-            profiles[key.removeprefix('permissions.')] = value
-    assert profiles[parent_profile]['filesystem']['/protected'] == 'deny'
+    assert fork['permissions'] == parent_profile and 'sandbox' not in fork
+    assert not any(key == 'permissions' or key.startswith('permissions.') for key in fork.get('config', {}))
     evidence = yaml.safe_load(next(binding.parent.glob('checks/*/execution.yml')).read_text())
-    assert evidence['authorized_difference'] == {
-        'permission_profile': {'id': 'graphtraj_checker', 'extends': parent_profile},
-        'unix_socket': socket, 'network_access': {'main': False, 'checker': True},
-    }
+    assert 'authorized_difference' not in evidence
+    assert evidence['configuration']['sandbox'] == evidence['parent_configuration']['sandbox'] == main['sandbox']
 
 
-def test_symlinked_control_socket_is_allowed_and_connected_as_its_target(tmp_path: Path) -> None:
-    """The proxy connects to the same resolved socket the checker is allowed."""
+def test_failed_checker_turn_keeps_the_runtime_error_in_the_stop_reason(host: tuple[Path, Path]) -> None:
+    """A checker turn Codex fails is a visible check failure naming Codex's own error."""
+    root, binding = host
+    error = {'message': 'failed to load workspace requirements: invalid input parameter',
+             'codexErrorInfo': 'other', 'additionalDetails': None}
+    (root / 'options.json').write_text(json.dumps({'configuration': MAIN_WORKSPACE, 'turn_error': error}))
+    result = stop(binding)
+    assert result['continue'] is False
+    assert 'Completion Check · error' in result['stopReason']
+    assert 'Completion check failed: Codex execution' in result['stopReason']
+    assert error['message'] in result['stopReason']
+
+
+def test_symlinked_control_socket_is_connected_as_its_target(tmp_path: Path) -> None:
+    """The proxy connects to the published control socket's resolved target."""
     target = tmp_path / 'daemon' / 'opaque'
     target.parent.mkdir()
     target.touch()
@@ -1868,14 +1871,15 @@ def test_symlinked_control_socket_is_allowed_and_connected_as_its_target(tmp_pat
 
 
 @pytest.mark.parametrize('fork', [
+    CHECKER_WORKSPACE,
     {**CHECKER_WORKSPACE, 'activePermissionProfile': {'id': ':workspace', 'extends': None}},
-    {**CHECKER_WORKSPACE, 'sandbox': {'type': 'dangerFullAccess'}},
-    {**CHECKER_WORKSPACE, 'sandbox': {'type': 'workspaceWrite', 'writableRoots': ['/'], 'networkAccess': True}},
+    {**MAIN_WORKSPACE, 'sandbox': {'type': 'dangerFullAccess'}},
+    {**MAIN_WORKSPACE, 'sandbox': {'type': 'workspaceWrite', 'writableRoots': ['/'], 'networkAccess': False}},
 ])
-def test_checker_profile_must_be_applied_without_other_widening(
+def test_checker_fork_with_any_difference_from_main_never_starts(
     host: tuple[Path, Path], fork: dict,
 ) -> None:
-    """A fork that ignores the socket profile or widens anything else never starts."""
+    """A fork reporting another profile, managed network or any wider policy never starts."""
     root, binding = host
     (root / 'options.json').write_text(json.dumps({
         'configuration': MAIN_WORKSPACE, 'fork_configuration': fork,

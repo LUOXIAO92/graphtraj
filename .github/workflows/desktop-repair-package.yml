@@ -10,7 +10,7 @@ permissions:
 
 env:
   # graftling tag in GraphTraj's declared range (pyproject.toml).
-  GRAFTLING_REF: v0.5.0
+  GRAFTLING_REF: v0.5.2
   PRODUCT_COMMIT: ${{ github.sha }}
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
 

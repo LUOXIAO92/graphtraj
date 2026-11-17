@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
-      GRAFTLING_REF: v0.5.0
+      GRAFTLING_REF: v0.5.2
       ADOPTION_ROOT: ${{ github.workspace }}/desktop/test-results/linux-adoption
       ADOPTION_EXECUTABLE: /usr/bin/graphtraj-desktop
       ADOPTION_INSTALL_ROOT: /opt/graphtraj-desktop

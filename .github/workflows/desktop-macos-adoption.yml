@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 30
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
-      GRAFTLING_REF: v0.5.0
+      GRAFTLING_REF: v0.5.2
       SETTINGS_ADOPTION: ${{ inputs.mode == 'settings' || github.ref_name == 'agent/295-desktop-direct-settings-save-macos' }}
       ACTIVITY_ADOPTION: ${{ inputs.mode == 'usage' || inputs.mode == 'activity' || github.ref_name == 'agent/292-desktop-readable-runtime-events' }}
     defaults:

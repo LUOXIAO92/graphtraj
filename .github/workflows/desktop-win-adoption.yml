@@ -13,7 +13,7 @@ jobs:
         shell: pwsh
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
-      GRAFTLING_REF: v0.5.0
+      GRAFTLING_REF: v0.5.2
       PYTHONUTF8: '1'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:

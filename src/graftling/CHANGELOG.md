@@ -12,7 +12,12 @@ version that identifies everything listed under it.
 
 The numbers in parentheses are the project's Task numbers.
 
-## Unreleased (compatible)
+## 0.5.2 (patch release by the user's decision of 2026-11-17)
+
+Everything below since 0.5.0 ships as 0.5.2. The change of 477 is incompatible by
+section 7 of the public interface; by the user's decision it is released as a patch,
+not a minor version. GraphTraj relies on 466 and 477, so its range becomes
+`graftling>=0.5.2,<0.6`.
 
 - Tool descendants are judged only on a settled read (498). Before, a read that was
   unreadable or empty counted as this execution's. So another execution's process
@@ -38,7 +43,7 @@ The numbers in parentheses are the project's Task numbers.
   decides the timeout (487). Before, an end arriving in between was reserved for the
   departed wait, released as `held` and pushed at once, so a deferring receiver
   (a running Task member's child end) could not hold it for the parent's next `wait`.
-- **Incompatible, not yet numbered (477; see section 7 of the public interface).**
+- **Incompatible, released in 0.5.2 (477; see section 7 of the public interface).**
   `status`, `wait` and `retire` always return the child's stored
   `last_result.last_message`. Before, once the body had been delivered (or might
   have been: `pending`, `delivered`, `unconfirmed`), it was shown as `null`, and the

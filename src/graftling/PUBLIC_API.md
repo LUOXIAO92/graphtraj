@@ -2038,15 +2038,15 @@ Consumers must ignore result fields and archive fields they do not know.
 
 Recorded classifications:
 
-- 477 (unreleased): `status`, `wait` and `retire` always return the stored
+- 477 (0.5.2): `status`, `wait` and `retire` always return the stored
   `last_message`, which was `null` once the body had been delivered; a parent's
   running `wait` takes its child's end instead of the push, and
   `last_result.notification` gains `waiting` for that. A consumer that read the
   `null` as "already delivered" now reads `notification`, so this changes the
-  meaning of a result field and is incompatible. The version number is not
-  raised in this change; the release that ships it raises the minor version
-  and GraphTraj's range with it.
-- 466: the feature `session_read`, its arguments `session`, `start`, `stop`, `content`
+  meaning of a result field and is incompatible. By the user's decision of
+  2026-11-17 it is released in 0.5.2, a patch release, not a minor version;
+  GraphTraj relies on it and on 466, so its range becomes `graftling>=0.5.2,<0.6`.
+- 466 (0.5.2): the feature `session_read`, its arguments `session`, `start`, `stop`, `content`
   and `search`, `AgentControl(session_reads=...)` with `session_read` and `may_read`,
   and `find_session`, `read_events`, `redact_session`, `JsonlSessionStore.events()` and
   `.revision`. All are new, and no existing request changes, so the change is

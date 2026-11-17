@@ -1,6 +1,6 @@
 {
   "name": "graftling-pi",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "private": true,
   "description": "Graftling for Pi: start child Agents on any configured Runtime from a Pi Session.",
   "keywords": ["pi-package"],

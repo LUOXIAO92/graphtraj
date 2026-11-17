@@ -1330,20 +1330,24 @@ Delivery rules:
   than as an empty result. Recorded command lines, in the record file and in
   `escaped_processes`, are redacted and cut to 300 characters; redaction covers only
   credentials it can recognize. Names and commands are never matched. A descendant is
-  judged only on a settled read (498): after it has executed an image (a fork copy
-  carrying the marker is recorded provisionally and judged again at every sample), with
-  a readable environment, or an empty one when it is an Apple platform binary. One whose
-  settled environment lacks exactly this execution's marker (a Runner Worker, another
-  execution's child Runtime) is neither recorded nor descended into; a provisional entry
-  that settles so is dropped with everything recorded beneath it. The same verdict is
-  taken again before each signal: this execution's processes and its fork copies (a
-  shell subshell, which reads its parent's settled view) are signalled; one whose read is
-  not settled is never signalled and is listed under `remaining`. The owner applies the
-  same stop when the execution ends normally or is stopped, after the Runtime exits.
-  Known limits: recording can lag one sample behind an exec; a process that never gives a
-  settled read (a same-user setuid program; on Linux a tool started with `env -i`) is
-  never recorded; a process started and detached between two samples (about one second) is found only
-  by the marker, so not when it is a platform binary; a process whose chain of
+  judged only on a settled read (498): after it has executed an image, with a readable
+  environment, or an empty one when it is an Apple platform binary. A fork copy that has
+  not executed is recorded provisionally (judged again at every sample) only when it
+  carries the marker or copies a platform image (a shell subshell). One whose settled
+  environment lacks exactly this execution's marker (a Runner Worker, another
+  execution's child Runtime) is neither recorded nor descended into. A recorded entry
+  that reads readable without the marker is a new image and another execution's, even
+  before its exec is complete: it is dropped with everything recorded beneath it, and at
+  stop time it and everything recorded beneath it are excluded whatever their own reads.
+  The verdict is taken again before each signal: this execution's processes and its fork
+  copies are signalled; one whose read is not settled is never signalled and is listed
+  under `remaining`. The owner applies the same stop when the execution ends normally or
+  is stopped, after the Runtime exits. Known limits: recording can lag one sample behind
+  an exec; a process that never gives a settled read (a same-user setuid program; on
+  Linux a tool started with `env -i`) is never recorded; while the code-signing status
+  lags an exec, a copy of a platform image that is executing a non-platform image may
+  read provisional for a moment (inference); a process started and detached between two
+  samples (about one second) is found only by the marker, so not when it is a platform binary; a process whose chain of
   ancestors passed through a readable process without the marker is left alone by
   design; Windows is not covered. A Pi execution records `tool_marker` and
   `tool_descendants` too and is stopped the same way (461); Pi starts its bash tool

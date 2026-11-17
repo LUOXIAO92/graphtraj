@@ -15,28 +15,36 @@ or replace the marker. A descendant is judged only on a settled read (498),
 from kernel facts, never from timing:
 
 - a fork copy that has not executed yet (darwin P_EXEC clear; Linux
-  PF_FORKNOEXEC set) whose readable environment lacks the marker, or whose
-  read is unreadable: later, neither recorded nor cached; any other fork copy:
-  provisional, recorded and judged again at every sample;
+  PF_FORKNOEXEC set): provisional if it carries the marker or is a copy of an
+  Apple platform image (csops; a shell subshell), recorded and judged again at
+  every sample; otherwise (unreadable, empty, or readable without the marker)
+  later, neither recorded nor cached;
 - an executed process whose read is unreadable: later (every exec window reads
   unreadable for a moment);
 - an executed process with an empty environment: this execution's if it is an
-  Apple platform binary (csops), else later;
+  Apple platform binary, else later;
 - an executed process with a readable environment: the marker decides, finally.
 
-A provisional entry that settles foreign is dropped together with every entry
-recorded beneath it (by recorded parent pid), and all are cached as foreign.
-At stop time the same verdict is taken again, also right before each signal:
+A recorded entry was recorded as ours or as a copy of a platform image, so once
+it reads readable without the marker it is a new image and foreign, even while
+P_EXEC is still clear. A foreign recorded entry is dropped together with every
+entry recorded beneath it (by recorded parent pid, transitively), and all are
+cached as foreign. At stop time the same rule is applied to the record's
+entries (a foreign entry excludes every entry recorded beneath it, whatever
+their own reads), and the verdict is taken again right before each signal:
 this execution's processes and provisional ones (fork copies of ours, such as
 a shell subshell, which read their parent's settled view) are signalled; one
 whose read is later is never signalled and is listed under ``remaining``.
 
 Known limits: recording can lag one sample (about a second) behind an exec; a
 process that never gives a settled read (a same-user setuid program; on Linux a
-tool started with ``env -i``) is never recorded; a process started and detached between two samples is reached only
-through the marker scan (so not a platform binary); a process whose chain of
-ancestors passed through a readable process without the marker is left alone
-by design; the Linux rule is not run on a real host; Windows is not covered.
+tool started with ``env -i``) is never recorded; while csops lags an exec, a
+copy of a platform image in the middle of an exec into a non-platform image may
+read provisional for a moment (inference); a process started and detached
+between two samples is reached only through the marker scan (so not a platform
+binary); a process whose chain of ancestors passed through a readable process
+without the marker is left alone by design; the Linux rule is not run on a real
+host; Windows is not covered.
 """
 
 from __future__ import annotations
@@ -159,17 +167,25 @@ def _platform(pid: int) -> bool:
         return False
 
 
-def _verdict(pid: int, marker: str) -> str:
-    """The boundary rule on a settled read (module docstring): OURS, FOREIGN, PROVISIONAL or LATER."""
+def _verdict(pid: int, marker: str, recorded: bool = False) -> str:
+    """The boundary rule on a settled read (module docstring): OURS, FOREIGN, PROVISIONAL or LATER.
+
+    A ``recorded`` process was recorded as ours or as a copy of a platform image, so a
+    readable view without the marker is a new image: FOREIGN even while P_EXEC is clear.
+    """
     executed = _executed(pid)
     view = _process_view(pid)
     if view is None:
         return LATER
+    marked = f'{MEMBER_RUN_ENV}={marker}' in view[1]
+    if view[1] and not marked:
+        return FOREIGN if executed or recorded else LATER
     if not executed:
-        return LATER if view[1] and f'{MEMBER_RUN_ENV}={marker}' not in view[1] else PROVISIONAL
+        # A fork copy: of ours (the marker), or of a platform image (a subshell); else undecided.
+        return PROVISIONAL if marked or _platform(pid) else LATER
     if not view[1]:
         return OURS if _platform(pid) else LATER
-    return OURS if f'{MEMBER_RUN_ENV}={marker}' in view[1] else FOREIGN
+    return OURS
 
 
 def shown_command(argv: list[str] | str) -> str:
@@ -332,24 +348,20 @@ class DescendantSampler:
                 self.error = f'descendant sampling: {type(error).__name__}: {error}'
 
     def _settle(self, live: dict[tuple[int, int], dict]) -> None:
-        """Judge provisional entries again; a foreign one is dropped with every entry recorded beneath it.
+        """Judge recorded entries again; a foreign one is dropped with every entry recorded beneath it.
 
-        An unsettled read (later, or still a fork copy) keeps the entry provisional.
+        A recorded entry reading readable without the marker is foreign, executed or not.
+        An unsettled read (later, or still a fork copy) keeps a provisional entry provisional.
         """
         self._provisional &= set(live)
-        dropped: set[tuple[int, int]] = set()
-        for key in list(self._provisional):
-            verdict = _verdict(live[key]['pid'], self.marker)
+        foreign = set()
+        for key, entry in live.items():
+            verdict = _verdict(entry['pid'], self.marker, recorded=True)
             if verdict == FOREIGN:
-                dropped.add(key)
+                foreign.add(key)
             elif verdict == OURS:
                 self._provisional.discard(key)
-        # Beneath by the recorded parent pid, transitively, even when reparented since.
-        parents = {key[0] for key in dropped}
-        while parents:
-            below = {key for key, entry in live.items() if key not in dropped and entry.get('ppid') in parents}
-            dropped |= below
-            parents = {key[0] for key in below}
+        dropped = _beneath(live, foreign)
         for key in dropped:
             live.pop(key, None)
             self._provisional.discard(key)
@@ -364,6 +376,16 @@ class DescendantSampler:
         return list(self.entries.values())
 
 
+def _beneath(live: dict[tuple[int, int], dict], roots: set[tuple[int, int]]) -> set[tuple[int, int]]:
+    """``roots`` and every entry recorded beneath them by recorded parent pid, transitively (even when reparented)."""
+    found, parents = set(roots), {key[0] for key in roots}
+    while parents:
+        below = {key for key, entry in live.items() if key not in found and entry.get('ppid') in parents}
+        found |= below
+        parents = {key[0] for key in below}
+    return found
+
+
 def _targets(entries: list[dict], marker: str, exclude: set[int],
              unsettled: dict[int, Identity] | None = None) -> dict[int, Identity]:
     """Recorded processes still alive and their descendants that are ours or provisional; ``unsettled`` gets the later ones.
@@ -372,18 +394,29 @@ def _targets(entries: list[dict], marker: str, exclude: set[int],
     """
     unsettled = {} if unsettled is None else unsettled
     table = _table()
-    recorded = {}
+    live: dict[tuple[int, int], dict] = {}
+    verdict_of: dict[tuple[int, int], str] = {}
     for entry in entries:
         now = table.get(entry['pid'])
         if (now is not None and now.start == entry['start'] and now.uid == entry['uid']
                 and now.pid not in exclude):
-            verdict = _verdict(now.pid, marker)
-            if verdict in (OURS, PROVISIONAL):
-                recorded[now.pid] = now
-            elif verdict == LATER:
-                unsettled[now.pid] = now
+            key = (now.pid, now.start)
+            live[key] = entry
+            verdict_of[key] = _verdict(now.pid, marker, recorded=True)
+    # A recorded entry now foreign excludes every entry recorded beneath it, whatever their own reads
+    # (the owner may have ended before a sample dropped them).
+    excluded = _beneath(live, {key for key, verdict in verdict_of.items() if verdict == FOREIGN})
+    recorded = {}
+    for key, verdict in verdict_of.items():
+        if key in excluded:
+            continue
+        if verdict in (OURS, PROVISIONAL):
+            recorded[key[0]] = table[key[0]]
+        elif verdict == LATER:
+            unsettled[key[0]] = table[key[0]]
     verdicts: dict[int, str] = {}
-    recorded.update(_descend(table, set(recorded), marker, set(), exclude, verdicts))
+    skip = set(exclude) | {key[0] for key in excluded}
+    recorded.update(_descend(table, set(recorded), marker, set(), skip, verdicts))
     for pid, verdict in verdicts.items():
         if verdict == LATER and pid in table:
             unsettled[pid] = table[pid]
@@ -394,7 +427,7 @@ def _signal(targets: dict[int, Identity], marker: str, sig: int) -> None:
     for item in targets.values():
         # Re-verify identity and the boundary right before the signal: ours, or a fork copy of ours
         # (provisional); one that executed meanwhile is judged on its settled read, a later one never.
-        if _alive(item) and _verdict(item.pid, marker) in (OURS, PROVISIONAL):
+        if _alive(item) and _verdict(item.pid, marker, recorded=True) in (OURS, PROVISIONAL):
             try:
                 os.kill(item.pid, sig)
             except (ProcessLookupError, PermissionError):

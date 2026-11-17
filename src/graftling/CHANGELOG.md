@@ -19,9 +19,10 @@ The numbers in parentheses are the project's Task numbers.
   sampled in its exec window was recorded, and its later tool shell was signalled when
   this execution stopped. A tool sampled as a fork copy of a Runtime without the marker
   was never recorded. Now kernel facts decide: darwin P_EXEC and csops platform binary;
-  Linux PF_FORKNOEXEC, which is not run on a real host. A fork copy carrying the marker
-  is provisional, and is dropped with what was recorded beneath it if it settles as
-  another execution's. Stop signals this execution's processes and their fork copies
+  Linux PF_FORKNOEXEC, which is not run on a real host. A fork copy carrying the marker,
+  or copying a platform image, is provisional. A recorded entry that reads readable
+  without the marker is another execution's even before its exec completes: it is
+  dropped with what was recorded beneath it, and stop excludes them all. Stop signals this execution's processes and their fork copies
   (subshells); `stop_tool_processes` never signals a process whose read is not settled
   and lists it under `remaining`. Recording can lag one
   sample. A process that never reads settled (setuid; Linux `env -i`) is not recorded.

@@ -185,8 +185,8 @@ def test_a_fork_copy_with_this_marker_that_execs_another_execution_is_not_kept_n
 
         runtime.stdin.write(b'x')
         runtime.stdin.flush()
-        # Exec complete by the kernel fact the rule uses: the new arguments read before P_EXEC is set.
-        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(launch)) and _executed(launch), 10), 'exec'
+        # The new arguments can read before P_EXEC is set; the rule must hold either way (correction 2).
+        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(launch)), 10), 'exec'
         sampler.sample()
         sampler.sample()
         report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)
@@ -283,8 +283,8 @@ def test_a_provisional_entry_that_settles_foreign_is_dropped_with_everything_rec
 
         runtime.stdin.write(b'x')
         runtime.stdin.flush()
-        # Exec complete by the kernel fact the rule uses (P_EXEC), not only its new arguments.
-        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(copy)) and _executed(copy), 10), 'exec of the copy'
+        # The new arguments can read before P_EXEC is set; the rule must hold either way (correction 2).
+        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(copy)), 10), 'exec of the copy'
         own = own_tree(runtime.pid)
         sampler.sample()
         report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)
@@ -396,3 +396,72 @@ def test_guard_a_recorded_tools_subshell_that_never_executes_is_stopped() -> Non
         if tool.poll() is None:
             tool.kill()
         tool.wait(5)
+
+
+# Correction 2: the 496 guard's interleaving with P_EXEC held clear (as under heavy load, where
+# the new image reads before P_EXEC is set). Another execution's process reads unreadable, empty,
+# unreadable, then its real view without this marker; it is never kept and never signalled.
+def test_another_executions_process_with_p_exec_still_clear_is_never_kept(tmp_path: Path, monkeypatch) -> None:
+    marker = uuid.uuid4().hex
+    runtime = subprocess.Popen([sys.executable, '-c', RUNTIME, OTHER, uuid.uuid4().hex],
+                               env={**os.environ, MEMBER_RUN_ENV: marker},
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    own: list[Identity] = []
+    try:
+        other = int(runtime.stdout.readline())
+        own = [identity(other)]
+        sampler = DescendantSampler(tmp_path / 'tool-descendants.json', marker)
+        sampler.runtime_pid, sampler._runtime_start = runtime.pid, identity(runtime.pid).start
+        assert wait_for(lambda: OTHER.strip()[:20] in ' '.join(argv(other)), 10), 'other process exec'
+        real_view, real_executed = _process_view, graftling.tool_descendants._executed
+        reads = iter([None, ([], []), None])
+        monkeypatch.setattr(graftling.tool_descendants, '_process_view',
+                            lambda pid: next(reads, real_view(pid)) if pid == other else real_view(pid))
+        monkeypatch.setattr(graftling.tool_descendants, '_executed',
+                            lambda pid: False if pid == other else real_executed(pid))
+        seen = []
+        for _ in range(4):
+            sampler.sample()
+            seen.append(other in recorded(sampler))
+        report = stop_tool_processes(list(sampler.entries.values()), marker, {runtime.pid}, grace=1.0)
+        print('seen:', seen, 'entries:', list(sampler.entries.values()), 'report:', report)
+        assert not seen[-1], f'still recorded at the final sample (per sample: {seen})'
+        assert other not in {item['pid'] for item in report['found']}
+        assert is_alive(own[0])
+    finally:
+        own += own_tree(runtime.pid)
+        stop_own([item for item in own if item is not None])
+        runtime.kill()
+        runtime.wait(5)
+
+
+# Correction 2, stop time: a record holds an entry that now reads readable without this marker
+# (P_EXEC held clear) and, recorded beneath it, a platform child (/bin/sh). The owner may have ended
+# before a sample dropped them: stop signals neither.
+def test_stop_excludes_a_recorded_entry_now_foreign_and_everything_recorded_beneath_it(monkeypatch) -> None:
+    marker = uuid.uuid4().hex
+    plain = {key: value for key, value in os.environ.items() if key != MEMBER_RUN_ENV}
+    parent = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'],
+                              env={**plain, MEMBER_RUN_ENV: uuid.uuid4().hex})
+    child = subprocess.Popen(['/bin/sh', '-c', '/bin/sleep 300; :'], env=plain)
+    try:
+        assert wait_for(lambda: 'time.sleep(300)' in ' '.join(argv(parent.pid)), 10)
+        assert wait_for(lambda: any(item.ppid == child.pid for item in own_tree(child.pid)), 10), 'shell exec'
+        own = [identity(parent.pid), identity(child.pid)]
+        entries = [{'pid': own[0].pid, 'ppid': os.getpid(), 'pgid': own[0].pgid, 'uid': own[0].uid,
+                    'start': own[0].start, 'argv': 'python'},
+                   {'pid': own[1].pid, 'ppid': own[0].pid, 'pgid': own[1].pgid, 'uid': own[1].uid,
+                    'start': own[1].start, 'argv': '/bin/sh -c ...'}]
+        real_executed = graftling.tool_descendants._executed
+        monkeypatch.setattr(graftling.tool_descendants, '_executed',
+                            lambda pid: False if pid == parent.pid else real_executed(pid))
+        report = stop_tool_processes(entries, marker, grace=1.0)
+        print('report:', report)
+        assert {item['pid'] for item in report['found']} & {parent.pid, child.pid} == set()
+        assert parent.poll() is None and child.poll() is None, 'neither signalled'
+    finally:
+        for process in (parent, child):
+            if process.poll() is None:
+                process.kill()
+            process.wait(5)
+        stop_own(own_tree(child.pid))

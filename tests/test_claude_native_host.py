@@ -341,6 +341,16 @@ def _host_project(tmp_path: Path) -> tuple[Path, Path, Path]:
     return project, elsewhere, config
 
 
+def _ended(who: str, step: str, returncode: int) -> str:
+    """Describe a helper process that ended without answering, naming a signal by its name (502).
+
+    The suite's intermittent empty outputs (480-506) came from such an end; a
+    negative status is a signal from outside, a positive one the helper's own error.
+    """
+    how = f'signal {signal.Signals(-returncode).name}' if returncode < 0 else f'status {returncode}'
+    return f'{who} ended without answering {step}: {how}'
+
+
 def _source_env(**extra: str) -> dict:
     """Run the host from this checkout."""
     import graphtraj
@@ -454,6 +464,8 @@ def test_graphtraj_session_end_is_one_stop_line(tmp_path: Path, case: str) -> No
     finished = subprocess.run([sys.executable, '-c', launcher, str(config)],
                               cwd=elsewhere if case == 'refused' else project,
                               capture_output=True, text=True, timeout=60, env=_source_env())
+    if len(finished.stdout.splitlines()) != 2:
+        pytest.fail(_ended('the launcher', 'initialize', finished.returncode) + '\n' + finished.stderr)
     reply, returncode = finished.stdout.splitlines()
     assert json.loads(reply)['result']['serverInfo']['name'] == 'agents'
     assert returncode == '0', finished.stderr
@@ -500,7 +512,10 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
                 'print(host.wait(timeout=30))\n')
     host = subprocess.Popen([sys.executable, '-c', launcher, str(config)], cwd=elsewhere, env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-    assert json.loads(host.stdout.readline())['result']['serverInfo']['name'] == 'agents'
+    greeting = host.stdout.readline()
+    if not greeting:
+        pytest.fail(_ended('the launcher', 'initialize', host.wait(timeout=30)))
+    assert json.loads(greeting)['result']['serverInfo']['name'] == 'agents'
     refused = context()
     host.stdin.write('stop\n')
     host.stdin.flush()
@@ -569,9 +584,16 @@ class ClaudeParent:
 
     def do(self, **command: object) -> object:
         """Run one command in the parent and return its answer."""
-        self.process.stdin.write(json.dumps(command) + '\n')
-        self.process.stdin.flush()
-        return json.loads(self.process.stdout.readline())
+        try:
+            self.process.stdin.write(json.dumps(command) + '\n')
+            self.process.stdin.flush()
+            line = self.process.stdout.readline()
+        except BrokenPipeError:
+            line = ''
+        if not line:
+            # 502: an end of output means the parent ended; its status tells how (negative: the signal).
+            pytest.fail(_ended('the Claude parent', command['do'], self.process.wait(timeout=30)))
+        return json.loads(line)
 
     def send(self, method: str, params: dict) -> dict:
         """Exchange one MCP message with this parent's host."""

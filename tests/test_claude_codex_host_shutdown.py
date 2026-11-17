@@ -12,6 +12,7 @@ so a process that relied on the thread ending would hang here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,7 @@ import time
 import pytest
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
+INSTALLED_GRAFTLING = Path(importlib.util.find_spec('graftling').origin).resolve()
 PEER = Path(__file__).with_name('codex_stdio_peer.py')
 SESSION = '11111111-1111-4111-8111-111111111111'
 KINDS = ['agents-claude', 'graphtraj-claude', 'codex']
@@ -33,7 +35,7 @@ HOST_LIMIT = 25
 RECORDED = 'agents host recorded its children stopped.'
 
 HOST = r'''
-import faulthandler, importlib, json, os, subprocess, sys, threading, time
+import faulthandler, importlib, importlib.util, json, os, subprocess, sys, threading, time
 from pathlib import Path
 
 where, kind, case = Path(os.environ['TEST_WHERE']), os.environ['TEST_KIND'], os.environ['TEST_CASE']
@@ -59,7 +61,8 @@ class Driver:
     def __init__(self):
         self.stops, self.attempts = {}, {}
         self.lock = threading.Lock()
-        self.facts = {'module': graftling.__file__, 'agents': []}
+        self.facts = {'module': graftling.__file__, 'agents': [],
+                      'graphtraj': getattr(importlib.util.find_spec('graphtraj'), 'origin', None)}
 
     def prepare(self, runtime, caller, **options):
         return {'runtime': runtime}
@@ -341,7 +344,10 @@ def run_host(
     stdout = ''.join(read) + stdout
     facts = json.loads((where / 'facts.json').read_text()) if (where / 'facts.json').exists() else {}
     if facts:
-        assert Path(facts['module']).is_relative_to(SOURCE)
+        # Provenance: graftling is the suite's installed distribution (it comes from its own
+        # repository), and graphtraj comes from this Worktree's src.
+        assert Path(facts['module']).resolve() == INSTALLED_GRAFTLING, facts['module']
+        assert facts['graphtraj'] and Path(facts['graphtraj']).resolve().is_relative_to(SOURCE), facts['graphtraj']
     replies = [json.loads(line) for line in stdout.splitlines() if line.startswith('{')] if kind != 'codex' else []
     report = log.read_text() if log is not None and log.exists() else stderr
     return Host(process.returncode, time.monotonic() - began, stdout, stderr, report, facts, where, replies)

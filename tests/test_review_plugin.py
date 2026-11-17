@@ -344,16 +344,25 @@ def test_record_keeps_the_decision_without_input_or_credentials(tmp_path, monkey
 
 
 def test_policy_is_a_copy_and_the_plugin_imports_no_graphtraj():
-    """The policy files equal their source, unmodified, and agents imports nothing from GraphTraj."""
+    """The policy files equal their source, unmodified, and agents imports nothing from GraphTraj.
+
+    graftling is the suite's installed distribution; GraphTraj's copy is in this checkout.
+    """
+    from importlib.metadata import distribution
+    import graphtraj
+
     source = Path(graftling.__file__).parent
     copied = source / 'review_policy'
-    original = source.parent / 'graphtraj' / 'runtimes' / 'codex' / 'policy'
+    original = Path(graphtraj.__file__).parent / 'runtimes' / 'codex' / 'policy'
     for name in ('policy.md', 'policy_template.md', 'LICENSE', 'NOTICE', 'SOURCE.md'):
         assert (copied / name).read_bytes() == (original / name).read_bytes()
     assert list(copied.glob('*.py')) == []
     for path in (source / 'review.py', source / 'codex' / 'driver.py', source / 'codex' / 'managed_session.py'):
         assert not re.search(r'^\s*(import|from)\s+graphtraj', path.read_text(), re.MULTILINE)
-    assert 'review_policy/*' in (source / 'pyproject.toml').read_text()
+    # The installed distribution ships every policy file (its RECORD lists them).
+    shipped = {str(name) for name in distribution('graftling').files}
+    assert {f'graftling/review_policy/{name}' for name in
+            ('policy.md', 'policy_template.md', 'LICENSE', 'NOTICE', 'SOURCE.md')} <= shipped
 
 
 # -- Config -----------------------------------------------------------------

@@ -3,10 +3,12 @@ import { spawn } from 'node:child_process';
 import { accessSync, constants, statSync } from 'node:fs';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-// A supported graftling distribution (the range in pyproject.toml) installs beside this package.
-import { loadHostSdk, registerAgents, sessionEnvironment } from '../../../graftling/pi/extension.mjs';
+// The installed graftling distribution (the range in pyproject.toml), wherever it is.
+import { graftlingModule } from '../graftling.mjs';
 
-export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost } from '../../../graftling/pi/extension.mjs';
+const { loadHostSdk, registerAgents, registerAgentDisplay, sessionEnvironment, startAgentHost } =
+  graftlingModule('pi/extension.mjs');
+export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost };
 
 // This installation's scripts: <prefix>/lib/pythonX.Y/site-packages/graphtraj/runtimes/pi
 // -> <prefix>/bin, as in a venv, a `pip install --user` or a framework Python.

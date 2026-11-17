@@ -58,8 +58,8 @@ def test_an_interpreter_without_this_checkout_is_named_with_both_fixes(tmp_path:
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves "
         "subprocesses: graphtraj -> None, graftling -> None; "
         "-I Workers: graphtraj -> None, graftling -> None; expected graphtraj under {1} and an installed "
-        "graftling. Use a venv whose site-packages resolves this checkout: install graftling from its "
-        "repository (pip install <graftling checkout>/src/graftling or its wheel) and this checkout "
+        "graftling. Use a venv whose site-packages resolves this checkout: install the graftling wheel "
+        "built from its repository (pip install graftling-<version>-py3-none-any.whl) and this checkout "
         "editable (pip install -e {2}), or add a .pth naming {1}. "
         "PYTHONPATH={1} serves only the subprocesses that do not run -I."
     ).format(interpreter, source, PROJECT_ROOT)

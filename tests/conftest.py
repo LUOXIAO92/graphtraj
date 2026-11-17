@@ -30,11 +30,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-# graftling comes from its own repository. GraphTraj's Pi and DSH runtime modules
-# import it as a sibling package (../../../graftling), as in an installed
-# site-packages, so a development checkout links the graftling checkout's package
-# here (git-ignored): ln -s <graftling checkout>/src/graftling src/graftling
-GRAFTLING_LINK = PROJECT_ROOT / "src" / "graftling"
 
 
 def _absolute_pythonpath(configured: str, cwd: Path) -> str:
@@ -49,6 +44,11 @@ def _absolute_pythonpath(configured: str, cwd: Path) -> str:
 
 if os.environ.get("PYTHONPATH"):
     os.environ["PYTHONPATH"] = _absolute_pythonpath(os.environ["PYTHONPATH"], Path.cwd())
+
+# GraphTraj's Pi and DSH modules run from this source tree, where graftling is not
+# beside graphtraj; they ask GRAFTLING_PYTHON for the installed graftling
+# (src/graphtraj/runtimes/graftling.mjs). The suite's interpreter has it.
+os.environ.setdefault("GRAFTLING_PYTHON", sys.executable)
 
 _ORIGINS = (
     "import importlib.util\n"
@@ -75,18 +75,13 @@ def _checkout_import_problem(cwd: Path, executable: str = sys.executable) -> Opt
             continue
         found = ", ".join("{0} -> {1}".format(*pair) for pair in zip(("graphtraj", "graftling"), origins))
         resolved.append("{0}: {1}".format(form, found or "probe failed: " + probe.stderr.strip()[-300:]))
-    if not resolved and (GRAFTLING_LINK / "pyproject.toml").is_file():
-        return None
     if not resolved:
-        return (
-            "{0} does not link a graftling checkout's package; GraphTraj's Pi and DSH runtime modules "
-            "import graftling beside graphtraj. Link it: ln -s <graftling checkout>/src/graftling {0}"
-        ).format(GRAFTLING_LINK)
+        return None
     return (
         "Test subprocesses would not import this checkout: {0} from a neutral directory resolves {1}; "
         "expected graphtraj under {2} and an installed graftling. Use a venv whose site-packages resolves "
-        "this checkout: install graftling from its repository (pip install <graftling checkout>/src/graftling "
-        "or its wheel) and this checkout editable (pip install -e {3}), or add a .pth naming {2}. "
+        "this checkout: install the graftling wheel built from its repository (pip install "
+        "graftling-<version>-py3-none-any.whl) and this checkout editable (pip install -e {3}), or add a .pth naming {2}. "
         "PYTHONPATH={2} serves only the subprocesses that do not run -I."
     ).format(executable, "; ".join(resolved), source, PROJECT_ROOT)
 
@@ -771,7 +766,6 @@ def _build_wheel(build_root: Path) -> Path:
             "--no-deps",
             "-w",
             str(wheelhouse),
-            str(GRAFTLING_LINK.resolve()),
             str(source),
         ],
         cwd=source,
@@ -782,11 +776,25 @@ def _build_wheel(build_root: Path) -> Path:
     return artifacts[0]
 
 
+def installed_graftling() -> tuple[Path, Path]:
+    """The graftling package directory and dist-info this suite imports.
+
+    GraphTraj and its tests use the installed graftling distribution (a wheel
+    built from the graftling repository), never a source checkout.
+    """
+    from importlib.metadata import distribution
+
+    import graftling
+
+    found = distribution("graftling")
+    dist_info = Path(str(found._path))  # the .dist-info directory of a wheel install
+    package = Path(graftling.__file__).resolve().parent
+    assert dist_info.is_dir() and dist_info.name.endswith(".dist-info"), dist_info
+    return package, dist_info
+
+
 def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     """Install one built wheel into a fresh environment."""
-
-    # The agents wheel built beside GraphTraj carries the graftling checkout's version.
-    from graftling import __version__ as graftling_version
 
     subprocess.run(
         [
@@ -808,12 +816,19 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
             "install",
             "--disable-pip-version-check",
             "--no-deps",
-            str(wheel.with_name(f"graftling-{graftling_version}-py3-none-any.whl")),
             str(wheel),
         ],
         cwd=wheel.parent,
     )
     result.check_returncode()
+    # graftling comes from its own repository: the fresh environment gets the
+    # distribution this suite imports, copied whole (package and dist-info).
+    package, dist_info = installed_graftling()
+    site = run_process([str(python), '-c',
+                        "import sysconfig; print(sysconfig.get_path('purelib'))"], cwd=environment)
+    site.check_returncode()
+    shutil.copytree(package, Path(site.stdout.strip(), "graftling"), ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(dist_info, Path(site.stdout.strip(), dist_info.name))
     # Workers use Python -I. Load their clock after site initialization so
     # dependencies inherited through system-site-packages are available.
     site = run_process([str(python), '-c',

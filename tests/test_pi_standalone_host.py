@@ -17,6 +17,7 @@ import graftling
 from graftling import AgentControl, AgentsError, Caller, bind
 from graftling.pi import host
 from graftling.pi.driver import PiDriver
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
@@ -354,7 +355,7 @@ def test_each_end_is_pushed_once_and_shutdown_ends_are_held(tmp_path: Path, fake
 
 def test_pi_package_manifest_loads_the_extension() -> None:
     """Pi installs graftling/pi as a package; its version repeats the single version."""
-    directory = SOURCE / 'graftling/pi'
+    directory = GRAFTLING / 'pi'
     manifest = json.loads((directory / 'package.json').read_text())
     assert manifest['version'] == graftling.__version__
     assert 'pi-package' in manifest['keywords']
@@ -463,7 +464,7 @@ def run_extension(tmp_path: Path, **environment: str) -> tuple[list, list]:
            if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'}}
     env.update(GRAFTLING_PYTHON=str(fake), TEST_CONFIG=str(tmp_path / 'host.json'),
                TEST_LOG=str(tmp_path / 'acks.json'), **environment)
-    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(SOURCE / 'graftling/pi/extension.mjs')],
+    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(GRAFTLING / 'pi/extension.mjs')],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout), json.loads((tmp_path / 'acks.json').read_text())

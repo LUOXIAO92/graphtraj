@@ -29,6 +29,7 @@ from graftling.pi import PiDriver
 from graftling.pi import execution as pi_execution
 from dsh_standalone_peer import FakeDshService, install_dsh
 from test_pi_runtime import pi_environment  # noqa: F401 - pytest fixture
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = Caller('test-host', 'parent', 'parent-session', 'pi')
@@ -292,7 +293,7 @@ console.log(JSON.stringify({ prepend: options.prepend,
   tool: await hook(exec('write'), allow), deny: await hook(exec('write'), nativeDeny),
   ask: await hook(exec('write'), nativeAsk), agents: await hook(exec('mcp__agents__agents'), allow),
   inner: await hook({ ...exec('run_code'), parent: Symbol('outer') }, allow) }));
-""" % json.dumps(str(ROOT / 'src/graftling/dsh/review.mjs'))
+""" % json.dumps(str(GRAFTLING / 'dsh/review.mjs'))
 
 
 def ask_frame(tool: str, call_id: str, tool_input: dict) -> dict:
@@ -339,7 +340,7 @@ const agents = await handler(event('mcp__agents__agents'), { ui: { confirm: asyn
 const reloaded = []; registerReview({ registerCommand: (name) => reloaded.push(name), on: () => {} }, environment);
 console.log(JSON.stringify({ active, commands, dialogs, result: result ?? null, failure, agents: agents ?? null,
   variable: 'GRAFTLING_PI_REVIEW' in environment, kept: environment.KEEP, reloaded }));
-""" % json.dumps(str(ROOT / 'src/graftling/pi/extension.mjs'))
+""" % json.dumps(str(GRAFTLING / 'pi/extension.mjs'))
 
 
 def test_pi_handler_is_inert_without_the_owner(tmp_path: Path) -> None:

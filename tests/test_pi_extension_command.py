@@ -11,6 +11,8 @@ import pytest
 
 from graftling.sessions.archive import JsonlSessionStore, archive_path
 from graphtraj.configuration.project_configuration import default_configuration_content
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
 
@@ -47,8 +49,9 @@ def installation(root: Path, scripts: bool) -> Path:
     site = root / 'lib/python3.13/site-packages'
     extension = site / 'graphtraj/runtimes/pi/extension.mjs'
     for target, origin in ((extension, SOURCE / 'graphtraj/runtimes/pi/extension.mjs'),
-                           (site / 'graftling/pi/extension.mjs', SOURCE / 'graftling/pi/extension.mjs')):
-        target.parent.mkdir(parents=True)
+                           (site / 'graphtraj/runtimes/graftling.mjs', SOURCE / 'graphtraj/runtimes/graftling.mjs'),
+                           (site / 'graftling/pi/extension.mjs', GRAFTLING / 'pi/extension.mjs')):
+        target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(origin, target)
 
     if scripts:

@@ -27,6 +27,8 @@ import pytest
 from graftling.dsh.errors import DshError
 from graftling.dsh.service import DshService
 from test_claude_codex_host_shutdown import RECORDED, SESSION, SOURCE, locate, tool_call
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 # The three signal steps of 5 seconds each, and room for a loaded machine.
 STOP_BOUND = 25.0
@@ -320,7 +322,7 @@ try:
 finally:
     print(json.dumps(sent))
 '''
-    path   = SOURCE / 'graftling' / 'dsh' / 'watcher.py'
+    path   = GRAFTLING / 'dsh' / 'watcher.py'
     result = subprocess.run([sys.executable, '-I', '-S', '-c', probe, str(path)], stdin=subprocess.DEVNULL,
                             capture_output=True, text=True, env={}, timeout=15)
     assert json.loads(result.stdout) == [[4242424, int(sig)] for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL)]

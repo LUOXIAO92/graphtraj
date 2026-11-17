@@ -12,6 +12,3 @@ uv.lock
 
 # Per-platform GUI provenance generated only while packaging its backend wheel.
 src/graphtraj/interfaces/desktop-host.json
-
-# A development checkout links the graftling repository's package here (tests/conftest.py).
-/src/graftling

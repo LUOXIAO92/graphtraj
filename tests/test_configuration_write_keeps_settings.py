@@ -16,6 +16,7 @@ import sys
 import pytest
 
 import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
 SOURCE = Path(graftling.__file__).resolve().parents[1]
@@ -236,7 +237,7 @@ def test_first_install_content_is_unchanged(entry: Entry, project: Path) -> None
     configure(entry, project, '--write')
 
     config = project / entry.config
-    module = (SOURCE / 'graftling/claude/host_context.mjs').read_text(encoding='utf-8')
+    module = (GRAFTLING / 'claude/host_context.mjs').read_text(encoding='utf-8')
     plugin = f'.claude/skills/{entry.plugin}'
     expected = {
         entry.config: json.dumps({

@@ -23,6 +23,8 @@ import pytest
 from graftling import AgentControl, Caller, bind
 from graftling.dsh import host as dsh_host
 from graftling.pi import host as pi_host
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
@@ -724,7 +726,7 @@ def run_pi(tmp_path: Path, mode: str, entries: list | None = None) -> dict:
     (tmp_path / 'host.json').write_text(json.dumps({'root': str(tmp_path / 'data')}))
     env = {key: value for key, value in os.environ.items()
            if key not in {'GRAFTLING_CONNECTION', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE', 'DSH_AGENT_PACKAGE'}}
-    env.update(GRAFTLING_PYTHON=sys.executable, TEST_EXTENSION=str(SOURCE / 'graftling/pi/extension.mjs'),
+    env.update(GRAFTLING_PYTHON=sys.executable, TEST_EXTENSION=str(GRAFTLING / 'pi/extension.mjs'),
                TEST_CONFIG=str(tmp_path / 'host.json'), TEST_ENTRIES=json.dumps(entries or []), TEST_MODE=mode,
                TEST_SESSION_FILE=str(tmp_path / 's.jsonl'), TEST_RUN_MS='1500',
                PI_CODING_AGENT_DIR=str(tmp_path / 'pi-home'))
@@ -829,7 +831,7 @@ def run_extension(tmp_path: Path, *, entries: list | None = None, ui: bool = Fal
                TEST_ENTRY=str(package / 'cli.js'),
                TEST_ENTRIES=json.dumps(entries or []), TEST_UI='1' if ui else '0', TEST_TURN='1' if turn else '0',
                TEST_NOTICES=notices, TEST_RUN_MS=str(run_ms))
-    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(SOURCE / 'graftling/pi/extension.mjs')],
+    result = subprocess.run([node, '--input-type=module', '-e', EXTENSION, str(GRAFTLING / 'pi/extension.mjs')],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout), json.loads((tmp_path / 'log.json').read_text())
@@ -917,7 +919,7 @@ def test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inacti
     if not node:
         pytest.skip('Node is required')
     result = subprocess.run([node, '--input-type=module', '-e', COMMUNICATION,
-                             str(SOURCE / 'graftling/dsh/communication.mjs')],
+                             str(GRAFTLING / 'dsh/communication.mjs')],
                             cwd=tmp_path, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     document = json.loads(result.stdout)
@@ -1028,7 +1030,7 @@ def run_plugin(tmp_path: Path, **environment: str) -> list:
            if key not in {'GRAFTLING_CONNECTION', 'DSH_AGENT_PACKAGE', 'GRAPHTRAJ_CLI_CONNECTION'}}
     env.update(GRAFTLING_DSH_PACKAGE=str(tmp_path / 'stub' / 'entry.js'), GRAFTLING_PYTHON=str(fake),
                GRAFTLING_DSH_CONFIG='/abs/dsh-host.json', TEST_LOG=str(tmp_path / 'log.json'), **environment)
-    result = subprocess.run([node, '--input-type=module', '-e', PLUGIN, str(SOURCE / 'graftling/dsh/plugin.mjs')],
+    result = subprocess.run([node, '--input-type=module', '-e', PLUGIN, str(GRAFTLING / 'dsh/plugin.mjs')],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     return json.loads((tmp_path / 'log.json').read_text())

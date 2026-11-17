@@ -32,6 +32,8 @@ from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 from test_dsh_standalone_child import claude_main, dsh, stop_owned  # noqa: F401 - dsh is a pytest fixture
 from test_hosted_cli import own_process
 from test_result_submission import result_project
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 ROOT = Path(__file__).resolve().parents[1]
 GIT = {'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1', 'PATH': os.environ['PATH']}
@@ -461,7 +463,7 @@ def test_a_standalone_child_keeps_its_own_entry_and_policy(tmp_path: Path, dsh: 
     assert plugin['config'] == {'mcpCommand': str(Path(sys.executable).absolute()),
                                 'mcpArgs': ['-I', '-m', 'graftling.mcp'],
                                 'mcpEnv': ['GRAFTLING_CONNECTION']}
-    assert Path(plugin['name']).is_relative_to(ROOT / 'src/graftling')
+    assert Path(plugin['name']).resolve().is_relative_to(GRAFTLING)
     # Byte-identical to the row before this change: no extra key at all.
     assert next(row for row in service.patches if row.get('id') == 'sandbox-policy') == {
         'id': 'sandbox-policy', 'config': {'mode': 'workspace-write', 'workspaceRoot': str(tmp_path)}}

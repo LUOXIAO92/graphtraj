@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import zipfile
+from importlib.metadata import distribution
 from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.version import Version
 
 import graftling
-from conftest import InstalledCommands
+from conftest import InstalledCommands, installed_graftling
 
 
-def test_independent_wheel_without_graphtraj(built_wheel: Path, tmp_path: Path) -> None:
-    """The standalone artifact exposes native values without GraphTraj installed."""
-    agents_wheel = next(built_wheel.parent.glob('graftling-*.whl'))
-    with zipfile.ZipFile(agents_wheel) as archive:
-        archive.extractall(tmp_path)
+def test_independent_wheel_without_graphtraj(tmp_path: Path) -> None:
+    """The installed graftling distribution exposes native values without GraphTraj."""
+    package, _ = installed_graftling()
+    shutil.copytree(package, tmp_path / 'graftling', ignore=shutil.ignore_patterns('__pycache__'))
     script = '''
 import importlib.util
 import sys
@@ -52,10 +53,10 @@ assert not any(name == 'graphtraj' or name.startswith('graphtraj.') for name in 
 
 def test_wheels_have_separate_owners(built_wheel: Path) -> None:
     """Installation owns each native resource once and declares real dependencies."""
-    agents_wheel = next(built_wheel.parent.glob('graftling-*.whl'))
-    with zipfile.ZipFile(agents_wheel) as archive:
-        agents = set(archive.namelist())
-        agents_metadata = archive.read(next(n for n in agents if n.endswith('/METADATA'))).decode()
+    # graftling is installed from its own repository's wheel; its RECORD lists the files.
+    installed = distribution('graftling')
+    agents = {str(name) for name in installed.files}
+    agents_metadata = installed.read_text('METADATA')
     with zipfile.ZipFile(built_wheel) as archive:
         graphtraj = set(archive.namelist())
         metadata = archive.read(next(n for n in graphtraj if n.endswith('/METADATA'))).decode()

@@ -23,6 +23,8 @@ from graphtraj.interfaces.hosted_cli import forward_request
 from graphtraj.runtimes.pi import session_entry
 from test_agent_control import ScriptedDriver
 from test_codex_app_server import peer  # noqa: F401
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
 
@@ -182,7 +184,7 @@ def test_pi_exclusion_moved_to_the_graphtraj_extension(tmp_path: Path) -> None:
     """agents' Pi entry adopts its own connection; GraphTraj's refuses mixing owners."""
     both = {'GRAFTLING_CONNECTION': '/agents-host', 'GRAPHTRAJ_CLI_CONNECTION': '/graphtraj-host',
             'GRAFTLING_PYTHON': sys.executable}
-    assert start_pi(tmp_path, 'graftling/pi/extension.mjs', 'agents', **both) == {
+    assert start_pi(tmp_path, str(GRAFTLING / 'pi/extension.mjs'), 'agents', **both) == {
         'owned': True, 'registered': ['agents']}
     refused = start_pi(tmp_path, 'graphtraj/runtimes/pi/extension.mjs', 'graphtraj', **both)
     assert refused['error'].startswith('Conflicting existing Agent connections')

@@ -13,10 +13,12 @@ import subprocess
 import sys
 
 import pytest
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 SOURCE = Path(__file__).resolve().parents[1] / 'src'
 GRAPHTRAJ = SOURCE / 'graphtraj'
-CONTRACT = SOURCE / 'graftling' / 'PUBLIC_API.md'
+CONTRACT = GRAFTLING / 'PUBLIC_API.md'
 
 ROOT = 'graftling'
 RUNTIME_PACKAGES = ('graftling.claude', 'graftling.codex', 'graftling.pi', 'graftling.dsh')
@@ -187,6 +189,10 @@ MODULE_FORM = re.compile(
 )
 
 
+GRAFTLING_MODULE = re.compile(
+    r"(?:const\s*\{(?P<names>[^}]*)\}\s*=\s*)?(?:await\s+)?\bgraftling(?:Module|Import)\(\s*['\"](?P<file>[^'\"]+)['\"]\s*\)")
+
+
 def javascript_findings(path: str, source: str, table: dict[str, set[str]]) -> list[str]:
     """Report a ``.mjs`` import of an agents file or export the contract does not list.
 
@@ -210,6 +216,20 @@ def javascript_findings(path: str, source: str, table: dict[str, set[str]]) -> l
             continue
         for item in filter(None, (part.strip() for part in braces['names'].split(','))):
             name = item.split()[0]
+            if name not in table[target]:
+                findings.append(f'imports unlisted export {target}: {name}')
+    # GraphTraj loads the installed graftling through graphtraj/runtimes/graftling.mjs
+    # (graftlingModule or graftlingImport).
+    for match in GRAFTLING_MODULE.finditer(source):
+        target = 'graftling/' + match['file']
+        if target not in table:
+            findings.append(f'imports unlisted file {target}')
+            continue
+        if match['names'] is None:
+            findings.append(f'imports all of {target} instead of listed exports')
+            continue
+        for item in filter(None, (part.strip() for part in match['names'].split(','))):
+            name = item.split(':')[0].strip()
             if name not in table[target]:
                 findings.append(f'imports unlisted export {target}: {name}')
     return findings
@@ -273,7 +293,7 @@ def test_listed_javascript_exports_exist() -> None:
 
     assert table
     for file, exports in table.items():
-        source = (SOURCE / file).read_text(encoding='utf-8')
+        source = (GRAFTLING.parent / file).read_text(encoding='utf-8')
         for name in exports:
             assert re.search(rf'export\s+(?:async\s+)?(?:function\*?|const|let|class)\s+{name}\b', source), (file, name)
 

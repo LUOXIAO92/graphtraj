@@ -15,6 +15,8 @@ from graphtraj.execution.runner_status import caller_alias
 from graphtraj.runtimes import replacement
 from graphtraj.runtimes.native_entry import main
 from graphtraj.workspace.runner_project import discover_runner_directory
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
 @pytest.fixture
@@ -184,7 +186,7 @@ def test_pi_shared_process_environment_is_per_session(project: Path) -> None:
     node = shutil.which('node')
     if node is None:
         pytest.skip('Node is not installed')
-    extension = Path(__file__).resolve().parents[1] / 'src/graftling/pi/extension.mjs'
+    extension = GRAFTLING / 'pi/extension.mjs'
     # Load the exact module bytes without asking Node to inspect denied parents
     # of an otherwise readable isolated Worktree.
     extension = Path(shutil.copy2(extension, project / 'extension.mjs'))
@@ -215,7 +217,7 @@ def test_installed_native_session_apis(project: Path, runtime: str) -> None:
     if node is None or executable is None:
         pytest.skip(f'{runtime} native library is not installed')
     package = Path(__file__).resolve().parents[1] / 'src/graphtraj/runtimes'
-    module = (package.parents[1] / 'graftling/pi/extension.mjs' if runtime == 'pi'
+    module = (GRAFTLING / 'pi/extension.mjs' if runtime == 'pi'
               else package / runtime / 'tool.mjs')
     # DSH tool.mjs imports its sibling collection and graftling plugin by
     # relative path (5debbf4), so it is loaded in place rather than copied.

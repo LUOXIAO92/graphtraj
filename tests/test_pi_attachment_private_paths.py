@@ -17,6 +17,8 @@ import pytest
 
 from graftling import default_config
 from graftling.sessions import JsonlSessionStore, PiArchive, SessionArchive, archive_path
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
 def bound_archive(root: Path) -> SessionArchive:
@@ -85,7 +87,7 @@ def test_standalone_copies_an_attachment_under_graphtraj(tmp_path: Path) -> None
 
 def test_standalone_copies_it_with_no_graphtraj_package(tmp_path: Path) -> None:
     """An isolated Python that cannot import GraphTraj gives the same copy."""
-    source = Path(__file__).resolve().parents[1] / 'src/graftling'
+    source = GRAFTLING
     shutil.copytree(source, tmp_path / 'graftling', ignore=shutil.ignore_patterns('__pycache__'))
     program = '''
 import sys
@@ -525,7 +527,9 @@ main()
     source = Path(__file__).resolve().parents[1] / 'src'
     for name in ('GRAFTLING_CONNECTION', 'GRAFTLING_PYTHON', 'GRAPHTRAJ_CLI_CONNECTION', 'PI_SUBAGENT_CHILD'):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv('PATH', str(bin_dir) + os.pathsep + os.environ['PATH'])
+    # Without GRAFTLING_PYTHON, GraphTraj's extension asks python3 on PATH for the
+    # installed graftling: the suite's interpreter, which has it.
+    monkeypatch.setenv('PATH', os.pathsep.join((str(bin_dir), str(Path(sys.executable).parent), os.environ['PATH'])))
     monkeypatch.setenv('PYTHONPATH', str(source))
     monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
     monkeypatch.setenv('GRAFTLING_NATIVE_SESSION', 'attachments')

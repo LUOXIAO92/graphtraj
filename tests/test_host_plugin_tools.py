@@ -9,6 +9,8 @@ from graftling import AgentsError, AgentsResult
 from graftling.claude import NativeCalls, claude_host_plugin
 from graftling.claude.host import adoption_material as agents_material
 from graphtraj.runtimes.claude.host import NativeCalls as GraphTrajCalls, adoption_material as graphtraj_material
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 SESSION = '11111111-1111-4111-8111-111111111111'
 
@@ -49,7 +51,7 @@ def test_a_standalone_plugin_associates_and_lists_only_agents(tmp_path: Path) ->
     """Nothing in the standalone plugin names or handles the tasks tool."""
     text = module_of(agents_material(tmp_path, Path('/claude')))
     assert 'tasks' not in text
-    assert text == Path('src/graftling/claude/host_context.mjs').read_text()
+    assert text == (GRAFTLING / 'claude/host_context.mjs').read_text()
     run_module(tmp_path, text, r'''
 assert.deepEqual([...handlers.keys()].filter(key => key.startsWith('tool.')).sort(),
                  ['tool.call:mcp__agents__agents', 'tool.check:mcp__agents__agents']);

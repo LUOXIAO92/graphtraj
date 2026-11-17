@@ -19,6 +19,8 @@ from test_session_storage import header
 from test_codex_jsonl_archive import history
 from test_claude_jsonl import message
 from test_migration_snapshot import _source
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
 def test_sqlite_evidence_is_lossless_idempotent_and_not_native_order(tmp_path: Path) -> None:
@@ -208,7 +210,7 @@ def test_snapshot_captures_swarm_configuration_and_can_clone(tmp_path: Path, mon
 
 def test_archive_collectors_work_with_no_graphtraj_package(tmp_path: Path) -> None:
     """Isolated Python loads and enables all collectors from the independent package."""
-    source = Path(__file__).resolve().parents[1] / 'src/graftling'
+    source = GRAFTLING
     shutil.copytree(source, tmp_path / 'graftling', ignore=shutil.ignore_patterns('__pycache__'))
     program = '''
 import sys

@@ -4,7 +4,10 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { installCollection } from './collection.mjs';
-import { sessionEnvironment as nativeSessionEnvironment } from '../../../graftling/dsh/plugin.mjs';
+// The installed graftling distribution (the range in pyproject.toml), wherever it is.
+import { graftlingImport } from '../graftling.mjs';
+
+const { sessionEnvironment: nativeSessionEnvironment } = await graftlingImport('dsh/plugin.mjs');
 
 // A user-started DSH sets no package variable: resolve from its real entry file,
 // since an installed `dsh` command is usually a symlink to it.

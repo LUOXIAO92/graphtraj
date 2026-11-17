@@ -4,6 +4,8 @@ import re
 import subprocess
 
 from graphtraj.runtimes.claude.host import adoption_material
+import graftling
+GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
 def written_mod() -> str:
@@ -170,7 +172,7 @@ DOLLAR_VALUE = re.compile(r'\$\.[A-Za-z_]+\b(?!\.[A-Za-z_]+\()')
 
 def test_mod_spells_every_host_noun_at_its_call_site() -> None:
     """The validator's ``$.noun`` rule holds for the shipped mod; a value probe is caught."""
-    text = Path('src/graftling/claude/host_context.mjs').read_text()
+    text = (GRAFTLING / 'claude/host_context.mjs').read_text()
     assert DOLLAR_VALUE.findall(text) == []
     assert DOLLAR_VALUE.findall("if (typeof $.prompt?.submit !== 'function') {}") == ['$.prompt']
     assert DOLLAR_VALUE.findall("await $.prompt.submit({text});") == []

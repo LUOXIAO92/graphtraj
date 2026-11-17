@@ -9,6 +9,9 @@
 #      <Harness>/tmp/501/graftling-after when that exists, else 0.5.2), then BEFORE vs AFTER
 #   B  498 per-sample cost: DescendantSampler.sample() with six marked sleeps, pre-498 (2da634af) / 498 (871aaaa9) /
 #      0.5.2 (<1 min)
+#   S  production-sized Worldline, BEFORE: a fresh BEFORE project whose Worldline gets 8700 synthetic earlier
+#      events (~4.9 KB each, as production's 8653 events / 42 MB), one timed read, then the P run (<10 min)
+#   T  the same at AFTER (VERIFY501_AFTER, default the Worktree HEAD), then S vs T (<10 min)
 #   G  GraphTraj full suite of the Worktree HEAD (background), graftling wheel from <Harness>/graftling
 #   R  results of the newest G
 #   U  USER, only if P or A reports a folder-trust or login refusal (waits for the user)
@@ -144,6 +147,22 @@ P|A)
   print "and the top working stacks per phase. If the member was refused (trust/login): USER step zsh $THIS U."
   print -r -- "next: zsh $THIS B 2>&1 | tee $OUT/B.txt   (then report $OUT/${L}.json and ${STEP}.txt to the Leader)"
   ;;
+S|T)
+  local L=bigbefore C=$BEFORE_COMMIT
+  [[ $STEP == T ]] && { L=bigafter; C=$AFTER_COMMIT; }
+  say "[$STEP] $L ($C + graftling 0.5.2) with a production-sized synthetic Worldline. Dialog: none (U if refused). <10 min."
+  check_tmp && quiet || return 1
+  [[ $STEP == T && ! -f $OUT/bigbefore.json ]] && { print -r -- "STOP: run S first"; return 1; }
+  claude_version
+  build $L $C $RT/graftling || return 1
+  probe $L seed $(project $L) 8700 || { print -r -- "STOP: seeding the Worldline failed (above)"; return 1; }
+  member $L; local rc=$?
+  (( rc == 2 )) && { print -r -- "rerun this step for a fresh project"; return $rc; }
+  [[ $STEP == T ]] && probe $L compare $OUT/bigbefore.json $OUT/bigafter.json
+  print "Success: 'seeded 8700 synthetic events ... one read_worldline: ... s CPU' (S about 5 s, T about 0.5 s on this"
+  print "host), raw ps lines, 'phase' lines and the CHECK 468 window; T ends with 'S vs T' as '== before/after'."
+  [[ $STEP == S ]] && print -r -- "next: zsh $THIS T 2>&1 | tee $OUT/T.txt" || print -r -- "next: zsh $THIS G (full suite), then R"
+  ;;
 B)
   say "[B] 498 per-sample cost on this host (six marked sleeps this step starts and stops). Dialog: none. <1 min."
   quiet || return 1
@@ -201,5 +220,5 @@ U)
   print "If it asks to log in instead, log in, then /exit. Send no message."
   print -r -- "next (Main): the refused step again (zsh $THIS P or A)"
   ;;
-*) print -r -- "usage: zsh $THIS 0|P|A|B|G|R|U" ; return 2 ;;
+*) print -r -- "usage: zsh $THIS 0|P|A|S|T|B|G|R|U" ; return 2 ;;
 esac

@@ -382,6 +382,51 @@ def profile(path: Path, rows: list[dict], labels: list[str]) -> None:
             print(f'   x{count:5d} {stack[:400]}')
 
 
+def seed(project: Path, count: str) -> int:
+    """Put COUNT synthetic earlier events (production-sized: ~4.9 KB each, 200 per shard) before the project's Worldline.
+
+    Synthetic content only, dated 2025 so the project's own later events keep their order; each cites the one
+    before it. The Task index is removed so it rebuilds. Then one timed read of the whole Worldline.
+    """
+    from datetime import timedelta, timezone
+
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    state = load_project_configuration(project).state
+    worldline = state / 'worldline'
+    own = read_worldline(state)
+    worldline.mkdir(parents=True, exist_ok=True)
+    zone = timezone(timedelta(hours=9))
+    start = datetime(2025, 1, 1, 9, tzinfo=zone)
+    previous, shard, written = None, [], 0
+
+    def flush() -> None:
+        (worldline / (shard[0]['event_id'] + '.jsonl')).write_text(
+            ''.join(json.dumps(item, ensure_ascii=False) + '\n' for item in shard), encoding='utf-8')
+
+    for number in range(int(count)):
+        captured = start + timedelta(seconds=number)
+        event_id = captured.strftime('%Y%m%dT%H%M%S.%f%z')
+        shard.append({'event': 'fact-recorded', 'caused_by_event_ids': [previous] if previous else [],
+                      'evidence_refs': [], 'task_id': f'seed{number % 500}', 'fact': f'501 synthetic {number} ' + 'x' * 4800,
+                      'event_id': event_id, 'captured_at': captured.isoformat(timespec='microseconds')})
+        previous = event_id
+        if len(shard) == 200:
+            flush()
+            written += len(shard)
+            shard = []
+    if shard:
+        flush()
+        written += len(shard)
+    (state / 'task-index.json').unlink(missing_ok=True)
+    began, cpu = time.perf_counter(), time.process_time()
+    events = read_worldline(state)
+    print(f'seeded {written} synthetic events before the project\'s {len(own)}; one read_worldline: {len(events)} '
+          f'events, {time.process_time() - cpu:.2f} s CPU, {time.perf_counter() - began:.2f} s wall')
+    return 0 if len(events) == written + len(own) else 1
+
+
 def compare(before: Path, after: str) -> int:
     first, second = json.loads(before.read_text()), json.loads(Path(after).read_text())
     for item in (first, second):
@@ -396,5 +441,5 @@ def compare(before: Path, after: str) -> int:
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
     commands = {'imports': imports, 'prepare': prepare, 'isolation': isolation, 'init': init,
-                'run': run_member, 'report': report, 'compare': compare}
+                'run': run_member, 'report': report, 'compare': compare, 'seed': seed}
     raise SystemExit(commands[command](target, extra))

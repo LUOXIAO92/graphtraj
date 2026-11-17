@@ -92,7 +92,7 @@ G)
   fi
   (cd $PYTEST_TMP && $V/bin/python -I -c 'import graphtraj, graftling; print("graphtraj", graphtraj.__file__); print("graftling", graftling.__file__, graftling.__version__)')
   mkdir -p $R
-  (cd $WT && TMPDIR=$PYTEST_TMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -rA > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
+  (cd $WT && TMPDIR=$PYTEST_TMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
   print "started; result: tail -30 $R/suite.txt"
   print "next, when it ends: zsh ${0:A} R"
   ;;

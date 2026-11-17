@@ -6,6 +6,7 @@
 #   G      GraphTraj full suite of the Worktree HEAD, graftling installed as a wheel from <Harness>/graftling main (background)
 #   F [ref] graftling full suite of ref (default the Task branch; `dev` is the baseline) from a fresh clone (background)
 #   R      results: newest G and the two newest F (tail, FAILED/ERROR lines, the item-1 test line)
+#   O <rev> <test paths...>  focused run of the given test files at <rev> of this Worktree, one pytest process (foreground)
 # Dialog: none in every step. pytest's TMPDIR stays outside the Harness; each test step prints it.
 # No step signals processes it did not start. Every step prints its follow-up with real values.
 emulate -L zsh
@@ -123,16 +124,52 @@ F)
 R)
   say "[R] results. Dialog: none."
   local g=($OUT/G-*(N/om[1])) f=($OUT/F-*(N/om[1,2]))
+  (( $#g )) || print -r -- "no G result under $OUT yet"
+  (( $#f )) || print -r -- "no F result under $OUT yet"
   for r in $g $f; do
-    print "---- $r"
+    print -r -- "---- $r"
+    [[ -f $r/suite.txt ]] || { print -r -- "(no suite.txt yet)"; continue; }
     tail -8 $r/suite.txt
     print "failed/error lines:"
     grep -h -E '^(FAILED|ERROR) ' $r/suite.txt $r/shards/*(N.) 2>/dev/null | sort -u || print "(none)"
   done
   if (( $#g )); then
-    print "---- item 1 in $g"
+    print -r -- "---- item 1 in $g"
     grep -h -F "$ITEM1" $g/suite.txt $g/shards/*(N.) 2>/dev/null | grep -E 'PASSED|FAILED|ERROR|SKIPPED' | sort -u || print "item 1: no result line found"
   fi
   ;;
-*) print "usage: zsh ${0:A} 0|C|G|F [ref]|R"; return 2 ;;
+O)
+  (( $# >= 3 )) || { print -r -- "usage: zsh ${0:A} O <rev> <test paths...>"; return 2; }
+  local REV=$2; shift 2
+  say "[O] focused run at $REV of $WT, one pytest process, foreground. Dialog: none."
+  check_tmp; quiet
+  [[ -d $G/src/graftling ]] || { print -r -- "STOP: $G/src/graftling missing"; return 1; }
+  local S=$(git -C $WT rev-parse --short "$REV^{commit}") FULL=$(git -C $WT rev-parse "$REV^{commit}")
+  local K=$T/gt-$S V=$T/venv-gto-$S N=$T/wheels-gto-$S O=$OUT/O-$S-$(date +%H%M%S).txt
+  if [[ -d $K/.git ]]; then
+    print -r -- "reusing $K"
+  else
+    mkdir -p $T
+    git clone -q --no-hardlinks $WT $K && git -C $K checkout -q --detach $S
+  fi
+  [[ $(git -C $K rev-parse HEAD) == $FULL ]] || { print -r -- "STOP: $K HEAD is not $FULL"; return 1; }
+  [[ -e $K/src/graftling ]] && { print -r -- "STOP: $K/src/graftling exists; GraphTraj must use the installed graftling"; return 1; }
+  print -r -- "graftling wheel source: $G at $(git -C $G rev-parse HEAD) ($(git -C $G branch --show-current))"
+  if [[ -x $V/bin/python ]]; then
+    print -r -- "reusing $V (made for $S)"
+  else
+    $CONDA -m venv --system-site-packages $V && copy_deps $V
+    $CONDA -m pip wheel -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
+      -w $N $G/src/graftling >/dev/null
+    $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
+      $N/graftling-*.whl -e $K 2>&1 | grep -vi cache || true
+  fi
+  (cd $PYTEST_TMP && $V/bin/python -I -c 'import graphtraj, graftling; print("graphtraj", graphtraj.__file__); print("graftling", graftling.__file__, graftling.__version__)')
+  mkdir -p $OUT
+  print -r -- "tests: $*"
+  (cd $K && TMPDIR=$PYTEST_TMP $V/bin/python -m pytest -p no:cacheprovider -q -rfE "$@" 2>&1 && print "exit=0" || print "exit=$?") | tee $O
+  print -r -- "result: $O"
+  print -r -- "next: report $O to the Leader; another focused run: zsh ${0:A} O <rev> <test paths...>"
+  ;;
+*) print -r -- "usage: zsh ${0:A} 0|C|G|F [ref]|R|O <rev> <test paths...>"; return 2 ;;
 esac

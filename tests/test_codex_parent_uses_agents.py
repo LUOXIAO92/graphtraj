@@ -17,7 +17,7 @@ import pytest
 
 from graftling.codex.host import CodexHost
 from test_codex_host_cross_runtime import Running, events, until
-from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+from agents_helpers import native_settings  # noqa: F401 - pytest fixture
 import graftling
 GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 

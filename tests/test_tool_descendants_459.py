@@ -29,7 +29,7 @@ import graftling
 from graftling import AgentControl, Caller
 from graftling.member_processes import MEMBER_RUN_ENV
 from graftling.tool_descendants import Identity, identity, read_sidecar, stop_tool_processes
-from graftling_agent_control import ScriptedDriver
+from agents_helpers import ScriptedDriver
 from test_claude_runtime import claude_environment, execution  # noqa: F401
 from test_owner_exited_notice_451 import dead_pid
 from test_result_submission import result_project

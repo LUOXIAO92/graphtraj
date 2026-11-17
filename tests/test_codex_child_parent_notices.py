@@ -17,7 +17,7 @@ from graftling.codex.host import CodexHost
 from graftling.codex.managed_session import CodexManagedExecution
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 from test_codex_host_cross_runtime import Running, host_settings, until  # noqa: F401
-from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+from agents_helpers import native_settings  # noqa: F401 - pytest fixture
 
 APPROVAL = 'request:item/commandExecution/requestApproval'
 

@@ -29,7 +29,7 @@ from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.execution.runner_heartbeat import hold_ownership
 from graphtraj.runtimes.dsh import execution
 from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
-from graftling_dsh_standalone_child import claude_main, dsh, stop_owned  # noqa: F401 - dsh is a pytest fixture
+from agents_helpers import claude_main, dsh, stop_owned  # noqa: F401 - dsh is a pytest fixture
 from test_hosted_cli import own_process
 from test_result_submission import result_project
 import graftling

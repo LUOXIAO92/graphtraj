@@ -19,7 +19,7 @@ from graftling.codex.driver import CodexDriver
 from graftling.codex.host import CodexHost
 from graftling.control import ExecutionEvents
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
-from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+from agents_helpers import native_settings  # noqa: F401 - pytest fixture
 
 CONFIG = """connections:
   work-claude:

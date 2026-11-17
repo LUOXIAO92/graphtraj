@@ -26,7 +26,7 @@ from graftling.pi import host as pi_host
 from graftling.pi.driver import PiDriver
 from test_claude_host_cross_runtime import claimed, main_call
 from test_codex_host_cross_runtime import Running, events, until
-from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+from agents_helpers import native_settings  # noqa: F401 - pytest fixture
 from test_pi_runtime import pi_environment  # noqa: F401 - pytest fixture
 
 

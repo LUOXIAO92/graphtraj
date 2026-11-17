@@ -15,7 +15,7 @@ import graftling
 from graftling import AgentControl, Caller
 from graphtraj.configuration.project_configuration import default_configuration_content
 from graphtraj.interfaces.agents import swarm_root
-from graftling_agents_connections_presets import CONFIG, RecordingDriver, configured
+from agents_helpers import CONFIG, RecordingDriver, configured
 from test_agents_native_claude import agents
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
 

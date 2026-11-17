@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from graphtraj.runtimes.pi.managed_session import PiManagedExecution
-from graftling_pi_standalone_host import run_host
+from agents_helpers import run_host
 
 
 def test_host_starts_with_archiving_on(tmp_path: Path) -> None:

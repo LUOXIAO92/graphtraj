@@ -33,9 +33,7 @@ from graftling.process import authenticate_process
 from graftling.runtime import RuntimeAdapterError
 from dsh_standalone_peer import FakeDshService
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
-from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
-from graftling_dsh_standalone_child import declare, dsh  # noqa: F401 - pytest fixture
-from graftling_pi_dsh_notice_holding import Process
+from agents_helpers import Process, declare, dsh, native_settings  # noqa: F401 - dsh, native_settings: pytest fixtures
 
 # Far longer than a refusal takes; the old code never answers at all.
 PROMPT = 10.0

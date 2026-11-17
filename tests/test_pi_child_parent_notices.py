@@ -21,7 +21,7 @@ from graftling.dsh import host as dsh_host
 from graftling.pi import execution, host as pi_host
 from graftling.pi.driver import PiDriver
 from test_codex_host_cross_runtime import Running, until
-from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+from agents_helpers import native_settings  # noqa: F401 - pytest fixture
 from test_hosts_pi_children import ENTRY, ClaudeMain, CodexMain, codex_settings, install_node, project  # noqa: F401
 from test_pi_generic_execution import generic
 from test_pi_runtime import pi_environment  # noqa: F401 - pytest fixture

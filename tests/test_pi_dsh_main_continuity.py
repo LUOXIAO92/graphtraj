@@ -11,7 +11,7 @@ from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution.main_continuity import claim_main, claims, current_main, route_notice
 from graphtraj.execution.runner_connection import connection_operation
 from graphtraj.interfaces.agents import GraphTrajAgents
-from graftling_agent_control import ScriptedDriver
+from agents_helpers import ScriptedDriver
 from test_external_session_entry import dsh_session, native, pi_session, project  # noqa: F401
 
 

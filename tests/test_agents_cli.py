@@ -10,7 +10,7 @@ import pytest
 from graftling import AgentControl, Caller, bind
 from graftling.connection import agents_connection
 from graftling.process import authenticate_process
-from graftling_agent_control import ScriptedDriver
+from agents_helpers import ScriptedDriver
 
 
 @pytest.mark.parametrize('surface', ['cli', 'mcp'])

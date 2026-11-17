@@ -1852,7 +1852,7 @@ def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
     from graphtraj.execution.main_continuity import MainRoots, current_main
     from graphtraj.runtimes.claude.host import main_calls
     from graphtraj.runtimes.claude.mcp import serve
-    from graftling_agent_control import ScriptedDriver
+    from agents_helpers import ScriptedDriver
 
     root, task, mapping, arguments = target
     # Process ancestry names no Runtime, as for the real Claude host.

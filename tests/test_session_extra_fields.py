@@ -10,7 +10,7 @@ from graftling.sessions.claude import ClaudeJsonlCollector
 from graftling.sessions.protocol import (
     ARCHIVE_TYPES, native_record, upgrade_event, upgrade_header, validate_event, validate_header,
 )
-from graftling_claude_jsonl import message, write
+from agents_helpers import message, write
 
 EXAMPLES = Path(__file__).parents[1] / 'examples' / 'sessions'
 V4_EXAMPLES = Path(__file__).parent / 'fixtures' / 'sessions_v4'

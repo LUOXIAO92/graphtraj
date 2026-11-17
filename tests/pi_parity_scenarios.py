@@ -13,6 +13,7 @@ import sys
 import tempfile
 
 from graftling import __file__ as agents_file
+from graphtraj import __file__ as graphtraj_file
 from graphtraj.runtimes.pi.managed_session import PiManagedExecution
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 
@@ -151,7 +152,9 @@ def capture() -> dict:
             text = json.dumps(document, indent=1, sort_keys=True)
             replacements = {
                 str(root): '<tmp>', directory: '<tmp>',
+                # graftling is installed (site-packages) and graphtraj runs from src: both read <src>.
                 str(Path(agents_file).resolve().parents[1]): '<src>',
+                str(Path(graphtraj_file).resolve().parents[1]): '<src>',
                 sys.executable: '<python>', str(Path(sys.executable).parent): '<python-bin>',
                 str(Path(sys.prefix).resolve()): '<prefix>', sys.prefix: '<prefix>',
                 str(Path(sys.base_prefix).resolve()): '<base-prefix>', str(Path.home()): '<home>',

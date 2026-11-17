@@ -54,6 +54,9 @@ def run_plugin(project: Path, python: Path, **environment: str) -> dict:  # noqa
     # A user's shell has no member or package variables.
     clean = {name: value for name, value in os.environ.items()
              if not name.startswith(('GRAPHTRAJ_', 'GRAFTLING_', 'DSH_'))}
+    # Its shell has the GraphTraj installation's Python first on PATH, which holds the
+    # installed graftling that tool.mjs looks up from a source tree.
+    clean['PATH'] = os.pathsep.join((str(python.parent), clean.get('PATH', '')))
     refuse = '1' if environment else ''
     result = subprocess.run(
         [node, '--input-type=module', '-e', SCRIPT, dsh, str(ROOT / 'src/graphtraj/runtimes/dsh/tool.mjs'),

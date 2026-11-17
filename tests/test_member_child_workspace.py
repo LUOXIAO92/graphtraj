@@ -17,7 +17,7 @@ from graphtraj.configuration import project_roles, role_definitions
 from graphtraj.configuration.project_configuration import runner_directory
 from graphtraj.execution import agent_driver, main_continuity, runner_status
 from graphtraj.execution.runner_status import runtime_caller
-from graphtraj.interfaces.agents import GraphTrajAgents, swarm_root
+from graphtraj.interfaces.agents import GraphTrajAgents, join_holds, swarm_root
 from graphtraj.interfaces.gateway import handle_request
 from graphtraj.interfaces.hosted_cli import agents_dispatch
 from graphtraj.runtimes import runtime_adapter
@@ -121,6 +121,13 @@ def harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pi_environment: dic
     for thread in threading.enumerate():
         if thread.name.startswith(('agents-', 'codex-')):
             thread.join(20)
+    # The member's turn ends as its Worker ends it: terminal record, then this
+    # process's holds send (477). A hold left running would outlive the test (505).
+    # A test that removed the member's record has no turn to end (no hold reads it).
+    if (runner / f'sessions/{MEMBER}').is_dir():
+        (runner / f'sessions/{MEMBER}/execution.yml').write_text(
+            'outcome: completed\nterminal_confirmed: true\n', encoding='utf-8')
+    assert join_holds(10), 'a member hold outlived the test'
 
 
 def request(runtime: str, **arguments) -> dict:

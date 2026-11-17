@@ -35,7 +35,7 @@ The DSH definitions are translated from
   log, derived message surface, fork prefix, persistence separation.
 
 Copyright (c) 2026 DeepSeek. The upstream MIT license is retained and distributed
-in `src/graphtraj/sessions/DSH-LICENSE`. The Python implementation adds archive
+in the installed graftling package (`graftling/sessions/DSH-LICENSE`). The Python implementation adds archive
 provenance, RL records and the `extra_fields` container; it does not claim the upstream defines these additions.
 
 ## Values and versions

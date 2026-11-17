@@ -16,7 +16,7 @@ from graphtraj.execution.main_continuity import (
 from graphtraj.execution.runner_connection import parent_connection
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.execution.runner_status import runtime_caller
-from test_agent_control import ScriptedDriver
+from graftling_agent_control import ScriptedDriver
 
 
 CODEX  = {'runtime': 'codex', 'session': 'codex-main', 'codex_home': '/home/.codex', 'hook_session': 'hook'}

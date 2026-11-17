@@ -17,7 +17,7 @@ from graphtraj.interfaces.cli.graphtraj import main
 from graphtraj.sessions.storage import SessionStore, session_path
 from test_session_storage import header
 from test_codex_jsonl_archive import history
-from test_claude_jsonl import message
+from graftling_claude_jsonl import message
 from test_migration_snapshot import _source
 import graftling
 GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package

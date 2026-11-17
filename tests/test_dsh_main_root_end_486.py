@@ -34,7 +34,7 @@ DSH_WINDOW = 2.0
 SERVER = r'''
 from graphtraj.runtimes import replacement
 import graphtraj.execution.agent_driver as agent_driver
-from test_agent_control import ScriptedDriver
+from graftling_agent_control import ScriptedDriver
 
 replacement.caller_runtime = lambda: 'dsh'   # in a real host DSH's node is this server's parent
 driver = ScriptedDriver()                     # one native owner per process, as AdapterDriver's _TURNS

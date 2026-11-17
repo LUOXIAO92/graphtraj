@@ -11,7 +11,7 @@ import pytest
 
 import graftling
 from graftling import AgentControl, Caller
-from test_agent_control import ScriptedDriver
+from graftling_agent_control import ScriptedDriver
 
 MESSAGE = 'The process owning this execution exited before reporting its end.'
 

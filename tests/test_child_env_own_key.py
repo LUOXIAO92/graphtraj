@@ -37,7 +37,7 @@ from graphtraj.configuration.runtime_connections import resolve_connection, vali
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.runtimes.runtime_adapter import select_runtime_adapter
 
-from test_claude_review import native  # noqa: F401  (fixture)
+from graftling_claude_review import native  # noqa: F401  (fixture)
 from test_codex_app_server import peer  # noqa: F401  (fixture)
 from test_codex_approval import managed
 from test_pi_runtime import pi_environment  # noqa: F401  (fixture)

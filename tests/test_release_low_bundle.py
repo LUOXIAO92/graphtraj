@@ -22,7 +22,7 @@ from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
 from test_claude_host_concurrent_calls import run_mod
 from test_team_round import _register_ready_inline_task
-from test_agents_connections_presets import RecordingDriver, catalog, configured, create  # noqa: F401
+from graftling_agents_connections_presets import RecordingDriver, catalog, configured, create  # noqa: F401
 from test_member_child_workspace import RecordingTurn, claimed_main, harness, request  # noqa: F401
 from test_pi_generic_execution import generic
 from test_pi_runtime import pi_environment  # noqa: F401

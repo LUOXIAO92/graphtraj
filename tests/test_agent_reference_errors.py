@@ -12,7 +12,7 @@ import pytest
 
 from graftling import AgentControl, AgentsError, Binding, Caller, bind
 from graphtraj.execution.main_continuity import MainRoots, claim_main
-from test_agent_control import ScriptedDriver
+from graftling_agent_control import ScriptedDriver
 
 
 HINT = '`agent` takes the reference returned by create or status, not the readable name.'

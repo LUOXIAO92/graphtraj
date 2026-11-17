@@ -22,7 +22,7 @@ import pytest
 import graftling
 from graftling import AgentControl, Caller, Run
 from graftling.member_processes import MEMBER_RUN_ENV
-from test_agent_control import ScriptedDriver
+from graftling_agent_control import ScriptedDriver
 from test_owner_exited_notice_451 import dead_pid
 
 pytestmark = pytest.mark.skipif(os.name == 'nt', reason='POSIX process scan')

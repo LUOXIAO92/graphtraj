@@ -20,7 +20,7 @@ import yaml
 from graftling import AgentControl, AgentsError, Caller, bind, read_session, write_config
 from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
-from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 from test_pi_runtime import context as pi_context, pi_environment  # noqa: F401 - pytest fixture
 
 

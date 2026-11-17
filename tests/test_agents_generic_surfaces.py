@@ -21,7 +21,7 @@ from graftling.tool import INPUT_SCHEMA
 from graphtraj.execution.runner_models import RunnerError
 from graphtraj.interfaces.hosted_cli import forward_request
 from graphtraj.runtimes.pi import session_entry
-from test_agent_control import ScriptedDriver
+from graftling_agent_control import ScriptedDriver
 from test_codex_app_server import peer  # noqa: F401
 import graftling
 GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package

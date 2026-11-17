@@ -30,7 +30,7 @@ from graftling.dsh.errors import DshError
 from graftling.dsh.service import DshService
 from graftling.dsh.settings import prepare
 from dsh_standalone_peer import FakeDshService, install_dsh
-from test_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
+from graftling_codex_independent_control import native_settings  # noqa: F401 - pytest fixture
 import graftling
 GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 

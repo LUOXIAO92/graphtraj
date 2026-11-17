@@ -21,7 +21,7 @@ import graftling
 import graftling.control
 from graftling.claude.host import IndependentCalls
 from test_claude_runtime import claude_environment  # noqa: F401
-from test_codex_independent_control import native_settings  # noqa: F401
+from graftling_codex_independent_control import native_settings  # noqa: F401
 
 
 @pytest.fixture

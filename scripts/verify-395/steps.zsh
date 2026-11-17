@@ -91,15 +91,35 @@ P)
   print "next: zsh ${0:A} T"
   ;;
 T)
+  final || return 1   # sets OUT, HEAD_SHA, SOURCE; nothing above uses them (no_unset)
   say "[T] tag v$VERSION at $HEAD_SHA and push the tag. Dialog: as in P (keychain; Allow)."
-  final || return 1
+  local TAG=v$VERSION
   [[ $(git -C $G rev-parse HEAD) == $HEAD_SHA ]] || { print "STOP: HEAD is not $HEAD_SHA"; return 1; }
   [[ $(git -C $G ls-remote origin refs/heads/main | cut -f1) == $HEAD_SHA ]] || { print "STOP: remote main is not $HEAD_SHA; run P first"; return 1; }
   [[ $(sed -n 's/^__version__ = "\(.*\)"$/\1/p' $G/src/graftling/__init__.py) == $VERSION ]] || { print "STOP: version is not $VERSION"; return 1; }
-  git -C $G -c user.name=LUOXIAO92 -c user.email=89069722+LUOXIAO92@users.noreply.github.com \
-    tag -a v$VERSION -m "graftling $VERSION" $HEAD_SHA
-  git -C $G push origin v$VERSION
-  print "remote tag: $(git -C $G ls-remote origin refs/tags/v$VERSION "refs/tags/v$VERSION^{}")"
+  # Safe to rerun: an existing tag at $HEAD_SHA is reported and kept; one elsewhere stops the step.
+  # No tag is ever forced or deleted.
+  local here=$(git -C $G rev-parse -q --verify "refs/tags/$TAG^{commit}" 2>/dev/null || true)
+  local there=$(git -C $G ls-remote origin "refs/tags/$TAG^{}" | cut -f1)
+  [[ -n $there ]] || there=$(git -C $G ls-remote origin "refs/tags/$TAG" | cut -f1)
+  print "local $TAG: ${here:-absent}"; print "remote $TAG: ${there:-absent}"
+  [[ -z $here || $here == $HEAD_SHA ]] || { print "STOP: local $TAG points at $here, not $HEAD_SHA; nothing changed"; return 1; }
+  [[ -z $there || $there == $HEAD_SHA ]] || { print "STOP: remote $TAG points at $there, not $HEAD_SHA; nothing changed"; return 1; }
+  if [[ -z $here ]]; then
+    git -C $G -c user.name=LUOXIAO92 -c user.email=89069722+LUOXIAO92@users.noreply.github.com \
+      tag -a $TAG -m "graftling $VERSION" $HEAD_SHA
+    print "created local $TAG"
+  else
+    print "local $TAG already at $HEAD_SHA; kept"
+  fi
+  if [[ -z $there ]]; then
+    git -C $G push origin refs/tags/$TAG
+  else
+    print "remote $TAG already at $HEAD_SHA; not pushed again"
+  fi
+  print "tagger: $(git -C $G for-each-ref --format='%(taggername) %(taggeremail)' refs/tags/$TAG)"
+  print "remote tag: $(git -C $G ls-remote origin refs/tags/$TAG "refs/tags/$TAG^{}" | tr '\n' ' ')"
+  print "expect peeled ($TAG^{}): $HEAD_SHA"
   ;;
 G)
   say "[G] GraphTraj full suite from $WT with graftling installed as a wheel from $G (6 shards, --timeout 1500, background). Dialog: none. Returns at once."

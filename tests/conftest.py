@@ -829,6 +829,14 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     site.check_returncode()
     shutil.copytree(package, Path(site.stdout.strip(), "graftling"), ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copytree(dist_info, Path(site.stdout.strip(), dist_info.name))
+    # Its console scripts (agents, agents-mcp), written as pip writes them for a wheel.
+    from importlib.metadata import distribution
+
+    for entry in distribution("graftling").entry_points.select(group="console_scripts"):
+        script = environment / "bin" / entry.name
+        script.write_text("#!{0}\nimport sys\nfrom {1} import {2}\nsys.exit({2}())\n".format(
+            python, entry.module, entry.attr))
+        script.chmod(0o755)
     # Workers use Python -I. Load their clock after site initialization so
     # dependencies inherited through system-site-packages are available.
     site = run_process([str(python), '-c',

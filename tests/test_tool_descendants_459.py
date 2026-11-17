@@ -138,7 +138,10 @@ def stop_own(items) -> None:
     """Stop only processes this test started, after checking pid and start time."""
     for item in items:
         if is_alive(item):
-            os.kill(item.pid, signal.SIGKILL)
+            try:
+                os.kill(item.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # it exited between the identity check and the kill (500)
     deadline = time.monotonic() + 5
     while any(is_alive(item) for item in items) and time.monotonic() < deadline:
         time.sleep(0.05)

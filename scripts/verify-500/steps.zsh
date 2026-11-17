@@ -14,8 +14,9 @@
 # P:        preflight: shell, Python, CPUs, load, running suites; prints the next commands. Seconds.
 # B:        builds old, new and oldt (clone + venv + instrumentation). ~4 min.
 # R <v>:    instrumented loaded repetition on variant v (old|new|oldt): the host shutdown file + the 459/495/496/498
-#           files present, 6 workers x VERIFY500_PASSES (default 4) passes each + CPU spinners, then AN. Same pass
-#           count for every variant. <= 25 min (limit VERIFY500_LIMIT, default 1500 s).
+#           files present, 6 workers x VERIFY500_PASSES (default 5) passes each + CPU spinners, then AN. Same pass
+#           count for every variant. ~11 min (one pass of 6 workers took ~2 min in the sandbox rehearsal);
+#           limit VERIFY500_LIMIT, default 1500 s.
 # AN <v>:   analysis only (reads the last R's kill log and counts). Seconds.
 # SI <v>:   instrumented FULL suite on variant v (6 shards, background after a quiet-host wait); SIR <v> reads it.
 # Racc:     uninstrumented loaded repetition of the same files on the candidate; PASS only on 0 failures.
@@ -146,7 +147,7 @@ step_B() {
 load_run() {
   local name=$1 label=$2; shift 2
   local targets=($@) limit=${VERIFY500_LIMIT:-1500} spin=${VERIFY500_SPIN:-$(ncpus)}
-  local workers=${VERIFY500_WORKERS:-6} passes=${VERIFY500_PASSES:-4} res=$OUT/$label-repeat
+  local workers=${VERIFY500_WORKERS:-6} passes=${VERIFY500_PASSES:-5} res=$OUT/$label-repeat
   print "${#targets} files x$passes passes on each of $workers workers, plus $spin CPU spinners; limit $limit s (+20 s stop):"
   print -l -- "  "$^targets
   check_tmp || return 1
@@ -175,7 +176,7 @@ present_files() { local f; for f in $FILES; do [[ -f $BASE/$1/src/${f%%::*} ]] &
 
 step_R() {
   diagnostic $VAR || { print "usage: zsh $THIS R <old|new|oldt>"; return 1; }
-  say "[R $VAR] instrumented loaded repetition on $VAR ($(commit_of $VAR)). Expected dialog: none. Duration <= $(( ${VERIFY500_LIMIT:-1500} / 60 + 1 )) min."
+  say "[R $VAR] instrumented loaded repetition on $VAR ($(commit_of $VAR)). Expected dialog: none. Duration ~11 min (bounded by $(( ${VERIFY500_LIMIT:-1500} / 60 + 1 )) min)."
   ensure $VAR || return 1
   fresh_log $VAR R
   load_run $VAR R-$VAR ${(f)"$(present_files $VAR)"} || return 1
@@ -253,7 +254,7 @@ step__Srun() {
 }
 
 step_Racc() {
-  say "[Racc] candidate $CAND, UNinstrumented ($BASE/cand): the same files under the parallel-load method. Expected dialog: none. Duration <= $(( ${VERIFY500_LIMIT:-1500} / 60 + 1 )) min."
+  say "[Racc] candidate $CAND, UNinstrumented ($BASE/cand): the same files under the parallel-load method. Expected dialog: none. Duration ~11 min (bounded by $(( ${VERIFY500_LIMIT:-1500} / 60 + 1 )) min)."
   ensure cand || return 1
   load_run cand Racc ${(f)"$(present_files cand)"} || return 1
   local res=$OUT/Racc-repeat row ok=1 rows=0

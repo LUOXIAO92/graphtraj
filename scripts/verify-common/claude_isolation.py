@@ -3,7 +3,9 @@
 User authorization (Worldline 20261116T180057.272969+0900): verification scripts may disable Claude Code's builtin
 plugin cc-plugin-agents-md and exclude the Harness CLAUDE.md/AGENTS.md in an isolated test project's OWN
 .claude/settings.local.json under Harness tmp/<task>/ -- never ~/.claude, global plugin settings or the Harness
-AGENTS.md. `settings` refuses any project outside <harness>/tmp/.
+AGENTS.md. `settings` refuses any project outside <harness>/tmp/, with one later exception: a real-host project
+that a Runtime would merge into the Harness may live in /tmp/<name>-<id>/ (user authorization, Worldline
+20261118T123826.017393+0900; the evidence stays in the Task record).
 
 Cause (489 A/B): the builtin plugin cc-plugin-agents-md walks up from the working directory and gives the model the
 Harness AGENTS.md, even when the project has its own git and .graphtraj. Claude Code also loads CLAUDE.md /
@@ -22,7 +24,7 @@ printed). The answer must not be the prompt echoed. --expect clean (default) exi
 with TAG and nothing was loaded; --expect loaded exits 0 only when it answered and something was loaded (the
 before-fix demonstration).
 """
-import json, sys
+import json, re, sys
 from pathlib import Path
 
 PROMPT = ('Reply with exactly two lines. Line 1: TAG followed by the model id you are running as, and say whether '
@@ -33,11 +35,26 @@ EXCLUDES = ('/CLAUDE.md', '/CLAUDE.local.md', '/.claude/CLAUDE.md', '/**/CLAUDE.
             '/AGENTS.md', '/**/AGENTS.md')
 
 
+# /tmp/<name>-<id>: one component directly under /private/tmp (where /tmp resolves on macOS).
+SYSTEM_TMP = Path('/private/tmp')
+SYSTEM_TMP_DIR = re.compile(r'[A-Za-z0-9_.]+-[A-Za-z0-9_.]+')
+
+
+def in_scope(harness, proj):
+    """Whether resolved ``proj`` is under <harness>/tmp/, or is or lies inside /private/tmp/<name>-<id>."""
+    if proj.is_relative_to(Path(harness).resolve() / 'tmp'):
+        return True
+    if not proj.is_relative_to(SYSTEM_TMP) or proj == SYSTEM_TMP:
+        return False
+    return SYSTEM_TMP_DIR.fullmatch(proj.relative_to(SYSTEM_TMP).parts[0]) is not None
+
+
 def settings(harness, project, only=None):
     harness = harness.rstrip('/')
     proj = Path(project).resolve()
-    if not proj.is_relative_to(Path(harness).resolve() / 'tmp'):
-        print(f'REFUSED: {proj} is not an isolated test project under {harness}/tmp/ (user authorization scope)')
+    if not in_scope(harness, proj):
+        print(f'REFUSED: {proj} is not an isolated test project under {harness}/tmp/ or /tmp/<name>-<id>/ '
+              '(user authorization scope)')
         return 2
     path = proj / '.claude' / 'settings.local.json'
     s = json.loads(path.read_text()) if path.is_file() else {}

@@ -284,14 +284,15 @@ import { apply } from %s;
 const [readyFile, input] = process.argv.slice(1);
 let hook, options;
 const ctx = { on: (event, handler, given) => { if (event === 'tools/pre-execute') { hook = handler; options = given; } } };
-apply(ctx, { readyFile });
+// A GraphTraj DSH member's row: graftling dsh/execution.py passes its mcp_server, graphtraj (514).
+apply(ctx, { readyFile, mcpServer: 'graphtraj' });
 const exec = (name) => ({ name, callId: 'call-1', arguments: JSON.parse(input) });
 const allow = () => Promise.resolve({ kind: 'allow' });
 const nativeDeny = () => Promise.resolve({ kind: 'deny', reason: 'native deny' });
 const nativeAsk = () => Promise.resolve({ kind: 'ask', reason: 'native ask' });
 console.log(JSON.stringify({ prepend: options.prepend,
   tool: await hook(exec('write'), allow), deny: await hook(exec('write'), nativeDeny),
-  ask: await hook(exec('write'), nativeAsk), agents: await hook(exec('mcp__graftling__agents'), allow),
+  ask: await hook(exec('write'), nativeAsk), agents: await hook(exec('mcp__graphtraj__agents'), allow),
   inner: await hook({ ...exec('run_code'), parent: Symbol('outer') }, allow) }));
 """ % json.dumps(str(GRAFTLING / 'dsh/review.mjs'))
 

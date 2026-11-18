@@ -118,8 +118,9 @@ print(yaml.safe_dump({"tasks": [{"task_id": "1", "task_name": "read-only-report-
 
 step_D() {
   local alias=${1:-$(investigator)}
-  say "[D] Main's decide-result accepts $alias's submission. Dialog: none (Main's own CLI in the isolated project)."
+  say "[D] Main's decide-result accepts the investigator's submission. Dialog: none (Main's own CLI in the isolated project)."
   [[ -n $alias ]] || { print "STOP: no investigator Session of Task 1; run A first"; return 1; }
+  print "investigator: $alias"
   x521 decide $alias; local rc=$?
   (( rc == 0 )) && print "PASS D" || print "FAIL D (above)"
   print "records: $P/.graphtraj/state (Worldline), $P/.graphtraj/state/tasks/1-read-only-report-result/teams/1/traces/$alias/"

@@ -21,7 +21,7 @@ OLD = ('mcp__agents__agents', 'mcp__agents__tasks')
 STEP_FILES = {'summary.txt', 'run.txt', 'mcp.json', 'config.json', 'settings.local.json', 'patch.yml',
               'member.txt', 'marker', 'main-session.txt'}
 ID_KEYS = ('id', 'tool_use_id', 'toolUseId', 'toolCallId', 'callId', 'call_id')
-NAME_KEYS = ('name', 'toolName', 'tool_name')
+NAME_KEYS = ('name', 'toolName', 'tool_name', 'tool')
 REFUSALS = ('did not allow', "haven't granted", 'was denied', 'user denied', 'permission denied',
             'requires approval', 'no such tool', 'not available', 'unknown tool')
 
@@ -66,7 +66,12 @@ def records(path: Path):
 
 
 def call_name(item: dict) -> str | None:
-    """The model-visible tool name of one call object, or None."""
+    """The model-visible tool name of one call object, or None.
+
+    Codex rollouts record ``{type: McpToolCall, server, tool, status, result}`` (server and tool in separate
+    fields); DSH ``--json`` records ``{type: tool_call, callId, tool, input}`` (517)."""
+    if item.get('type') == 'McpToolCall' and isinstance(item.get('server'), str) and isinstance(item.get('tool'), str):
+        return f"mcp__{item['server']}__{item['tool']}"
     for key in NAME_KEYS:
         if isinstance(item.get(key), str) and item[key].startswith('mcp__'):
             return item[key]
@@ -81,6 +86,16 @@ def refused(item: dict) -> str | None:
     if item.get('is_error') is True or item.get('isError') is True:
         return 'error flag'
     result = item.get('result')
+    if item.get('type') in ('McpToolCall', 'tool_result') and 'status' in item:
+        # Codex McpToolCall and DSH --json tool_result state their outcome themselves (517): judged by
+        # status, error field and result.isError only; text matching misread their successful content.
+        if item.get('status') != 'completed':
+            return f"status {item.get('status')!r}"
+        if item.get('error'):
+            return 'error field: ' + json.dumps(item['error'], ensure_ascii=False)[:200]
+        if isinstance(result, dict) and result.get('isError') is True:
+            return 'error result'
+        return None
     if isinstance(result, dict) and ('Err' in result or result.get('isError') is True):
         return 'error result'
     text = json.dumps(item, ensure_ascii=False).lower()
@@ -124,7 +139,8 @@ def main() -> int:
                 ident = next((str(item[k]) for k in ID_KEYS if isinstance(item.get(k), (str, int))), None)
                 if name and ident and ('input' in item or 'arguments' in item or 'invocation' in item):
                     calls.setdefault(ident, (name, path))
-                    if 'invocation' in item and 'result' in item:
+                    started = item.get('status') in ('in_progress', 'inProgress', 'pending')  # not an outcome yet
+                    if ('invocation' in item or item.get('type') == 'McpToolCall') and 'result' in item and not started:
                         results.setdefault(ident, []).append(refused(item))
                 elif ident and any(k in item for k in ('content', 'output', 'result', 'is_error', 'isError')):
                     results.setdefault(ident, []).append(refused(item))

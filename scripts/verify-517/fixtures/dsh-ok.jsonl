@@ -1,0 +1,2 @@
+{"type": "tool_call", "callId": "call_00_ET_DIzW0BUTq87JHfHcUN9F8523", "tool": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "status", "arguments": {}}}
+{"type": "tool_result", "callId": "call_00_ET_DIzW0BUTq87JHfHcUN9F8523", "status": "completed", "result": "action: status\nagent: null\nsession: null"}

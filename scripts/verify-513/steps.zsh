@@ -4,10 +4,13 @@
 #   zsh <this file> <STEP>
 #   0   preflight: versions, clone head and branch, each CLI's version, a one-line answer from claude and codex
 #   B   dev wheel of the clone HEAD into a fresh venv under tmp/513, isolated projects, versions
-#   F   graftling full suite of the clone HEAD in that venv (background, idle host)     R  its results
 #   Ct  USER, plain Terminal: trust the Claude project (one dialog), then C
 #   C X P D   Claude Code / Codex / Pi / DSH host: one prompt -> agents create of a reviewed child of the same
 #             Runtime -> wait; raw records under the Task's realhost/<step>-<time>/ and check513.py lines
+#   Pu  USER, plain Terminal: P in interactive Pi (it has a UI), for the Pi display entries
+#   F   graftling full suite of the clone HEAD (background, idle host)     R  its results
+# Order: 0, B, Ct, C, X, P, Pu, D, then F and R on an idle host. DSH's display is its web tool view
+# (dsh/client.mjs), drawn in the browser only and kept in no record, so no step observes it.
 # Invocations follow scripts/real-host/394 (the standalone-graftling matrix, rh394.py and common.zsh):
 # claude -p with --mcp-config/--strict-mcp-config/--allowedTools, python -m graftling.codex.host, pi --mode json
 # -e extension.mjs --agents-config, dsh --profile --patch --json with GRAFTLING_DSH_CONFIG; keys as load_key there.
@@ -124,7 +127,7 @@ case $STEP in
   print "zsh: $ZSH_VERSION ($0)"; print "git: $(git --version)"
   print "conda python: $($CONDA --version 2>&1) ($CONDA)"
   print "Harness: $H"; print "Worktree: $WT ($(git -C $WT rev-parse --short HEAD))"
-  print "clone: $G ($(git -C $G rev-parse --short HEAD) on $(git -C $G branch --show-current); expected $BR; base $(git -C $G merge-base HEAD dev | cut -c1-8))"
+  print "clone: $G ($(git -C $G rev-parse --short HEAD) on $(git -C $G branch --show-current); expected $BR; base $(git -C $G merge-base HEAD origin/dev | cut -c1-8) = origin/dev $(git -C $G rev-parse --short origin/dev))"
   print "clone graftling version: $(sed -n 's/^__version__ = "\(.*\)"$/\1/p' $G/src/graftling/__init__.py)"
   check_tmp
   local b; for b in claude codex pi dsh node; do
@@ -157,7 +160,7 @@ B)
 import importlib.util as u; print("graphtraj importable:", u.find_spec("graphtraj") is not None)')
   mkdir -p $T/claude-project
   print -r -- "wheel: $(print $N/graftling-*.whl)"; print -r -- "built from: $C"
-  print -r -- "next: zsh ${0:A} F (idle host), then USER: zsh ${0:A} Ct"
+  print -r -- "next (USER, plain Terminal): zsh ${0:A} Ct; then Main: C, X, P; USER: Pu; Main: D; then on an idle host F and R"
   ;;
 F)
   local VT=$T/venv-test
@@ -211,9 +214,19 @@ C)
   $V/bin/python -I -c 'import json, sys
 p, root, claude = sys.argv[1:4]
 d = json.load(open(p)); d["root"] = root; d["settings"] = {"permission_mode": "default"}
-d["runtimes"] = {"claude": {"executable": claude, "permission_mode": "default"}}
+# Claude children take the host settings (graftling claude/host.py runtime_drivers): no runtimes.claude.
+d.pop("runtimes", None)
 json.dump(d, open(p, "w"), indent=2)' $P/.agents-control/claude-host.json $DATA $(command -v claude)
   cp $P/.mcp.json $D/mcp.json; cp $P/.agents-control/claude-host.json $D/claude-host.json
+  # No model call: build the host's drivers from this configuration and check config.yml's connections,
+  # as `serve` does at start (IndependentCalls + require_connections), before the paid run.
+  (cd $P && $V/bin/python -I -c 'import json, sys
+from pathlib import Path
+from graftling.claude.host import IndependentCalls
+c = json.load(open(sys.argv[1]))
+IndependentCalls(Path(c["root"]), Path(c["cwd"]), c.get("settings", {}), c.get("runtimes")).control.require_connections()
+print("host configuration loads; config.yml connections accepted (no model call)")' $P/.agents-control/claude-host.json) \
+    || { print -r -- "STOP: the generated host configuration is refused (above); no claude -p was run"; return 1; }
   (cd $P && bounded 900 claude -p --model $CLAUDE_MODEL --output-format stream-json --verbose \
      --mcp-config $P/.mcp.json --strict-mcp-config --allowedTools mcp__graftling__agents --session-id $S \
      < $D/host.prompt.txt > $D/stream.jsonl 2> $D/stderr.txt) || print "claude rc=$?"
@@ -248,12 +261,16 @@ json.dump({"adapter_request": settings()}, open(out, "w"), indent=2)' $W $CODEX_
   print -r -- "observables: names = rollouts/*.jsonl and output.json; child = output.json operations (wait last_message PONG-513); review = reviewer.log has no *__agents tool; display = stderr '┌ <parent> → <agent>' rows"
   print -r -- "next: zsh ${0:A} P"
   ;;
-P)
-  say "[P] Pi host (pi --mode json -e graftling/pi/extension.mjs --agents-config): create a reviewed Pi child -> wait. Dialog: none. At most 15 min."
+P|Pu)
+  if [[ $STEP == P ]]; then
+    say "[P] Pi host (pi --mode json -e graftling/pi/extension.mjs --agents-config): create a reviewed Pi child -> wait. Dialog: none. At most 15 min."
+  else
+    say "[Pu] USER, plain Terminal: the same Pi host interactive (a UI, so the display renders). Dialog: none (the reviewed child's review dialog goes to its owner, not to you). Pi starts with the prompt already sent: type nothing; when the reply ending with PONG-513 is shown, quit Pi (Ctrl+C twice)."
+  fi
   clean_env; load_key || return 1
   [[ -f $PI_SANDBOX/pi-sandbox.env ]] || { print -r -- "STOP: $PI_SANDBOX/pi-sandbox.env missing; run: /bin/bash $WT/scripts/real-host/install-pi-sandbox.sh"; return 1; }
   local SBP=$(sed -n 's/^sandbox_python=//p' $PI_SANDBOX/pi-sandbox.env) SBX=$(sed -n 's/^sandbox_path=//p' $PI_SANDBOX/pi-sandbox.env)
-  begin_run P pi "    provider: $PI_PROVIDER
+  begin_run $STEP pi "    provider: $PI_PROVIDER
     api_key_env: DEEPSEEK_API_KEY
     models: [$DEEPSEEK_MODEL]" || return 1
   local W=$RUN/work PH=$RUN/pi-home SD=$RUN/sessions ID=rh513-$(uuidgen | cut -c1-8 | tr A-Z a-z)
@@ -264,14 +281,21 @@ root, home, sbp, sbx, model, provider, out = sys.argv[1:8]
 json.dump({"root": root, "pi": {"provider": provider, "model": model, "agent_dir": home, "sandbox_python": sbp,
   "sandbox_path": sbx, "worktree_access": "read", "api_key_env": "DEEPSEEK_API_KEY"}}, open(out, "w"), indent=2)' \
     $DATA $PH $SBP $SBX $DEEPSEEK_MODEL $PI_PROVIDER $D/pi-host.json
-  (cd $W && PI_CODING_AGENT_DIR=$PH GRAFTLING_PYTHON=$V/bin/python bounded 900 pi --mode json --session-dir $SD --session-id $ID \
-     --model $PI_PROVIDER/$DEEPSEEK_MODEL -e $EXT --agents-config $D/pi-host.json "$(<$D/host.prompt.txt)" \
-     < /dev/null > $D/stdout.jsonl 2> $D/stderr.txt) || print "pi rc=$?"
+  if [[ $STEP == P ]]; then
+    (cd $W && PI_CODING_AGENT_DIR=$PH GRAFTLING_PYTHON=$V/bin/python bounded 900 pi --mode json --session-dir $SD --session-id $ID \
+       --model $PI_PROVIDER/$DEEPSEEK_MODEL -e $EXT --agents-config $D/pi-host.json "$(<$D/host.prompt.txt)" \
+       < /dev/null > $D/stdout.jsonl 2> $D/stderr.txt) || print "pi rc=$?"
+  else
+    # Interactive: the terminal is Pi's. registerAgentDisplay (pi/extension.mjs) runs only when ctx.hasUI and
+    # appends `custom` entries graftling:agent-communication to the Session file, which is retained below.
+    (cd $W && PI_CODING_AGENT_DIR=$PH GRAFTLING_PYTHON=$V/bin/python pi --session-dir $SD --session-id $ID \
+       --model $PI_PROVIDER/$DEEPSEEK_MODEL -e $EXT --agents-config $D/pi-host.json "$(<$D/host.prompt.txt)") || print "pi rc=$?"
+  fi
   local ps=($SD/*.jsonl(N))
   (( $#ps )) && cp $ps $D/ || print -r -- "no Pi Session file in $SD"
   end_run pi
-  print -r -- "observables: names = the Pi Session file's tool calls and stdout.jsonl; child = toolResult with last_message PONG-513; review = reviewer.log has no *__agents tool; display = graftling:agent-communication entries (the display renders only with a UI: --mode json has none, so CANNOT there is expected and needs an interactive Pi run)"
-  print -r -- "next: zsh ${0:A} D"
+  print -r -- "observables: names = the Pi Session file's tool calls (and stdout.jsonl for P); child = toolResult with last_message PONG-513; review = reviewer.log has no *__agents tool; display = Session-file entries of type custom, customType graftling:agent-communication (only Pu has a UI; P's display is CANNOT by design)"
+  [[ $STEP == P ]] && print -r -- "next (USER, plain Terminal): zsh ${0:A} Pu" || print -r -- "next (Main): zsh ${0:A} D"
   ;;
 D)
   say "[D] DSH host (the graftling-dsh plugin row, GRAFTLING_DSH_CONFIG): create a reviewed DSH child -> wait. Dialog: none. At most 15 min."
@@ -306,7 +330,7 @@ m.factory(() => ({ createElement: () => ({}) })).apply({ slots: { inject: (n, f)
 console.log("installed DSH tool view keys: " + JSON.stringify(keys));' ${PLUGIN:h}/client.mjs | tee $D/client-view-keys.txt
   end_run dsh $DH
   print -r -- "observables: names = DSH Session logs' request headers/tool calls and stdout.jsonl; child = tool_result with last_message PONG-513; review = reviewer.log has no *__agents tool; display = the web tool view only (client-view-keys.txt shows it renders mcp__graftling__agents; a browser observation is not part of this step)"
-  print -r -- "next: report $OUT to the Leader"
+  print -r -- "next, on an idle host: zsh ${0:A} F, then R; report $OUT to the Leader"
   ;;
-*) print -r -- "usage: zsh ${0:A} 0|B|F|R|Ct|C|X|P|D"; return 2 ;;
+*) print -r -- "usage: zsh ${0:A} 0|B|Ct|C|X|P|Pu|D|F|R"; return 2 ;;
 esac

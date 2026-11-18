@@ -11,14 +11,40 @@ import sys
 
 NEW, OLD = 'mcp__graftling__agents', 'mcp__agents__agents'
 TOKEN = 'PONG-513'
+# Files steps.zsh writes itself: its inputs, configuration and diagnostic printouts. They are not Runtime
+# records (client-view-keys.txt lists the old key on purpose, the prompts name the tool and the token),
+# so no check reads them. client-view-keys.txt stays in the step directory as display evidence.
+STEP_FILES = {'summary.txt', 'run.txt', 'client-view-keys.txt', 'reviewer.log', 'config.yml', 'mcp.json',
+              'claude-host.json', 'codex-settings.json', 'pi-host.json', 'dsh-host.json', 'dsh-main.patch.yml'}
 
 
 def files(paths: list[str]):
-    """Yield every record file under ``paths``: not the prompts (they name the tool and the token) nor this summary."""
+    """Yield every Runtime record file under ``paths``, leaving out the step's own files (STEP_FILES, prompts)."""
     for path in map(Path, paths):
         found = [path] if path.is_file() else sorted(path.rglob('*')) if path.is_dir() else []
-        yield from (item for item in found if item.is_file()
-                    and not item.name.endswith('.prompt.txt') and item.name != 'summary.txt')
+        for item in found:
+            if item.name.endswith('.prompt.txt') or item.name in STEP_FILES:
+                continue
+            try:
+                if item.is_file():
+                    item.read_bytes()[:0]
+                    yield item
+            except OSError as error:
+                # A retained symlink into a directory this process may not read (named, never silent).
+                print(f'  unreadable, not scanned: {item} ({error.strerror})')
+
+
+def display_entries(path: Path) -> int:
+    """Count the Pi display's Session entries: type ``custom``, customType graftling:agent-communication."""
+    count = 0
+    for line in path.read_text(errors='replace').splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        count += isinstance(entry, dict) and entry.get('type') == 'custom' \
+            and entry.get('customType') == 'graftling:agent-communication'
+    return count
 
 
 def say(state: str, text: str) -> None:
@@ -66,7 +92,8 @@ def main() -> None:
 
     # 4. Display of the call.
     frames = [line for line in raw.splitlines() if '┌ ' in line or 'agents · ' in line]
-    custom = raw.count('graftling:agent-communication')
+    # Pi notices share the customType as custom_message entries; only `custom` entries are the display.
+    custom = sum(display_entries(path) for path in files([str(step)]) if path.suffix == '.jsonl')
     print(f'  display lines: {len(frames)}; graftling:agent-communication entries: {custom}')
     for line in frames[:4]:
         print(f'    {line[:200]}')

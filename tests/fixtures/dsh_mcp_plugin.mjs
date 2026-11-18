@@ -59,13 +59,13 @@ try {
   const parent = await create('native-parent', {});
   const child = await create('native-child', { origin: 'subagent', delegationDepth: 1 }, parent);
   for (const agent of [parent, child]) {
-    assert.deepEqual(ctx.tools.schemas(agent).map(tool => tool.name), ['mcp__agents__agents']);
+    assert.deepEqual(ctx.tools.schemas(agent).map(tool => tool.name), ['mcp__graftling__agents']);
   }
   const args = { action: 'execute', feature: 'status', arguments: {} };
   const execution = { signal: new AbortController().signal };
-  const result = await ctx.tools.get('mcp__agents__agents', parent).execute(args, execution);
+  const result = await ctx.tools.get('mcp__graftling__agents', parent).execute(args, execution);
   assert.equal(result.structuredContent.result.caller, 'native-parent');
-  const childResult = await ctx.tools.get('mcp__agents__agents', child).execute(args, execution);
+  const childResult = await ctx.tools.get('mcp__graftling__agents', child).execute(args, execution);
   assert.equal(childResult.structuredContent.result.caller, 'native-child');
   assert.equal(childResult.structuredContent.result.source, 'child');
   console.log(JSON.stringify({ tools: ctx.tools.schemas(parent).map(tool => tool.name),

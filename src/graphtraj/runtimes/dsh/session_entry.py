@@ -26,7 +26,7 @@ def current_connection() -> dict | None:
     """Use DSH's per-execution facts, never inherited GraphTraj Main flags.
 
     A shell execution carries the GraphTraj plugin's rebuilt namespace
-    (``DSH_GRAPHTRAJ_*``). The ``agents`` MCP server of a native Agent carries
+    (``DSH_GRAPHTRAJ_*``). The ``graphtraj`` MCP server of a native Agent carries
     the agents plugin's ``DSH_SESSION_ID``/``DSH_AGENT_SOURCE`` instead; both
     plugins derive them from the same native Session header.
     """

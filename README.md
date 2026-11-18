@@ -280,8 +280,10 @@ It produces:
 
 - `.graphtraj/claude-host/config.json`: the host configuration naming the
   Claude CLI that must launch the host directly;
-- `.mcp.json`: one `agents` server serving both tools (replace earlier
-  hand-made `graphtraj`/`agents` entries for this host);
+- `.mcp.json`: one `graphtraj` server serving both tools, which Claude Code
+  shows as `mcp__graphtraj__agents` and `mcp__graphtraj__tasks` (with
+  `--write`, an `agents` entry that starts this host, as written before 514, is
+  removed; any other `agents` entry stays);
 - `.claude/settings.local.json` `env`: `GRAFTLING_CLAUDE_HOST_PYTHON` and
   `GRAFTLING_CLAUDE_HOST_CONFIG`;
 - the plugin `.claude/skills/graphtraj-claude-host/`, which Claude Code loads
@@ -289,9 +291,9 @@ It produces:
   (`{"modules": ["./host_context.mjs"]}`) and `hooks/host_context.mjs`.
 
 Running it again on a configured project updates only what the command owns:
-`command` and `args` of the `agents` server, those two `env` entries, `cwd` and
+`command` and `args` of the `graphtraj` server, those two `env` entries, `cwd` and
 `claude` in the host configuration, and the plugin files. Everything else stays,
-including other keys of the `agents` server such as `env`, other servers, and
+including other keys of the `graphtraj` server such as `env`, other servers, and
 `root` and `channel_file` in the host configuration. If the project moved, a
 `root` or `channel_file` inside its old directory moves to the same relative
 place in the new one. An existing JSON file that does not parse or does not hold
@@ -309,7 +311,7 @@ itself. In a session, `/agents-context` shows the current Session, whether the
 Start or resume Claude Code from the project directory. Claude Code reads
 `.mcp.json` from its start directory and the directories above it, so in an
 unrelated directory it loads that directory's own servers, not this project's
-`agents`. Started in a subdirectory, or given this project's `.mcp.json`
+`graphtraj`. Started in a subdirectory, or given this project's `.mcp.json`
 explicitly, the host connects but refuses: it binds no control, Agent or Main,
 and every `agents` and `tasks` call returns `host-unavailable: The agents host
 did not start: Claude Code was started in <actual>, but this host is configured

@@ -569,7 +569,7 @@ console.log(JSON.stringify({notices, servers}));
     assert not [line for line in spawned if '--collect' in line]
     if owner == 'agents-driver':
         # extension.mjs returns before any native entry: an agents connection owns the Session.
-        assert (spawned, outcome) == ([], {'notices': [], 'servers': ['agents']})
+        assert (spawned, outcome) == ([], {'notices': [], 'servers': ['graftling']})
     else:
         assert spawned == ['pi']
         assert [notice['level'] for notice in outcome['notices']] == ['error']

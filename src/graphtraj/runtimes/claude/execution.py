@@ -28,6 +28,11 @@ class ClaudeExecution(NativeClaudeExecution):
     # A Runner execution's member reaches the hosted CLI, not graftling's own owner.
     connection_env = 'GRAPHTRAJ_CLI_CONNECTION'
 
+    @property
+    def mcp_server(self) -> str:
+        """Name a member's own server ``graphtraj`` (mcp__graphtraj__*); agents alone keeps graftling's."""
+        return super().mcp_server if self.independent else 'graphtraj'
+
     def __init__(self, *arguments) -> None:
         """Bind the project archive and its GraphTraj header fields to a Runner execution."""
         super().__init__(*arguments)
@@ -129,7 +134,7 @@ class ClaudeExecution(NativeClaudeExecution):
             },
         }
         # The MCP process uses the same PID-authenticated hosted CLI as native Bash.
-        mcp = {'mcpServers': {'agents': {
+        mcp = {'mcpServers': {self.mcp_server: {
             'command': sys.executable, 'args': ['-m', 'graphtraj.runtimes.claude.mcp'],
             'env': {'GRAPHTRAJ_CLI_CONNECTION': address},
         }}}

@@ -31,6 +31,8 @@ class Entry:
     plugin: str
     description: str
     tools: tuple[str, ...]
+    # The .mcp.json key the entry writes (514: graftling, graphtraj).
+    server: str
     # What this entry's first install adds to the host configuration.
     written: tuple[tuple[str, object], ...]
     # Keys a user added to the host configuration.
@@ -43,12 +45,12 @@ class Entry:
 
 ENTRIES = {
     'agents': Entry('graftling.claude.host', '.agents-control/claude-host.json', 'agents-claude-host',
-                    'Native Claude context for independent agents MCP.', ('agents',), (('settings', {}),),
+                    'Native Claude context for independent agents MCP.', ('agents',), 'graftling', (('settings', {}),),
                     (('settings', {'model': 'chosen'}),
                      ('runtimes', {'pi': {'provider': 'deepseek', 'model': 'deepseek-flash'}}))),
     'graphtraj': Entry('graphtraj.runtimes.claude.host', '.graphtraj/claude-host/config.json',
                        'graphtraj-claude-host', 'GraphTraj Main host context for the agents and tasks MCP entries.',
-                       ('agents', 'tasks'), (), (('note', 'mine'),)),
+                       ('agents', 'tasks'), 'graphtraj', (), (('note', 'mine'),)),
 }
 
 
@@ -110,7 +112,7 @@ def test_rerun_updates_only_what_the_command_owns(entry: Entry, project: Path, t
         'top': 'level',
         'mcpServers': {
             'other': {'command': 'other', 'args': ['x']},
-            'agents': {'command': '/stale/python', 'args': ['stale', 'args', 'many'], 'type': 'stdio',
+            entry.server: {'command': '/stale/python', 'args': ['stale', 'args', 'many'], 'type': 'stdio',
                        'env': {'LANGUAGE': 'zh'}},
         },
     })
@@ -130,7 +132,7 @@ def test_rerun_updates_only_what_the_command_owns(entry: Entry, project: Path, t
         'top': 'level',
         'mcpServers': {
             'other': {'command': 'other', 'args': ['x']},
-            'agents': {'command': sys.executable, 'args': host_arguments(entry, project), 'type': 'stdio',
+            entry.server: {'command': sys.executable, 'args': host_arguments(entry, project), 'type': 'stdio',
                        'env': {'LANGUAGE': 'zh'}},
         },
     }
@@ -152,7 +154,7 @@ def test_rerun_updates_only_what_the_command_owns(entry: Entry, project: Path, t
 def test_printing_writes_nothing_and_shows_the_kept_paths(entry: Entry, project: Path, tmp_path: Path) -> None:
     """Without --write nothing changes; the host configuration shows what a write keeps."""
     data = tmp_path.resolve() / 'data'
-    write_json(project / '.mcp.json', {'mcpServers': {'agents': {'env': {'LANGUAGE': 'zh'}}}})
+    write_json(project / '.mcp.json', {'mcpServers': {entry.server: {'env': {'LANGUAGE': 'zh'}}}})
     write_json(project / entry.config, {'root': str(data), 'cwd': str(project), 'claude': '/stale/claude',
                                         'channel_file': str(data / 'channel.json')})
     before = snapshot(project)
@@ -163,8 +165,26 @@ def test_printing_writes_nothing_and_shows_the_kept_paths(entry: Entry, project:
     host = printed[str(project / entry.config)]
     assert (host['root'], host['channel_file']) == (str(data), str(data / 'channel.json'))
     # Otherwise it prints the command's own fragment, as before.
-    assert printed[str(project / '.mcp.json')] == {'mcpServers': {'agents': {
+    assert printed[str(project / '.mcp.json')] == {'mcpServers': {entry.server: {
         'command': sys.executable, 'args': host_arguments(entry, project)}}}
+
+
+@pytest.mark.parametrize('ours', [True, False])
+def test_rewrite_drops_only_its_own_old_agents_entry(entry: Entry, project: Path, ours: bool) -> None:
+    """An ``agents`` entry an earlier --write of this host left goes; any other ``agents`` server stays.
+
+    Kept beside the new entry, the old one would start a second host and show
+    the model a second set of tools (514).
+    """
+    old = ({'command': '/old/python', 'args': ['-m', entry.module, 'serve', '--config', '/old/config.json']}
+           if ours else {'command': 'npx', 'args': ['some-other-agents-server']})
+    write_json(project / '.mcp.json', {'mcpServers': {'agents': old, 'other': {'command': 'other'}}})
+
+    configure(entry, project, '--write')
+
+    assert read_json(project / '.mcp.json')['mcpServers'] == {
+        **({} if ours else {'agents': old}), 'other': {'command': 'other'},
+        entry.server: {'command': sys.executable, 'args': host_arguments(entry, project)}}
 
 
 @pytest.mark.parametrize('recorded, expected', [
@@ -244,7 +264,7 @@ def test_first_install_content_is_unchanged(entry: Entry, project: Path) -> None
             'root': str(entry.default_root(project)), 'cwd': str(project), 'claude': '/new/claude',
             'channel_file': str(config.parent / 'live/channel.json'), **dict(entry.written),
         }, indent=2) + '\n',
-        '.mcp.json': json.dumps({'mcpServers': {'agents': {
+        '.mcp.json': json.dumps({'mcpServers': {entry.server: {
             'command': sys.executable, 'args': host_arguments(entry, project)}}}, indent=2) + '\n',
         '.claude/settings.local.json': json.dumps({'env': {
             'GRAFTLING_CLAUDE_HOST_PYTHON': sys.executable,
@@ -253,7 +273,8 @@ def test_first_install_content_is_unchanged(entry: Entry, project: Path) -> None
             {'name': entry.plugin, 'version': '1', 'description': entry.description}, indent=2) + '\n',
         f'{plugin}/hooks/hooks.json': json.dumps({'modules': ['./host_context.mjs']}, indent=2) + '\n',
         f'{plugin}/hooks/host_context.mjs': module.replace(
-            'const TOOLS = ["agents"];', f'const TOOLS = {json.dumps(list(entry.tools))};'),
+            'const TOOLS = ["agents"];', f'const TOOLS = {json.dumps(list(entry.tools))};').replace(
+            'const SERVER = "graftling";', f'const SERVER = {json.dumps(entry.server)};'),
     }
     written = {path: content.decode('utf-8') for path, content in snapshot(project).items() if content is not None}
     assert written == expected

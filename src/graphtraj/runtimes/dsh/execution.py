@@ -72,6 +72,11 @@ class DshExecution(NativeDshExecution):
     connection_env = 'GRAPHTRAJ_CLI_CONNECTION'
     agents_only = False
 
+    @property
+    def mcp_server(self) -> str:
+        """Name a member's own server ``graphtraj`` (mcp__graphtraj__*); agents alone keeps graftling's."""
+        return super().mcp_server if self.agents_only else 'graphtraj'
+
     def __init__(
         self,
         request: dict,

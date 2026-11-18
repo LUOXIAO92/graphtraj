@@ -117,7 +117,8 @@ function quote(value) {
 export default function graphtraj(pi) {
   const sessions = new WeakMap();
   const collectors = new WeakMap();
-  // Members reach agents through GraphTraj's own MCP server as well.
+  // Members reach agents through GraphTraj's own MCP server as well; `agents`
+  // names it in Sessions started before 514. An independent child keeps graftling's server.
   const agents = registerAgents(pi, { displayServers: ['graphtraj', 'agents'] });
   const independent = agents.independent;
   // One notice loop for the Session currently associated as Main; a later

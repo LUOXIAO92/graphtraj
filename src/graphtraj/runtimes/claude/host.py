@@ -199,7 +199,7 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
             'root': kept['root'], 'cwd': str(root), 'claude': str(claude),
             'channel_file': kept['channel_file'],
         },
-        (root / '.mcp.json').as_posix(): {'mcpServers': {'agents': {
+        (root / '.mcp.json').as_posix(): {'mcpServers': {SERVER['name']: {
             'command': str(python),
             'args': ['-m', 'graphtraj.runtimes.claude.host', 'serve', '--config', str(config)],
         }}},
@@ -208,8 +208,32 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
             'GRAFTLING_CLAUDE_HOST_CONFIG': str(config),
         }},
         **claude_host_plugin(plugin, 'graphtraj-claude-host',
-                             'GraphTraj Main host context for the agents and tasks MCP entries.', ADDED_TOOLS),
+                             'GraphTraj Main host context for the agents and tasks MCP entries.', ADDED_TOOLS,
+                             server=SERVER['name']),
     }
+
+
+# The .mcp.json key this host had before 514.
+OLD_SERVER = 'agents'
+
+
+def drop_old_entry(root: Path) -> None:
+    """Remove the ``agents`` entry an earlier configuration --write left in ``.mcp.json``.
+
+    Kept beside the ``graphtraj`` entry, it would start a second host and show
+    the model a second set of tools. Only an entry that starts this host goes;
+    any other ``agents`` entry stays.
+    """
+    path = Path(root).resolve() / '.mcp.json'
+    try:
+        document = json.loads(path.read_text(encoding='utf-8'))
+        entry = document['mcpServers'][OLD_SERVER]
+        ours = 'graphtraj.runtimes.claude.host' in entry['args']
+    except (OSError, ValueError, KeyError, TypeError):
+        return
+    if ours:
+        del document['mcpServers'][OLD_SERVER]
+        path.write_text(json.dumps(document, indent=2) + '\n', encoding='utf-8')
 
 
 def refuse(error: Exception, log: Path) -> None:
@@ -237,6 +261,7 @@ def main() -> None:
         material = adoption_material(options.project, options.claude)
         if options.write:
             write_adoption(material)
+            drop_old_entry(options.project)
         print(json.dumps(material if not options.write else sorted(material), indent=2, ensure_ascii=False))
         return
     if options.config is None:

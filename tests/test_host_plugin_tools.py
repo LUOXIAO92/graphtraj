@@ -29,7 +29,7 @@ const contexts = [], log = [];
 const host = {
  session: {id: async () => 'first', cwd: async () => '/work'},
  command: {register: async () => {}},
- tool: {list: async () => [{name: 'mcp__agents__agents'}, {name: 'mcp__agents__notes'}, {name: 'mcp__agents__tasks'}]},
+ tool: {list: async () => [{name: 'mcp__graftling__agents'}, {name: 'mcp__graftling__notes'}, {name: 'mcp__graftling__tasks'}]},
  env: {get: async key => key.endsWith('PYTHON') ? '/python' : '/config'},
  process: {run: async (argv, options) => {contexts.push(JSON.parse(options.stdin)); return {exitCode: 0, stdout: '{}', stderr: ''};}},
  ui: {log: async line => log.push(line)},
@@ -54,7 +54,7 @@ def test_a_standalone_plugin_associates_and_lists_only_agents(tmp_path: Path) ->
     assert text == (GRAFTLING / 'claude/host_context.mjs').read_text()
     run_module(tmp_path, text, r'''
 assert.deepEqual([...handlers.keys()].filter(key => key.startsWith('tool.')).sort(),
-                 ['tool.call:mcp__agents__agents', 'tool.check:mcp__agents__agents']);
+                 ['tool.call:mcp__graftling__agents', 'tool.check:mcp__graftling__agents']);
 await handlers.get('command.run')(host);
 assert.deepEqual(log.filter(line => line.startsWith('MCP ')), ['MCP agents registered']);
 ''')
@@ -66,12 +66,12 @@ def test_a_declared_tool_gets_association_and_cleanup_without_an_exchange(tmp_pa
     assert 'tasks' not in text
     run_module(tmp_path, text, r'''
 const request = {action: 'execute', feature: 'note', arguments: {message: 'hidden'}};
-await handlers.get('tool.check:mcp__agents__notes')(host, {input: request}, async () => ({decision: 'allow'}));
+await handlers.get('tool.check:mcp__graftling__notes')(host, {input: request}, async () => ({decision: 'allow'}));
 assert.deepEqual(contexts.at(-1), {operation: 'prepare', tool: 'notes', session: 'first', cwd: '/work', agent: null, request});
-const denied = await handlers.get('tool.check:mcp__agents__notes')(host, {agentId: 'native', input: request}, async () => ({decision: 'allow'}));
+const denied = await handlers.get('tool.check:mcp__graftling__notes')(host, {agentId: 'native', input: request}, async () => ({decision: 'allow'}));
 assert.equal(denied.decision, 'deny');
 const answer = {result: [{type: 'text', text: JSON.stringify({agent: 'agent-1', execution: 'e', result: {}})}]};
-assert.equal(await handlers.get('tool.call:mcp__agents__notes')(host, {...request}, async () => answer), answer);
+assert.equal(await handlers.get('tool.call:mcp__graftling__notes')(host, {...request}, async () => answer), answer);
 assert.deepEqual(contexts.at(-1), {operation: 'end', tool: 'notes', request, session: 'first'});
 assert.deepEqual(log, []);
 await handlers.get('command.run')(host);
@@ -83,6 +83,9 @@ def test_only_the_declared_tools_are_written(tmp_path: Path) -> None:
     """GraphTraj declares tasks like any other package; agents alone declares nothing."""
     assert 'const TOOLS = ["agents"];' in module_of(agents_material(tmp_path, Path('/claude')))
     assert 'const TOOLS = ["agents", "tasks"];' in module_of(graphtraj_material(tmp_path, Path('/claude')))
+    # 514: GraphTraj's module handles only its own server's calls, mcp__graphtraj__<tool>.
+    assert 'const SERVER = "graphtraj";' in module_of(graphtraj_material(tmp_path, Path('/claude')))
+    assert 'const SERVER = "graftling";' in module_of(agents_material(tmp_path, Path('/claude')))
     files = claude_host_plugin(tmp_path / 'plugin', 'n', 'd')
     assert sorted(files) == [str(tmp_path / 'plugin' / name) for name in (
         '.claude-plugin/plugin.json', 'hooks/hooks.json', 'hooks/host_context.mjs')]

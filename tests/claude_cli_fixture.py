@@ -206,7 +206,7 @@ def ask_bridge(feature: str, arguments: dict) -> str:
     As a stdio client does, this keeps the input open until the answer is read:
     input EOF means the client went away and ends the call's waits.
     """
-    command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['agents']
+    command = json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['graphtraj']
     query = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
         'name': 'tasks', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
     with tempfile.TemporaryFile('w+') as errors, subprocess.Popen(
@@ -334,13 +334,13 @@ def prompt(message: dict) -> None:
             'subtype': 'can_use_tool', 'tool_name': 'Bash', 'input': {'command': 'echo approved'},
             'tool_use_id': 'tool-1'}})
     elif text in {'sdk-agents-status', 'sdk-agents-create-twice', 'sdk-agents-display'}:
-        assert 'agents' in sdk_servers
+        assert 'graftling' in sdk_servers
         if text in {'sdk-agents-create-twice', 'sdk-agents-display'}:
             sdk_request_arguments = {'action': 'execute', 'feature': 'create',
                                      'arguments': {'runtime': 'claude', 'instruction': 'child'}}
         sdk_display = text == 'sdk-agents-display'
         emit({'type': 'control_request', 'request_id': 'sdk-list', 'request': {
-            'subtype': 'mcp_message', 'server_name': 'agents',
+            'subtype': 'mcp_message', 'server_name': 'graftling',
             'message': {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}}})
     elif text == 'mcp':
         result(ask_bridge('session_reports', {'alias': 'research@x1'}))
@@ -456,7 +456,7 @@ for line in sys.stdin:
             sdk_servers = request.get('sdkMcpServers', [])
             if sdk_servers:
                 emit({'type': 'control_request', 'request_id': 'sdk-initialize', 'request': {
-                    'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
+                    'subtype': 'mcp_message', 'server_name': 'graftling', 'message': {
                         'jsonrpc': '2.0', 'id': 10, 'method': 'initialize',
                         'params': {'protocolVersion': '2025-06-18'}}}})
             else:
@@ -506,7 +506,7 @@ for line in sys.stdin:
         elif response['request_id'] == 'sdk-initialize':
             assert response['response']['mcp_response']['result']['protocolVersion'] == '2025-06-18'
             emit({'type': 'control_request', 'request_id': 'sdk-initial-tools', 'request': {
-                'subtype': 'mcp_message', 'server_name': 'agents',
+                'subtype': 'mcp_message', 'server_name': 'graftling',
                 'message': {'jsonrpc': '2.0', 'id': 11, 'method': 'tools/list'}}})
         elif response['request_id'] == 'sdk-initial-tools':
             assert response['response']['mcp_response']['result']['tools'][0]['name'] == 'agents'
@@ -518,7 +518,7 @@ for line in sys.stdin:
                     log.write(f'{time.monotonic() - hook_sent}\n')
             init = {'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model}
             if sdk_servers:
-                init['tools'] = ['mcp__agents__agents']
+                init['tools'] = ['mcp__graftling__agents']
             observed_mode = os.environ.get('CLAUDE_FIXTURE_PERMISSION_MODE', permission_mode)
             if observed_mode is not None:
                 init['permissionMode'] = observed_mode
@@ -531,7 +531,7 @@ for line in sys.stdin:
             tools = response['response']['mcp_response']['result']['tools']
             assert [tool['name'] for tool in tools] == ['agents']
             call_request = {'type': 'control_request', 'request_id': 'sdk-call', 'request': {
-                'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
+                'subtype': 'mcp_message', 'server_name': 'graftling', 'message': {
                     'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
                     'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}}
             emit(call_request)
@@ -545,7 +545,7 @@ for line in sys.stdin:
                     'subtype': 'hook_callback', 'callback_id': 'graftling_agents_display', 'input': {
                         'hook_event_name': 'PostToolUse', 'session_id': session,
                         'tool_use_id': 'display-' + sdk_request_arguments['feature'],
-                        'tool_name': 'mcp__agents__agents', 'tool_input': sdk_request_arguments,
+                        'tool_name': 'mcp__graftling__agents', 'tool_input': sdk_request_arguments,
                         'tool_response': reply}}})
             elif sdk_request_arguments['feature'] == 'create':
                 sdk_create_results.append(reply)
@@ -560,7 +560,7 @@ for line in sys.stdin:
                 sdk_request_arguments = {'action': 'execute', 'feature': 'wait',
                     'arguments': {'agent': sdk_display_reply['structuredContent']['agent'], 'timeout_seconds': 20}}
                 emit({'type': 'control_request', 'request_id': 'sdk-call', 'request': {
-                    'subtype': 'mcp_message', 'server_name': 'agents', 'message': {
+                    'subtype': 'mcp_message', 'server_name': 'graftling', 'message': {
                         'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
                         'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}})
             else:

@@ -61,7 +61,7 @@ def test_real_progressive_mcp_memory_stop_and_projection(monkeypatch: pytest.Mon
 
     try:
         created = operate({'action': 'create', 'runtime': 'claude', 'instruction':
-            'Remember TASK332-MEMORY-ORCHID for later. Use mcp__agents__agents three times: '
+            'Remember TASK332-MEMORY-ORCHID for later. Use mcp__graftling__agents three times: '
             'first action discover query status; then action describe feature status schema true; '
             'finally action execute feature status arguments {}. Do not use shell or other tools. '
             'After the status result, reply READY.'})
@@ -78,7 +78,7 @@ def test_real_progressive_mcp_memory_stop_and_projection(monkeypatch: pytest.Mon
         entries = [json.loads(line) for line in transcript.read_text().splitlines()]
         blocks = [block for entry in entries for block in entry.get('message', {}).get('content', [])
                   if isinstance(block, dict)]
-        tools = [b for b in blocks if b.get('type') == 'tool_use' and b.get('name') == 'mcp__agents__agents']
+        tools = [b for b in blocks if b.get('type') == 'tool_use' and b.get('name') == 'mcp__graftling__agents']
         assert {b['input']['action'] for b in tools} >= {'discover', 'describe', 'execute'}, tools
         for tool in tools:
             result = next(b for b in blocks if b.get('type') == 'tool_result' and b.get('tool_use_id') == tool['id'])

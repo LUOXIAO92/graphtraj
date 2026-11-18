@@ -541,8 +541,8 @@ const host = {
  clock: {setTimeout: fn => timers.push(fn)},
  ui: {log: () => {}},
 };
-const call = name => handlers.get(`tool.call:mcp__agents__${name}`);
-const check = name => handlers.get(`tool.check:mcp__agents__${name}`);
+const call = name => handlers.get(`tool.call:mcp__graphtraj__${name}`);
+const check = name => handlers.get(`tool.check:mcp__graphtraj__${name}`);
 const held = () => { let release; const promise = new Promise(done => { release = done; }); return {promise, release}; };
 const tick = () => new Promise(done => setTimeout(done, 5));
 '''
@@ -557,13 +557,13 @@ def test_mod_lets_calls_overlap_and_each_ends_only_itself(tmp_path: Path) -> Non
 const long = {action: 'execute', feature: 'wait', arguments: {agent: 'a', timeout_seconds: 5}};
 const short = {action: 'describe', feature: 'status', schema: true};
 const gate = held();
-const running = call('agents')(host, {tool: 'mcp__agents__agents', ...long}, async () => {
+const running = call('agents')(host, {tool: 'mcp__graphtraj__agents', ...long}, async () => {
   await check('agents')(host, {input: long}, async () => ({decision: 'allow'}));
   await gate.promise;
   return {result: '{}'};
 });
 await tick();
-const second = await call('agents')(host, {tool: 'mcp__agents__agents', ...short}, async () => {
+const second = await call('agents')(host, {tool: 'mcp__graphtraj__agents', ...short}, async () => {
   await check('agents')(host, {input: short}, async () => ({decision: 'allow'}));
   return {result: '{}'};
 });
@@ -586,7 +586,7 @@ await handlers.get('session.start')(host, {}, async () => 'started');
 const notice = {at: 1, id: 'e1:completed', event: {alias: 'leader@l1', event: 'completed', message: 'done'}};
 const gates = [held(), held()];
 const request = {action: 'execute', feature: 'status', arguments: {}};
-const running = gates.map(gate => call('agents')(host, {tool: 'mcp__agents__agents', ...request}, async () => {
+const running = gates.map(gate => call('agents')(host, {tool: 'mcp__graphtraj__agents', ...request}, async () => {
   await gate.promise; return {result: '{}'};
 }));
 await tick();

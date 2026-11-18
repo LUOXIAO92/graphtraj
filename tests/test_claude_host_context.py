@@ -32,7 +32,7 @@ const contexts = [], log = [], registrations = [];
 const host = {
  session: {id: async () => session, cwd: async () => '/native/current'},
  command: {register: async entry => registrations.push(entry)},
- tool: {list: async () => [{name: 'mcp__agents__agents'}]},
+ tool: {list: async () => [{name: 'mcp__graphtraj__agents'}]},
  env: {get: async key => key.endsWith('PYTHON') ? '/venv/python' : '/host/config'},
  process: {run: async (argv, options) => {
    assert.deepEqual(argv, ['/venv/python', '-m', 'graftling.claude.host', 'context', '--config', '/host/config']);
@@ -52,7 +52,7 @@ for (session of ['first', 'after-clear', 'resumed']) {
  for (const decision of ['allow', 'ask', 'deny']) {
   const native = {decision, reason: 'native reason', ceiling: 'ask'};
   const before = contexts.length;
-  const result = await handlers.get('tool.check:mcp__agents__agents')(host, {tool: 'mcp__agents__agents', input}, async () => native);
+  const result = await handlers.get('tool.check:mcp__graphtraj__agents')(host, {tool: 'mcp__graphtraj__agents', input}, async () => native);
   assert.equal(result, native);
   if (decision === 'deny') assert.equal(contexts.length, before);
   else assert.deepEqual(contexts.at(-1), {operation: 'prepare', tool: 'agents', session, cwd: '/native/current', agent: null, request: input});
@@ -60,32 +60,32 @@ for (session of ['first', 'after-clear', 'resumed']) {
 }
 // tasks uses the same per-call association, naming its own entry.
 const task = {action: 'execute', feature: 'task_graph', arguments: {}};
-await handlers.get('tool.check:mcp__agents__tasks')(host, {tool: 'mcp__agents__tasks', input: task}, async () => ({decision: 'allow'}));
+await handlers.get('tool.check:mcp__graphtraj__tasks')(host, {tool: 'mcp__graphtraj__tasks', input: task}, async () => ({decision: 'allow'}));
 assert.deepEqual(contexts.at(-1), {operation: 'prepare', tool: 'tasks', session, cwd: '/native/current', agent: null, request: task});
-const taskChild = await handlers.get('tool.check:mcp__agents__tasks')(host, {agentId: 'native-child', input: task}, async () => ({decision: 'allow'}));
+const taskChild = await handlers.get('tool.check:mcp__graphtraj__tasks')(host, {agentId: 'native-child', input: task}, async () => ({decision: 'allow'}));
 assert.equal(taskChild.decision, 'deny');
 const count = contexts.length;
-const child = await handlers.get('tool.check:mcp__agents__agents')(host, {agentId: 'native-child', input}, async () => ({decision: 'allow'}));
+const child = await handlers.get('tool.check:mcp__graphtraj__agents')(host, {agentId: 'native-child', input}, async () => ({decision: 'allow'}));
 assert.equal(child.decision, 'deny');
 assert.equal(contexts.length, count);
 fail = true;
-const broken = await handlers.get('tool.check:mcp__agents__agents')(host, {input}, async () => ({decision: 'ask'}));
+const broken = await handlers.get('tool.check:mcp__graphtraj__agents')(host, {input}, async () => ({decision: 'ask'}));
 assert.equal(broken.decision, 'deny');
 fail = false;
-const event = {tool: 'mcp__agents__agents', ...input};
+const event = {tool: 'mcp__graphtraj__agents', ...input};
 const document = {agent: 'agent-child', execution: 'execution-one', result: {last_result: {id: 'execution-one', last_message: 'hello parent'}}};
 const native = {result: [{type: 'text', text: JSON.stringify(document)}]};
 // A resumed plugin has no in-memory display receipts. A new execution's
 // status includes the previous last_result, which is not its new reply.
 const stale = {result: [{type: 'text', text: JSON.stringify({...document, execution: 'execution-two'})}]};
-await handlers.get('tool.call:mcp__agents__agents')(host, {...event, feature: 'status', arguments: {}}, async () => stale);
+await handlers.get('tool.call:mcp__graphtraj__agents')(host, {...event, feature: 'status', arguments: {}}, async () => stale);
 assert.equal(log.filter(line => line.includes('hello parent')).length, 0);
-const returned = await handlers.get('tool.call:mcp__agents__agents')(host, event, async received => {
+const returned = await handlers.get('tool.call:mcp__graphtraj__agents')(host, event, async received => {
  assert.equal(received, event);
  // Calls may overlap; one ending names only its own association.
- const other = {tool: 'mcp__agents__agents', action: 'execute', feature: 'status', arguments: {}};
+ const other = {tool: 'mcp__graphtraj__agents', action: 'execute', feature: 'status', arguments: {}};
  const before = contexts.length;
- await handlers.get('tool.call:mcp__agents__agents')(host, other, async () => stale);
+ await handlers.get('tool.call:mcp__graphtraj__agents')(host, other, async () => stale);
  assert.deepEqual(contexts.slice(before).filter(item => item.operation === 'end'), [{operation: 'end', tool: 'agents', request: {action: 'execute', feature: 'status', arguments: {}}, session}]);
  return native;
 });
@@ -99,11 +99,11 @@ assert.ok(log.includes('│ hello parent'));
 assert.ok(log.every(line => !line.includes('\n') && !line.includes('\r')));
 assert.deepEqual(contexts.at(-1), {operation: 'end', tool: 'agents', request: input, session});
 const replies = log.filter(line => line.includes('│ hello parent')).length;
-await handlers.get('tool.call:mcp__agents__agents')(host, {...event, feature: 'status', arguments: {}}, async () => native);
+await handlers.get('tool.call:mcp__graphtraj__agents')(host, {...event, feature: 'status', arguments: {}}, async () => native);
 assert.equal(log.filter(line => line.includes('│ hello parent')).length, replies);
 // A queued member notice arrives with the next tasks result and is shown once.
 const queued = {main_notices: [{at: 1, event: {source: 'graphtraj', alias: 'leader@l1', event: 'completed', message: 'Session execution ended'}}]};
-await handlers.get('tool.call:mcp__agents__tasks')(host, {tool: 'mcp__agents__tasks', ...task}, async () => ({result: [{type: 'text', text: JSON.stringify(queued)}]}));
+await handlers.get('tool.call:mcp__graphtraj__tasks')(host, {tool: 'mcp__graphtraj__tasks', ...task}, async () => ({result: [{type: 'text', text: JSON.stringify(queued)}]}));
 assert.ok(log.includes('┌ agents · leader@l1 → resumed'));
 assert.ok(log.includes('│ Session execution ended'));
 let ended = false;

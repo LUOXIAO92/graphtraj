@@ -291,7 +291,7 @@ const nativeDeny = () => Promise.resolve({ kind: 'deny', reason: 'native deny' }
 const nativeAsk = () => Promise.resolve({ kind: 'ask', reason: 'native ask' });
 console.log(JSON.stringify({ prepend: options.prepend,
   tool: await hook(exec('write'), allow), deny: await hook(exec('write'), nativeDeny),
-  ask: await hook(exec('write'), nativeAsk), agents: await hook(exec('mcp__agents__agents'), allow),
+  ask: await hook(exec('write'), nativeAsk), agents: await hook(exec('mcp__graftling__agents'), allow),
   inner: await hook({ ...exec('run_code'), parent: Symbol('outer') }, allow) }));
 """ % json.dumps(str(GRAFTLING / 'dsh/review.mjs'))
 
@@ -336,7 +336,7 @@ const ctx = { ui: { confirm: async (title, message, options) => {
 const event = (toolName) => ({ toolName, toolCallId: 'call-1', input: { path: '/x' } });
 let result, failure = null;
 try { result = await handler(event('write'), ctx); } catch (error) { failure = error.message; }
-const agents = await handler(event('mcp__agents__agents'), { ui: { confirm: async () => { throw new Error('asked'); } } });
+const agents = await handler(event('mcp__graftling__agents'), { ui: { confirm: async () => { throw new Error('asked'); } } });
 const reloaded = []; registerReview({ registerCommand: (name) => reloaded.push(name), on: () => {} }, environment);
 console.log(JSON.stringify({ active, commands, dialogs, result: result ?? null, failure, agents: agents ?? null,
   variable: 'GRAFTLING_PI_REVIEW' in environment, kept: environment.KEEP, reloaded }));

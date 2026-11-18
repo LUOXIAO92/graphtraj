@@ -22,7 +22,9 @@ from graphtraj.interfaces.hosted_cli import agents_dispatch, forward_request
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, recovery_review
 
 
-SERVER = {'name': 'agents', 'version': '1'}
+# The MCP server key GraphTraj registers: Claude Code shows mcp__graphtraj__agents/tasks
+# (before 514 the key was ``agents``, which retained records still show).
+SERVER = {'name': 'graphtraj', 'version': '1'}
 
 
 def descriptors() -> list[dict]:

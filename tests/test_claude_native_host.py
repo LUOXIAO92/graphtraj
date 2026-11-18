@@ -229,7 +229,7 @@ def test_adoption_material_is_the_plugin_layout_and_keeps_settings(tmp_path: Pat
     settings = json.loads((tmp_path / '.claude/settings.local.json').read_text())
     assert settings['env']['KEEP'] == '1' and 'GRAFTLING_CLAUDE_HOST_CONFIG' in settings['env']
     assert settings['permissions'] == {'allow': []}
-    assert list(json.loads((tmp_path / '.mcp.json').read_text())['mcpServers']) == ['agents']
+    assert list(json.loads((tmp_path / '.mcp.json').read_text())['mcpServers']) == ['graphtraj']
 
 
 def test_generated_hook_context_accepts_the_project_host_configuration(
@@ -408,7 +408,7 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
                               input=''.join(json.dumps(message) + '\n' for message in messages),
                               capture_output=True, text=True, timeout=60, env=env)
     replies = [json.loads(line) for line in finished.stdout.splitlines()]
-    assert replies[0]['result']['serverInfo'] == {'name': 'agents', 'version': '1'}
+    assert replies[0]['result']['serverInfo'] == {'name': 'graphtraj', 'version': '1'}
     assert [tool['name'] for tool in replies[1]['result']['tools']] == ['agents', 'tasks']
     errors = []
     for reply in replies[2:]:
@@ -467,7 +467,7 @@ def test_graphtraj_session_end_is_one_stop_line(tmp_path: Path, case: str) -> No
     if len(finished.stdout.splitlines()) != 2:
         pytest.fail(_ended('the launcher', 'initialize', finished.returncode) + '\n' + finished.stderr)
     reply, returncode = finished.stdout.splitlines()
-    assert json.loads(reply)['result']['serverInfo']['name'] == 'agents'
+    assert json.loads(reply)['result']['serverInfo']['name'] == 'graphtraj'
     assert returncode == '0', finished.stderr
     log = (config.parent / 'host.log').read_text()
     assert 'Traceback' not in log and 'KeyboardInterrupt' not in log
@@ -515,7 +515,7 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
     greeting = host.stdout.readline()
     if not greeting:
         pytest.fail(_ended('the launcher', 'initialize', host.wait(timeout=30)))
-    assert json.loads(greeting)['result']['serverInfo']['name'] == 'agents'
+    assert json.loads(greeting)['result']['serverInfo']['name'] == 'graphtraj'
     refused = context()
     host.stdin.write('stop\n')
     host.stdin.flush()
@@ -577,6 +577,8 @@ class ClaudeParent:
 
     def __init__(self, module: str, project: Path, config: Path) -> None:
         self.project = project
+        # graftling's own host keeps its serverInfo name; GraphTraj's is graphtraj (514).
+        self.server = 'graphtraj' if module.startswith('graphtraj.') else 'agents'
         self.process = subprocess.Popen([sys.executable, '-c', CLAUDE_PARENT, module, str(config)], cwd=project,
                                         env=_source_env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         self.pid = self.process.pid
@@ -609,7 +611,7 @@ class ClaudeParent:
 
     def greet(self) -> None:
         """Complete the MCP handshake."""
-        assert self.send('initialize', {})['result']['serverInfo']['name'] == 'agents'
+        assert self.send('initialize', {})['result']['serverInfo']['name'] == self.server
 
     def context(self, document: dict | None = None) -> dict:
         """Run the mod's context entry from this parent."""

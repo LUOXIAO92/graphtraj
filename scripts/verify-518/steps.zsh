@@ -162,6 +162,16 @@ S|T)
   [[ $STEP == S ]] && print -r -- "next: report $OUT/S.txt to the Leader (T follows once the Leader names AFTER)" \
                    || print -r -- "next: zsh $THIS G (full suite), then R"
   ;;
+M)
+  say "[M] read only, <2 min: one archive-header lookup over production's Session archives. Dialog: none. Output also in $OUT/M.txt"
+  { check_tmp || return 1
+  print -r -- "load average: $(sysctl -n vm.loadavg) (another run on the host only slows the wall times)"
+  (cd $PYTEST_TMP && clean $H/.venv-runtime/bin/python -I $SD/probe518.py archives $H -)
+  print "Success: 'Session archives: N, ... GB; first lines ... GB', two 'fresh SessionArchive(root).native_header' lines"
+  print "(each a full scan) and one 'reading only each header' line. Nothing is written."
+  print -r -- "next: report $OUT/M.txt to the Leader"
+  } 2>&1 | tee $OUT/M.txt
+  ;;
 X)
   say "[X] rehearsal without the host: build BEFORE and scale it; dispatches nothing. Dialog: none."
   check_tmp || return 1

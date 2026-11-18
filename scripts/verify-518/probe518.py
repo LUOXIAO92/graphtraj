@@ -30,6 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'verify-501'))
 import probe  # noqa: E402  (verify-501's helper: IDLE, seconds, CHILD)
 
 SAFE_PID = 99999
+PREFIX = b'{"archiveVersion":1,"header":'  # how graftling's compact encoding starts an archive's first line
 PHASES = ('start', 'pre30', 'post30', 'child', 'after')
 
 
@@ -180,6 +181,48 @@ def clone(project: Path, harness: str) -> int:
     return 0
 
 
+def archives(harness: Path, _unused: str) -> int:
+    """Read only: what one archive-header lookup costs over production's Session archives.
+
+    ``SessionArchive(root).native_header`` (graftling) decodes the whole first line of every archive to take its
+    header; the first line also holds the archive's resolved observations. This times exactly that call (a fresh
+    instance, as ``find_session`` and Claude collection make), and, for comparison, reading only each header.
+    """
+    import time
+
+    from graftling.sessions.archive import SessionArchive
+
+    root = harness / '.graphtraj/swarm'
+    paths = sorted((root / 'sessions').glob('*/session.jsonl'))
+    first = header = 0
+    for path in paths:
+        with path.open('rb') as stream:
+            line = stream.readline()
+        first += len(line)
+        if line.startswith(PREFIX):
+            header += len(json.dumps(json.JSONDecoder().raw_decode(line.decode(), len(PREFIX))[0]))
+    total = sum(path.stat().st_size for path in paths)
+    print(f'Session archives: {len(paths)}, {total / 1e9:.2f} GB; first lines {first / 1e9:.2f} GB, '
+          f'of which headers {header / 1e6:.2f} MB')
+    for attempt in (1, 2):
+        began, cpu = time.perf_counter(), time.process_time()
+        found = SessionArchive(root).native_header('claude', 'no-such-session-518')
+        print(f'fresh SessionArchive(root).native_header (as find_session / Claude collection), run {attempt}: '
+              f'{time.process_time() - cpu:.2f} s CPU, {time.perf_counter() - began:.2f} s wall (found {found})')
+    began, cpu = time.perf_counter(), time.process_time()
+    for path in paths:
+        with path.open('rb') as stream:
+            chunk = stream.read(65536)
+        if chunk.startswith(PREFIX):
+            try:
+                json.JSONDecoder().raw_decode(chunk.decode('utf-8', 'ignore'), len(PREFIX))
+            except ValueError:
+                pass
+    print(f'reading only each header (64 KiB prefix): {time.process_time() - cpu:.2f} s CPU, '
+          f'{time.perf_counter() - began:.2f} s wall')
+    return 0
+
+
 def _epoch(value) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
@@ -306,5 +349,5 @@ def compare(before: Path, after: str) -> int:
 
 if __name__ == '__main__':
     command, target, extra = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
-    commands = {'census': census, 'clone': clone, 'phases': phases, 'compare': compare}
+    commands = {'census': census, 'archives': archives, 'clone': clone, 'phases': phases, 'compare': compare}
     raise SystemExit(commands[command](target, extra))

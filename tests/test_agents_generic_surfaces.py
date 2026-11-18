@@ -185,7 +185,7 @@ def test_pi_exclusion_moved_to_the_graphtraj_extension(tmp_path: Path) -> None:
     both = {'GRAFTLING_CONNECTION': '/agents-host', 'GRAPHTRAJ_CLI_CONNECTION': '/graphtraj-host',
             'GRAFTLING_PYTHON': sys.executable}
     assert start_pi(tmp_path, str(GRAFTLING / 'pi/extension.mjs'), 'agents', **both) == {
-        'owned': True, 'registered': ['agents']}
+        'owned': True, 'registered': ['graftling']}
     refused = start_pi(tmp_path, 'graphtraj/runtimes/pi/extension.mjs', 'graphtraj', **both)
     assert refused['error'].startswith('Conflicting existing Agent connections')
     refused = start_pi(tmp_path, 'graphtraj/runtimes/pi/extension.mjs', 'graphtraj',

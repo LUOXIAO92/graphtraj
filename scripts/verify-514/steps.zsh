@@ -12,6 +12,7 @@
 #   C    Claude Main host + one Claude member      X  one Codex member (gpt-6-luna)
 #   P    Pi Main                                   D  DSH Main
 #   T    focused tests in Harness tmp/514 venv     F  full suite there (background)      R  F's results
+#   V    correction 4: F's 3 failures at 142bdd8e and the review-row test, in the same venv (foreground)
 # Projects live outside the Harness (user 2026-11-18): a project under it would merge the Harness .mcp.json and
 # instruction files. No step starts or connects to the Harness's production MCP servers; every host here is started
 # from an isolated project with --strict-mcp-config or its own extension/patch. No step signals a process it did not
@@ -318,7 +319,7 @@ D)
   clean $CONDA -I $CHECK dsh-main $D/stdout.jsonl $DH | redact | tee $D/summary.txt && print "D: PASS" || print "D: FAIL or CANNOT (lines above)"
   next "T, then F (idle host), then R"
   ;;
-T|F)
+T|F|V)
   local VT=$T/venv-test
   check_tmp() { case ${PYTEST_TMP:A}/ in ${H:A}/*) print "STOP: TMPDIR $PYTEST_TMP is inside the Harness"; return 1 ;; esac; print "pytest temp: $PYTEST_TMP (outside the Harness)"; }
   check_tmp
@@ -337,7 +338,19 @@ T|F)
   (cd $PYTEST_TMP && $VT/bin/python -I -c 'import graftling, graphtraj, pytest; print("graftling", graftling.__version__, graftling.__file__, "| graphtraj", graphtraj.__file__, "| pytest", pytest.__version__)')
   [[ -n ${VERIFY514_PREFIX_ONLY:-} ]] && { print "VERIFY514_PREFIX_ONLY: venv ready, no pytest started (rehearsal)"; return 0; }
   local R=$OUT/$STEP-$(candidate | cut -c1-10)-$(date +%H%M%S); mkdir -p $R
-  if [[ $STEP == T ]]; then
+  if [[ $STEP == V ]]; then
+    say "[V] the 3 tests F failed at 142bdd8e plus the review-row test, at this commit (foreground, about 1 min). Dialog: none."
+    print "pytest temp: TMPDIR=$PYTEST_TMP"
+    (cd $WT && TMPDIR=$PYTEST_TMP $VT/bin/python -m pytest -p no:cacheprovider -q -rfE \
+      tests/test_dsh_member_tools.py::test_a_member_uses_both_tools_and_its_round_completes \
+      tests/test_dsh_member_tools.py::test_a_standalone_child_keeps_its_own_entry_and_policy \
+      tests/test_agents_generic_surfaces.py::test_pi_exclusion_moved_to_the_graphtraj_extension \
+      tests/test_review_plugin_pi_dsh.py::test_review_row_asks_only_for_what_dsh_itself_allows \
+      > $R/focused.txt 2>&1; print "exit=$?" >> $R/focused.txt)
+    print -r -- "output: $R/focused.txt"; tail -6 $R/focused.txt
+    print "FAILED lines:"; grep -E '^(FAILED|ERROR) ' $R/focused.txt || print "(none)"
+    grep '^exit=' $R/focused.txt
+  elif [[ $STEP == T ]]; then
     say "[T] focused tests (foreground, about 5 min). Dialog: none."
     (cd $WT && TMPDIR=$PYTEST_TMP $VT/bin/python -m pytest -p no:cacheprovider -q -rfE \
       tests/test_graphtraj_mcp_server_name.py tests/test_configuration_write_keeps_settings.py tests/test_claude_native_host.py \
@@ -359,5 +372,5 @@ R)
   local f=($OUT/F-*(N/om[1])); (( $#f )) || { print "no F result yet; run: zsh $THIS F"; return 0; }
   print -r -- "---- $f"; tail -6 $f/suite.txt; print "failed/error lines:"; grep -h -E '^(FAILED|ERROR) ' $f/suite.txt | sort -u || print "(none)"
   ;;
-*) print -r -- "usage: zsh $THIS 0|Ct|Rt|Rs1|Rs2 <alias>|C|X|P|D|T|F|R"; return 2 ;;
+*) print -r -- "usage: zsh $THIS 0|Ct|Rt|Rs1|Rs2 <alias>|C|X|P|D|T|F|R|V"; return 2 ;;
 esac

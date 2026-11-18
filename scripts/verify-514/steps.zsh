@@ -132,6 +132,30 @@ collect_claude() {  # $1 project
   for f in $1/.graphtraj/**/*(N.); do [[ $f -nt $D/marker ]] && { mkdir -p $D/project-records/${${f#$1/}:h}; cp $f $D/project-records/${f#$1/}; }; done
   print -r -- "claude transcripts copied: $(ls $D/claude-projects | wc -l | tr -d ' '); project records copied: $(find $D/project-records -type f | wc -l | tr -d ' ')"
 }
+# The plugin gate before every paid Claude step: one one-line claude -p from the project (the same .mcp.json and
+# --strict-mcp-config as the step). Its system init record must list exactly the expected server, no untrusted
+# plugin warning, and mcp__<expected>__agents. Returns 1 otherwise (the step then runs no claude -p of its own).
+gate() {  # $1 project, $2 expected server
+  local p=$1 server=$2
+  (cd $p && clean $BOUND 120 claude -p --model $MODEL --output-format stream-json --verbose --mcp-config $p/.mcp.json \
+     --strict-mcp-config <<< 'Reply with one line: READY-514 and your exact model name. Use no tool.' > $D/gate.jsonl 2> $D/gate.err) \
+     || print "claude rc=$?"
+  clean $CONDA -I -c 'import json, sys
+server = sys.argv[2]
+lines = []
+for l in open(sys.argv[1], errors="replace"):
+    try: lines.append(json.loads(l))
+    except ValueError: pass
+init = next((l for l in lines if l.get("subtype") == "init"), {}); res = next((l for l in lines if l.get("type") == "result"), {})
+servers = [(s.get("name"), s.get("status")) for s in init.get("mcp_servers", [])]
+warnings = json.dumps(init.get("plugin_warnings", []))
+tools = [t for t in init.get("tools", []) if t.startswith("mcp__")]
+print("claude model:", init.get("model"), "| answer:", str(res.get("result", ""))[:120].replace("\n", " "))
+print("claude init mcp_servers:", servers, "| mcp tools:", tools, "| plugin_warnings:", warnings[:300])
+ok = [n for n, _ in servers] == [server] and "untrusted" not in warnings and f"mcp__{server}__agents" in tools
+print(f"claude plugin gate ({sys.argv[3]}, expected server {server}):", "PASS" if ok else "NOT PASSED")
+sys.exit(0 if ok else 1)' $D/gate.jsonl $server $p
+}
 member_prompt() {  # $1 role, $2 prefix of the member's own tools as the Main names them, $3 tag
   print -r -- "Use only the MCP tools ${2}tasks and ${2}agents. 1. With ${2}tasks execute swarm with arguments {\"tasks\":[{\"task_id\":\"1\",\"role\":\"$1\",\"instruction\":\"This is a scripted probe. Call your agents MCP tool exactly once with {\\\"action\\\": \\\"execute\\\", \\\"feature\\\": \\\"status\\\", \\\"arguments\\\": {}} and your tasks MCP tool exactly once with {\\\"action\\\": \\\"discover\\\"}. Use no other tool. Then reply with one line: $3 followed by the exact names of the two tools you called and, for each, ok or the exact error.\"}]} and print the raw result on one line starting with SWARM-RESULT. 2. Call ${2}agents with {\"action\": \"execute\", \"feature\": \"wait\", \"arguments\": {\"agent\": <the member's agent or alias from step 1>, \"timeout_seconds\": 300}}, repeating until its execution has ended. 3. Print one line MEMBER <the member's alias> <its session> and one line REPLY <its final last_message>. Stop."
 }
@@ -179,27 +203,17 @@ print(graftling.__file__.split("/lib/")[0], "graftling", m.version("graftling"),
   load_key || true
   local ASK='Reply with one line: READY-514 and your exact model name. Use no tool.'
   begin 0
-  (cd $P && clean $BOUND 120 claude -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json \
-     --strict-mcp-config <<< $ASK > $D/claude.jsonl 2> $D/claude.err) || print "claude rc=$?"
-  clean $V/bin/python -I -c 'import json, sys
-lines = [json.loads(l) for l in open(sys.argv[1], errors="replace") if l.startswith("{")]
-init = next((l for l in lines if l.get("subtype") == "init"), {}); res = next((l for l in lines if l.get("type") == "result"), {})
-servers = [(s.get("name"), s.get("status")) for s in init.get("mcp_servers", [])]
-warnings = json.dumps(init.get("plugin_warnings", []))
-tools = [t for t in init.get("tools", []) if t.startswith("mcp__")]
-print("claude model:", init.get("model"), "| answer:", str(res.get("result", ""))[:120].replace("\n", " "))
-print("claude init mcp_servers:", servers, "| mcp tools:", tools, "| plugin_warnings:", warnings[:300])
-ok = [n for n, _ in servers] == ["graphtraj"] and "untrusted" not in warnings and "mcp__graphtraj__agents" in tools
-print("claude plugin gate:", "PASS" if ok else "NOT YET (run Ct to trust the folder, then rerun 0)")' $D/claude.jsonl
+  # Information only here: before Ct trusts the folder the plugin is skipped; Rs1, Rs2, C and X gate themselves.
+  gate $P graphtraj || print "(expected before Ct: the steps that need it re-check and stop)"
   (cd $BASE && clean $BOUND 120 codex exec --skip-git-repo-check -m gpt-6-luna $ASK 2>&1 | tail -2) || print "codex rc=$?"
   (cd $BASE && clean $BOUND 120 pi --print --no-tools --provider $PI_PROVIDER --model $PI_MODEL $ASK < /dev/null 2>&1 | redact | tail -2) || print "pi rc=$?"
   (cd $BASE && clean $BOUND 120 dsh --profile headless --permission-mode read-only $ASK < /dev/null 2>&1 | redact | tail -2) || print "dsh rc=$?"
   print "Ready when: both venvs print their versions, 'roles OK' and 'probe Task 1 ready' twice, '.mcp.json servers: ['graphtraj']', the DSH row YES, and four READY-514 lines."
-  next "Ct   (USER, plain Terminal), then Rt (USER), then Main: Rs1"
+  next "Ct   (USER, plain Terminal)"
   ;;
 Ct|Rt)
   local p=$([[ $STEP == Ct ]] && print $P || print $PO)
-  say "[$STEP] USER in a plain Terminal. Dialog: one, Claude Code's 'Do you trust the files in this folder?' for $p -> choose 'Yes, proceed', then type /exit. Any MCP server dialog: press Esc (the steps pass --mcp-config --strict-mcp-config)."
+  say "[$STEP] USER in a plain Terminal. Dialog: one, expected to be the only one: Claude Code's 'Do you trust the files in this folder?' for $p -> choose 'Yes, proceed', then type /exit. Should an MCP server approval dialog appear anyway, choose the option that does NOT enable the server (press Esc); the steps pass --mcp-config --strict-mcp-config."
   (cd $p && claude) || print "claude exit $?"
   [[ $STEP == Ct ]] && next "Rt  (USER, plain Terminal)" || next "Rs1  (Main)"
   ;;
@@ -207,13 +221,28 @@ Rs1)
   say "[Rs1] OLD configuration (GraphTraj $BASECOMMIT + graftling $GOLD, .mcp.json key agents) in $PO: a Claude Main dispatches one Claude member, which calls mcp__agents__agents/tasks. Dialog: none. At most 25 min."
   begin Rs1
   configure_claude $PO $OV
+  gate $PO agents || { print "STOP: plugin gate not passed for $PO (above); no claude -p of Rs1 was run. Trust it with: zsh $THIS Rt"; return 1; }
   member_prompt claude_member mcp__agents__ DONE-514-OLD > $D/host.prompt.txt
   claude_main $PO mcp__agents__ $D/host.prompt.txt
   collect_claude $PO
-  grep -h '^MEMBER \|"MEMBER ' $D/stream.jsonl | head -2 || true
   clean $CONDA -I $CHECK Rs1-old --observe --skip $(<$D/main-session.txt) $D/claude-projects | tee $D/summary.txt
-  print "Record for Rs2: the member alias from the MEMBER line of the Main's reply ($D/stream.jsonl, last 'result' record)."
-  next "Rs2 <member alias>"
+  # The member alias (and session) from the MEMBER line of the Main's last result record.
+  local member=$(clean $CONDA -I -c 'import json, sys
+text = ""
+for l in open(sys.argv[1], errors="replace"):
+    try: d = json.loads(l)
+    except ValueError: continue
+    if d.get("type") == "result": text = str(d.get("result", ""))
+hits = [l.split()[1:3] for l in text.splitlines() if l.strip().startswith("MEMBER ") and len(l.split()) >= 2]
+if hits: print(" ".join(hits[-1]))
+else: print("NONE"); print(text[-1500:], file=sys.stderr)' $D/stream.jsonl)
+  if [[ -z $member || $member == NONE* ]]; then
+    print "STOP: no MEMBER line in the Main's last result ($D/stream.jsonl); its text is above. Rs2 needs the member alias."
+    return 1
+  fi
+  print -r -- $member > $D/member.txt
+  print -r -- "member alias and session: $member"
+  next "Rs2 ${member%% *}"
   ;;
 Rs2)
   local alias=${2:-}; [[ -n $alias ]] || { print "usage: zsh $THIS Rs2 <member alias from Rs1>"; return 2; }
@@ -221,6 +250,7 @@ Rs2)
   venv_check; begin Rs2
   configure_claude $PO $V
   host_check $PO graphtraj || print "NOTE: the rewritten Rs configuration is not exactly graphtraj (above)"
+  gate $PO graphtraj || { print "STOP: plugin gate not passed for $PO after the rewrite (above); no claude -p of Rs2 was run"; return 1; }
   print -r -- "Use only the MCP tools mcp__graphtraj__agents and mcp__graphtraj__tasks. 1. Call mcp__graphtraj__agents with {\"action\": \"execute\", \"feature\": \"resume\", \"arguments\": {\"agent\": \"$alias\", \"message\": \"This is a scripted probe after an update. Call your agents MCP tool exactly once with {\\\"action\\\": \\\"execute\\\", \\\"feature\\\": \\\"status\\\", \\\"arguments\\\": {}} and your tasks MCP tool exactly once with {\\\"action\\\": \\\"discover\\\"}. Use no other tool. Then reply with one line: DONE-514-RESUMED followed by the exact names of the two tools you called and, for each, ok or the exact error.\"}} and print the raw result. If resume is refused, describe resume with schema true, retry once with the documented arguments, and print both raw results. 2. Wait for it with mcp__graphtraj__agents wait (timeout_seconds 300), repeating until its execution has ended. 3. Print one line REPLY <its final last_message>. Stop." > $D/host.prompt.txt
   claude_main $PO mcp__graphtraj__ $D/host.prompt.txt
   collect_claude $PO
@@ -232,6 +262,7 @@ C)
   say "[C] Claude Main host (GraphTraj host plugin, .mcp.json with only graphtraj) in $P dispatches one Claude member (claude_member, permission_mode auto). Dialog: none (Ct trusted the folder). At most 25 min."
   venv_check; begin C
   configure_claude $P $V; host_check $P graphtraj || { print "STOP: the host configuration is refused; no claude -p was run"; return 1; }
+  gate $P graphtraj || { print "STOP: plugin gate not passed for $P (above); no claude -p of $STEP was run. Trust it with: zsh $THIS Ct"; return 1; }
   member_prompt claude_member mcp__graphtraj__ DONE-514-C > $D/host.prompt.txt
   claude_main $P mcp__graphtraj__ $D/host.prompt.txt
   collect_claude $P
@@ -245,6 +276,7 @@ X)
   say "[X] a Claude Main in $P dispatches one Codex member (codex_member, gpt-6-luna). Dialog: none. At most 25 min. Judged: the Codex member's records."
   venv_check; begin X
   configure_claude $P $V; host_check $P graphtraj || { print "STOP: the host configuration is refused; no claude -p was run"; return 1; }
+  gate $P graphtraj || { print "STOP: plugin gate not passed for $P (above); no claude -p of $STEP was run. Trust it with: zsh $THIS Ct"; return 1; }
   member_prompt codex_member mcp__graphtraj__ DONE-514-X > $D/host.prompt.txt
   claude_main $P mcp__graphtraj__ $D/host.prompt.txt
   collect_claude $P

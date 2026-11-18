@@ -1,0 +1,89 @@
+# Task 521 rehearsal: F and B from git checkouts (Engineer, 2026-11-18 23:33 JST)
+# Cause fixed: Main's F on the git-archive extraction gave 596 errors from tests/conftest.py:739 (_export_source:
+# git ls-files in a directory that is not a repository). F now clones this repository into $BASE/checkout-product,
+# detached at bf92a981, installs it editable into $BASE/venv-product and runs there; B does the same for 81dde17e.
+# Empty scratch BASE /tmp/claude-501/521-rehG.ySY4Xl/base (VERIFY521_BASE/VERIFY521_OUT only; F/B need no stub host). In this sandbox nohup
+# cannot detach and ps cannot see the background pid (see rehearsal-F.txt); on the host both are used.
+
+## 1. F collect-only through the background path, then R
+## F (VERIFY521_COLLECT=1) from an empty BASE: clone + editable install, then the background run
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-F (outside the Harness)
+
+### test checkout /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product and venv /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product (about 1 min when new)
+checkout /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product: HEAD bf92a9810333cbb96e9445b5b459160942606884 (expected bf92a9810333cbb96e9445b5b459160942606884) | changed or untracked (not ignored) paths: 0 (expected 0)
+graphtraj: /private/tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product/src/graphtraj/__init__.py | inside the checkout: True | graftling: /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL: --collect-only
+command (in /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product): /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product/bin/python -m pytest --collect-only tests -p no:cacheprovider -p no:xdist -q -rfE --junitxml=/tmp/claude-501/521-rehG.ySY4Xl/base/out-F/F-junit.xml --basetemp=/tmp/claude-501/verify-521-F
+detached with: trap HUP (nohup refused here) and &!
+started 2026-11-18 23:32:17 JST pid 95884
+files: /tmp/claude-501/521-rehG.ySY4Xl/base/out-F/F-pytest.txt, F-junit.xml, F.pid, F.start, F.exit (written when pytest ends)
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+rc=0
+## R after the end
+
+### [R] the F result. Dialog: none.
+finished: exit code 0 (started 2026-11-18 23:32:17 JST; 0 min since)
+summary: 3646 tests collected in 4.34s
+failed/errored test ids (junit): 0 -> /tmp/claude-501/521-rehG.ySY4Xl/base/out-F/F-failed.txt
+no failures: no new failures (B not needed)
+rc=0
+
+## 2. a test through conftest's git ls-files (tests/conftest.py:739), from the product checkout
+## one test through conftest _export_source (git ls-files, tests/conftest.py:739), from the checkout
+command (in /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product): /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product/bin/python -m pytest -p no:cacheprovider -p no:xdist -q -rfE --basetemp=/tmp/claude-501/verify-521-G tests/test_wheel_installation.py::test_built_wheel_carries_only_the_commands_and_runtime_policy
+.                                                                        [100%]
+1 passed in 1.44s
+rc=0
+checkout still clean: 0 changed/untracked paths
+
+## 3. B install path and comparison (synthetic F-failed.txt with 2 real ids)
+## B on a synthetic F-failed.txt (2 real ids: the git-dependent wheel test, a test new in 521)
+
+### [B] the F failures rerun on the baseline 81dde17ec099e8bb7d70f25eb2f320f61cc41ffb, single process. Dialog: none. Install about 1 min; then only those tests.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-B (outside the Harness)
+
+### baseline checkout /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-baseline and venv /tmp/claude-501/521-rehG.ySY4Xl/base/venv-baseline: 81dde17ec099e8bb7d70f25eb2f320f61cc41ffb cloned and installed editable from there
+checkout /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-baseline: HEAD 81dde17ec099e8bb7d70f25eb2f320f61cc41ffb (expected 81dde17ec099e8bb7d70f25eb2f320f61cc41ffb) | changed or untracked (not ignored) paths: 0 (expected 0)
+graphtraj: /private/tmp/claude-501/521-rehG.ySY4Xl/base/checkout-baseline/src/graphtraj/__init__.py | inside the checkout: True | graftling: /tmp/claude-501/521-rehG.ySY4Xl/base/venv-baseline/lib/python3.13/site-packages/graftling/__init__.py
+candidate failures: 2; present on the baseline: 1
+baseline run: 1 passed in 1.37s (log /tmp/claude-501/521-rehG.ySY4Xl/base/out-B/B-pytest.txt)
+
+### per test: candidate / baseline
+tests/test_wheel_installation.py::test_built_wheel_carries_only_the_commands_and_runtime_policy: candidate-failed / baseline-passed
+tests/test_result_submission.py::test_read_only_session_submits_its_own_report_as_result: candidate-failed / baseline-absent (not collected on the baseline)
+
+new failures (failed on the candidate, not failing on the baseline): 2
+  NEW tests/test_wheel_installation.py::test_built_wheel_carries_only_the_commands_and_runtime_policy
+  NEW tests/test_result_submission.py::test_read_only_session_submits_its_own_report_as_result
+FAIL
+rc=1
+
+## 4. F rerun over existing F results (Main's case): moved aside, checkout reused
+## F rerun (collect-only) over the existing F results; checkout and venv reused
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-F (outside the Harness)
+earlier F results moved to /tmp/claude-501/521-rehG.ySY4Xl/base/out-F/F-earlier-20261118T233250
+
+### test checkout /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product and venv /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product (about 1 min when new)
+checkout /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product and venv /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product already hold bf92a9810333cbb96e9445b5b459160942606884: install skipped (rerun)
+checkout /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product: HEAD bf92a9810333cbb96e9445b5b459160942606884 (expected bf92a9810333cbb96e9445b5b459160942606884) | changed or untracked (not ignored) paths: 0 (expected 0)
+graphtraj: /private/tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product/src/graphtraj/__init__.py | inside the checkout: True | graftling: /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL: --collect-only
+command (in /tmp/claude-501/521-rehG.ySY4Xl/base/checkout-product): /tmp/claude-501/521-rehG.ySY4Xl/base/venv-product/bin/python -m pytest --collect-only tests -p no:cacheprovider -p no:xdist -q -rfE --junitxml=/tmp/claude-501/521-rehG.ySY4Xl/base/out-F/F-junit.xml --basetemp=/tmp/claude-501/verify-521-F
+detached with: trap HUP (nohup refused here) and &!
+started 2026-11-18 23:32:50 JST pid 96645
+files: /tmp/claude-501/521-rehG.ySY4Xl/base/out-F/F-pytest.txt, F-junit.xml, F.pid, F.start, F.exit (written when pytest ends)
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+rc=0
+finished: exit code 0 (started 2026-11-18 23:32:50 JST; 0 min since)
+summary: 3646 tests collected in 0.62s
+failed/errored test ids (junit): 0 -> /tmp/claude-501/521-rehG.ySY4Xl/base/out-F/F-failed.txt
+no failures: no new failures (B not needed)

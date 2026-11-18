@@ -8,10 +8,10 @@
 #   A  one read-only investigator (claude, Sonnet, worktree_access read) on Task 1: submit_report investigation.md,
 #      then submit_result with result_refs [.state/teams/1/rounds/1/investigation.md]; observed from the records
 #   D  Main's decide-result accepts that submission (CLI in the project, as verify-490 decide)
-#   F  [rerun]  full suite of PRODUCT (bf92a981, installed by P) from $BASE/candidate, single process, nohup in the
-#      background: $OUT/F-pytest.txt, F-junit.xml, F.pid, F.start, F.exit (exit code, written when pytest ends)
+#   F  [rerun]  full suite of PRODUCT (bf92a981) from a git checkout $BASE/checkout-product installed editable into
+#      $BASE/venv-product (conftest needs a repository: git ls-files), single process, nohup in the background: $OUT/F-pytest.txt, F-junit.xml, F.pid, F.start, F.exit (exit code, written when pytest ends)
 #   R  the F result: running (elapsed, last log line) or finished (summary, exit code, failed ids from junit)
-#   B  only F's failed ids rerun on the baseline 81dde17e (archived, own venv): new failures -> PASS (none new) or FAIL
+#   B  only F's failed ids rerun on the baseline 81dde17e (git checkout, own venv): new failures -> PASS (none new) or FAIL
 # Patterns from scripts/verify-490 (venv, isolated project, launch, decide). The steps never signal a process they
 # did not start. pytest temp: ${TMPDIR:-/tmp}, refused if inside the Harness. Outputs: $OUT/<step>.txt via tee.
 set -u
@@ -139,7 +139,34 @@ step_D() {
 # Full suite of the product commit (F/R/B). PRODUCT is the commit Main's P/A/D passed on; BASELINE is the branch base.
 PRODUCT=bf92a9810333cbb96e9445b5b459160942606884
 BASELINE=81dde17ec099e8bb7d70f25eb2f320f61cc41ffb
-VB=$BASE/venv-baseline
+CP=$BASE/checkout-product VP=$BASE/venv-product      # F: a git checkout of PRODUCT, installed editable
+CB=$BASE/checkout-baseline VB=$BASE/venv-baseline     # B: the same for BASELINE
+XPY=$VP/bin/python                                    # the helper's interpreter for R and B
+# install_checkout <commit> <checkout> <venv>: a clean git checkout (clone of this repository, detached at <commit>)
+# installed editable into <venv>, as the earlier full-suite steps (514, 502, 523) run. Reused when both already match.
+install_checkout() {
+  local commit=$1 tree=$2 venv=$3
+  if [[ $(cat $venv/.candidate 2>/dev/null) == $commit && $(git -C $tree rev-parse HEAD 2>/dev/null) == $commit ]]; then
+    print "checkout $tree and venv $venv already hold $commit: install skipped (rerun)"
+  else
+    rm -rf $tree $venv
+    git clone -q --no-hardlinks --no-checkout $SRC $tree && git -C $tree checkout -q --detach $commit || return 1
+    link_deps
+    $(base_python) -m venv --system-site-packages $venv || return 1
+    local site=$($venv/bin/python -I -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+    for x in $DEPS/*(N); do [[ -e $site/${x:t} ]] || ln -s ${x:A} $site/${x:t}; done
+    clean $venv/bin/python -m pip install -q --no-deps --no-build-isolation --no-index -e $tree 2>&1 | grep -vi cache
+    print -r -- $commit > $venv/.candidate
+  fi
+  local head=$(git -C $tree rev-parse HEAD) dirty=$(git -C $tree status --porcelain --untracked-files=all | wc -l | tr -d ' ')
+  print "checkout $tree: HEAD $head (expected $commit) | changed or untracked (not ignored) paths: $dirty (expected 0)"
+  [[ $head == $commit && $dirty == 0 ]] || { print "STOP: the checkout is not a clean $commit"; return 1; }
+  (cd $TMPB && clean $venv/bin/python -I -c 'import sys, graphtraj, graftling
+from pathlib import Path
+ok = Path(graphtraj.__file__).resolve().is_relative_to(Path(sys.argv[1]).resolve())
+print("graphtraj:", graphtraj.__file__, "| inside the checkout:", ok, "| graftling:", graftling.__file__)
+sys.exit(0 if ok else 1)' $tree) || { print "STOP: $venv does not import graphtraj from $tree"; return 1; }
+}
 # VERIFY521_COLLECT=1 (rehearsal only) runs pytest --collect-only through the same background and exit-file path.
 PYTEST_ARGS=(-p no:cacheprovider -p no:xdist -q -rfE)
 # F counts as running while F.exit is absent and its pid is visible, or (a sandbox hides other processes from ps)
@@ -157,9 +184,6 @@ step_F() {
   say "[F] full suite of $PRODUCT in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min."
   check_tmp || return 1
   print "pytest temp: TMPDIR=${TMPB:A}, --basetemp ${TMPB:A}/verify-521-F (outside the Harness)"
-  [[ $(cat $V/.candidate 2>/dev/null) == $PRODUCT ]] || {
-    print "STOP: $V holds $(cat $V/.candidate 2>/dev/null || print nothing), not $PRODUCT. Install it with:"
-    print -r -- "  VERIFY521_CANDIDATE=$PRODUCT zsh $THIS P"; return 1; }
   if running_f; then print "STOP: an earlier F is still running (pid $(<$OUT/F.pid)); read it with: zsh $THIS R"; return 1; fi
   if [[ -e $OUT/F.pid || -e $OUT/F.exit || -e $OUT/F-pytest.txt ]]; then
     if [[ $mode != rerun ]]; then
@@ -167,12 +191,15 @@ step_F() {
       print "      or start again, moving them aside: zsh $THIS F rerun"; return 1
     fi
     local aside=$OUT/F-earlier-$(date +%Y%m%dT%H%M%S); mkdir -p $aside
-    mv $OUT/F.pid $OUT/F.exit $OUT/F.start $OUT/F-pytest.txt $OUT/F-junit.xml $aside/ 2>/dev/null; print "earlier F results moved to $aside"
+    mv $OUT/F.pid $OUT/F.exit $OUT/F.start $OUT/F-pytest.txt $OUT/F-junit.xml $OUT/F-failed.txt $aside/ 2>/dev/null
+    print "earlier F results moved to $aside"
   fi
+  say "test checkout $CP and venv $VP (about 1 min when new)"
+  install_checkout $PRODUCT $CP $VP || return 1
   local args=(tests $PYTEST_ARGS --junitxml=$OUT/F-junit.xml --basetemp=$TMPB/verify-521-F)
   [[ -n ${VERIFY521_COLLECT:-} ]] && { args=(--collect-only $args); print "REHEARSAL: --collect-only"; }
   print -r -- "$(date +%s) $(date '+%Y-%m-%d %H:%M:%S %Z')" > $OUT/F.start
-  print -r -- "command (in $BASE/candidate): $PY -m pytest ${args[*]}"
+  print -r -- "command (in $CP): $VP/bin/python -m pytest ${args[*]}"
   # The wrapper records its own pid, ignores HUP, runs pytest as its child, then writes F.exit atomically.
   # nohup is used where it works (a host terminal); a sandbox refuses its detach, so the trap alone then holds.
   local hup=(nohup)
@@ -180,7 +207,7 @@ step_F() {
   print "detached with: ${${hup:+nohup + trap HUP}:-trap HUP (nohup refused here)} and &!"
   clean $hup /bin/zsh -fc 'trap "" HUP; print $$ > $3.pid; cd $1 || { print 127 > $3.exit; exit 1 }
     log=$2 p=$3; shift 3; "$@" > $log 2>&1; print $? > $p.exit.tmp && mv $p.exit.tmp $p.exit' \
-    F-run $BASE/candidate $OUT/F-pytest.txt $OUT/F $PY -m pytest $args < /dev/null > /dev/null 2>&1 &!
+    F-run $CP $OUT/F-pytest.txt $OUT/F $VP/bin/python -m pytest $args < /dev/null > /dev/null 2>&1 &!
   local i=0; while [[ ! -f $OUT/F.pid ]] && (( i++ < 10 )); do sleep 0.5; done
   [[ -f $OUT/F.pid ]] || { rm -f $OUT/F.start; print "STOP: the background run did not start (no $OUT/F.pid within 5 s)"; return 1; }
   print "started $(cut -d' ' -f2- $OUT/F.start) pid $(<$OUT/F.pid)"
@@ -205,7 +232,7 @@ step_R() {
   print "finished: exit code $rc (started $(cut -d' ' -f2- $OUT/F.start); $(( elapsed / 60 )) min since)"
   print -r -- "summary: $(grep -E '(passed|failed|error|no tests ran|collected|tests? collected)' $OUT/F-pytest.txt | tail -1)"
   [[ -f $OUT/F-junit.xml ]] || { print "STOP: no $OUT/F-junit.xml"; return 1; }
-  $PY -I $SD/x521.py failed-ids $OUT/F-junit.xml $BASE/candidate > $OUT/F-failed.txt
+  $XPY -I $SD/x521.py failed-ids $OUT/F-junit.xml $CP > $OUT/F-failed.txt
   print "failed/errored test ids (junit): $(wc -l < $OUT/F-failed.txt | tr -d ' ') -> $OUT/F-failed.txt"
   sed 's/^/  /' $OUT/F-failed.txt
   if [[ -s $OUT/F-failed.txt ]]; then next "zsh $THIS B 2>&1 | tee $OUT/B.txt"
@@ -218,22 +245,22 @@ step_B() {
   check_tmp || return 1
   print "pytest temp: TMPDIR=${TMPB:A}, --basetemp ${TMPB:A}/verify-521-B (outside the Harness)"
   [[ -s $OUT/F-failed.txt ]] || { print "STOP: no failed ids in $OUT/F-failed.txt; run: zsh $THIS R"; return 1; }
-  say "baseline venv $VB: $BASELINE archived to $BASE/baseline and installed editable from there"
-  install_commit $BASELINE $BASE/baseline $VB || return 1
+  say "baseline checkout $CB and venv $VB: $BASELINE cloned and installed editable from there"
+  install_checkout $BASELINE $CB $VB || return 1
   # Collect the failed files on the baseline: an id absent there would stop pytest (not found), so only present ids run.
   local files=(${(u)${(f)"$(cut -d: -f1 $OUT/F-failed.txt)"}})
-  (cd $BASE/baseline && local present=(${^files}(N)) && (( $#present )) && clean $VB/bin/python -m pytest --collect-only -q \
+  (cd $CB && local present=(${^files}(N)) && (( $#present )) && clean $VB/bin/python -m pytest --collect-only -q \
      -p no:cacheprovider -p no:xdist $present 2>/dev/null) | grep '::' > $OUT/B-collected.txt
   local ids=(${(f)"$(grep -Fxf $OUT/B-collected.txt $OUT/F-failed.txt)"})
   print "candidate failures: $(wc -l < $OUT/F-failed.txt | tr -d ' '); present on the baseline: ${#ids}"
   rm -f $OUT/B-junit.xml
   if (( ${#ids} )); then
-    (cd $BASE/baseline && clean $VB/bin/python -m pytest $PYTEST_ARGS --junitxml=$OUT/B-junit.xml \
+    (cd $CB && clean $VB/bin/python -m pytest $PYTEST_ARGS --junitxml=$OUT/B-junit.xml \
        --basetemp=$TMPB/verify-521-B $ids > $OUT/B-pytest.txt 2>&1)
     print -r -- "baseline run: $(grep -E '(passed|failed|error)' $OUT/B-pytest.txt | tail -1) (log $OUT/B-pytest.txt)"
   fi
   say "per test: candidate / baseline"
-  $PY -I $SD/x521.py compare $OUT/F-failed.txt $OUT/B-junit.xml $OUT/B-collected.txt $BASE/baseline
+  $XPY -I $SD/x521.py compare $OUT/F-failed.txt $OUT/B-junit.xml $OUT/B-collected.txt $CB
 }
 
 case $STEP in

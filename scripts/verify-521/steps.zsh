@@ -63,7 +63,7 @@ install_commit() {
   clean $venv/bin/python -m pip install -q --no-deps --no-build-isolation --no-index -e $tree 2>&1 | grep -vi cache
   print -r -- $commit > $venv/.candidate
 }
-investigator() { ls$P/.graphtraj/runner/sessions 2>/dev/null | grep "^1-" | grep -m1 "investigator"; }
+investigator() { ls $P/.graphtraj/runner/sessions 2>/dev/null | grep "^1-" | grep -m1 "investigator"; }
 
 step_P() {
   say "[P] preflight via /bin/zsh. Dialog: none. Waits: install <= 2 min, claude <= 120 s."

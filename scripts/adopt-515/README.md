@@ -62,9 +62,12 @@ merge the Harness `.mcp.json`). Each step prints who runs it, its dialog, how to
   restart). Note: `configuration --write` merges GraphTraj's two `env` keys into settings.local.json; their values are
   the same `.venv-runtime` paths, so I expects unchanged bytes and prints `CHANGED` (information for Main) otherwise.
 - M/Mp: paste-ready prompt naming the new tools; Mp is one bounded `claude -p` probe in the Harness (no tool call).
-- Rs/Rsr (new): Rs finds the Leader alias (`graphtraj task members`), records the byte size of both Sessions' record
-  files (graftling archive and Claude transcript), and prints Main's fixed resume message; Rsr reads only what was
-  appended after Rs (`rec515.py calls --since`).
+- Rs/Rsr (new): Rs finds the Leader alias (`graphtraj task members`), records the split time `Rs.epoch`, and prints
+  Main's fixed resume message; Rsr judges only calls whose own record time (transcript `timestamp`, archive `time`)
+  is after it (`rec515.py calls --after`; 517 replaced 515's byte offsets, which counted pre-install turns). An old-name
+  call with no record time FAILs.
+- Checks judge only GraphTraj's/graftling's own MCP entries (`rec515.py init`); other connectors are listed.
+  nr499 recognises the agents tool under any registered server name (`mcp__<server>__agents`).
 - Nr: `rec515.py calls` on the member's raw records. It judges a call by the result's own `is_error`, not by text in
   successful content (514's check514.py misjudged real success records that way). P/Pr (Pi/DSH) are dropped: 515's
   definition does not require them, and their checker (pr503.py) had the defects named by the Leader.

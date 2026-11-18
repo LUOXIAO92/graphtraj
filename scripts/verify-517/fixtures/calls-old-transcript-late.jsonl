@@ -1,0 +1,1 @@
+{"type": "assistant", "timestamp": "2026-11-18T05:30:00.000Z", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_01VbL6jGjVWDCryztm81TBad", "name": "mcp__agents__agents", "input": {}}]}}

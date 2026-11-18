@@ -144,7 +144,7 @@ steps Vu > $F/Vu.out 2>&1
 check "Vu names the isolated path, 'Yes, proceed', /exit and graphtraj" sh -c "grep -q \"cd $FB/vproject && claude\" $F/Vu.out && grep -q 'Yes, proceed' $F/Vu.out && grep -q \"MCP server 'graphtraj'\" $F/Vu.out"
 steps Vc > $F/Vc.out 2>&1
 check "Vc setup: isolated .mcp.json has graphtraj only (CHECK PASS) and answer check OK" sh -c "grep -q 'CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS' $RW/Vc.txt && grep -q 'answer check (expect clean): OK' $RW/Vc.txt"
-check "Vc stream init (stub) lists graphtraj only and the new tools" sh -c "grep -q 'CHECK 515 init mcp server graphtraj only: PASS' $RW/Vc.txt && grep -q 'CHECK 515 init no mcp__agents__\* tool: PASS' $RW/Vc.txt"
+check "Vc stream init (stub) lists graphtraj only and the new tools" sh -c "grep -q 'CHECK 515 init mcp server graphtraj connected, no agents/graftling entry beside it: PASS' $RW/Vc.txt && grep -q 'CHECK 515 init no mcp__agents__\* tool: PASS' $RW/Vc.txt"
 check "Vc with the stub does not pass (no real plugin load) and asks for Vu" grep -q 'USER: zsh .*steps.zsh Vu' $F/Vc.out
 touch $RW/Vc.ok   # rehearsal only: the real plugin load is not rehearsable
 
@@ -168,7 +168,7 @@ steps Mp > $F/Mp.out 2>&1; MPR=$?; grep -E 'CHECK|init' $F/Mp.out
 check "Mp exit 0: four init CHECKs PASS (stub reads the Harness .mcp.json), none FAIL" sh -c "[ $MPR -eq 0 ] && [ \$(grep -c 'CHECK 515 init .*: PASS' $RW/Mp.txt) -eq 4 ] && ! grep -q 'FAIL' $RW/Mp.txt"
 print -rl -- '{"type":"system","subtype":"init","mcp_servers":[{"name":"graphtraj","status":"connected"},{"name":"agents","status":"connected"}],"tools":["mcp__graphtraj__agents","mcp__graphtraj__tasks","mcp__agents__agents"],"plugin_warnings":[{"plugin":"graphtraj-claude-host","message":"untrusted"}]}' > $F/init-neg.jsonl
 $CONDA -I $SD/rec515.py init $F/init-neg.jsonl > $F/init-neg.out 2>&1; INR=$?
-check "rec515 init negative: second server, old tool and untrusted warning FAIL" sh -c "[ $INR -ne 0 ] && grep -q 'mcp server graphtraj only: FAIL' $F/init-neg.out && grep -q 'no mcp__agents__\* tool: FAIL' $F/init-neg.out && grep -q 'no untrusted-plugin warning: FAIL' $F/init-neg.out"
+check "rec515 init negative: second server, old tool and untrusted warning FAIL" sh -c "[ $INR -ne 0 ] && grep -q 'no agents/graftling entry beside it: FAIL' $F/init-neg.out && grep -q 'no mcp__agents__\* tool: FAIL' $F/init-neg.out && grep -q 'no untrusted-plugin warning: FAIL' $F/init-neg.out"
 
 head1 "rec515 calls on Claude record shapes (graftling archive events and Claude transcript lines)"
 mkdir -p $F/rec
@@ -181,7 +181,7 @@ print -rl -- '{"header":{"id":"claude:aaaa"}}' \
 $CONDA -I $SD/rec515.py calls pos --need agents,tasks $F/rec/pos.jsonl > $F/rec-pos.out 2>&1; check "rec515 calls positive (ok despite 'not available' in content)" [ $? -eq 0 ]
 print -rl -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t3","name":"mcp__agents__agents","input":{}}]}}' > $F/rec/old.jsonl
 $CONDA -I $SD/rec515.py calls old --need agents $F/rec/pos.jsonl $F/rec/old.jsonl > $F/rec-old.out 2>&1; RO=$?
-check "rec515 calls negative: an old-name call FAILs" sh -c "[ $RO -ne 0 ] && grep -q 'no mcp__agents__\* call: FAIL (1)' $F/rec-old.out"
+check "rec515 calls negative: an old-name call FAILs" sh -c "[ $RO -ne 0 ] && grep -q 'no mcp__agents__\* call: FAIL (1 in the window' $F/rec-old.out"
 print -rl -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t4","name":"mcp__graphtraj__agents","input":{}}]}}' \
   '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t4","is_error":true,"content":"Claude requested permissions to use mcp__graphtraj__agents, but you haven'"'"'t granted it yet."}]}}' > $F/rec/refused.jsonl
 $CONDA -I $SD/rec515.py calls ref --need agents $F/rec/refused.jsonl > $F/rec-ref.out 2>&1; RR=$?
@@ -192,18 +192,19 @@ SESSD=$FH/.graphtraj/swarm/sessions; RUN=$FH/.graphtraj/core/runner/sessions
 LA=515-production_adoption_mcp_server_names-handover0-team_leader@team_leader; EA=515-production_adoption_mcp_server_names-handover0-engineer@engineer
 for a in ${LA}:bbbb ${EA}:cccc; do   # braces: a bare $EA:c would be zsh's :c modifier
   mkdir -p $RUN/${a%%:*} $SESSD/s-${a#*:}; print "session: claude:${a#*:}" > $RUN/${a%%:*}/mapping.yml
-  print -rl -- "{\"header\":{\"id\":\"claude:${a#*:}\"}}" '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"old1","name":"mcp__agents__agents","input":{}}]}}' > $SESSD/s-${a#*:}/session.jsonl
+  print -rl -- "{\"header\":{\"id\":\"claude:${a#*:}\"}}" '{"type":"assistant","timestamp":"2020-01-01T00:00:00Z","message":{"content":[{"type":"tool_use","id":"old1","name":"mcp__agents__agents","input":{}}]}}' > $SESSD/s-${a#*:}/session.jsonl
 done
 print -r -- $LA > $RW/Rs-leader.txt; print -r -- $EA > $RW/Rs-engineer.txt   # task members of the fake venv lists none
 steps Rs > $F/Rs.out 2>&1; RSR=$?
-check "Rs exit 0: leader alias in Main's prompt, sizes of 2 archives recorded" sh -c "[ $RSR -eq 0 ] && grep -q \"send to the retained Session $LA\" $F/Rs.out && grep -q 'recorded sizes of 2 record file' $F/Rs.out && grep -q 'DONE-515-RESUMED' $F/Rs.out"
-print -rl -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"l1","name":"mcp__graphtraj__agents","input":{}}]}}' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"l1","content":"ok"}]}}' >> $SESSD/s-bbbb/session.jsonl
-print -rl -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e1","name":"mcp__graphtraj__agents","input":{}},{"type":"tool_use","id":"e2","name":"mcp__graphtraj__tasks","input":{}}]}}' '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"e1","content":"ok"},{"type":"tool_result","tool_use_id":"e2","content":"ok"}]}}' >> $SESSD/s-cccc/session.jsonl
+check "Rs exit 0: leader alias in Main's prompt, split time Rs.epoch recorded" sh -c "[ $RSR -eq 0 ] && grep -q \"send to the retained Session $LA\" $F/Rs.out && [ -s $RW/Rs.epoch ] && grep -q 'split time recorded' $F/Rs.out && grep -q 'DONE-515-RESUMED' $F/Rs.out"
+# Records after Rs carry a later record time (517: Rsr splits by record time, not by byte offset).
+print -rl -- '{"type":"assistant","timestamp":"2099-01-01T00:00:00Z","message":{"content":[{"type":"tool_use","id":"l1","name":"mcp__graphtraj__agents","input":{}}]}}' '{"type":"user","timestamp":"2099-01-01T00:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"l1","content":"ok"}]}}' >> $SESSD/s-bbbb/session.jsonl
+print -rl -- '{"type":"assistant","timestamp":"2099-01-01T00:00:00Z","message":{"content":[{"type":"tool_use","id":"e1","name":"mcp__graphtraj__agents","input":{}},{"type":"tool_use","id":"e2","name":"mcp__graphtraj__tasks","input":{}}]}}' '{"type":"user","timestamp":"2099-01-01T00:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"e1","content":"ok"},{"type":"tool_result","tool_use_id":"e2","content":"ok"}]}}' >> $SESSD/s-cccc/session.jsonl
 steps Rsr > $F/Rsr.out 2>&1; RSRR=$?; grep -E '^CHECK|record files' $F/Rsr.out
 check "Rsr exit 0: new-name calls after Rs ok; the old-name call before Rs is not counted" sh -c "[ $RSRR -eq 0 ] && [ \$(grep -c 'CHECK 515 .*: PASS' $RW/Rsr.txt) -eq 5 ] && ! grep -q 'FAIL' $RW/Rsr.txt"
-print -rl -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e3","name":"mcp__agents__tasks","input":{}}]}}' >> $SESSD/s-cccc/session.jsonl
+print -rl -- '{"type":"assistant","timestamp":"2099-01-01T00:00:02Z","message":{"content":[{"type":"tool_use","id":"e3","name":"mcp__agents__tasks","input":{}}]}}' >> $SESSD/s-cccc/session.jsonl
 steps Rsr > $F/Rsr-neg.out 2>&1; RSN=$?
-check "Rsr negative: an old-name call after Rs FAILs" sh -c "[ $RSN -ne 0 ] && grep -q 'engineer .*no mcp__agents__\* call: FAIL (1)' $F/Rsr-neg.out"
+check "Rsr negative: an old-name call after Rs FAILs" sh -c "[ $RSN -ne 0 ] && grep -q 'engineer .*no mcp__agents__\* call after the split: FAIL (1 in the window' $F/Rsr-neg.out"
 
 head1 "468 window report (fixture samples; not blocking)"
 T0=$(date +%s); mkdir -p $F/cpu

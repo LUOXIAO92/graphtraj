@@ -908,8 +908,8 @@ S) print "[S] Main. 全套测试不运行（复用 514 的结果）。对话框:
   next "USER: zsh $THIS Vu    （之后 Main: zsh $THIS Vc）" ;;
 
 # Rs (Main, after M/Mps/inbox): the standby Leader of this Task, created under the old server name, is resumed with a
-# fixed message; the Leader then resumes the Engineer with a fixed probe. Rs records the byte size of every archive of
-# both Sessions (Rsr reads only what comes after) and prints Main's paste-ready message with the Leader's alias.
+# fixed message; the Leader then resumes the Engineer with a fixed probe. Rs records the split time Rs.epoch (Rsr judges
+# only calls whose own record time is after it; 517) and prints Main's paste-ready message with the Leader's alias.
 Rs) cv; print "[Rs] Main，M、Mps、inbox 之后。已保留的待命 Session（本 Task 的 Leader 与 Engineer，用旧名字创建）恢复。对话框: 无。< 1 分钟。"
   (cd $H && clean $RT/bin/graphtraj task members) > $R/Rs-members.txt 2>&1
   LEADER=$(grep -oE "${TASK_ID}-[A-Za-z0-9_.-]*team_leader[A-Za-z0-9_@.-]*" $R/Rs-members.txt | head -1)
@@ -921,8 +921,8 @@ Rs) cv; print "[Rs] Main，M、Mps、inbox 之后。已保留的待命 Session�
   [[ -z $ENGINEER && -s $R/Rs-engineer.txt ]] && ENGINEER=$(<$R/Rs-engineer.txt)
   [[ -n $ENGINEER ]] || print "engineer alias not found: Main writes it (from mcp__graphtraj__agents status, task_id $TASK_ID, role engineer) to $R/Rs-engineer.txt before Rsr"
   rs_archives > $R/Rs-archives.txt; print "archives of both Sessions:"; cat $R/Rs-archives.txt
-  $CONDA -I $SD/rec515.py sizes $R/Rs-sizes.txt ${(f)"$(<$R/Rs-archives.txt)"} | tee -a $R/Rs.txt
   date +%s > $R/Rs.epoch
+  print "split time recorded (Rsr judges calls after it): $(<$R/Rs.epoch) = $(date -u -r $(<$R/Rs.epoch) +%Y-%m-%dT%H:%M:%SZ)" | tee -a $R/Rs.txt
   cat <<EOF2 | tee $R/Rs-prompt.txt
 
 [Rs] Main 粘贴（恢复 Leader $LEADER；不 wait，不等回复）:
@@ -932,14 +932,14 @@ Using only mcp__graphtraj__agents: send to the retained Session $LEADER (agent a
 EOF2
   next "（Leader 报告之后）zsh $THIS Rsr" ;;
 
-Rsr) cv; print "[Rsr] Main，Leader 报告 DONE-515-RESUMED 之后。只读两个恢复后的 Session 的原始记录（只看 Rs 之后新增的部分）。对话框: 无。< 30 秒。"
-  [[ -s $R/Rs-sizes.txt ]] || { print "没有 $R/Rs-sizes.txt：先运行 Rs。"; exit 1; }
+Rsr) cv; print "[Rsr] Main，Leader 报告 DONE-515-RESUMED 之后。只读两个恢复后的 Session 的原始记录（只判定记录时间在 Rs 之后的调用；没有时间的旧名字调用算 FAIL）。对话框: 无。< 30 秒。"
+  [[ -s $R/Rs.epoch ]] || { print "没有 $R/Rs.epoch：先运行 Rs。"; exit 1; }
   rs_archives > $R/Rsr-archives.txt; rc=0
   for who in leader engineer; do
     a=$(cat $R/Rs-$who.txt 2>/dev/null); [[ -n $a ]] || { print "CHECK 515 Rs $who: NOT OBSERVED (no alias recorded by Rs)" | tee -a $R/Rsr.txt; rc=1; continue; }
     fs=(${(f)"$(rs_session_files $a)"})
     print "$who $a record files: ${#fs}" | tee -a $R/Rsr.txt
-    $CONDA -I $SD/rec515.py calls "$who $a" --since $R/Rs-sizes.txt --need $([[ $who == engineer ]] && print agents,tasks || print agents) ${(u)fs} 2>&1 | tee -a $R/Rsr.txt
+    $CONDA -I $SD/rec515.py calls "$who $a" --after $(<$R/Rs.epoch) --need $([[ $who == engineer ]] && print agents,tasks || print agents) ${(u)fs} 2>&1 | tee -a $R/Rsr.txt
     (( ${pipestatus[1]} == 0 )) || rc=1
   done
   summary Rsr "$(grep -E '^(CHECK|\[)' $R/Rsr.txt)"

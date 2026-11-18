@@ -1,0 +1,260 @@
+
+======== empty base: /tmp/claude-501/adopt515-rehearsal removed; zsh -n of every zsh file
+REHEARSAL PASS: zsh -n rehearse.zsh
+REHEARSAL PASS: zsh -n steps.zsh
+REHEARSAL PASS: base /tmp/claude-501/adopt515-rehearsal/project/tmp/515 absent before 00
+
+======== setup: fake production = graphtraj 6115c72491a238cc672d88ec539cda800e4c3651 + graftling v0.5.2 (real repository, git archive), plugin, configuration
+graftling-0.5.2-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+Create dev from eace412daa40d969b7146696288d0f9b8174961e? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+fake production .mcp.json servers: ['agents']
+
+======== 00 (Main found through claude --continue; production markers absent; .mcp.json 'agents' listed; settings shown)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+.mcp.json servers: ['agents'] | servers running graphtraj/graftling: ['agents']
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: FAIL
+enabledMcpjsonServers: ['graphtraj', 'agents'] | enableAllProjectMcpServers: True | mcp__ permission rules: none | env names: ['GRAFTLING_CLAUDE_HOST_CONFIG', 'GRAFTLING_CLAUDE_HOST_PYTHON']
+markers expected absent: PASS (7/7)
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt515-rehearsal/project/tmp/515/main.session)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+.mcp.json servers: ['agents'] | servers running graphtraj/graftling: ['agents']
+enabledMcpjsonServers: ['graphtraj', 'agents'] | enableAllProjectMcpServers: True | mcp__ permission rules: none | env names: ['GRAFTLING_CLAUDE_HOST_CONFIG', 'GRAFTLING_CLAUDE_HOST_PYTHON']
+markers expected absent: PASS (7/7)
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt515-rehearsal/project/tmp/515/main.session)
+REHEARSAL PASS: 00 exit 0, MAIN found
+REHEARSAL PASS: 00: 515 markers absent in production (7/7)
+REHEARSAL PASS: 00: .mcp.json shows the old 'agents' server (information) and the settings view
+REHEARSAL PASS: 00: isolated vproject OK and answer check OK
+REHEARSAL PASS: 00 next is B with the real path
+
+======== B (graftling from git archive v0.6.0 of the real repository; graphtraj from git archive 4ad22e9065cf38bc3c976eed184d29b1a299413a)
+REHEARSAL PASS: B exit 0
+v0.6.0 peels to a51e1004a0fe77fe492681faa2f278d80b3d725e…: yes
+graphtraj archive carries no src/graftling: yes
+37807db052632b699e78ee559055349aba1be6081a85b653872b62d547f19669  graftling-0.6.0-py3-none-any.whl
+93b7d7bcd9d96666f4fdba9ce3addbef74f3a7c8d182878811646c9f37de45e2  graphtraj-0.1.0-py3-none-any.whl
+graftling wheel version: 0.6.0
+graphtraj Requires-Dist: graftling<0.7,>=0.6.0
+graphtraj wheel carries graftling/: 0 files (expect 0)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+v0.6.0 peels to a51e1004a0fe77fe492681faa2f278d80b3d725e…: yes
+graphtraj archive carries no src/graftling: yes
+37807db052632b699e78ee559055349aba1be6081a85b653872b62d547f19669  graftling-0.6.0-py3-none-any.whl
+93b7d7bcd9d96666f4fdba9ce3addbef74f3a7c8d182878811646c9f37de45e2  graphtraj-0.1.0-py3-none-any.whl
+graftling wheel version: 0.6.0
+graphtraj Requires-Dist: graftling<0.7,>=0.6.0
+graphtraj wheel carries graftling/: 0 files (expect 0)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+成功: 'v0.6.0 peels to a51e1004a0fe77fe492681faa2f278d80b3d725e…: yes'（并打印完整 sha 与 main 是否指向它）；graphtraj-0.1.0 与 graftling-0.6.0 各一个 wheel 及 sha256；'graftling wheel version: 0.6.0'；'graphtraj Requires-Dist: graftling<0.7,>=0.6.0'；graphtraj wheel carries graftling/: 0；leaked: 0。
+REHEARSAL PASS: B: v0.6.0 peels to a51e1004…, graftling 0.6.0, Requires-Dist graftling<0.7,>=0.6.0, carries 0, leaked 0
+REHEARSAL PASS: B negative: a tag that does not peel to the expected commit STOPs
+
+======== V (stub plugin validate): plugin change limited to SERVER/PREFIX; wheel = archive; CODE listed; markers both ways
+REHEARSAL PASS: V exit 0
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+plugin bytes change (5 diff lines; lines other than const SERVER/PREFIX and "version": 2). Expected (514): one hooks trust dialog may appear at resume.
+CHECK 515 candidate host_context.mjs const SERVER = "graphtraj": PASS
+515 graftling CODE files 0.5.2 -> 0.6.0 (expected; information): 10
+graftling wheel vs /tmp/claude-501/adopt515-rehearsal/project/.graphtraj/core/state/tasks/515-production-adoption-mcp-server-names/adoption/gsrc-0.6.0/src/graftling (git archive): 95 files, differing 0: SAME
+markers expected present: PASS (7/7)
+markers expected absent: PASS (7/7)
+CHECK 503 layout python is the venv: PASS (/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90 vs /private/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.0', '/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling-0.6.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///tmp/claude-501/adopt515-rehearsal/project/.graphtraj/core/state/tasks/515-production-adoption-mcp-server-names/adoption/wheels-4ad22e90/graftling-0.6.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling/__init__.py version 0.6.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+503 layout: PASS (0 failed)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling/: PASS
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+plugin bytes change (5 diff lines; lines other than const SERVER/PREFIX and "version": 2). Expected (514): one hooks trust dialog may appear at resume.
+CHECK 515 candidate host_context.mjs const SERVER = "graphtraj": PASS
+515 graftling CODE files 0.5.2 -> 0.6.0 (expected; information): 10
+graftling wheel vs /tmp/claude-501/adopt515-rehearsal/project/.graphtraj/core/state/tasks/515-production-adoption-mcp-server-names/adoption/gsrc-0.6.0/src/graftling (git archive): 95 files, differing 0: SAME
+markers expected present: PASS (7/7)
+markers expected absent: PASS (7/7)
+CHECK 503 layout python is the venv: PASS (/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90 vs /private/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.0', '/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling-0.6.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///tmp/claude-501/adopt515-rehearsal/project/.graphtraj/core/state/tasks/515-production-adoption-mcp-server-names/adoption/wheels-4ad22e90/graftling-0.6.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling/__init__.py version 0.6.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /tmp/claude-501/adopt515-rehearsal/project/tmp/515/vvenv-4ad22e90/lib/python3.13/site-packages/graftling/: PASS
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+成功: 'CHANGED hooks/host_context.mjs'（514 预期：const SERVER/PREFIX 行；'lines other than const SERVER/PREFIX and "version": 0'）；'CHECK 515 candidate host_context.mjs const SERVER = "graphtraj": PASS'；'graftling wheel vs …: … differing 0: SAME'（CODE 行是 0.5.2→0.6.0 的预期变化，只列出）；
+  'markers expected present: PASS (7/7)' 与 'markers expected absent: PASS (7/7)'；'503 layout: PASS' 与两行 'CHECK 503 node resolves … : PASS'（scratch venv）；候选 ✘ 不多于 baseline；无 STOP；入口文件预测列出 .mcp.json 的 graphtraj 条目（预测是合并，不含 configuration --write 对 agents 的删除；I 用真正的 --write 并核对）；read_session failures=0。
+  'graftling wheel vs … STOP'：把 /tmp/claude-501/adopt515-rehearsal/project/.graphtraj/core/state/tasks/515-production-adoption-mcp-server-names/adoption/raw-4ad22e90/V-graftcode.txt 交给 Leader，不要做 I。
+REHEARSAL PASS: V: host_context.mjs CHANGED, only const SERVER/PREFIX (and version) lines
+REHEARSAL PASS: V: candidate SERVER graphtraj PASS
+REHEARSAL PASS: V: graftling wheel = git archive v0.6.0 (differing 0: SAME); CODE files 0.5.2 -> 0.6.0 listed, not a STOP
+REHEARSAL PASS: V: markers present in the candidate and absent in production (7/7)
+REHEARSAL PASS: V: one graftling and node resolution in the scratch venv
+REHEARSAL PASS: V wrote nothing to production entry files
+REHEARSAL PASS: V next is S
+
+======== graftcode negative: a wheel file that differs from the archive STOPs
+REHEARSAL PASS: graftcode negative: exit 1, WHEEL-DIFFERS control.py, STOP
+
+======== markers negatives
+REHEARSAL PASS: markers 'present' on production fails
+REHEARSAL PASS: markers 'absent' on the candidate fails
+
+======== S: reused suite evidence; no src change 142bdd8e..4ad22e9065cf38bc3c976eed184d29b1a299413a
+REHEARSAL PASS: S exit 0
+reused evidence (514 teams/1/rounds/1/leader-2.md): F at 142bdd8e: 3587 passed (full suite, TMPDIR=${TMPDIR:-/tmp}, single process ~73 min); V at 4ad22e90: the 3 stale tests fixed in 4ad22e90 + the review-row test: 4 passed.
+pytest: none run by this step (no TMPDIR needed).
+CHECK 515 no src change between 514's F commit and the adopted commit: PASS
+REHEARSAL PASS: S: no src change PASS, 3587 passed and 4 passed printed, no pytest run
+
+======== Vu / Vc (stub claude: plugin not loaded, so Vc asks for Vu; its setup must show only graphtraj in the isolated .mcp.json)
+REHEARSAL PASS: Vu names the isolated path, 'Yes, proceed', /exit and graphtraj
+REHEARSAL PASS: Vc setup: isolated .mcp.json has graphtraj only (CHECK PASS) and answer check OK
+REHEARSAL PASS: Vc stream init (stub) lists graphtraj only and the new tools
+REHEARSAL PASS: Vc with the stub does not pass (no real plugin load) and asks for Vu
+
+======== I (USER): guard idle, backup, install, configuration --write, 515 CHECKs, settings not written, restart text
+REHEARSAL PASS: I exit 0
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.2
+Successfully installed graftling-0.6.0 graphtraj-0.1.0
+PASS 252 FAIL 0
+markers expected present: PASS (7/7)
+configuration --write rc=0 (output lines:        8; kept in /tmp/claude-501/adopt515-rehearsal/project/.graphtraj/core/state/tasks/515-production-adoption-mcp-server-names/adoption/raw-4ad22e90/I-configuration.txt)
+SAME-AS-VALIDATED
+plugin bytes CHANGED from before the install (expected: const SERVER = "graphtraj"): one hooks trust dialog may appear at resume
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+CHECK 515 host_context.mjs const SERVER = "graphtraj": PASS
+CHECK 515 settings.local.json bytes unchanged by configuration --write: PASS
+enabledMcpjsonServers: ['graphtraj', 'agents'] | enableAllProjectMcpServers: True | mcp__ permission rules: none | env names: ['GRAFTLING_CLAUDE_HOST_CONFIG', 'GRAFTLING_CLAUDE_HOST_PYTHON']
+changed: .mcp.json (before -> after, secret-like values hidden)
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.5.2
+Successfully installed graftling-0.6.0 graphtraj-0.1.0
+PASS 252 FAIL 0
+markers expected present: PASS (7/7)
+SAME-AS-VALIDATED
+plugin bytes CHANGED from before the install (expected: const SERVER = "graphtraj"): one hooks trust dialog may appear at resume
+CHECK 515 settings.local.json bytes unchanged by configuration --write: PASS
+changed: .mcp.json (before -> after, secret-like values hidden)
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+成功: Successfully installed graftling-0.6.0 graphtraj-0.1.0（pip 卸载 graftling-0.5.0）；PASS n FAIL 0（含 LEFTOVER-DIST-INFO 0）；三个 -rw------- 备份入口文件；'markers expected present: PASS (7/7)'；'395 layout graftling 0.5.2 | distributions 1 | beside graphtraj: True | graftling.mjs: True | graphtraj requires [...>=0.5.2...]'；'503 layout: PASS (0 failed)'（六行 CHECK 503 layout）；两行 'CHECK 503 node resolves … : PASS'；'control records snapshot I.json'；464 的两行 import（457…463 仍在）、478 的三行 '466 session_read DEFAULT_COUNT 5 …'、'468 archive _identity …'、'477 take_push …'、492 的四行（481/484、486、485/480、487）与 497 的三行 '488 _worker_arguments _worker_arguments | _process_ended _process_ended'、'490 _work_ended … | SLICE_SECONDS 5.0 | cleanup uses process_is_zombie: True'、'494 Claude host receiver defers_push: True | hold thread started in the lock: True' 与 '495 argv refreshed each sample: True'；
+  '465 Claude member settings call project_history_files: False | Codex development reads history param: True' 与 '469 UnknownTask _load_task_state _RegisteredTaskNames'；SAME-AS-VALIDATED；计时器列表三次（备份前、pip 前、安装后；安装后的一次按 old/new 分类），只报告不发信号；
+  'CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS'；'CHECK 515 host_context.mjs const SERVER = "graphtraj": PASS'；'plugin bytes CHANGED … (expected …)'；'CHECK 515 settings.local.json bytes unchanged …: PASS'（若 CHANGED：信息，交 Main；值不打印）；入口文件 changed: .mcp.json（agents → graphtraj）。
+Main 拥有的 .claude/settings.local.json（本步不写）: 重启之后由 Main 自己修改，从 enabledMcpjsonServers 里去掉 "agents":
+  现在: enabledMcpjsonServers: ['graphtraj', 'agents'] 
+  改为: enabledMcpjsonServers 只保留 ["graphtraj"]（其它键不动；enableAllProjectMcpServers 不动）。
+  MCP 服务器框: 预期没有（"graphtraj" 已在 enabledMcpjsonServers 里，且 enableAllProjectMcpServers 为 true）；若问 "graphtraj"，选批准；若问 "agents"，选拒绝并告诉 Main。其它任何框: Esc 并告诉 Main 标题。
+REHEARSAL PASS: I: installed graftling 0.6.0, proddiff PASS, markers present 7/7
+REHEARSAL PASS: I: configuration --write rc=0, .mcp.json CHECK PASS, SERVER CHECK PASS, SAME-AS-VALIDATED
+REHEARSAL PASS: I: .mcp.json now has graphtraj only
+REHEARSAL PASS: I: settings.local.json bytes unchanged (enabledMcpjsonServers still lists agents; Main edits it)
+REHEARSAL PASS: I: backup holds .mcp.json, settings.local.json, plugin, tools; COMPLETE
+REHEARSAL PASS: I: prints Main's settings edit, the restart command and the expected hooks dialog
+
+======== M / Mp (after the restart): prompt names the new tools; probe init must list graphtraj only
+REHEARSAL PASS: M prompt names mcp__graphtraj__agents/tasks and asks about mcp__agents__*
+[Mp] Main，M 之后。Harness 里一次有时限（120 秒）的 claude -p 单行探测，看 init 记录的 MCP 服务器与工具名。对话框: 无。不调用工具。< 2 分钟。
+init mcp_servers: [('graphtraj', 'connected')]
+init mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+init plugin_warnings: [] | records naming "untrusted": 0
+CHECK 515 init mcp server graphtraj only: PASS
+CHECK 515 init tools mcp__graphtraj__agents and mcp__graphtraj__tasks: PASS
+CHECK 515 init no mcp__agents__* tool: PASS
+CHECK 515 init no untrusted-plugin warning: PASS
+init mcp_servers: [('graphtraj', 'connected')]
+init mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+init plugin_warnings: [] | records naming "untrusted": 0
+CHECK 515 init mcp server graphtraj only: PASS
+CHECK 515 init tools mcp__graphtraj__agents and mcp__graphtraj__tasks: PASS
+CHECK 515 init no mcp__agents__* tool: PASS
+CHECK 515 init no untrusted-plugin warning: PASS
+成功: 四行 'CHECK 515 init …: PASS'（mcp server graphtraj only；两个新工具名；没有 mcp__agents__*；没有 untrusted-plugin 警告）。FAIL 交 Main。
+REHEARSAL PASS: Mp exit 0: four init CHECKs PASS (stub reads the Harness .mcp.json), none FAIL
+REHEARSAL PASS: rec515 init negative: second server, old tool and untrusted warning FAIL
+
+======== rec515 calls on Claude record shapes (graftling archive events and Claude transcript lines)
+REHEARSAL PASS: rec515 calls positive (ok despite 'not available' in content)
+REHEARSAL PASS: rec515 calls negative: an old-name call FAILs
+REHEARSAL PASS: rec515 calls negative: a refused agents call FAILs and shows the refusal text
+
+======== Rs / Rsr: standby Leader and Engineer Sessions; only records after Rs count
+REHEARSAL PASS: Rs exit 0: leader alias in Main's prompt, sizes of 2 archives recorded
+leader 515-production_adoption_mcp_server_names-handover0-team_leader@team_leader record files: 1
+CHECK 515 [leader 515-production_adoption_mcp_server_names-handover0-team_leader@team_leader] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [leader 515-production_adoption_mcp_server_names-handover0-team_leader@team_leader] no mcp__agents__* call: PASS (0)
+engineer 515-production_adoption_mcp_server_names-handover0-engineer@engineer record files: 1
+CHECK 515 [engineer 515-production_adoption_mcp_server_names-handover0-engineer@engineer] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer 515-production_adoption_mcp_server_names-handover0-engineer@engineer] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer 515-production_adoption_mcp_server_names-handover0-engineer@engineer] no mcp__agents__* call: PASS (0)
+CHECK 515 [leader 515-production_adoption_mcp_server_names-handover0-team_leader@team_leader] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [leader 515-production_adoption_mcp_server_names-handover0-team_leader@team_leader] no mcp__agents__* call: PASS (0)
+CHECK 515 [engineer 515-production_adoption_mcp_server_names-handover0-engineer@engineer] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer 515-production_adoption_mcp_server_names-handover0-engineer@engineer] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer 515-production_adoption_mcp_server_names-handover0-engineer@engineer] no mcp__agents__* call: PASS (0)
+REHEARSAL PASS: Rsr exit 0: new-name calls after Rs ok; the old-name call before Rs is not counted
+REHEARSAL PASS: Rsr negative: an old-name call after Rs FAILs
+
+======== 468 window report (fixture samples; not blocking)
+REPORT 515 468 Worker CPU 30 s before child creation: 0.600 CPU-s per wall-s (18.0 s over 30 s, 4 samples; not blocking)
+REPORT 515 468 Worker CPU 30 s after child creation: 0.100 CPU-s per wall-s (3.0 s over 30 s, 4 samples; not blocking)
+REHEARSAL PASS: 468 window: before 0.600 (18 s over 30 s) and after 0.100 CPU-s per wall-s reported
+
+======== R (rollback from the backup's own tools): venv, plugin, .mcp.json and settings restored
+DIFF entries=946 differences=51 (/tmp/claude-501/adopt515-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=946 differences=0 (/tmp/claude-501/adopt515-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt515-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+restored: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.2
+DIFF entries=946 differences=51 (/tmp/claude-501/adopt515-rehearsal/project/.venv-runtime)
+### venv restored whole from the backup
+SAME entries=946 differences=0 (/tmp/claude-501/adopt515-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt515-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+restored: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.5.2
+REHEARSAL PASS: R exit 0; venv and plugin SAME; entry files restored and OK
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+ERROR: Pipe to stdout was broken
+Exception ignored on flushing sys.stdout:
+BrokenPipeError: [Errno 32] Broken pipe
+REHEARSAL PASS: R: production .mcp.json is 'agents' again and graftling is 0.5.2
+REHEARSAL PASS: 503's backup under tmp/503 unchanged
+
+======== done: no exported key value in raw files
+REHEARSAL PASS: done: raw files containing an exported key value: 0
+
+REHEARSAL SUMMARY: 49 checks, all PASS

@@ -203,7 +203,8 @@ print(graftling.__file__.split("/lib/")[0], "graftling", m.version("graftling"),
   print "Rs project (base e746cfc4) .mcp.json servers: $(clean $V/bin/python -I -c 'import json,sys; print(list(json.load(open(sys.argv[1]))["mcpServers"]))' $PO/.mcp.json) (expected ['agents'])"
   clean claude plugin validate $P/.claude/skills/graphtraj-claude-host 2>&1 | tail -3 || print "plugin validate rc=$?"
   clean $V/bin/python -m graphtraj.runtimes.dsh.main_entry patch --write $BASE/dsh-main.patch.yml >/dev/null && \
-    print "- id: llm-deepseek\n  config: {apiKeyEnv: DEEPSEEK_API_KEY, baseURL: 'https://api.deepseek.com/anthropic'}" >> $BASE/dsh-main.patch.yml
+    { print -r -- "- id: llm-deepseek"
+      print -r -- "  config: {apiKeyEnv: DEEPSEEK_API_KEY, baseURL: 'https://api.deepseek.com/anthropic'}"; } >> $BASE/dsh-main.patch.yml
   (cd $P && clean dsh --profile headless --patch $BASE/dsh-main.patch.yml --dump-config > $BASE/dsh-dump-config.txt 2>&1) || true
   grep -q graphtraj-main $BASE/dsh-dump-config.txt && print "DSH composed tree has the graphtraj-main row: YES" \
     || { print "STOP: no graphtraj-main row in the composed DSH tree:"; head -20 $BASE/dsh-dump-config.txt | redact; return 1; }

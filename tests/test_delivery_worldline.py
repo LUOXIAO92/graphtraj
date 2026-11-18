@@ -381,6 +381,29 @@ def test_same_instant_offset_collisions_keep_causal_order_across_shards(
     assert events[200]["caused_by_event_ids"] == [events[199]["event_id"]]
 
 
+@pytest.mark.parametrize("cause", ["later", "unknown"])
+def test_reading_refuses_a_retained_cause_that_no_earlier_event_has(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cause: str,
+) -> None:
+    """A stored event may cite only events before it, as the per-event check did before 501."""
+    monkeypatch.syspath_prepend(str(PROJECT_ROOT / "src"))
+    from graphtraj.graph.delivery_worldline import append_project_worldline_event, read_worldline
+
+    state = tmp_path / "state"
+    first = append_project_worldline_event(
+        state, tmp_path, {"event": "fact-recorded", "caused_by_event_ids": [], "evidence_refs": []})
+    second = append_project_worldline_event(
+        state, tmp_path, {"event": "fact-recorded", "caused_by_event_ids": [first["event_id"]], "evidence_refs": []})
+    assert [event["event_id"] for event in read_worldline(state)] == [first["event_id"], second["event_id"]]
+    shard = state / "worldline" / (first["event_id"] + ".jsonl")
+    records = [json.loads(line) for line in shard.read_text(encoding="utf-8").splitlines()]
+    records[0]["caused_by_event_ids"] = [second["event_id"] if cause == "later" else "20200101T000000.000000+0000"]
+    _write_shard(state / "worldline", records)
+
+    with pytest.raises(ValueError, match="causal predecessor does not exist"):
+        read_worldline(state)
+
+
 def _migration_script() -> Path:
     return PROJECT_ROOT / "scripts" / "migrate_worldline_event_field.py"
 

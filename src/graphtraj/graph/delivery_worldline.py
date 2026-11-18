@@ -263,7 +263,10 @@ def _validate_recorded_event(
     collision_counts[instant] = expected_count + 1
     supplied = {key: value for key, value in event.items() if key not in {"event_id", "captured_at"}}
     _validate_supplied_event(supplied)
-    _validate_causes(event, [{"event_id": item} for item in known_ids])
+    # Checked against the set itself: rebuilding it per event made every
+    # Worldline read quadratic in its event count (501).
+    if any(item not in known_ids for item in event["caused_by_event_ids"]):
+        raise ValueError("causal predecessor does not exist")
     return captured
 
 

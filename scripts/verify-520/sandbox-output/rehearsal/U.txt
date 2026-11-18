@@ -1,0 +1,34 @@
+== [U] USER, in a plain Terminal (not this sandbox) and the browser. Dialogs: none expected from dsh; the browser may ask nothing. No model call is needed when the recorded Sessions are listed.
+web profile web520 has graftling-dsh: NO (step 0's plugin add failed; both cards will be generic; tell the Leader)
+
+--- Session S (mcp__graftling__agents): recorded id stub-session-1 
+1. In a plain Terminal (DEEPSEEK_API_KEY set as usual), run:
+     cd /tmp/claude-501/rehearse520/base/work-standalone && env DSH_HOME=/tmp/claude-501/rehearse520/base/dsh-home GRAFTLING_PYTHON=/tmp/claude-501/rehearse520/base/venv/bin/python GRAFTLING_DSH_CONFIG=/tmp/claude-501/rehearse520/base/dsh-host.json dsh --profile web520 --patch /tmp/claude-501/rehearse520/base/graftling-alone.patch.yml --port 0
+   It prints the served URL (http://127.0.0.1:<port>/...) and opens it; if no browser opens, open that URL.
+2. In the page, open the Session stub-session-1 from the Session list (sidebar / history). If it is not listed, start a new
+   conversation there and paste this prompt (one model call):
+     Call the MCP tool mcp__graftling__agents exactly once with {"action": "execute", "feature": "status", "arguments": {}}. Use no other tool. Then reply with one line: DONE-520-S followed by the exact name of the tool you called and ok or the exact error.
+3. Find the tool call card for mcp__graftling__agents in the conversation. If it has a 'Details' button or a disclosure, open it.
+4. Screenshot the whole card (and the expanded details), with the tool name visible. Save it as
+     /tmp/claude-501/rehearse520/base/screenshot-S.png
+5. Stop the server with Ctrl-C in that Terminal.
+
+--- Session G (mcp__graphtraj__agents): recorded id stub-session-1 
+1. In a plain Terminal (DEEPSEEK_API_KEY set as usual), run:
+     cd /tmp/claude-501/rehearse520/base/project && env DSH_HOME=/tmp/claude-501/rehearse520/base/dsh-home dsh --profile web520 --patch /tmp/claude-501/rehearse520/base/graphtraj-main.patch.yml --port 0
+   It prints the served URL (http://127.0.0.1:<port>/...) and opens it; if no browser opens, open that URL.
+2. In the page, open the Session stub-session-1 from the Session list (sidebar / history). If it is not listed, start a new
+   conversation there and paste this prompt (one model call):
+     Call the MCP tool mcp__graphtraj__agents exactly once with {"action": "execute", "feature": "status", "arguments": {}}. Use no other tool. Then reply with one line: DONE-520-G followed by the exact name of the tool you called and ok or the exact error.
+3. Find the tool call card for mcp__graphtraj__agents in the conversation. If it has a 'Details' button or a disclosure, open it.
+4. Screenshot the whole card (and the expanded details), with the tool name visible. Save it as
+     /tmp/claude-501/rehearse520/base/screenshot-G.png
+5. Stop the server with Ctrl-C in that Terminal.
+
+What 'normal' looks like (graftling dsh/client.mjs AgentsRow): a compact row with a line 'sender → recipient'
+and a line 'agents · <operation> · <state>' (here operation status), plus a 'Details' button.
+A generic DSH tool card instead shows the raw tool name and its JSON arguments/result.
+Expected from the source (prediction, to be confirmed by the screenshots): S renders as AgentsRow; G renders as a
+generic card, because client.mjs registers its view only for mcp__graftling__agents and mcp__agents__agents, and
+GraphTraj's graphtraj-main row registers no browser view of its own.
+Send both screenshots (or say which one is missing) to the Leader.

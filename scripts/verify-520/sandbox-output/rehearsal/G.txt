@@ -1,0 +1,12 @@
+DEEPSEEK_API_KEY: set
+== [G] GraphTraj DSH Main (graphtraj-main row) in /tmp/claude-501/rehearse520/base/project, one mcp__graphtraj__agents call. Dialog: none. At most 10 min.
+run records: /tmp/claude-501/rehearse520/base/runs/G-20261118T221641
+stub dsh DSH_HOME=/tmp/claude-501/rehearse520/base/dsh-home args: --profile headless520 --from-default-profile headless --patch /tmp/claude-501/rehearse520/base/graphtraj-main.patch.yml --json Call the MCP tool mcp__graphtraj__agents exactly once with {"action": "execute", "feature": "status", "arguments": {}}. Use no other tool. Then reply with one line: DONE-520-G followed by the exact name of the tool you called and ok or the exact error.
+agents calls in stdout.jsonl (expected: one mcp__graphtraj__agents call, its result not an error):
+     1 "isError":false
+     1 "name":"mcp__graphtraj__agents"
+     1 "status":"completed"
+last line of the answer: 
+DSH Session id (stdout.jsonl): stub-session-1
+DSH Session files changed in this run:
+follow-up (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/520-unobserved-redaction-and-dsh-display/scripts/verify-520/steps.zsh U

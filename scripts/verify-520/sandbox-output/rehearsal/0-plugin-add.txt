@@ -1,0 +1,8 @@
+[WARN] Issue while reading "/Users/luoxiao/.npmrc". Operation not permitted (os error 1)
+Error: ERR_PNPM_STORE_DIR_OPEN_OPERATION_LOCK
+
+  × adding a new package
+  ╰─▶ Failed to open the store operation lock at "pnpm-store-operation-locks":
+      Operation not permitted (os error 1)
+
+dsh: plugin command failed; diagnostics: /tmp/claude-501/rehearse520/base/dsh-home/profiles/web520/.plugin-manager/logs/operation-IZYltX/pnpm.log

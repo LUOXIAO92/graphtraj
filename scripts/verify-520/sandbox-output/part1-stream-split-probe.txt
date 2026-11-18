@@ -1,0 +1,3 @@
+$ cd $TMPDIR && $TMPDIR/venv520/bin/python -I -c <probe>   # graftling 0.6.0 (sources = <Harness>/graftling a51e100: sessions/reading.py, codex/diagnostics.py)
+split across two chunks -> ['the key is sk-pro', 'be520fakevalue0007 ok']
+whole value in one item -> {'t': ['api_key=', '[redacted]']}

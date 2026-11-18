@@ -1,0 +1,9 @@
+== [R] Part 1: tests/test_agents_session_read.py (content 'all' redaction) in /tmp/claude-501/rehearse520/base/venv-test. Dialog: none. < 1 min.
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+graftling 0.6.0 /tmp/claude-501/rehearse520/base/venv-test/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/520-unobserved-redaction-and-dsh-display/src/graphtraj/__init__.py | pytest 9.1.1
+run records: /tmp/claude-501/rehearse520/base/runs/R-20261118T221607
+..............                                                           [100%]
+14 passed in 2.78s
+exit=0
+(no FAILED/ERROR lines)
+expected: all passed, including test_content_all_redacts_reasoning_streams_records_extra_fields_and_drafts

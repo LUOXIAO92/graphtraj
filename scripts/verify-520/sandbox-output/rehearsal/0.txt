@@ -1,0 +1,39 @@
+== [0] preflight. Dialog: none. Builds wheels and a venv (no network), the isolated project and DSH home, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2; node v26.5.0
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/520-unobserved-redaction-and-dsh-display 81dde17ec099e8bb7d70f25eb2f320f61cc41ffb (branch agent/520-unobserved-redaction-and-dsh-display); graftling: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/graftling-dev a51e1004a0
+isolated layout: BASE=/tmp/claude-501/rehearse520/base  project=/tmp/claude-501/rehearse520/base/project  standalone work=/tmp/claude-501/rehearse520/base/work-standalone  venv=/tmp/claude-501/rehearse520/base/venv  DSH_HOME=/tmp/claude-501/rehearse520/base/dsh-home (never ~/.dsh)
+venv: graftling 0.6.0 graphtraj 0.1.0 from /tmp/claude-501/rehearse520/base/venv
+== isolated GraphTraj project and probe Task 1 (G)
+Create dev from 32140cdaa1b38c43327b4674de56041dc6e9cab0? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+register: 0 /private/tmp/claude-501/rehearse520/base/project/.graphtraj/state/tasks/1-server-name-probe
+update: 0 1118T221601.961749+0900
+captured_at: '2026-11-18T22:16:01.961749+09:00'
+event: task-state-changed
+caused_by_event_ids: []
+evidence_refs:
+- .graphtraj/probe-514/evidence.md
+task_id: '1'
+from_status: pending
+to_status: ready
+active_team_ordinal: null
+worktree: null
+branch: null
+current_candidate: null
+roles OK
+probe Task 1 ready
+== patches: G = GraphTraj's graphtraj-main row; S = graftling-dsh's agents-host row
+== isolated web profile web520 in /tmp/claude-501/rehearse520/base/dsh-home: a fresh copy of the shipped web template, then graftling-dsh added (its browser tool view)
+profile web520: created (/tmp/claude-501/rehearse520/base/dsh-home/profiles/web520)
+WARNING: dsh plugin add failed (rc 1); the web view then has no graftling-dsh tool view at all:
+
+  × adding a new package
+  ╰─▶ Failed to open the store operation lock at "pnpm-store-operation-locks":
+      Operation not permitted (os error 1)
+
+dsh: plugin command failed; diagnostics: /tmp/claude-501/rehearse520/base/dsh-home/profiles/web520/.plugin-manager/logs/operation-IZYltX/pnpm.log
+web profile dependencies: []
+graftling-dsh tool view keys: ["mcp__graftling__agents","mcp__agents__agents"]
+VERIFY520_NOMODEL: no model call (rehearsal)
+Ready when: the venv versions, 'roles OK' and 'probe Task 1 ready', profile web520 created with graftling-dsh, view keys listed, and one READY-520 line naming the model.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/520-unobserved-redaction-and-dsh-display/scripts/verify-520/steps.zsh S

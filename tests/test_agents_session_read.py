@@ -202,6 +202,62 @@ def test_no_credential_value_is_returned_or_searchable(control: AgentControl) ->
             assert found['hits_total'] == 0 and not any(found['outside_view'].values())
 
 
+def test_content_all_redacts_reasoning_streams_records_extra_fields_and_drafts(control: AgentControl) -> None:
+    """content all: credentials in reasoning, stream items, record text, extra_fields, drafts and legacy are redacted.
+
+    Each place holds its own fake credential, in the forms 515's Session showed: the
+    shell-quoted split ``api_key=sk-...''...`` and the joined ``sk-...`` value (520).
+    """
+    from graftling.sessions import JsonlSessionStore, archive_path
+
+    split, joined = "sk-probe520fake''value0000", 'sk-probe520fakevalue0000'
+    places = {
+        'reasoning': 'sk-reasoning520value0001', 'stream': 'sk-stream520value0002',
+        'record': 'sk-record520value0003', 'extra': 'sk-extra520value0004',
+        'draft': 'sk-draft520value0005', 'legacy': 'sk-legacy520value0006'}
+    control.import_agent(agent('agent-x', None, 's-x'))
+    store = SessionArchive(control.root, save_normalized_sessions=True)
+    store.map_session(header('s-x'))
+    answer = message(0, 's-x', 'assistant', [
+        {'type': 'reasoning', 'text': f'thinking: the key is {places["reasoning"]}; run api_key={split}'},
+        {'type': 'text', 'text': 'done'}])
+    answer['data']['stream'] = [
+        {'type': 'reasoning-chunks', 'time0': 0, 'index': 0, 'dt': [], 'texts': [f'api_key={places["stream"]}']},
+        {'type': 'chunk', 'time': 0, 'chunk': {'type': 'reasoning-delta', 'index': 0,
+                                                'text': f'joined {joined}'}}]
+    answer['extra_fields'] = {'test-namespace': {'note': f'token: {places["extra"]}'}}
+    record = {'type': 'claude/observation', 'seq': 1, 'time': 0, 'data': {}, 'ignorable': True,
+              'native': {'runtime': 'claude', 'sessionId': 's-x', 'locator': 'transcript:1',
+                         'record': {'type': 'attachment', 'text': f'export api_key={places["record"]}'}}}
+    assert store.collect('claude:s-x', [answer, record], source='test', position=1)
+    draft = message(2, 's-x', 'assistant', [{'type': 'reasoning', 'text': f'api_key={places["draft"]}'}])
+    assert store.checkpoint('claude:s-x', draft, source='live', position=2)
+    JsonlSessionStore(archive_path(control.root, 'claude:s-x')).retain_legacy(
+        {'header': header('s-x'), 'events': [{'seq': 0, 'type': 'old', 'text': f'Bearer {places["legacy"]}'}]})
+    secrets = (split, joined, *places.values())
+    caller = Caller('test-host', None, MAIN, 'claude')
+    for arguments in ({}, {'start': 0}):
+        document, failed = read(control, caller, session='s-x', content='all', **arguments)
+        assert not failed, document
+        serialized = json.dumps(document)
+        assert not [secret for secret in secrets if secret in serialized], arguments
+        result = document['result']
+        reasoning = result['events'][0]['event']['data']['message']['content'][0]['text']
+        assert reasoning == 'thinking: the key is [redacted]; run api_key="[redacted]"'
+        stream = result['events'][0]['event']['data']['stream']
+        assert stream[0]['texts'] == ['api_key="[redacted]"'] and stream[1]['chunk']['text'] == 'joined [redacted]'
+        assert result['events'][0]['event']['extra_fields']['test-namespace']['note'] == 'token: "[redacted]"'
+        assert result['events'][1]['event']['native']['record']['text'] == 'export api_key="[redacted]"'
+        assert result['pending'][0]['event']['data']['message']['content'][0]['text'] == 'api_key="[redacted]"'
+        assert result['legacy']['events'][0]['text'] == 'Bearer [redacted]'
+    for secret in secrets:
+        found = read(control, caller, session='s-x', content='all', search=secret)[0]['result']
+        assert found['hits_total'] == 0 and found['outside_view'] == {}, secret
+        assert secret not in json.dumps({**found, 'search': None})  # the query itself is echoed back
+    marked = read(control, caller, session='s-x', content='all', search='[redacted]')[0]['result']
+    assert marked['hits_total'] == 2 and not any(secret in json.dumps(marked) for secret in secrets)
+
+
 def test_search_names_matches_outside_the_view(control: AgentControl) -> None:
     """An error only in a Bash result: 0 text hits, an outside count naming tools, then found and sliced."""
     caller = Caller('test-host', 'agent-p')

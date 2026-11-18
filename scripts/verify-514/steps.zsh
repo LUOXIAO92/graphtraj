@@ -24,19 +24,21 @@ GDEV=$H/.graphtraj/core/worktrees/graftling-dev        # graftling Integration W
 GCOMMIT=a51e1004a0fe77fe492681faa2f278d80b3d725e        # graftling dev 0.6.0 (513)
 GREPO=$H/graftling; GOLD=v0.5.2                        # Rs: graftling before 513, as production (503)
 BASECOMMIT=e746cfc4                                    # Rs: GraphTraj dev before 514
-BASE=/private/tmp/graphtraj-514                        # resolved form (verify-common claude_isolation accepts it)
+# VERIFY514_* are set only by a rehearsal (scratch BASE/T/OUT, a fake RT, stub hosts first on PATH); defaults are real.
+BASE=${VERIFY514_BASE:-/private/tmp/graphtraj-514}     # resolved form (verify-common claude_isolation accepts it)
 P=$BASE/project; PO=$BASE/project-rs
 V=$BASE/venv; OV=$BASE/venv-old
-T=$H/tmp/514                                           # test venv and suite output (Harness tmp)
-OUT=$H/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost
+T=${VERIFY514_T:-$H/tmp/514}                           # test venv and suite output (Harness tmp)
+OUT=${VERIFY514_OUT:-$H/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost}
 CONDA=$HOME/miniconda3/bin/python3.13
-RT=$H/.venv-runtime/lib/python3.13/site-packages      # read only: yaml, websockets, click (no PyPI on this host)
+RT=${VERIFY514_RT:-$H/.venv-runtime/lib/python3.13/site-packages}   # read only: yaml, websockets, click (no PyPI on this host)
 SD=${0:A:h}; THIS=${0:A}; CHECK=$SD/check514.py
 STEP=${1:-}
 PYTEST_TMP=${TMPDIR:-/tmp}
 MODEL=claude-opus-5-5
 PI_PROVIDER=deepseek; PI_MODEL=deepseek-flash
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
+[[ -n ${VERIFY514_STUB:-} ]] && path=($VERIFY514_STUB $path)   # rehearsal only: stub hosts first
 
 say() { print -r -- "== $*"; }
 next() { print -r -- "next: zsh $THIS $*"; }
@@ -73,6 +75,12 @@ wheel() {  # $1 repository, $2 commit, $3 subdirectory, $4 output directory
   git -C $1 archive $2 $3 | tar -x -C $src
   $CONDA -m pip wheel -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
     -w $4 $src/$3 >/dev/null
+}
+need() {  # $1 directory, $2 pattern: print the one file it must hold, else STOP with the listing
+  local found=($1/$~2(N))
+  (( $#found == 1 )) && { print -r -- $found; return 0; }
+  print -r -- "STOP: expected exactly one $2 in $1, found ${#found}:" >&2; ls -la $1 >&2
+  return 1
 }
 make_venv() {  # $1 venv, $2.. wheels
   local dir=$1; shift
@@ -171,14 +179,16 @@ case $STEP in
   print "pytest temp for T/F: $PYTEST_TMP"
   mkdir -p $BASE $W
   if [[ ! -f $V/installed || $(<$V/installed) != "$C $GCOMMIT" ]]; then
-    rm -f $W/graftling-0.6*.whl $W/graphtraj-*.whl
+    rm -f $W/graftling-*.whl(N) $W/graphtraj-*.whl(N)
     wheel $GDEV $GCOMMIT src/graftling $W && wheel $WT $C . $W || { print "STOP: a wheel did not build"; return 1; }
-    make_venv $V $W/graftling-0.6*.whl $W/graphtraj-*.whl && print -r -- "$C $GCOMMIT" > $V/installed
+    local gw hw; gw=$(need $W 'graftling-*.whl') && hw=$(need $W 'graphtraj-*.whl') || return 1
+    make_venv $V $gw $hw && print -r -- "$C $GCOMMIT" > $V/installed
   else print "venv $V already holds $C + $GCOMMIT"; fi
   if [[ ! -f $OV/installed ]]; then
-    local O=$BASE/wheels-old; mkdir -p $O
+    local O=$BASE/wheels-old; mkdir -p $O; rm -f $O/graftling-*.whl(N) $O/graphtraj-*.whl(N)
     wheel $GREPO $GOLD src/graftling $O && wheel $WT $BASECOMMIT . $O || { print "STOP: an Rs wheel did not build"; return 1; }
-    make_venv $OV $O/graftling-*.whl $O/graphtraj-*.whl && print -r -- "$BASECOMMIT $GOLD" > $OV/installed
+    local ogw ohw; ogw=$(need $O 'graftling-*.whl') && ohw=$(need $O 'graphtraj-*.whl') || return 1
+    make_venv $OV $ogw $ohw && print -r -- "$BASECOMMIT $GOLD" > $OV/installed
   fi
   local v; for v in $V $OV; do
     (cd $PYTEST_TMP && clean $v/bin/python -I -c 'import graftling, graphtraj, importlib.metadata as m
@@ -317,12 +327,14 @@ T|F)
   if [[ ! -f $VT/installed || $(<$VT/installed) != "$(candidate) $GCOMMIT" ]]; then
     mkdir -p $T; [[ -e $VT ]] && mv $VT $VT.$(date +%H%M%S)
     $CONDA -m venv --system-site-packages $VT; deps $VT
-    local W=$T/wheels; mkdir -p $W; rm -f $W/graftling-*.whl; wheel $GDEV $GCOMMIT src/graftling $W
-    $VT/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $W/graftling-*.whl
+    local W=$T/wheels gw; mkdir -p $W; rm -f $W/graftling-*.whl(N); wheel $GDEV $GCOMMIT src/graftling $W
+    gw=$(need $W 'graftling-*.whl') || return 1
+    $VT/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $gw
     $VT/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT 2>&1 | grep -vi cache || true
     print -r -- "$(candidate) $GCOMMIT" > $VT/installed
   fi
   (cd $PYTEST_TMP && $VT/bin/python -I -c 'import graftling, graphtraj, pytest; print("graftling", graftling.__version__, graftling.__file__, "| graphtraj", graphtraj.__file__, "| pytest", pytest.__version__)')
+  [[ -n ${VERIFY514_PREFIX_ONLY:-} ]] && { print "VERIFY514_PREFIX_ONLY: venv ready, no pytest started (rehearsal)"; return 0; }
   local R=$OUT/$STEP-$(candidate | cut -c1-10)-$(date +%H%M%S); mkdir -p $R
   if [[ $STEP == T ]]; then
     say "[T] focused tests (foreground, about 5 min). Dialog: none."

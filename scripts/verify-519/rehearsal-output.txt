@@ -1,0 +1,267 @@
+rehearsal scratch: <scratch> (stub claude; VERIFY519_BASE/OUT/STUB/PROJECTS/WAIT=2)
+
+######## rehearsal: zsh steps.zsh 
+usage: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/519-standby-session-archive-latency/scripts/verify-519/steps.zsh P|Tu|A|B|C   (Main; Tu is USER)   S: rehearsal simulation
+######## rc=2
+
+######## rehearsal: zsh steps.zsh B
+output: <scratch>/out/B-20261118T222001
+[B] standby: wait 2 s, then the same observation, compared with A. Dialog: none. No model. About 7 s.
+STOP: <scratch>/out/state.env is missing; run A first
+######## rc=1
+
+######## rehearsal: zsh steps.zsh S
+output: <scratch>/out/S-20261118T222001
+[S] rehearsal simulation (no model, no process): graftling's own ClaudeJsonlCollector over a synthetic transcript; the A/B/C observation and comparison code on its files. Dialog: none.
+sim turn 1 (M1) collected and closed; native session s
+[A] taken 2026-11-18T13:20:01.748Z | session s
+  archive: <scratch>/out/S-20261118T222001/sim/swarm/sessions/2a66be965cada9932759d2a52d08bbec54dacedf0c0fac5f055ffecf075911bd/session.jsonl
+    size 3332 | mtime 2026-11-18T13:20:01.715Z | inode 374880571 | lines 4 | head4096 c7e79c0d449718b5 | line1 1873 B | last record time 2026-11-18T13:20:01.709Z
+    marker SIM519-M1: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 3 offset 2348 time 2026-11-18T13:20:01.709Z type assistant/message
+  transcript: <scratch>/out/S-20261118T222001/sim/native.jsonl
+    size 524 | mtime 2026-11-18T13:20:01.714Z | inode 374880553 | lines 2 | head4096 57e957deabb16f77 | line1 234 B | last record time 2026-11-18T13:20:01.709Z
+    marker SIM519-M1: PRESENT 1 line(s): line 2 offset 235 time 2026-11-18T13:20:01.709Z type assistant
+  session_read path (find_session + read_events): archive claude:s revision 13 events 3
+    search SIM519-M1 content text: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search SIM519-M1 content all: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+  written: <scratch>/out/S-20261118T222001/A.json
+[B] taken 2026-11-18T13:20:01.841Z | session s
+  archive: <scratch>/out/S-20261118T222001/sim/swarm/sessions/2a66be965cada9932759d2a52d08bbec54dacedf0c0fac5f055ffecf075911bd/session.jsonl
+    size 3332 | mtime 2026-11-18T13:20:01.715Z | inode 374880571 | lines 4 | head4096 c7e79c0d449718b5 | line1 1873 B | last record time 2026-11-18T13:20:01.709Z
+    marker SIM519-M1: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 3 offset 2348 time 2026-11-18T13:20:01.709Z type assistant/message
+  transcript: <scratch>/out/S-20261118T222001/sim/native.jsonl
+    size 524 | mtime 2026-11-18T13:20:01.714Z | inode 374880553 | lines 2 | head4096 57e957deabb16f77 | line1 234 B | last record time 2026-11-18T13:20:01.709Z
+    marker SIM519-M1: PRESENT 1 line(s): line 2 offset 235 time 2026-11-18T13:20:01.709Z type assistant
+  session_read path (find_session + read_events): archive claude:s revision 13 events 3
+    search SIM519-M1 content text: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search SIM519-M1 content all: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+  written: <scratch>/out/S-20261118T222001/B.json
+compare A (2026-11-18T13:20:01.748Z) -> B (2026-11-18T13:20:01.841Z)
+  archive: inode same | size 3332 -> 3332 | first 3332 bytes same | line 1 1873 -> 1873 B (+0)
+    SIM519-M1 first record line: line 3 -> 3, offset 2348 -> 2348 (shift +0); beyond A's size 3332 at B: no
+  transcript: inode same | size 524 -> 524 | first 524 bytes same | line 1 234 -> 234 B (+0)
+    SIM519-M1 first record line: line 2 -> 2, offset 235 -> 235 (shift +0); beyond A's size 524 at B: no
+verdicts (observation):
+  H1 archive lacks the last turn at A and has it at B: NO (archive marker lines A present, B present; session_read at A: 1 hit(s))
+  H2 archive rewritten between them: NO; marker shift 0 vs line-1 growth +0 (equal: the whole shift is the metadata line)
+  H3 Claude transcript rewritten between them: NO (append only); marker shift 0
+sim turn 2 (M2, resumed) collected and closed
+[C] taken 2026-11-18T13:20:02.066Z | session s
+  archive: <scratch>/out/S-20261118T222001/sim/swarm/sessions/2a66be965cada9932759d2a52d08bbec54dacedf0c0fac5f055ffecf075911bd/session.jsonl
+    size 6528 | mtime 2026-11-18T13:20:02.033Z | inode 374880598 | lines 7 | head4096 16bf5c318b8584aa | line1 3451 B | last record time 2026-11-18T13:20:02.021Z
+    marker SIM519-M1: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 3 offset 3926 time 2026-11-18T13:20:01.709Z type assistant/message
+    marker SIM519-M2: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 6 offset 5384 time 2026-11-18T13:20:02.021Z type assistant/message
+  transcript: <scratch>/out/S-20261118T222001/sim/native.jsonl
+    size 1128 | mtime 2026-11-18T13:20:02.032Z | inode 374880553 | lines 4 | head4096 48ebf4381a6adec2 | line1 234 B | last record time 2026-11-18T13:20:02.021Z
+    marker SIM519-M1: PRESENT 1 line(s): line 2 offset 235 time 2026-11-18T13:20:01.709Z type assistant
+    marker SIM519-M2: PRESENT 1 line(s): line 4 offset 759 time 2026-11-18T13:20:02.021Z type assistant
+  session_read path (find_session + read_events): archive claude:s revision 38 events 6
+    search SIM519-M1 content text: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search SIM519-M1 content all: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search SIM519-M2 content text: hits 1 last {'index': 3, 'seq': 4, 'type': 'assistant/message'}
+    search SIM519-M2 content all: hits 1 last {'index': 4, 'seq': 4, 'type': 'assistant/message'}
+  written: <scratch>/out/S-20261118T222001/C.json
+compare A (2026-11-18T13:20:01.748Z) -> C (2026-11-18T13:20:02.066Z)
+  archive: inode CHANGED (file replaced) | size 3332 -> 6528 | first 3332 bytes CHANGED | line 1 1873 -> 3451 B (+1578)
+    SIM519-M1 first record line: line 3 -> 3, offset 2348 -> 3926 (shift +1578); beyond A's size 3332 at C: YES (a byte split at the earlier size would count it as new)
+  transcript: inode same | size 524 -> 1128 | first 524 bytes same | line 1 234 -> 234 B (+0)
+    SIM519-M1 first record line: line 2 -> 2, offset 235 -> 235 (shift +0); beyond A's size 524 at C: no
+verdicts (observation):
+  H1 archive lacks the last turn at A and has it at C: NO (archive marker lines A present, C present; session_read at A: 1 hit(s))
+  H2 archive rewritten between them: YES; marker shift 1578 vs line-1 growth +1578 (equal: the whole shift is the metadata line)
+  H3 Claude transcript rewritten between them: NO (append only); marker shift 0
+expected: A present + 1 hit; A->B all same; A->C archive inode CHANGED, shift equal to line-1 growth, beyond A's size YES; transcript append only; H1 NO, H2 YES, H3 NO.
+######## rc=0
+
+######## rehearsal: zsh steps.zsh P
+output: <scratch>/out/P-20261118T222002
+[P] preflight. Dialog: none (no tool use; before Tu the folder is untrusted and the plugin is skipped). About 2 min.
+claude: <scratch>/stub/claude -> /private<scratch>/stub/claude | version: 0.0.0 (rehearsal stub)
+zsh 5.9 | worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/519-standby-session-archive-latency 81dde17e dirty files: 1
+production install (read only): graftling 0.6.0 graphtraj 0.1.0 from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime
+expected: graftling 0.6.0 (the code read for 519; its archive/collection files are identical to <Harness>/graftling main)
+Create dev from d0e527e5f41dffde8bc81048a440fc2616489df6? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+register: 0 /private<scratch>/base/project/.graphtraj/state/tasks/1-standby-probe
+update: 0 1118T222004.140982+0900
+captured_at: '2026-11-18T22:20:04.140982+09:00'
+event: task-state-changed
+caused_by_event_ids: []
+evidence_refs:
+- .graphtraj/probe-519/evidence.md
+task_id: '1'
+from_status: pending
+to_status: ready
+active_team_ordinal: null
+worktree: null
+branch: null
+current_candidate: null
+roles OK
+probe Task 1 ready
+project settings: /private<scratch>/base/project/.claude/settings.local.json | claudeMdExcludes 7 | cc-plugin-agents-md@builtin: False
+isolated .mcp.json servers: ['graphtraj'] (expected ['graphtraj'])
+graphtraj project root: /private<scratch>/base/project | isolated: True
+git top level: /private<scratch>/base/project | isolated: True
+CLAUDE.md/CLAUDE.local.md at or above the project: none
+.mcp.json/AGENTS.md/.graphtraj above the project: none
+isolation: OK
+-- one-line claude -p (model and login), judged by claude_isolation.py check (no Harness instruction file loaded)
+init record: yes | plugins: ['graphtraj-claude-host'] | cc-plugin-agents-md loaded: NO
+answer: PROBE-519 claude-opus-5-5 logged in | is_error: False | models: []
+instruction files the model reported: ['NONE'] | Harness files among them: none
+echo of the prompt: no | distinctive Harness AGENTS.md line in the answer: no
+host answered: yes | Harness instruction file loaded: NO
+answer check (expect clean): OK
+-- plugin gate (information before Tu; A and C require PASS)
+claude model: claude-opus-5-5 | answer: READY-519 claude-opus-5-5
+init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks'] | plugins: ['graphtraj-claude-host'] | plugin_warnings: []
+plugin gate: PASS
+expected: 'roles OK', 'probe Task 1 ready', servers ['graphtraj'], 'isolation: OK', answer check OK with model claude-opus-5-5 and logged in.
+P rc=0
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/519-standby-session-archive-latency/scripts/verify-519/steps.zsh Tu    (USER, plain Terminal)
+######## rc=0
+
+######## rehearsal: zsh steps.zsh Tu
+[Tu] USER in a plain Terminal (Main cannot answer dialogs). Dialog: one: Claude Code's 'Do you trust the files in this folder?' naming <scratch>/base/project -> choose 'Yes, proceed'. Then type /exit (send no message). Should an MCP server approval for 'graphtraj' appear, approve it for this project. Any other dialog: press Esc and tell Main its title.
+  cd <scratch>/base/project && claude
+then Main: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/519-standby-session-archive-latency/scripts/verify-519/steps.zsh A
+######## rc=0
+
+######## rehearsal: zsh steps.zsh A
+output: <scratch>/out/A-20261118T222004
+[A] Claude Main dispatches one Claude member; its one turn ends with M1; the Main calls session_read right after. Dialog: none. At most 20 min.
+claude: <scratch>/stub/claude -> /private<scratch>/stub/claude | version: 0.0.0 (rehearsal stub)
+roles OK
+probe Task 1 ready
+project settings: /private<scratch>/base/project/.claude/settings.local.json | claudeMdExcludes 7 | cc-plugin-agents-md@builtin: False
+isolated .mcp.json servers: ['graphtraj'] (expected ['graphtraj'])
+claude model: claude-opus-5-5 | answer: READY-519 claude-opus-5-5
+init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks'] | plugins: ['graphtraj-claude-host'] | plugin_warnings: []
+plugin gate: PASS
+Main ended 2026-11-18T13:20:05Z; observation starts 2026-11-18T13:20:05Z
+-- Main's lines
+SWARM-RESULT {stub}
+SESSION-READ-A {stub: hits 1}
+MEMBER agent-stub 1-standby_probe-claude_member@claude_member s
+member agent agent-stub | session s | transcript <scratch>/projects/-private-tmp-standby-519-project/s.jsonl
+[A] taken 2026-11-18T13:20:05.748Z | session s
+  archive: <scratch>/base/project/.graphtraj/swarm/sessions/2a66be965cada9932759d2a52d08bbec54dacedf0c0fac5f055ffecf075911bd/session.jsonl
+    size 3372 | mtime 2026-11-18T13:20:05.680Z | inode 374880853 | lines 4 | head4096 e129c272cceae591 | line1 1891 B | last record time 2026-11-18T13:20:05.672Z
+    marker STANDBY519-222005-R1: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 3 offset 2366 time 2026-11-18T13:20:05.672Z type assistant/message
+  transcript: <scratch>/projects/-private-tmp-standby-519-project/s.jsonl
+    size 535 | mtime 2026-11-18T13:20:05.678Z | inode 374880833 | lines 2 | head4096 9ba810fd1f51fdef | line1 234 B | last record time 2026-11-18T13:20:05.672Z
+    marker STANDBY519-222005-R1: PRESENT 1 line(s): line 2 offset 235 time 2026-11-18T13:20:05.672Z type assistant
+  session_read path (find_session + read_events): archive claude:s revision 15 events 3
+    search STANDBY519-222005-R1 content text: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search STANDBY519-222005-R1 content all: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+  written: <scratch>/out/A-20261118T222004/A.json
+processes naming session s: none
+state: <scratch>/out/state.env
+Predictions (code, see the report): graftling collects the turn while it runs and once more after Claude exits,
+  before the execution reports completed (graftling claude/execution.py:1119-1146, outcome at 1157); every archive write
+  replaces the whole file (sessions/archive.py:94-103, 336-349) and its line 1 holds pending drafts and accumulating
+  observations (archive.py:364-366, 494-499). Hence:
+  H2 (code):  A archive has M1 and session_read finds it; B identical to A (same inode, size, mtime);
+              C archive inode CHANGED, line 1 grew by d bytes, M1 line number unchanged, M1 offset shifted by exactly +d;
+              transcript inode same, first bytes same, M1 offset unchanged (append only); session_read finds M1 and M2.
+  H1 (latency, the 515 inference) would show: A and B archive M1 ABSENT and session_read 0 hits; C present.
+  H3 (Claude rewrites its transcript on --resume) would show: C transcript inode changed or first bytes CHANGED or SHRANK.
+Observable for A: 'archive: ... marker STANDBY519-222005-R1: PRESENT' with an event line (not only the metadata line), 'search STANDBY519-222005-R1 content text: hits >= 1', and SESSION-READ-A above with a hit. ABSENT / 0 hits supports H1.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/519-standby-session-archive-latency/scripts/verify-519/steps.zsh B      (waits 2 s; member agent-stub session s)
+######## rc=0
+
+######## rehearsal: zsh steps.zsh B
+output: <scratch>/out/B-20261118T222005
+[B] standby: wait 2 s, then the same observation, compared with A. Dialog: none. No model. About 7 s.
+member agent agent-stub | session s | waiting 2 s from 13:20:05Z
+[B] taken 2026-11-18T13:20:07.869Z | session s
+  archive: <scratch>/base/project/.graphtraj/swarm/sessions/2a66be965cada9932759d2a52d08bbec54dacedf0c0fac5f055ffecf075911bd/session.jsonl
+    size 3372 | mtime 2026-11-18T13:20:05.680Z | inode 374880853 | lines 4 | head4096 e129c272cceae591 | line1 1891 B | last record time 2026-11-18T13:20:05.672Z
+    marker STANDBY519-222005-R1: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 3 offset 2366 time 2026-11-18T13:20:05.672Z type assistant/message
+  transcript: <scratch>/projects/-private-tmp-standby-519-project/s.jsonl
+    size 535 | mtime 2026-11-18T13:20:05.678Z | inode 374880833 | lines 2 | head4096 9ba810fd1f51fdef | line1 234 B | last record time 2026-11-18T13:20:05.672Z
+    marker STANDBY519-222005-R1: PRESENT 1 line(s): line 2 offset 235 time 2026-11-18T13:20:05.672Z type assistant
+  session_read path (find_session + read_events): archive claude:s revision 15 events 3
+    search STANDBY519-222005-R1 content text: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search STANDBY519-222005-R1 content all: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+  written: <scratch>/out/B-20261118T222005/B.json
+processes naming session s: none
+compare A (2026-11-18T13:20:05.748Z) -> B (2026-11-18T13:20:07.869Z)
+  archive: inode same | size 3372 -> 3372 | first 3372 bytes same | line 1 1891 -> 1891 B (+0)
+    STANDBY519-222005-R1 first record line: line 3 -> 3, offset 2366 -> 2366 (shift +0); beyond A's size 3372 at B: no
+  transcript: inode same | size 535 -> 535 | first 535 bytes same | line 1 234 -> 234 B (+0)
+    STANDBY519-222005-R1 first record line: line 2 -> 2, offset 235 -> 235 (shift +0); beyond A's size 535 at B: no
+verdicts (observation):
+  H1 archive lacks the last turn at A and has it at B: NO (archive marker lines A present, B present; session_read at A: 1 hit(s))
+  H2 archive rewritten between them: NO; marker shift 0 vs line-1 growth +0 (equal: the whole shift is the metadata line)
+  H3 Claude transcript rewritten between them: NO (append only); marker shift 0
+expected (H2 and H1 alike, nothing writes while standby): archive and transcript inode same, size same, first bytes same, line 1 +0; marker lines unchanged; no process naming the session.
+Observable for H1 only: B archive marker ABSENT and 0 session_read hits, like A.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/519-standby-session-archive-latency/scripts/verify-519/steps.zsh C      (resumes member agent-stub, session s)
+######## rc=0
+
+######## rehearsal: zsh steps.zsh C
+output: <scratch>/out/C-20261118T222007
+[C] a new Claude Main resumes the standby member with M2, waits, calls session_read; then the observation. Dialog: none. At most 20 min.
+claude: <scratch>/stub/claude -> /private<scratch>/stub/claude | version: 0.0.0 (rehearsal stub)
+project settings: /private<scratch>/base/project/.claude/settings.local.json | claudeMdExcludes 7 | cc-plugin-agents-md@builtin: False
+isolated .mcp.json servers: ['graphtraj'] (expected ['graphtraj'])
+claude model: claude-opus-5-5 | answer: READY-519 claude-opus-5-5
+init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks'] | plugins: ['graphtraj-claude-host'] | plugin_warnings: []
+plugin gate: PASS
+Main ended 2026-11-18T13:20:08Z
+-- Main's lines
+RESUME-RESULT {stub}
+SESSION-READ-C1 {stub}
+SESSION-READ-C2 {stub}
+[C] taken 2026-11-18T13:20:08.369Z | session s
+  archive: <scratch>/base/project/.graphtraj/swarm/sessions/2a66be965cada9932759d2a52d08bbec54dacedf0c0fac5f055ffecf075911bd/session.jsonl
+    size 6612 | mtime 2026-11-18T13:20:08.307Z | inode 374881051 | lines 7 | head4096 cab5e7c9e52df9f3 | line1 3491 B | last record time 2026-11-18T13:20:08.294Z
+    marker STANDBY519-222005-R1: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 3 offset 3966 time 2026-11-18T13:20:05.672Z type assistant/message
+    marker STANDBY519-222005-R2: PRESENT 2 line(s): line 1 offset 0 time - type None (metadata line); line 6 offset 5446 time 2026-11-18T13:20:08.294Z type assistant/message
+  transcript: <scratch>/projects/-private-tmp-standby-519-project/s.jsonl
+    size 1150 | mtime 2026-11-18T13:20:08.306Z | inode 374880833 | lines 4 | head4096 54d74650d6055d0a | line1 234 B | last record time 2026-11-18T13:20:08.294Z
+    marker STANDBY519-222005-R1: PRESENT 1 line(s): line 2 offset 235 time 2026-11-18T13:20:05.672Z type assistant
+    marker STANDBY519-222005-R2: PRESENT 1 line(s): line 4 offset 770 time 2026-11-18T13:20:08.294Z type assistant
+  session_read path (find_session + read_events): archive claude:s revision 41 events 6
+    search STANDBY519-222005-R1 content text: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search STANDBY519-222005-R1 content all: hits 1 last {'index': 1, 'seq': 1, 'type': 'assistant/message'}
+    search STANDBY519-222005-R2 content text: hits 1 last {'index': 3, 'seq': 4, 'type': 'assistant/message'}
+    search STANDBY519-222005-R2 content all: hits 1 last {'index': 4, 'seq': 4, 'type': 'assistant/message'}
+  written: <scratch>/out/C-20261118T222007/C.json
+processes naming session s: none
+
+-- A -> C (the 515 situation: sizes recorded at A, records read after the resume)
+compare A (2026-11-18T13:20:05.748Z) -> C (2026-11-18T13:20:08.369Z)
+  archive: inode CHANGED (file replaced) | size 3372 -> 6612 | first 3372 bytes CHANGED | line 1 1891 -> 3491 B (+1600)
+    STANDBY519-222005-R1 first record line: line 3 -> 3, offset 2366 -> 3966 (shift +1600); beyond A's size 3372 at C: YES (a byte split at the earlier size would count it as new)
+  transcript: inode same | size 535 -> 1150 | first 535 bytes same | line 1 234 -> 234 B (+0)
+    STANDBY519-222005-R1 first record line: line 2 -> 2, offset 235 -> 235 (shift +0); beyond A's size 535 at C: no
+verdicts (observation):
+  H1 archive lacks the last turn at A and has it at C: NO (archive marker lines A present, C present; session_read at A: 1 hit(s))
+  H2 archive rewritten between them: YES; marker shift 1600 vs line-1 growth +1600 (equal: the whole shift is the metadata line)
+  H3 Claude transcript rewritten between them: NO (append only); marker shift 0
+
+-- B -> C
+compare B (2026-11-18T13:20:07.869Z) -> C (2026-11-18T13:20:08.369Z)
+  archive: inode CHANGED (file replaced) | size 3372 -> 6612 | first 3372 bytes CHANGED | line 1 1891 -> 3491 B (+1600)
+    STANDBY519-222005-R1 first record line: line 3 -> 3, offset 2366 -> 3966 (shift +1600); beyond B's size 3372 at C: YES (a byte split at the earlier size would count it as new)
+  transcript: inode same | size 535 -> 1150 | first 535 bytes same | line 1 234 -> 234 B (+0)
+    STANDBY519-222005-R1 first record line: line 2 -> 2, offset 235 -> 235 (shift +0); beyond B's size 535 at C: no
+verdicts (observation):
+  H1 archive lacks the last turn at B and has it at C: NO (archive marker lines B present, C present; session_read at B: 1 hit(s))
+  H2 archive rewritten between them: YES; marker shift 1600 vs line-1 growth +1600 (equal: the whole shift is the metadata line)
+  H3 Claude transcript rewritten between them: NO (append only); marker shift 0
+Predictions (code, see the report): graftling collects the turn while it runs and once more after Claude exits,
+  before the execution reports completed (graftling claude/execution.py:1119-1146, outcome at 1157); every archive write
+  replaces the whole file (sessions/archive.py:94-103, 336-349) and its line 1 holds pending drafts and accumulating
+  observations (archive.py:364-366, 494-499). Hence:
+  H2 (code):  A archive has M1 and session_read finds it; B identical to A (same inode, size, mtime);
+              C archive inode CHANGED, line 1 grew by d bytes, M1 line number unchanged, M1 offset shifted by exactly +d;
+              transcript inode same, first bytes same, M1 offset unchanged (append only); session_read finds M1 and M2.
+  H1 (latency, the 515 inference) would show: A and B archive M1 ABSENT and session_read 0 hits; C present.
+  H3 (Claude rewrites its transcript on --resume) would show: C transcript inode changed or first bytes CHANGED or SHRANK.
+Decide: H2 when the A->C archive line says 'inode CHANGED' and 'shift +d' equals the line-1 growth with the line number unchanged; the 515 symptom is reproduced when it also says 'beyond A's size ... YES'.
+        H1 when A/B said ABSENT and C PRESENT.  H3 when the transcript line says inode CHANGED, first bytes CHANGED or SHRANK.
+Done. Hand <scratch>/out/{A,B,C}-* to the Engineer/Leader.
+######## rc=0

@@ -1,0 +1,84 @@
+# Task 521 rehearsal: a new pytest basetemp for every F/B run (Engineer, 2026-11-19 00:39 JST)
+# Cause fixed: Main's F rerun reused the fixed basetemp $TMPDIR/verify-521-F, whose root held a .graphtraj marker
+# left by the earlier run; tests/harness_isolation.py then refused it (exit 4, no tests). Empty scratch BASE /tmp/claude-501/521-rehT.2ax0ki/base;
+# real background path, not collect-only; VERIFY521_TESTS limits the selection (rehearsal only; default 'tests').
+
+## 0. the old fixed basetemp with a planted marker, run directly (reproduces Main's exit 4)
+ERROR: --basetemp /tmp/claude-501/verify-521-F lies inside the Harness /private/tmp/claude-501/verify-521-F; tests would walk up into it and change its records. Choose a --basetemp outside every Harness (482).
+
+rc=4
+
+## 1. F with stale markers planted, limited selection, then R
+## planted stale markers: /tmp/claude-501/verify-521-F/.graphtraj and /tmp/claude-501/verify-521-F-20261118T000000/.graphtraj
+## F (VERIFY521_TESTS='tests/test_wheel_installation.py tests/test_result_submission.py'; not collect-only)
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501; --basetemp is new for every run (below)
+
+### test checkout /tmp/claude-501/521-rehT.2ax0ki/base/checkout-product and venv /tmp/claude-501/521-rehT.2ax0ki/base/venv-product (about 1 min when new)
+checkout /tmp/claude-501/521-rehT.2ax0ki/base/checkout-product: HEAD bf92a9810333cbb96e9445b5b459160942606884 (expected bf92a9810333cbb96e9445b5b459160942606884) | changed or untracked (not ignored) paths: 0 (expected 0)
+graphtraj: /private/tmp/claude-501/521-rehT.2ax0ki/base/checkout-product/src/graphtraj/__init__.py | inside the checkout: True | graftling: /tmp/claude-501/521-rehT.2ax0ki/base/venv-product/lib/python3.13/site-packages/graftling/__init__.py
+pytest basetemp (new for this run, outside the Harness, no Harness marker above it): /tmp/claude-501/verify-521-F-20261119T003753
+earlier F basetemps (kept; delete by hand when no longer needed): /tmp/claude-501/verify-521-F /tmp/claude-501/verify-521-F-20261118T000000
+REHEARSAL: tests limited to tests/test_wheel_installation.py tests/test_result_submission.py
+command (in /tmp/claude-501/521-rehT.2ax0ki/base/checkout-product): /tmp/claude-501/521-rehT.2ax0ki/base/venv-product/bin/python -m pytest tests/test_wheel_installation.py tests/test_result_submission.py -p no:cacheprovider -p no:xdist -q -rfE --junitxml=/tmp/claude-501/521-rehT.2ax0ki/base/out-F/F-junit.xml --basetemp=/tmp/claude-501/verify-521-F-20261119T003753
+detached with: trap HUP (nohup refused here) and &!
+started 2026-11-19 00:37:53 JST pid 67573
+files: /tmp/claude-501/521-rehT.2ax0ki/base/out-F/F-pytest.txt, F-junit.xml, F.pid, F.start, F.exit (written when pytest ends)
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+rc=0
+## R at once
+running: pid 67573 (not visible to ps here; judged by a log change within 10 min), started 2026-11-19 00:37:53 JST, elapsed 0 min 1 s
+last log line: 
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+
+## R after the end
+
+### [R] the F result. Dialog: none.
+basetemp of this run: /tmp/claude-501/verify-521-F-20261119T003753
+finished: exit code 0 (started 2026-11-19 00:37:53 JST; 0 min since)
+summary: 35 passed in 32.33s
+failed/errored test ids (junit): 0 -> /tmp/claude-501/521-rehT.2ax0ki/base/out-F/F-failed.txt
+no failures: no new failures (B not needed)
+rc=0
+## markers at the new basetemp's root (/tmp/claude-501/verify-521-F-20261119T003753) after the run:
+  .graphtraj: absent
+  .agents-control: absent
+  .agents-control/claude-host.json: absent
+  top-level entries: distribution-wheel0 distribution-wheelcurrent installed-environment0 installed-environmentcurrent test_cli_submits_versioned_cod0 test_cli_submits_versioned_codcurrent test_decision_cites_task_state0 test_decision_cites_task_statecurrent test_failed_evidence_write_or_0 test_failed_evidence_write_or_current test_installed_tool_reads_the_0 test_installed_tool_reads_the_current test_installed_wheel_initializ0 test_installed_wheel_initializ1 test_installed_wheel_initializcurrent test_new_role_aliases_get_dist0 test_new_role_aliases_get_distcurrent test_only_ordinary_receipts_ar0 test_only_ordinary_receipts_ar1 test_only_ordinary_receipts_ar2 
+
+## 2. F rerun: a second new basetemp, then R
+## F rerun (VERIFY521_TESTS=tests/test_result_submission.py)
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501; --basetemp is new for every run (below)
+earlier F results moved to /tmp/claude-501/521-rehT.2ax0ki/base/out-F/F-earlier-20261119T003832
+
+### test checkout /tmp/claude-501/521-rehT.2ax0ki/base/checkout-product and venv /tmp/claude-501/521-rehT.2ax0ki/base/venv-product (about 1 min when new)
+checkout /tmp/claude-501/521-rehT.2ax0ki/base/checkout-product and venv /tmp/claude-501/521-rehT.2ax0ki/base/venv-product already hold bf92a9810333cbb96e9445b5b459160942606884: install skipped (rerun)
+checkout /tmp/claude-501/521-rehT.2ax0ki/base/checkout-product: HEAD bf92a9810333cbb96e9445b5b459160942606884 (expected bf92a9810333cbb96e9445b5b459160942606884) | changed or untracked (not ignored) paths: 0 (expected 0)
+graphtraj: /private/tmp/claude-501/521-rehT.2ax0ki/base/checkout-product/src/graphtraj/__init__.py | inside the checkout: True | graftling: /tmp/claude-501/521-rehT.2ax0ki/base/venv-product/lib/python3.13/site-packages/graftling/__init__.py
+pytest basetemp (new for this run, outside the Harness, no Harness marker above it): /tmp/claude-501/verify-521-F-20261119T003833
+earlier F basetemps (kept; delete by hand when no longer needed): /tmp/claude-501/verify-521-F /tmp/claude-501/verify-521-F-20261118T000000 /tmp/claude-501/verify-521-F-20261119T003753
+REHEARSAL: tests limited to tests/test_result_submission.py
+command (in /tmp/claude-501/521-rehT.2ax0ki/base/checkout-product): /tmp/claude-501/521-rehT.2ax0ki/base/venv-product/bin/python -m pytest tests/test_result_submission.py -p no:cacheprovider -p no:xdist -q -rfE --junitxml=/tmp/claude-501/521-rehT.2ax0ki/base/out-F/F-junit.xml --basetemp=/tmp/claude-501/verify-521-F-20261119T003833
+detached with: trap HUP (nohup refused here) and &!
+started 2026-11-19 00:38:33 JST pid 68362
+files: /tmp/claude-501/521-rehT.2ax0ki/base/out-F/F-pytest.txt, F-junit.xml, F.pid, F.start, F.exit (written when pytest ends)
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+rc=0
+## R after the end
+
+### [R] the F result. Dialog: none.
+basetemp of this run: /tmp/claude-501/verify-521-F-20261119T003833
+finished: exit code 0 (started 2026-11-19 00:38:33 JST; 0 min since)
+summary: 28 passed in 17.75s
+failed/errored test ids (junit): 0 -> /tmp/claude-501/521-rehT.2ax0ki/base/out-F/F-failed.txt
+no failures: no new failures (B not needed)
+rc=0
+markers at /tmp/claude-501/verify-521-F-20261119T003833: (none listed = absent)

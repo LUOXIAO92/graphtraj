@@ -172,6 +172,25 @@ PYTEST_ARGS=(-p no:cacheprovider -p no:xdist -q -rfE)
 # F counts as running while F.exit is absent and its pid is visible, or (a sandbox hides other processes from ps)
 # its log or start record changed within 10 minutes. It never signals the process.
 pid_visible() { [[ -f $OUT/F.pid ]] && ps -p $(<$OUT/F.pid) >/dev/null 2>&1; }
+# new_basetemp <F|B>: a pytest basetemp new for this run, $TMPB/verify-521-<step>-<time>. It must not exist yet, and
+# neither it nor a parent may hold a Harness marker (tests/harness_isolation.py MARKERS), which made pytest refuse
+# the reused fixed basetemp (Main's F rerun, exit 4). Old basetemps are listed, never deleted. Sets BT.
+new_basetemp() {
+  BT=$TMPB/verify-521-$1-$(date +%Y%m%dT%H%M%S)
+  [[ -e $BT ]] && { print "STOP: basetemp $BT already exists; run again in a second"; return 1; }
+  [[ ${BT:A} != $H* ]] || { print "STOP: basetemp $BT is inside the Harness"; return 1; }
+  local d
+  for d in ${BT:h} ${BT:h:A}; do
+    while [[ $d != / ]]; do
+      if [[ -e $d/.graphtraj || -e $d/.agents-control/claude-host.json ]]; then
+        print "STOP: $d (a parent of basetemp $BT) holds a Harness marker; set TMPDIR elsewhere"; return 1; fi
+      d=${d:h}
+    done
+  done
+  print "pytest basetemp (new for this run, outside the Harness, no Harness marker above it): $BT"
+  local old=($TMPB/verify-521-$1(N/) $TMPB/verify-521-$1-*(N/))
+  print "earlier $1 basetemps (kept; delete by hand when no longer needed): ${old:-none}"
+}
 running_f() {
   [[ -f $OUT/F.start && ! -f $OUT/F.exit ]] || return 1
   pid_visible && return 0
@@ -183,7 +202,7 @@ step_F() {
   local mode=${1:-}
   say "[F] full suite of $PRODUCT in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min."
   check_tmp || return 1
-  print "pytest temp: TMPDIR=${TMPB:A}, --basetemp ${TMPB:A}/verify-521-F (outside the Harness)"
+  print "pytest temp: TMPDIR=${TMPB:A}; --basetemp is new for every run (below)"
   if running_f; then print "STOP: an earlier F is still running (pid $(<$OUT/F.pid)); read it with: zsh $THIS R"; return 1; fi
   if [[ -e $OUT/F.pid || -e $OUT/F.exit || -e $OUT/F-pytest.txt ]]; then
     if [[ $mode != rerun ]]; then
@@ -191,12 +210,16 @@ step_F() {
       print "      or start again, moving them aside: zsh $THIS F rerun"; return 1
     fi
     local aside=$OUT/F-earlier-$(date +%Y%m%dT%H%M%S); mkdir -p $aside
-    mv $OUT/F.pid $OUT/F.exit $OUT/F.start $OUT/F-pytest.txt $OUT/F-junit.xml $OUT/F-failed.txt $aside/ 2>/dev/null
+    mv $OUT/F.pid $OUT/F.exit $OUT/F.start $OUT/F-pytest.txt $OUT/F-junit.xml $OUT/F-failed.txt $OUT/F.basetemp $aside/ 2>/dev/null
     print "earlier F results moved to $aside"
   fi
   say "test checkout $CP and venv $VP (about 1 min when new)"
   install_checkout $PRODUCT $CP $VP || return 1
-  local args=(tests $PYTEST_ARGS --junitxml=$OUT/F-junit.xml --basetemp=$TMPB/verify-521-F)
+  new_basetemp F || return 1
+  print -r -- $BT > $OUT/F.basetemp
+  # VERIFY521_TESTS (rehearsal only) limits the selection; the default is the whole suite.
+  local args=(${=VERIFY521_TESTS:-tests} $PYTEST_ARGS --junitxml=$OUT/F-junit.xml --basetemp=$BT)
+  [[ -n ${VERIFY521_TESTS:-} ]] && print "REHEARSAL: tests limited to $VERIFY521_TESTS"
   [[ -n ${VERIFY521_COLLECT:-} ]] && { args=(--collect-only $args); print "REHEARSAL: --collect-only"; }
   print -r -- "$(date +%s) $(date '+%Y-%m-%d %H:%M:%S %Z')" > $OUT/F.start
   print -r -- "command (in $CP): $VP/bin/python -m pytest ${args[*]}"
@@ -229,6 +252,7 @@ step_R() {
     tail -5 $OUT/F-pytest.txt 2>/dev/null; print "start again: zsh $THIS F rerun"; return 1
   fi
   local rc=$(<$OUT/F.exit)
+  print "basetemp of this run: $(cat $OUT/F.basetemp 2>/dev/null || print unrecorded)"
   print "finished: exit code $rc (started $(cut -d' ' -f2- $OUT/F.start); $(( elapsed / 60 )) min since)"
   print -r -- "summary: $(grep -E '(passed|failed|error|no tests ran|collected|tests? collected)' $OUT/F-pytest.txt | tail -1)"
   [[ -f $OUT/F-junit.xml ]] || { print "STOP: no $OUT/F-junit.xml"; return 1; }
@@ -243,7 +267,7 @@ step_R() {
 step_B() {
   say "[B] the F failures rerun on the baseline $BASELINE, single process. Dialog: none. Install about 1 min; then only those tests."
   check_tmp || return 1
-  print "pytest temp: TMPDIR=${TMPB:A}, --basetemp ${TMPB:A}/verify-521-B (outside the Harness)"
+  print "pytest temp: TMPDIR=${TMPB:A}; --basetemp is new for every run (below)"
   [[ -s $OUT/F-failed.txt ]] || { print "STOP: no failed ids in $OUT/F-failed.txt; run: zsh $THIS R"; return 1; }
   say "baseline checkout $CB and venv $VB: $BASELINE cloned and installed editable from there"
   install_checkout $BASELINE $CB $VB || return 1
@@ -255,8 +279,10 @@ step_B() {
   print "candidate failures: $(wc -l < $OUT/F-failed.txt | tr -d ' '); present on the baseline: ${#ids}"
   rm -f $OUT/B-junit.xml
   if (( ${#ids} )); then
+    new_basetemp B || return 1
+    print -r -- $BT > $OUT/B.basetemp
     (cd $CB && clean $VB/bin/python -m pytest $PYTEST_ARGS --junitxml=$OUT/B-junit.xml \
-       --basetemp=$TMPB/verify-521-B $ids > $OUT/B-pytest.txt 2>&1)
+       --basetemp=$BT $ids > $OUT/B-pytest.txt 2>&1)
     print -r -- "baseline run: $(grep -E '(passed|failed|error)' $OUT/B-pytest.txt | tail -1) (log $OUT/B-pytest.txt)"
   fi
   say "per test: candidate / baseline"

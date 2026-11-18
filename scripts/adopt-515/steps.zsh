@@ -166,14 +166,20 @@ node_resolve() {
 summary() { print -- "\n----- 复制给 Main 的摘要（$1）-----"; shift; print -l -- "$@"; print -- "-----"; }
 # 515: the .mcp.json servers and which of them start GraphTraj or Graftling (command/args only; env values never
 # printed). Exit 0 only when the servers that run graphtraj/graftling are exactly ['graphtraj'] and 'agents' is absent.
+# With a second argument 'before' (00, production before I): the same facts as a state line without CHECK/PASS/FAIL,
+# exit 0 (the old 'agents' entry is expected there; I must turn the CHECK to PASS).
 mcp_keys() {
-  $CONDA -I - $1 <<'MK'
+  $CONDA -I - $1 ${2:-} <<'MK'
 import json, sys
+before = sys.argv[2:] == ['before']
 try: servers = json.load(open(sys.argv[1])).get('mcpServers') or {}
-except (OSError, ValueError) as e: print(f'.mcp.json unreadable: {e}'); sys.exit(1)
+except (OSError, ValueError) as e: print(f'.mcp.json unreadable: {e}'); sys.exit(0 if before else 1)
 ours = sorted(k for k, v in servers.items() if isinstance(v, dict) and any(w in ' '.join([str(v.get('command', ''))] + [str(a) for a in v.get('args') or []]) for w in ('graphtraj', 'graftling')))
 print(f".mcp.json servers: {sorted(servers)} | servers running graphtraj/graftling: {ours}")
 ok = ours == ['graphtraj'] and 'agents' not in servers
+if before:
+    print(f"state before I (not a check; expected 'not yet' now, I must make it so): .mcp.json has only graphtraj: {'yes' if ok else 'not yet'}")
+    sys.exit(0)
 print(f"CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: {'PASS' if ok else 'FAIL'}")
 sys.exit(0 if ok else 1)
 MK
@@ -386,7 +392,7 @@ step_00() {
   say "plugin files and hashes"; shasum -a 256 $PDIR/hooks/host_context.mjs $PDIR/hooks/hooks.json $PDIR/.claude-plugin/plugin.json
   grep -nE '^const (PLUGIN|SERVER|PREFIX)' $PDIR/hooks/host_context.mjs | sed 's/^/production copy: /'
   say "entry files (hashes; .mcp.json servers now: expect '$OLDS' only, 503's)"; shasum -a 256 $ENTRIES; tree mcp $H/.mcp.json
-  mcp_keys $H/.mcp.json
+  mcp_keys $H/.mcp.json before
   say "Main-owned .claude/settings.local.json (read only; Main removes '$OLDS' after the restart)"; settings_view $H/.claude/settings.local.json
   say "backup must be absent; 503's backup $OLDBASE/backup is listed, never touched"
   ls -d $BK 2>&1; ls -ld $OLDBASE/backup 2>&1; ls -l $OLDBASE/backup/COMPLETE 2>&1; [[ -e $OLDBASE/backup/COMPLETE ]] && print "503 backup COMPLETE marker: present" || print "503 backup COMPLETE marker: absent"
@@ -573,7 +579,7 @@ do_install() {
   say "entry files still as V saw them (expect 3 x OK)"; shasum -a 256 -c $W/entries-$C8.sha256 || { print "入口文件在 V 之后被改过；重新运行 V。"; return 1; }
   say "484: production agents control records right before pip (N484 compares against this snapshot)"
   $CONDA -I $SD/ctl497.py snap $H $CTL/I.json || return 1
-  say "install both wheels (graftling 0.5.0 -> $GVERSION from the $GTAG wheel; graphtraj 0.1.0 over the same version: --force-reinstall)"
+  say "install both wheels (graftling $GOLDVERSION -> $GVERSION from the $GTAG wheel; graphtraj 0.1.0 over the same version: --force-reinstall)"
   date +%s > $R/I-install-start.epoch   # 490: timers started before this are old (listed, not judged)
   $P -m pip install --disable-pip-version-check --no-cache-dir --no-deps --no-index --force-reinstall $(wheel_of graphtraj) $(wheel_of graftling) || return 1
   say "installed files vs the new wheels, file by file (versions are the same numbers as before)"
@@ -626,6 +632,13 @@ step_R() {
   local KEEP=$BK/after-install-$(date +%Y%m%dT%H%M%S) rc=0 f
   date '+R start %F %T'; mkdir -p $KEEP
   say "before restoring: how the venv differs from the pre-install manifest"; tree compare $BK/venv.manifest $RT | tail -1
+  # 515: graftling 0.5.2 and 0.6.0 differ in code, but not in the Session archive code (graftling/sessions/; v0.5.2..v0.6.0
+  # changes no file there). Checked here on the installed files, before the old venv comes back.
+  local ARCH_NOW=($RT/lib/python*/site-packages/graftling/sessions(N/)) ARCH_OLD=($BK/venv/lib/python*/site-packages/graftling/sessions(N/))
+  if [[ -n ${ARCH_NOW[1]:-} && -n ${ARCH_OLD[1]:-} ]]; then
+    ARCH_DIFF=$(diff -rq -x __pycache__ ${ARCH_OLD[1]} ${ARCH_NOW[1]} 2>&1 | wc -l | tr -d ' ')
+    print "graftling/sessions (archive writer/reader) installed vs backup: $ARCH_DIFF differing files$( (( ARCH_DIFF == 0 )) && print ' (archives written since the install are read by the restored code)' || print ' (NOT the same: tell Main before resuming; the archives stay as they are)')"
+  else print "graftling/sessions not found in one of the trees: archive compatibility not checked (tell Main)"; fi
   say "venv restored whole from the backup"; rm -rf $RT; cp -Rp $BK/venv $RT || return 1
   say "venv equals pre-install bytes? (expect SAME differences=0)"; tree compare $BK/venv.manifest $RT || rc=1
   say "plugin restored; the current one kept"; [[ -e $PDIR ]] && mv $PDIR $KEEP/plugin; mkdir -p ${PDIR:h}; cp -Rp $BK/plugin $PDIR || return 1
@@ -637,7 +650,7 @@ step_R() {
     if cmp -s $f $saved; then print "already as before: ${f#$H/}"; else cp -p $f $KEEP/entries/ 2>/dev/null; cp -p $saved $f || rc=1; print "restored: ${f#$H/}"; fi
   done
   shasum -a 256 -c $BK/entries.sha256 || rc=1
-  say "archives: graftling 0.5.0 and $GVERSION write the same archive format (same code), so they stay; versions (information)"; tree versions $SESS
+  say "archives stay (see the graftling/sessions line above: the archive code of $GOLDVERSION and $GVERSION is compared file by file); versions (information)"; tree versions $SESS
   say "a stale channel file would make the restored host refuse with host-busy"
   local CH=$H/.graphtraj/claude-host/live/channel.json
   if [[ -e $CH ]]; then mv $CH $KEEP/channel.json; print "moved out: $CH"; else print "no channel file"; fi
@@ -772,9 +785,9 @@ help) print "顺序: 00 → B → V → S（复用 514 的全套结果，不运�
   [[ -e $R/00.txt && ! -e $R/00-first.txt ]] && mv $R/00.txt $R/00-first.txt && print "previous 00.txt kept as $R/00-first.txt"
   : > $R/00.txt   # later reruns start a fresh 00.txt
   logged $R/00.txt step_00 || { print "\n00 STOP（see the STOP line above / 见上面的 STOP 行）。把 $R/00.txt 交给 Main，不要继续。"; exit 1; }
-  summary 00 "$(grep -E '^claude:|ZSH_VERSION|Node spawn|inherited|answer|instruction files|echo of the prompt|plugins in init|control records|budget_idle_timer|timer pid|zombies|503 backup|Claude Code installed|^Version|pip check rc|production copy|markers expected|CHECK 503 layout|mcp.json servers|enabledMcpjsonServers|isolat|running lines|may run now|^stopped|status|MAIN=|MAIN NOT|volume ids|^guard|advisor' $R/00.txt)"
+  summary 00 "$(grep -E '^claude:|^state before I|ZSH_VERSION|Node spawn|inherited|answer|instruction files|echo of the prompt|plugins in init|control records|budget_idle_timer|timer pid|zombies|503 backup|Claude Code installed|^Version|pip check rc|production copy|markers expected|CHECK 503 layout|mcp.json servers|enabledMcpjsonServers|isolat|running lines|may run now|^stopped|status|MAIN=|MAIN NOT|volume ids|^guard|advisor' $R/00.txt)"
   print "成功: 'claude:' 行给出路径与版本（默认 claude，现为 $CC_EXPECT）；ZSH_VERSION 有值；'answer check (expect clean): OK'（answer 以 MODEL-OK 开头、models 含 $MODEL、is_error False、cc-plugin-agents-md loaded: NO、无 Harness AGENTS.md、不是 prompt 回显）；'control records snapshot 00.json'；计时器每个一行（照实记录，不发信号）；graphtraj 0.1.0 与 graftling $GOLDVERSION（503 安装的）；pip check rc=0；'markers expected absent: PASS (7/7)'（生产仍是 6115c724）；'task graph rc=0' 且 'Task $TASK_ID named' 不为 0；"
-  print "  'isolation: OK'（$VPROJECT）；stopped: false 且 Team 1 active；roles 里有 opus_coding_team 的 advisor；'.mcp.json servers: [...'$OLDS'...]'（安装前，信息；此时 CHECK 515 .mcp.json 为 FAIL 是预期的）；'enabledMcpjsonServers: [...]'（信息）；$BK 'No such file'（503 的备份 $OLDBASE/backup 只列出，不动；'503 backup COMPLETE marker: present'）；'Claude Code installed: <版本>'；MAIN=<id>；Task $TASK_ID 的成员（Leader 与 Engineer）列出（I 期间应空闲）。"
+  print "  'isolation: OK'（$VPROJECT）；stopped: false 且 Team 1 active；roles 里有 opus_coding_team 的 advisor；'.mcp.json servers: [...'$OLDS'...]'（安装前，信息）与 'state before I (not a check …): .mcp.json has only graphtraj: not yet'（预期；不是失败，不要停；I 的 CHECK 515 .mcp.json 必须是 PASS）；'enabledMcpjsonServers: [...]'（信息）；$BK 'No such file'（503 的备份 $OLDBASE/backup 只列出，不动；'503 backup COMPLETE marker: present'）；'Claude Code installed: <版本>'；MAIN=<id>；Task $TASK_ID 的成员（Leader 与 Engineer）列出（I 期间应空闲）。"
   print "running lines 可以不为 0（其它 Task 的成员）；I 会等它们结束，不结束它们，不需要现在处理。计时器本身是 NON-BLOCKING，不影响安装；只有计时器的活子进程（预算送达启动的 Worker）在 \$RT 下时是 BLOCKING，由 USER 决定。"
   print "若 'inherited:' 列出名字：本脚本已对所有子命令 unset；记下它来自哪个项目（418 提醒）。"
   print "若 answer 有 login/API key 字样: USER 在 Terminal 运行 claude 登录后重跑 00。若 MAIN NOT FOUND 或 ps 被拒: 由 USER 在普通 Terminal 运行 00。"
@@ -836,8 +849,8 @@ I) need_main
   touch $R/I.ok
   { say "BLOCKING processes started during the install window ($INSTALL_FROM → $(date +%T)); information for Main"
     guard && print "none" || print "（上面 BLOCKING 列出的进程在安装期间启动，可能载入了新旧混合的文件；告诉 Main。）"; } 2>&1 | tee -a $R/I.txt
-  summary I "$(grep -E 'Successfully|^PASS|^FAIL|^graftling 0|^457 _stop_escaped|^460 tool-processes|^465 Claude|^469 Unknown|^4[89][0-9] |^395 layout|CHECK 503|503 layout|control records snapshot|budget_idle_timer|timer pid|zombies|markers expected|SAME-AS-VALIDATED|plugin bytes|WRITTEN|UNCHANGED|bytes unchanged|^changed|BLOCKING|-rw-------' $R/I.txt)"
-  print "成功: Successfully installed graftling-$GVERSION graphtraj-0.1.0（pip 卸载 graftling-0.5.0）；PASS n FAIL 0（含 LEFTOVER-DIST-INFO 0）；三个 -rw------- 备份入口文件；'markers expected present: PASS (7/7)'；'395 layout graftling 0.5.2 | distributions 1 | beside graphtraj: True | graftling.mjs: True | graphtraj requires [...>=0.5.2...]'；'503 layout: PASS (0 failed)'（六行 CHECK 503 layout）；两行 'CHECK 503 node resolves … : PASS'；'control records snapshot I.json'；464 的两行 import（457…463 仍在）、478 的三行 '466 session_read DEFAULT_COUNT 5 …'、'468 archive _identity …'、'477 take_push …'、492 的四行（481/484、486、485/480、487）与 497 的三行 '488 _worker_arguments _worker_arguments | _process_ended _process_ended'、'490 _work_ended … | SLICE_SECONDS 5.0 | cleanup uses process_is_zombie: True'、'494 Claude host receiver defers_push: True | hold thread started in the lock: True' 与 '495 argv refreshed each sample: True'；"
+  summary I "$(grep -E 'Successfully|^PASS|^FAIL|^graftling 0|^457 _stop_escaped|^460 tool-processes|^465 Claude|^469 Unknown|^4[89][0-9] |^395 layout|CHECK 503|503 layout|control records snapshot|budget_idle_timer|timer pid|zombies|markers expected|SAME-AS-VALIDATED|plugin bytes|configuration --write rc|CHECK 515|WRITTEN|UNCHANGED|bytes unchanged|^changed|BLOCKING|-rw-------' $R/I.txt)"
+  print "成功: Successfully installed graftling-$GVERSION graphtraj-0.1.0（pip 卸载 graftling-$GOLDVERSION）；PASS n FAIL 0（含 LEFTOVER-DIST-INFO 0）；三个 -rw------- 备份入口文件；'markers expected present: PASS (7/7)'；'395 layout graftling $GVERSION | distributions 1 | beside graphtraj: True | graftling.mjs: True | graphtraj requires [...>=$GVERSION...]'；'503 layout: PASS (0 failed)'（六行 CHECK 503 layout）；两行 'CHECK 503 node resolves … : PASS'；'control records snapshot I.json'；464 的两行 import（457…463 仍在）、478 的三行 '466 session_read DEFAULT_COUNT 5 …'、'468 archive _identity …'、'477 take_push …'、492 的四行（481/484、486、485/480、487）与 497 的三行 '488 _worker_arguments _worker_arguments | _process_ended _process_ended'、'490 _work_ended … | SLICE_SECONDS 5.0 | cleanup uses process_is_zombie: True'、'494 Claude host receiver defers_push: True | hold thread started in the lock: True' 与 '495 argv refreshed each sample: True'；"
   print "  '465 Claude member settings call project_history_files: False | Codex development reads history param: True' 与 '469 UnknownTask _load_task_state _RegisteredTaskNames'；SAME-AS-VALIDATED；计时器列表三次（备份前、pip 前、安装后；安装后的一次按 old/new 分类），只报告不发信号；"
   print "  'CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS'；'CHECK 515 host_context.mjs const SERVER = \"graphtraj\": PASS'；'plugin bytes CHANGED … (expected …)'；'CHECK 515 settings.local.json bytes unchanged …: PASS'（若 CHANGED：信息，交 Main；值不打印）；入口文件 changed: .mcp.json（agents → graphtraj）。"
   print "$R_HINT"

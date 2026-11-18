@@ -102,6 +102,7 @@ grep -E '^(MAIN=|markers expected|\.mcp.json servers|enabledMcpjsonServers|isola
 check "00 exit 0, MAIN found" sh -c "[ $ZRC -eq 0 ] && grep -q 'MAIN=$MAINID' $F/00.out"
 check "00: 515 markers absent in production (7/7)" grep -q 'markers expected absent: PASS (7/7)' $F/00.out
 check "00: .mcp.json shows the old 'agents' server (information) and the settings view" sh -c "grep -q \"^.mcp.json servers: \['agents'\]\" $F/00.out && grep -q \"^enabledMcpjsonServers: \['graphtraj', 'agents'\]\" $F/00.out"
+check "00: the pre-install .mcp.json is a state line ('not yet'), never a CHECK/FAIL line" sh -c "grep -q '^state before I (not a check.*): .mcp.json has only graphtraj: not yet' $F/00.out && ! grep -q '^CHECK 515 .mcp.json' $F/00.out && ! grep -q '^CHECK.*FAIL' $F/00.out"
 check "00: isolated vproject OK and answer check OK" sh -c "grep -q '^isolation: OK' $F/00.out && grep -q 'answer check (expect clean): OK' $F/00.out"
 check "00 next is B with the real path" grep -q "next.*: zsh $SD/steps.zsh B" $F/00.out
 
@@ -217,6 +218,8 @@ head1 "R (rollback from the backup's own tools): venv, plugin, .mcp.json and set
 : > $F/ps.txt
 print | zsh $FB/backup/tools/steps.zsh R > $F/R.out 2>&1; RR2=$?; grep -E '^(SAME|DIFF)|restored|already as|^Version' $F/R.out
 check "R exit 0; venv and plugin SAME; entry files restored and OK" sh -c "[ $RR2 -eq 0 ] && [ \$(grep -c 'SAME differences=0' $F/R.out) -ge 2 ] && grep -q 'restored: .mcp.json' $F/R.out"
+check "R: archive code compared before the restore (graftling/sessions 0.5.2 vs 0.6.0: 0 differing files); no 'same code' claim" sh -c "grep -q 'graftling/sessions (archive writer/reader) installed vs backup: 0 differing files' $F/R.out && ! grep -q 'same code' $F/R.out"
+check "I/R texts carry no stale 0.5.0 version" sh -c "! grep -q '0\.5\.0' $F/I.out && ! grep -q '0\.5\.0' $F/R.out && grep -q 'pip 卸载 graftling-0.5.2' $F/I.out && grep -q \"395 layout graftling 0.6.0 .*>=0.6.0\" $F/I.out"
 check "R: production .mcp.json is 'agents' again and graftling is 0.5.2" sh -c "$CONDA -I -c 'import json,sys; s=sorted(json.load(open(sys.argv[1]))[\"mcpServers\"]); sys.exit(0 if s==[\"agents\"] else 1)' $FH/.mcp.json && $FRT/bin/python -m pip show graftling | grep -q 'Version: 0.5.2'"
 check "503's backup under tmp/503 unchanged" sh -c "cd $FH && shasum -a 256 -c --quiet $F/evidence0.sha256"
 

@@ -85,7 +85,15 @@ which loads the installed 4ad22e90 + 0.6.0 code (so a Claude member it resumes i
 
 `zsh scripts/adopt-515/rehearse.zsh` starts from an empty base (`$TMPDIR/adopt515-rehearsal` removed), stub
 claude/ps, fake production from 6115c724 + the real repository's v0.5.2 (git archive, read only); B reads the real
-v0.6.0. Output: `rehearsal-output.txt` (49 checks).
+v0.6.0. Output: `rehearsal-output.txt` (52 checks).
+
+## R and the Session archives
+
+graftling 0.5.2 and 0.6.0 differ in code, but `git diff v0.5.2 v0.6.0 -- src/graftling/sessions` is empty. Before it
+restores the venv, R compares the installed `graftling/sessions/` with the backup's file by file and prints
+`graftling/sessions (archive writer/reader) installed vs backup: <n> differing files` (0 means the restored code reads
+the archives written since the install). The archives are never rewritten. 00 prints production's pre-install
+`.mcp.json` as a state line (`… has only graphtraj: not yet`), not as a CHECK; I's `CHECK 515 .mcp.json …` must be PASS.
 
 Not rehearsable here: real Claude Code (the plugin load in Vc, the trust dialogs, Main's tool list, the init record of
 a real `claude -p`), the real member dispatch (N/Nr on a real archive), the real Leader/Engineer resume (Rs/Rsr run on

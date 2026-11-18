@@ -275,12 +275,18 @@ KEYWORD, DONE = 'KW503-ORCHID', 'DONE-503'
 FAKE = 'sk-probe503fake' + 'value0000'   # never printed; counts only
 
 
+AGENTS_TOOL = re.compile(r'mcp__.+__agents')   # any registered server: graphtraj, graftling, old agents, plugin form
+
+
 def agent_calls(evs: list[dict]) -> list[tuple[dict, str]]:
-    """(arguments, result text) of each mcp__agents__agents call in an archive, in order."""
-    calls, out = {}, []
+    """(arguments, result text) of each agents tool call in an archive, in order: mcp__<server>__agents under any
+    registered server name (mcp__graphtraj__agents since 0.6.0; mcp__graftling__agents standalone; the old
+    mcp__agents__agents and mcp__plugin_<p>_agents__agents in older records). The names seen are printed (517)."""
+    calls, out, names = {}, [], {}
     for e in evs:
         for i in _items(e):
-            if i.get('type') in ('tool-call', 'tool_use') and str(i.get('name', '')).endswith('agents__agents'):
+            if i.get('type') in ('tool-call', 'tool_use') and AGENTS_TOOL.fullmatch(str(i.get('name', ''))):
+                names.setdefault(i['name'], set()).add(i.get('id'))
                 args = i.get('input', i.get('arguments', {}))
                 if isinstance(args, str):
                     try: args = json.loads(args)
@@ -288,6 +294,7 @@ def agent_calls(evs: list[dict]) -> list[tuple[dict, str]]:
                 calls[i.get('id')] = args if isinstance(args, dict) else {}
             elif i.get('type') == 'tool_result' and i.get('tool_use_id') in calls:
                 out.append((calls[i['tool_use_id']], _text(i.get('content'))))
+    print(f'  agents tool calls by name: {({k: len(v) for k, v in sorted(names.items())}) or "none"}')
     return out
 
 

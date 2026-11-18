@@ -20,6 +20,7 @@ from pathlib import Path
 import yaml
 
 MODEL = 'claude-sonnet-5-5'
+CONNECTION = 'claude/anthropic/sonnet-5_5'   # user catalog ${HOME}/.graphtraj/connections.yml (508's launch.yml)
 TASK_ID, TASK_NAME = '1', 'read-only-report-result'
 REPORT = '.state/teams/1/rounds/1/investigation.md'
 MARK = 'FINDING-521'
@@ -80,7 +81,8 @@ def session_dir(project: Path, alias: str) -> Path:
 
 def prepare(project: Path) -> int:
     (project / '.graphtraj/roles.yml').write_text(yaml.safe_dump({
-        'roles': {'investigator': {'runtime': 'claude', 'model': MODEL, 'worktree_access': 'read',
+        # A model other than claude-opus-5-5 needs a catalog connection: the one Task 508's investigator used.
+        'roles': {'investigator': {'connection': CONNECTION, 'worktree_access': 'read',
                                    'reports': ['investigation.md'], 'claude': {'permission_mode': 'auto'}}},
         'role_tree': {'investigator': {}}}))
     work = project / '.graphtraj/probe-521'
@@ -104,7 +106,7 @@ def prepare(project: Path) -> int:
         rc |= run(tool('graphtraj'), 'task', 'register', '--task-file', str(register), cwd=project).returncode
         rc |= run(tool('graphtraj'), 'task', 'update', '--state-file', str(state), cwd=project).returncode
     doctor = run(tool('graphtraj'), 'doctor', cwd=project)
-    print('roles OK (investigator: claude, ' + MODEL + ', worktree_access read)' if 'roles: OK' in doctor.stdout
+    print(f'roles OK (investigator: connection {CONNECTION} = {MODEL}, worktree_access read)' if 'roles: OK' in doctor.stdout
           else 'roles NOT OK: ' + doctor.stdout[-600:])
     status = task_record(project).get('status')
     print(f'task {TASK_ID} {TASK_NAME}: status {status} (ready before A; implementing after A started)')
@@ -138,8 +140,10 @@ def submitted(project: Path, alias: str, seconds: float) -> int:
     while (latest := latest_submission(project, alias)) is None and time.time() < deadline:
         time.sleep(5)
     directory = session_dir(project, alias)
-    access = read(directory / 'launch.yml').get('adapter_request', {}).get('worktree_access')
-    print(f'launch.yml adapter_request.worktree_access: {access} (expected read)')
+    request = read(directory / 'launch.yml').get('adapter_request', {})
+    access = request.get('worktree_access')
+    print(f'launch.yml adapter_request: worktree_access {access} (expected read), model {request.get("model")}, '
+          f'connection {request.get("connection")}')
     if latest is None:
         print(f'{alias} submitted nothing within {seconds:.0f} s')
         return 2

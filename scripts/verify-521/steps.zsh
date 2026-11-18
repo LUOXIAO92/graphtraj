@@ -33,7 +33,8 @@ mkdir -p $OUT
 say() { print -r -- ""; print -r -- "### $*"; }
 next() { print -r -- ""; print -r -- "==> next (Main pastes): $*"; }
 # No GraphTraj/Graftling Session variables of Main leak in.
-clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=$TMPB \
+# VERIFY521_HOME (rehearsal only) is a scratch HOME whose catalog names the same connection; the real steps use HOME.
+clean() { env -i HOME=${VERIFY521_HOME:-$HOME} USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=$TMPB \
   LANG=${LANG:-en_US.UTF-8} "$@"; }
 x521() { local command=$1; shift; (cd $P && clean $PY -I $SD/x521.py $command $P "$@"); }
 base_python() { print -r -- "$($RT/bin/python -I -c 'import sys; print(sys.base_prefix)')/bin/python3"; }

@@ -62,6 +62,8 @@ instructions through the existing execution rather than waking another copy.
 
 The executing Session commits its file results and uses MCP `submit_result` to record
 the version, result references, completion statement, evidence and unresolved work.
+A Session with read-only Worktree access may name its own submitted report as its
+result instead of committed files (see `references/command-inputs.md`).
 Use assigned report destinations. No role-specific filename or prose format is a
 universal submission or acceptance condition. Session completion alone does not
 accept or finish a Task.

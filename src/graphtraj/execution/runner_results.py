@@ -72,6 +72,21 @@ def session_submissions(mapping: Mapping[str, Any], cwd: Path) -> list[dict[str,
             and event.get('session') == mapping.get('session')]
 
 
+def session_worktree_access(session_directory: Path, mapping: Mapping[str, Any]) -> str:
+    """Return the Worktree access the Session was launched with.
+
+    The retained launch must still match the Session's mapping; a missing or
+    inconsistent record counts as write access, the stricter result rule.
+    """
+    from graphtraj.execution.runner_control import _read_session_resume_request
+
+    try:
+        request, _, _ = _read_session_resume_request(session_directory, mapping)
+    except RunnerError:
+        return 'write'
+    return 'read' if request.get('worktree_access') == 'read' else 'write'
+
+
 # Task states in which a member's result or a new Round may be recorded.
 RESULT_STATUSES = frozenset({'implementing', 'reviewing', 'reworking', 'resolving-integration'})
 
@@ -85,7 +100,9 @@ def submit_session_result(
 ) -> dict[str, Any]:
     """Bind a committed result and immutable evidence to the authentic member.
 
-    Result references name files at ``commit`` relative to the Worktree.
+    Result references name files at ``commit`` relative to the Worktree; a
+    Session launched with read Worktree access may also name its own submitted
+    reports (``.state/...``), which are then retained with the evidence.
     Evidence names committed files or the Session's assigned reports/Trace.
     Evidence copies and the event are committed together under the existing
     Worldline lock; a failed write or append removes the new copies.
@@ -98,7 +115,7 @@ def submit_session_result(
     alias = caller_alias(runner)
     if alias is None:
         raise RunnerError('authority-denied', 'A task result requires its own Session.')
-    mapping, _ = read_alias_mapping(runner, alias)
+    mapping, session_directory = read_alias_mapping(runner, alias)
     require_task_authority(configuration.state, runner, mapping['task_id'], alias, 'submit')
     if _load_task_state(configuration.state / 'tasks', mapping['task_id'])[1]['status'] not in RESULT_STATUSES:
         raise ValueError('This task is not accepting result submissions.')
@@ -138,11 +155,27 @@ def submit_session_result(
             raise ValueError(f'Result reference {reference} is not a committed file at {commit}.')
         return reference
 
-    for reference in result_refs:
-        committed_file(reference)
     assigned = set(_session_report_paths(alias, cwd))
+    # A read-only Session changes no file, so its own submitted report may be
+    # its result. Access comes from its retained launch, never the caller.
+    read_only = session_worktree_access(session_directory, mapping) == 'read'
+    result_reports = []
+    for reference in result_refs:
+        supplied = Path(reference)
+        if not (read_only and supplied.parts and supplied.parts[0] == '.state'):
+            committed_file(reference)
+            continue
+        if '..' in supplied.parts:
+            raise ValueError('Result files must be Worktree-relative.')
+        report = directory.joinpath(*supplied.parts[1:]).resolve()
+        if report not in assigned:
+            raise ValueError(f'Result report {reference} is not a report assigned to this Session.')
+        if not report.is_file():
+            raise ValueError(f'Result report {reference} has not been submitted.')
+        result_reports.append(report)
     trace = Path(mapping['trace_file'])
     snapshots = []
+    retained_reports = set()
     for reference in evidence_refs:
         supplied = Path(reference)
         path = supplied if supplied.is_absolute() else worktree / supplied
@@ -152,6 +185,7 @@ def submit_session_result(
         resolved = path.resolve()
         if resolved in assigned or (trace.is_absolute() and resolved == trace.resolve()):
             content = resolved.read_bytes()
+            retained_reports.add(resolved)
         else:
             relative = resolved.relative_to(worktree.resolve()).as_posix()
             if run_git(worktree, 'ls-tree', '--name-only', commit, '--', relative):
@@ -165,6 +199,10 @@ def submit_session_result(
             else:
                 raise ValueError('Evidence references must name existing Worktree files.')
         snapshots.append((path.name, content))
+    # A report named as the result is retained like evidence, once.
+    for report in dict.fromkeys(result_reports):
+        if report not in retained_reports:
+            snapshots.append((report.name, report.read_bytes()))
     start_result_correction(mapping, cwd)
     directory, _ = _load_task_state(configuration.state / 'tasks', mapping['task_id'])
     team = read_team(directory / 'teams' / str(mapping['team_generation']) / 'team.yml')

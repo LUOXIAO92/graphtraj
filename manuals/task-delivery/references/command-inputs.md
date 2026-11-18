@@ -145,6 +145,13 @@ Keep unresolved work explicit. A report does not substitute for the submission.
 For versioned results, `result_refs` must name files or directories present in
 the submitted commit. Put retained reports, test logs and installation evidence
 in `evidence_refs`; a report stored outside Git is not a committed result path.
+Exception: a Session launched with read Worktree access (`worktree_access: read`,
+for example an investigator) changes no file, so it may name its own assigned
+report, already written with `submit_report`, in `result_refs` in the same
+`.state/...` form, alone or beside committed files. Runner checks the launch
+record, the assignment and that the report exists, and retains a copy in the
+submission's `evidence_refs`. The commit is still the Worktree `HEAD`. A Session
+with write access must name committed files.
 
 Within a managed Session, use MCP with its prepared caller context. If that
 entry is unavailable or fails, the public CLI must use the host connection

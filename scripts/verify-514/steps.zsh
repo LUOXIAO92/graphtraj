@@ -350,7 +350,7 @@ T|F)
     next "F  (on an idle host)"
   else
     say "[F] GraphTraj full suite (background). Dialog: none. Returns at once."
-    (cd $WT && TMPDIR=$PYTEST_TMP nohup $VT/bin/python -m pytest -p no:cacheprovider -q -rfE > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
+    (cd $WT && TMPDIR=$PYTEST_TMP nohup $VT/bin/python -m pytest -p no:cacheprovider -q -rfE tests > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
     print -r -- "started; result: tail -30 $R/suite.txt"; next R
   fi
   ;;

@@ -1,0 +1,103 @@
+# Task 521 rehearsal of scripts/verify-521/steps.zsh F/R/B (Engineer, 2026-11-18 22:49 JST)
+# From an empty directory (/tmp/claude-501/521/rehF/empty) with VERIFY521_BASE=/tmp/claude-501/521/rehF/base (empty scratch), VERIFY521_STUB_BIN (stub claude),
+# VERIFY521_HOME (scratch catalog) and VERIFY521_OUT. F ran with VERIFY521_COLLECT=1 (pytest --collect-only tests, single
+# process, the same background and exit-file path). In this sandbox macOS nohup refuses to detach and ps cannot see
+# the background pid, so F used its trap-HUP fallback and R judged 'running' by the log age; on the host both use
+# nohup and ps. B ran against a synthetic F junit naming two real test ids (one new in 521, one existing).
+
+## 1. F before the PRODUCT install, then P pinned to PRODUCT (tail)
+## F before any install
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-F (outside the Harness)
+STOP: /tmp/claude-501/521/rehF/base/venv holds nothing, not bf92a9810333cbb96e9445b5b459160942606884. Install it with:
+  VERIFY521_CANDIDATE=bf92a9810333cbb96e9445b5b459160942606884 zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh P
+rc=1
+## P with VERIFY521_CANDIDATE=bf92a981
+3/28 tests collected (25 deselected) in 0.24s
+
+### the host A uses, one call: claude -p --model claude-sonnet-5-5 (limit 120 s)
+claude answer: OK | READY-521 stub-claude (rehearsal stub, not a real host) logged in: n/a
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh A 2>&1 | tee /tmp/claude-501/521/rehF/base/out-F/A.txt
+rc=0
+
+## 2. F (collect-only) / R running / F refused while running / R finished / F refused (earlier results)
+## F (VERIFY521_COLLECT=1)
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-F (outside the Harness)
+REHEARSAL: --collect-only
+command (in /tmp/claude-501/521/rehF/base/candidate): /tmp/claude-501/521/rehF/base/venv/bin/python -m pytest --collect-only tests -p no:cacheprovider -p no:xdist -q -rfE --junitxml=/tmp/claude-501/521/rehF/base/out-F/F-junit.xml --basetemp=/tmp/claude-501/verify-521-F
+detached with: trap HUP (nohup refused here) and &!
+started 2026-11-18 22:48:46 JST pid 20795
+files: /tmp/claude-501/521/rehF/base/out-F/F-pytest.txt, F-junit.xml, F.pid, F.start, F.exit (written when pytest ends)
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+rc=0
+## R at once
+
+### [R] the F result. Dialog: none.
+running: pid 20795 (not visible to ps here; judged by a log change within 10 min), started 2026-11-18 22:48:46 JST, elapsed 0 min 0 s
+last log line: 
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+rc=0
+## F again at once (expect STOP: still running)
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-F (outside the Harness)
+STOP: an earlier F is still running (pid 20795); read it with: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+rc=1
+## R after the end
+
+### [R] the F result. Dialog: none.
+finished: exit code 0 (started 2026-11-18 22:48:46 JST; 0 min since)
+summary: 3646 tests collected in 0.67s
+failed/errored test ids (junit): 0 -> /tmp/claude-501/521/rehF/base/out-F/F-failed.txt
+no failures: no new failures (B not needed)
+rc=0
+## F again without rerun (expect STOP: earlier results)
+
+### [F] full suite of bf92a9810333cbb96e9445b5b459160942606884 in the background, single process (no xdist). Dialog: none. Returns at once; the suite takes about 75 min.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-F (outside the Harness)
+STOP: results of an earlier F exist in /tmp/claude-501/521/rehF/base/out-F (F.pid/F.exit/F-pytest.txt). Read them: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh R
+      or start again, moving them aside: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh F rerun
+rc=1
+
+## 3. R and B on a synthetic F result
+## synthetic F result in /tmp/claude-501/521/rehF/base/out-B: F-junit.xml with 2 failures (a test new in 521, an existing test), 1 pass; F.exit 1
+## R
+
+### [R] the F result. Dialog: none.
+finished: exit code 1 (started synthetic; 0 min since)
+summary: 2 failed in 1.00s (synthetic)
+failed/errored test ids (junit): 2 -> /tmp/claude-501/521/rehF/base/out-B/F-failed.txt
+  tests/test_result_submission.py::test_read_only_session_submits_its_own_report_as_result
+  tests/test_result_submission.py::test_repeated_unchanged_submission_is_recorded_once
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh B 2>&1 | tee /tmp/claude-501/521/rehF/base/out-B/B.txt
+rc=0
+## B
+
+### [B] the F failures rerun on the baseline 81dde17ec099e8bb7d70f25eb2f320f61cc41ffb, single process. Dialog: none. Install about 1 min; then only those tests.
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+pytest temp: TMPDIR=/private/tmp/claude-501, --basetemp /private/tmp/claude-501/verify-521-B (outside the Harness)
+
+### baseline venv /tmp/claude-501/521/rehF/base/venv-baseline: 81dde17ec099e8bb7d70f25eb2f320f61cc41ffb archived to /tmp/claude-501/521/rehF/base/baseline and installed editable from there
+candidate failures: 2; present on the baseline: 1
+baseline run: 1 passed in 0.62s (log /tmp/claude-501/521/rehF/base/out-B/B-pytest.txt)
+
+### per test: candidate / baseline
+tests/test_result_submission.py::test_read_only_session_submits_its_own_report_as_result: candidate-failed / baseline-absent (not collected on the baseline)
+tests/test_result_submission.py::test_repeated_unchanged_submission_is_recorded_once: candidate-failed / baseline-passed
+
+new failures (failed on the candidate, not failing on the baseline): 2
+  NEW tests/test_result_submission.py::test_read_only_session_submits_its_own_report_as_result
+  NEW tests/test_result_submission.py::test_repeated_unchanged_submission_is_recorded_once
+FAIL
+rc=1

@@ -196,8 +196,58 @@ def decide(project: Path, alias: str) -> int:
     return 0 if ok else 1
 
 
+def junit_outcomes(junit: Path, root: Path) -> dict[str, str]:
+    """pytest node id -> passed/failed/error/skipped from a junit file of a run under <root>."""
+    import xml.etree.ElementTree as ElementTree
+
+    outcomes = {}
+    for case in ElementTree.parse(junit).getroot().iter('testcase'):
+        parts = (case.get('classname') or '').split('.')
+        # The longest dotted prefix naming a file under root is the module; the rest are classes.
+        for cut in range(len(parts), 0, -1):
+            if (root / Path(*parts[:cut])).with_suffix('.py').is_file():
+                node = '::'.join([Path(*parts[:cut]).with_suffix('.py').as_posix(), *parts[cut:], case.get('name', '')])
+                break
+        else:
+            node = f'{case.get("classname")}::{case.get("name")}'
+        kinds = {child.tag for child in case}
+        outcomes[node] = ('error' if 'error' in kinds else 'failed' if 'failure' in kinds
+                          else 'skipped' if 'skipped' in kinds else 'passed')
+    return outcomes
+
+
+def failed_ids(junit: Path, root: Path) -> int:
+    """Print the failed or errored ids of a run, one per line."""
+    for node, outcome in junit_outcomes(junit, root).items():
+        if outcome in ('failed', 'error'):
+            print(node)
+    return 0
+
+
+def compare(failed: Path, baseline_junit: Path, baseline_collected: Path, baseline_root: Path) -> int:
+    """Each candidate failure against the baseline: new = failed on the candidate, passed or absent on the baseline."""
+    ids = [line for line in failed.read_text().splitlines() if line.strip()]
+    collected = {line for line in baseline_collected.read_text().splitlines() if '::' in line}
+    outcomes = junit_outcomes(baseline_junit, baseline_root) if baseline_junit.is_file() else {}
+    new = []
+    for node in ids:
+        outcome = outcomes.get(node) or ('absent (not collected on the baseline)' if node not in collected else 'not run')
+        print(f'{node}: candidate-failed / baseline-{outcome}')
+        if outcome != 'failed' and outcome != 'error':
+            new.append(node)
+    print(f'\nnew failures (failed on the candidate, not failing on the baseline): {len(new)}')
+    for node in new:
+        print(f'  NEW {node}')
+    print('PASS (none new)' if not new else 'FAIL')
+    return 0 if not new else 1
+
+
 def main() -> int:
     command, project = sys.argv[1], Path(sys.argv[2])
+    if command == 'failed-ids':
+        return failed_ids(project, Path(sys.argv[3]))
+    if command == 'compare':
+        return compare(project, Path(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5]))
     if command == 'prepare':
         return prepare(project)
     if command == 'instruction':

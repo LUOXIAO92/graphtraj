@@ -1,0 +1,20 @@
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/data/control/agents/agent-eff3e97de46b47f29bc4ab8b32db30fb.json: mcp__graftling__agents=2 mcp__agents__agents=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/data/native/agent-eff3e97de46b47f29bc4ab8b32db30fb/session.yml: mcp__graftling__agents=1 mcp__agents__agents=0
+  unreadable, not scanned: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/data/native/agent-eff3e97de46b47f29bc4ab8b32db30fb/trace.jsonl (Operation not permitted)
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/data/sessions/5858c779edbe27943e05b6fad92e0d7742f6e3a8a2e602b18e30a7ca27ce40e8/session.jsonl: mcp__graftling__agents=13 mcp__agents__agents=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/f2717b0f-bf20-43f9-b886-572491bdeac5.jsonl: mcp__graftling__agents=23 mcp__agents__agents=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/stream.jsonl: mcp__graftling__agents=12 mcp__agents__agents=0
+  init mcp tools: ['mcp__graftling__agents'] servers: ['graftling']
+PASS model-visible tools (system init record): mcp__graftling__agents listed=True, mcp__agents__agents listed=False
+PASS retained records name mcp__graftling__agents 51 times and mcp__agents__agents 0 times
+  unreadable, not scanned: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/data/native/agent-eff3e97de46b47f29bc4ab8b32db30fb/trace.jsonl (Operation not permitted)
+  unreadable, not scanned: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/data/native/agent-eff3e97de46b47f29bc4ab8b32db30fb/trace.jsonl (Operation not permitted)
+PASS an agents create call made a child and returned it to the parent: control records ['agent-eff3e97de46b47f29bc4ab8b32db30fb']; named in the parent records: ['agent-eff3e97de46b47f29bc4ab8b32db30fb']
+  info (not a criterion): the child answered PONG-513 in an agents result (last_message): 0 record line(s)
+  reviewer was asked about: ['agents/connectivity-check']
+PASS the reviewer was never asked about an agents tool: asked none
+  unreadable, not scanned: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T124553/data/native/agent-eff3e97de46b47f29bc4ab8b32db30fb/trace.jsonl (Operation not permitted)
+  display lines: 2; graftling:agent-communication entries: 0
+    {"type":"system","subtype":"ui_log","plugin":"agents-claude-host","text":"┌ agents · f2717b0f-bf20-43f9-b886-572491bdeac5 → agent-eff3e97de46b47f29bc4ab8b32db30fb","uuid":"8cbdcec7-4539-456e-a12f-1a81
+    {"type":"system","subtype":"ui_log","plugin":"agents-claude-host","text":"┌ agents · agent-eff3e97de46b47f29bc4ab8b32db30fb → f2717b0f-bf20-43f9-b886-572491bdeac5","uuid":"02fe4b97-cbc3-49a5-a46f-8b2d
+PASS display of the agents call: 2 frame line(s), 0 Pi display entr(y/ies)

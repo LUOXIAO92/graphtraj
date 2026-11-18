@@ -1,0 +1,4 @@
+[codex-failed] scanning 1 file(s)
+FAIL [codex-failed] records name mcp__graphtraj__agents 0x, mcp__graphtraj__tasks 0x, mcp__agents__agents 0x, mcp__agents__tasks 0x
+  calls of mcp__graphtraj__agents: 1; outcomes: ["status 'failed'"]
+FAIL [codex-failed] mcp__graphtraj__agents calls with a result that is no error and no refusal: 0

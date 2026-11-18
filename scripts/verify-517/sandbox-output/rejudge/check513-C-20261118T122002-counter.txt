@@ -1,0 +1,11 @@
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T122002/8ab074f1-17fe-4134-9a84-c62ef9d03559.jsonl: mcp__graftling__agents=21 mcp__agents__agents=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/C-20261118T122002/stream.jsonl: mcp__graftling__agents=8 mcp__agents__agents=0
+  init mcp tools: ['mcp__graftling__agents'] servers: ['graftling']
+PASS model-visible tools (system init record): mcp__graftling__agents listed=True, mcp__agents__agents listed=False
+PASS retained records name mcp__graftling__agents 29 times and mcp__agents__agents 0 times
+FAIL an agents create call made a child and returned it to the parent: control records none; named in the parent records: none
+  info (not a criterion): the child answered PONG-513 in an agents result (last_message): 0 record line(s)
+  reviewer was asked about: nothing
+PASS the reviewer was never asked about an agents tool: asked none
+  display lines: 0; graftling:agent-communication entries: 0
+CANNOT no display frame in the retained records (see the step header for where this Runtime shows it)

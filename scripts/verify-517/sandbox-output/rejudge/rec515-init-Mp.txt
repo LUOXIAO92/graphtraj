@@ -1,0 +1,8 @@
+init mcp_servers: [('graphtraj', 'connected'), ('claude.ai Claude Docs', 'connected')]
+init GraphTraj/graftling entries (judged): [('graphtraj', 'connected')]; other servers (listed, not judged): ['claude.ai Claude Docs']
+init mcp tools: ['mcp__claude_ai_Claude_Docs__batch', 'mcp__claude_ai_Claude_Docs__create', 'mcp__claude_ai_Claude_Docs__delete', 'mcp__claude_ai_Claude_Docs__export', 'mcp__claude_ai_Claude_Docs__guide', 'mcp__claude_ai_Claude_Docs__query', 'mcp__claude_ai_Claude_Docs__read', 'mcp__claude_ai_Claude_Docs__update', 'mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+init plugin_warnings: [] | records naming "untrusted": 0
+CHECK 515 init mcp server graphtraj connected, no agents/graftling entry beside it: PASS
+CHECK 515 init tools mcp__graphtraj__agents and mcp__graphtraj__tasks: PASS
+CHECK 515 init no mcp__agents__* tool: PASS
+CHECK 515 init no untrusted-plugin warning: PASS

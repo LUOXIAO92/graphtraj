@@ -1,0 +1,8 @@
+[514-rs2-member after-rs2-start] scanned 2 file(s); split: after 2026-11-18T04:50:18Z (1794977418)
+[514-rs2-member after-rs2-start] calls at or before the split (not judged): {'mcp__agents__agents': 1, 'mcp__agents__tasks': 1}
+[514-rs2-member after-rs2-start] undated calls (no record time in any file): none
+[514-rs2-member after-rs2-start] calls of mcp__graphtraj__agents after the split: 1; ok 1; others: []
+[514-rs2-member after-rs2-start] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 515 [514-rs2-member after-rs2-start] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [514-rs2-member after-rs2-start] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [514-rs2-member after-rs2-start] no mcp__agents__* call after the split: PASS (0 in the window, 0 undated)

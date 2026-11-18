@@ -1,0 +1,6 @@
+[codex-member] scanning 2 file(s)
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/X-20261118T135153/rollouts/rollout-2026-11-18T13-52-03-01a1ecff-65a0-75d1-af51-b8eff1a9bfdb.jsonl: mcp__graphtraj__agents=4 mcp__graphtraj__tasks=4 mcp__agents__agents=0 mcp__agents__tasks=0
+PASS [codex-member] records name mcp__graphtraj__agents 4x, mcp__graphtraj__tasks 4x, mcp__agents__agents 0x, mcp__agents__tasks 0x
+  calls of mcp__graphtraj__agents: 1; outcomes: ['ok']
+  calls of mcp__graphtraj__tasks: 1; outcomes: ['ok']
+PASS [codex-member] mcp__graphtraj__agents calls with a result that is no error and no refusal: 1

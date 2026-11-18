@@ -1,0 +1,10 @@
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/D-20261118T120351/data/native/agent-a5df74b2a7ef4169bcfcd26255ea8aa4/dsh-native/--Users-luoxiao-workspace-you-are-a-product-architect-delivery-tmp-513-runs-D-20261118T120351-work--/session-2afc9a89-b3c2-4652-af9a-debd5411d5f7/session.v4.jsonl: mcp__graftling__agents=7 mcp__agents__agents=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/D-20261118T120351/data/sessions/a7793f17a54f08ef9049347f8ce8e66a78f4adaa59c8af606141f65cdc6d70b5/session.jsonl: mcp__graftling__agents=20 mcp__agents__agents=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/513-graftling-mcp-server-name/realhost/D-20261118T120351/stdout.jsonl: mcp__graftling__agents=2 mcp__agents__agents=0
+PASS retained records name mcp__graftling__agents 29 times and mcp__agents__agents 0 times
+PASS an agents create call made a child and returned it to the parent: control records ['agent-a5df74b2a7ef4169bcfcd26255ea8aa4']; named in the parent records: ['agent-a5df74b2a7ef4169bcfcd26255ea8aa4']
+  info (not a criterion): the child answered PONG-513 in an agents result (last_message): 2 record line(s)
+  reviewer was asked about: ['agents/connectivity-check']
+PASS the reviewer was never asked about an agents tool: asked none
+  display lines: 0; graftling:agent-communication entries: 0
+CANNOT no display frame in the retained records (see the step header for where this Runtime shows it)

@@ -1,0 +1,6 @@
+[N] Nr's 466/477/487/495 with the fixed nr499.py. Dialog: none. Reads only (never signals). < 1 min.
+project /tmp/claude-501/517/rehearsal-empty/h | raw /tmp/claude-501/517/rehearsal-empty/raw | child n515 | member none | task 515-production-adoption-mcp-server-names
+expected: CHECK 466 (three lines), 495 (466), 477 (two lines), 494 (487) lines PASS; '492: agents calls' lists the member's calls
+nr499 rc=1 (other checks are 515's and may differ now; full output /tmp/claude-501/517/rehearsal-empty/out/N-20261118T215552/nr499-full.txt)
+475: NO n515 child record under /tmp/claude-501/517/rehearsal-empty/h/.graphtraj/swarm/control/agents
+N: NOT as expected: 0 of 9 lines present, 0 not PASS (lines above; full output /tmp/claude-501/517/rehearsal-empty/out/N-20261118T215552/nr499-full.txt)

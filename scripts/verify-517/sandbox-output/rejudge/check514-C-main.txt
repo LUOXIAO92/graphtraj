@@ -1,0 +1,11 @@
+[claude-main] scanning 2 file(s)
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/C-20261118T135106/stream.jsonl: mcp__graphtraj__agents=12 mcp__graphtraj__tasks=12 mcp__agents__agents=0 mcp__agents__tasks=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/C-20261118T135106/claude-projects/1b7b5de8-c512-43a0-ba07-9e1353a3f6a8.jsonl: mcp__graphtraj__agents=25 mcp__graphtraj__tasks=29 mcp__agents__agents=0 mcp__agents__tasks=0
+  init mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+  init mcp_servers: [('graphtraj', 'connected')]
+  init plugin_warnings: []
+PASS [claude-main] system init lists ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']: [True, True]; old ['mcp__agents__agents', 'mcp__agents__tasks'] listed: [False, False]
+PASS [claude-main] records name mcp__graphtraj__agents 37x, mcp__graphtraj__tasks 41x, mcp__agents__agents 0x, mcp__agents__tasks 0x
+  calls of mcp__graphtraj__agents: 1; outcomes: ['ok']
+  calls of mcp__graphtraj__tasks: 1; outcomes: ['ok']
+PASS [claude-main] mcp__graphtraj__agents calls with a result that is no error and no refusal: 1

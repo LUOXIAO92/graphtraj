@@ -1,0 +1,7 @@
+[dsh-main] scanning 9 file(s)
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/D-20261118T135234/stdout.jsonl: mcp__graphtraj__agents=6 mcp__graphtraj__tasks=6 mcp__agents__agents=0 mcp__agents__tasks=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/D-20261118T135234/dsh-home/storages/session_projcache/sessions/session-65a3eea5-ffb9-4608-96b4-b6905c9cf73a.json: mcp__graphtraj__agents=1 mcp__graphtraj__tasks=1 mcp__agents__agents=0 mcp__agents__tasks=0
+PASS [dsh-main] records name mcp__graphtraj__agents 7x, mcp__graphtraj__tasks 7x, mcp__agents__agents 0x, mcp__agents__tasks 0x
+  calls of mcp__graphtraj__agents: 1; outcomes: ['ok']
+  calls of mcp__graphtraj__tasks: 1; outcomes: ['ok']
+PASS [dsh-main] mcp__graphtraj__agents calls with a result that is no error and no refusal: 1

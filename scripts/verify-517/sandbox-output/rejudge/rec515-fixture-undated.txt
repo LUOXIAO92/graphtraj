@@ -1,0 +1,5 @@
+[fixture-undated] scanned 1 file(s); split: after 2026-11-18T05:00:00Z (1794978000)
+[fixture-undated] calls at or before the split (not judged): none
+[fixture-undated] undated calls (no record time in any file): {'mcp__agents__agents': 1}
+CHECK 515 [fixture-undated] mcp__graphtraj__agents called and answered without error or refusal: FAIL (ok 0, errors/refusals 0)
+CHECK 515 [fixture-undated] no mcp__agents__* call after the split: FAIL (0 in the window, 1 undated; times ['undated'])

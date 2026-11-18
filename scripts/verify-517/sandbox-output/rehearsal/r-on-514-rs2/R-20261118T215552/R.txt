@@ -1,0 +1,58 @@
+[R] Rsr re-judged by record time. Dialog: none. Reads only. < 30 s.
+split (install end): 1794977418 = 2026-11-18T04:50:18Z; counterexample split: 1794973815 = 2026-11-18T03:50:15Z
+
+-- leader session 3a425d6a: 2 record file(s)
+   /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/Rs2-20261118T135018/claude-projects/3a425d6a-5cf4-421c-bdfa-cd0ebdf2dbbc.jsonl
+   /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/Rs2-20261118T135018/project-records/.graphtraj/swarm/sessions/fa2808a248508b3b90d10288e879ee17eba1d998b0227ed1773aa22ab8280f00/session.jsonl
+expected: PASS (needed new-name calls ok after the install; no old-name call after it)
+[leader after-install] scanned 2 file(s); split: after 2026-11-18T04:50:18Z (1794977418)
+[leader after-install] calls at or before the split (not judged): {'mcp__agents__agents': 1, 'mcp__agents__tasks': 1}
+[leader after-install] undated calls (no record time in any file): none
+[leader after-install] calls of mcp__graphtraj__agents after the split: 1; ok 1; others: []
+[leader after-install] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 515 [leader after-install] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [leader after-install] no mcp__agents__* call after the split: PASS (0 in the window, 0 undated)
+result: PASS (rc 0; expected PASS)
+
+-- leader counterexample: split before the pre-install old-name calls
+expected: FAIL on 'no mcp__agents__* call after the split' with the pre-install old calls counted
+[leader counterexample] scanned 2 file(s); split: after 2026-11-18T03:50:15Z (1794973815)
+[leader counterexample] calls at or before the split (not judged): none
+[leader counterexample] undated calls (no record time in any file): none
+[leader counterexample] calls of mcp__agents__agents after the split: 1; ok 1; others: []
+[leader counterexample] calls of mcp__agents__tasks after the split: 1; ok 1; others: []
+[leader counterexample] calls of mcp__graphtraj__agents after the split: 1; ok 1; others: []
+[leader counterexample] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 515 [leader counterexample] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [leader counterexample] no mcp__agents__* call after the split: FAIL (2 in the window, 0 undated; times ['2026-11-18T04:50:08Z', '2026-11-18T04:50:08Z'])
+result: FAIL (rc 1; expected FAIL)
+
+-- engineer session 3a425d6a: 2 record file(s)
+   /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/Rs2-20261118T135018/claude-projects/3a425d6a-5cf4-421c-bdfa-cd0ebdf2dbbc.jsonl
+   /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/Rs2-20261118T135018/project-records/.graphtraj/swarm/sessions/fa2808a248508b3b90d10288e879ee17eba1d998b0227ed1773aa22ab8280f00/session.jsonl
+expected: PASS (needed new-name calls ok after the install; no old-name call after it)
+[engineer after-install] scanned 2 file(s); split: after 2026-11-18T04:50:18Z (1794977418)
+[engineer after-install] calls at or before the split (not judged): {'mcp__agents__agents': 1, 'mcp__agents__tasks': 1}
+[engineer after-install] undated calls (no record time in any file): none
+[engineer after-install] calls of mcp__graphtraj__agents after the split: 1; ok 1; others: []
+[engineer after-install] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 515 [engineer after-install] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer after-install] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer after-install] no mcp__agents__* call after the split: PASS (0 in the window, 0 undated)
+result: PASS (rc 0; expected PASS)
+
+-- engineer counterexample: split before the pre-install old-name calls
+expected: FAIL on 'no mcp__agents__* call after the split' with the pre-install old calls counted
+[engineer counterexample] scanned 2 file(s); split: after 2026-11-18T03:50:15Z (1794973815)
+[engineer counterexample] calls at or before the split (not judged): none
+[engineer counterexample] undated calls (no record time in any file): none
+[engineer counterexample] calls of mcp__agents__agents after the split: 1; ok 1; others: []
+[engineer counterexample] calls of mcp__agents__tasks after the split: 1; ok 1; others: []
+[engineer counterexample] calls of mcp__graphtraj__agents after the split: 1; ok 1; others: []
+[engineer counterexample] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 515 [engineer counterexample] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer counterexample] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [engineer counterexample] no mcp__agents__* call after the split: FAIL (2 in the window, 0 undated; times ['2026-11-18T04:50:08Z', '2026-11-18T04:50:08Z'])
+result: FAIL (rc 1; expected FAIL)
+
+R overall: as expected

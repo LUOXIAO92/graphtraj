@@ -1,0 +1,7 @@
+[claude-member] scanning 2 file(s)
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/C-20261118T135106/claude-projects/5d43202a-e281-4329-b9e9-e4f17845ab9e.jsonl: mcp__graphtraj__agents=4 mcp__graphtraj__tasks=4 mcp__agents__agents=0 mcp__agents__tasks=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/C-20261118T135106/claude-projects/97c704c0-ece5-403a-9ab8-1d03ee165c5b.jsonl: mcp__graphtraj__agents=8 mcp__graphtraj__tasks=7 mcp__agents__agents=0 mcp__agents__tasks=0
+PASS [claude-member] records name mcp__graphtraj__agents 12x, mcp__graphtraj__tasks 11x, mcp__agents__agents 0x, mcp__agents__tasks 0x
+  calls of mcp__graphtraj__agents: 1; outcomes: ['ok']
+  calls of mcp__graphtraj__tasks: 1; outcomes: ['ok']
+PASS [claude-member] mcp__graphtraj__agents calls with a result that is no error and no refusal: 1

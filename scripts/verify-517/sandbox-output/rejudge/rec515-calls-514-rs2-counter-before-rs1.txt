@@ -1,0 +1,10 @@
+[514-rs2-member counter-before-rs1] scanned 2 file(s); split: after 2026-11-18T04:50:00Z (1794977400)
+[514-rs2-member counter-before-rs1] calls at or before the split (not judged): none
+[514-rs2-member counter-before-rs1] undated calls (no record time in any file): none
+[514-rs2-member counter-before-rs1] calls of mcp__agents__agents after the split: 1; ok 1; others: []
+[514-rs2-member counter-before-rs1] calls of mcp__agents__tasks after the split: 1; ok 1; others: []
+[514-rs2-member counter-before-rs1] calls of mcp__graphtraj__agents after the split: 1; ok 1; others: []
+[514-rs2-member counter-before-rs1] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 515 [514-rs2-member counter-before-rs1] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [514-rs2-member counter-before-rs1] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [514-rs2-member counter-before-rs1] no mcp__agents__* call after the split: FAIL (2 in the window, 0 undated; times ['2026-11-18T04:50:08Z', '2026-11-18T04:50:08Z'])

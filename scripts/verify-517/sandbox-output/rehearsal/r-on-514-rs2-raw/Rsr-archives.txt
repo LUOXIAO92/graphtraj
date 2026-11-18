@@ -1,0 +1,2 @@
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/Rs2-20261118T135018/claude-projects/3a425d6a-5cf4-421c-bdfa-cd0ebdf2dbbc.jsonl
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/Rs2-20261118T135018/project-records/.graphtraj/swarm/sessions/fa2808a248508b3b90d10288e879ee17eba1d998b0227ed1773aa22ab8280f00/session.jsonl

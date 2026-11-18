@@ -1,0 +1,7 @@
+[pi-main] scanning 2 file(s)
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/P-20261118T135230/pi-sessions/2026-11-18T04-52-30-667Z_01a1ecff-d14b-76e1-8e22-eea2c7a18f63.jsonl: mcp__graphtraj__agents=7 mcp__graphtraj__tasks=7 mcp__agents__agents=0 mcp__agents__tasks=0
+  names in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/514-graphtraj-mcp-server-name/realhost/P-20261118T135230/stdout.jsonl: mcp__graphtraj__agents=35 mcp__graphtraj__tasks=35 mcp__agents__agents=0 mcp__agents__tasks=0
+PASS [pi-main] records name mcp__graphtraj__agents 42x, mcp__graphtraj__tasks 42x, mcp__agents__agents 0x, mcp__agents__tasks 0x
+  calls of mcp__graphtraj__agents: 1; outcomes: ['ok']
+  calls of mcp__graphtraj__tasks: 1; outcomes: ['ok']
+PASS [pi-main] mcp__graphtraj__agents calls with a result that is no error and no refusal: 1

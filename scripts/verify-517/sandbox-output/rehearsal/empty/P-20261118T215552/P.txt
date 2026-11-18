@@ -1,0 +1,18 @@
+[P] preflight. Dialog: none. Reads only. < 5 s.
+worktree: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/517-verify-checker-record-shapes  commit: dc3ad0e2588facb756aafab51564b3377048e2a4  dirty files: 1
+python: /Users/luoxiao/miniconda3/bin/python3.13 -> Python 3.13.11  yaml (nr499): 6.0.3
+515 raw directory and inputs:
+  readable: /tmp/claude-501/517/rehearsal-empty/raw
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/raw/I-install-start.epoch
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/raw/I-install-end.epoch
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/raw/Rsr-archives.txt
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/raw/Rsr-main-timestamps.txt
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/raw/Nr.txt
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/raw/N-reply.txt
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/raw/Nw-snapshots.jsonl
+Rsr record files (Rsr-archives.txt):
+leader session:   engineer session: 
+N member archive (Nr.txt): not named
+  NOT READABLE: /tmp/claude-501/517/rehearsal-empty/h/.graphtraj/swarm/control/agents
+expected: every path readable (rc 0). Any NOT READABLE line names a path R or N cannot judge.
+P rc=1

@@ -1,0 +1,2 @@
+[R] Rsr re-judged by record time. Dialog: none. Reads only. < 30 s.
+STOP: not readable: one of /tmp/claude-501/517/rehearsal-empty/raw/I-install-end.epoch, I-install-start.epoch, Rsr-archives.txt, Rsr-main-timestamps.txt (run P)

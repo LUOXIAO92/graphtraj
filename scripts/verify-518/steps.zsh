@@ -234,8 +234,12 @@ print("518 header-only lookup present:", hasattr(archive, "_archived_header"))' 
   mkdir -p $R
   if [[ $STEP == GC ]]; then
     (cd $WT && TMPDIR=$PYTEST_TMP $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA --collect-only > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt)
-    tail -6 $R/suite.txt
-    print -r -- "collected per shard:"; grep -h -E '^[0-9]+ tests? collected|collected' $R/shards/*(N.) | tail -6
+    tail -4 $R/suite.txt
+    print -r -- "(run_test_shards counts no passed tests under --collect-only, so it prints ABNORMAL/'no tests ran' for every shard; expected here)"
+    print -r -- "collected per shard (exit 0 each expected, no 'error' lines):"
+    local f; for f in $R/shards/shard-*.log(N); do
+      print -r -- "  ${f:t}: $(grep -E '^[0-9]+ tests? collected' $f | tail -1) $(grep -E '^(ERROR|E   )' $f | head -1)"
+    done
     print -r -- "next: zsh $THIS G"
   else
     (cd $WT && TMPDIR=$PYTEST_TMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!

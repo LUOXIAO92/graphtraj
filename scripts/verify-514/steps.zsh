@@ -40,7 +40,8 @@ path=(/opt/homebrew/bin $HOME/.local/bin $path)
 
 say() { print -r -- "== $*"; }
 next() { print -r -- "next: zsh $THIS $*"; }
-bounded() { local s=$1; shift; /usr/bin/perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"' $s "$@"; }
+# A time limit that env -i (clean) can exec: a command, not a shell function. Usage: clean ... $BOUND <seconds> cmd...
+BOUND=(/usr/bin/perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"')
 redact() { if [[ -n ${DEEPSEEK_API_KEY:-} ]]; then sed "s|${DEEPSEEK_API_KEY}|[redacted]|g"; else cat; fi; }
 # A host inherits no marker of the Harness Main (GraphTraj/graftling connections, DSH Session).
 clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} \
@@ -117,7 +118,7 @@ begin() {  # $1 step: evidence directory and the time marker for the record scan
 claude_main() {  # $1 project, $2 tool prefix, $3 prompt file: one claude -p Main of the GraphTraj host plugin
   local p=$1 prefix=$2 S=$(uuidgen | tr A-Z a-z)
   print -r -- $S > $D/main-session.txt
-  (cd $p && clean bounded 1500 claude -p --model $MODEL --output-format stream-json --verbose \
+  (cd $p && clean $BOUND 1500 claude -p --model $MODEL --output-format stream-json --verbose \
      --mcp-config $p/.mcp.json --strict-mcp-config --allowedTools "${prefix}agents,${prefix}tasks" --session-id $S \
      < $3 > $D/stream.jsonl 2> $D/stderr.txt) || print "claude rc=$?"
   cp $p/.graphtraj/claude-host/host.log $D/host.log 2>/dev/null || true
@@ -178,7 +179,7 @@ print(graftling.__file__.split("/lib/")[0], "graftling", m.version("graftling"),
   load_key || true
   local ASK='Reply with one line: READY-514 and your exact model name. Use no tool.'
   begin 0
-  (cd $P && clean bounded 120 claude -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json \
+  (cd $P && clean $BOUND 120 claude -p --model $MODEL --output-format stream-json --verbose --mcp-config $P/.mcp.json \
      --strict-mcp-config <<< $ASK > $D/claude.jsonl 2> $D/claude.err) || print "claude rc=$?"
   clean $V/bin/python -I -c 'import json, sys
 lines = [json.loads(l) for l in open(sys.argv[1], errors="replace") if l.startswith("{")]
@@ -190,9 +191,9 @@ print("claude model:", init.get("model"), "| answer:", str(res.get("result", "")
 print("claude init mcp_servers:", servers, "| mcp tools:", tools, "| plugin_warnings:", warnings[:300])
 ok = [n for n, _ in servers] == ["graphtraj"] and "untrusted" not in warnings and "mcp__graphtraj__agents" in tools
 print("claude plugin gate:", "PASS" if ok else "NOT YET (run Ct to trust the folder, then rerun 0)")' $D/claude.jsonl
-  (cd $BASE && clean bounded 120 codex exec --skip-git-repo-check -m gpt-6-luna $ASK 2>&1 | tail -2) || print "codex rc=$?"
-  (cd $BASE && clean bounded 120 pi --print --no-tools --provider $PI_PROVIDER --model $PI_MODEL $ASK < /dev/null 2>&1 | redact | tail -2) || print "pi rc=$?"
-  (cd $BASE && clean bounded 120 dsh --profile headless --permission-mode read-only $ASK < /dev/null 2>&1 | redact | tail -2) || print "dsh rc=$?"
+  (cd $BASE && clean $BOUND 120 codex exec --skip-git-repo-check -m gpt-6-luna $ASK 2>&1 | tail -2) || print "codex rc=$?"
+  (cd $BASE && clean $BOUND 120 pi --print --no-tools --provider $PI_PROVIDER --model $PI_MODEL $ASK < /dev/null 2>&1 | redact | tail -2) || print "pi rc=$?"
+  (cd $BASE && clean $BOUND 120 dsh --profile headless --permission-mode read-only $ASK < /dev/null 2>&1 | redact | tail -2) || print "dsh rc=$?"
   print "Ready when: both venvs print their versions, 'roles OK' and 'probe Task 1 ready' twice, '.mcp.json servers: ['graphtraj']', the DSH row YES, and four READY-514 lines."
   next "Ct   (USER, plain Terminal), then Rt (USER), then Main: Rs1"
   ;;
@@ -259,7 +260,7 @@ P)
   venv_check; load_key || return 1; begin P
   local EXT=$($V/bin/python -I -c 'import graphtraj, pathlib; print(pathlib.Path(graphtraj.__file__).parent / "runtimes/pi/extension.mjs")')
   print -r -- "Call the MCP tool mcp__graphtraj__agents exactly once with {\"action\": \"execute\", \"feature\": \"status\", \"arguments\": {}} and the MCP tool mcp__graphtraj__tasks exactly once with {\"action\": \"discover\"}. Use no other tool. Then reply with one line: DONE-514-P followed by the exact names of the tools you have whose names start with mcp__, and for each call ok or the exact error." > $D/host.prompt.txt
-  (cd $P && clean PATH=$V/bin:${(j.:.)path} GRAFTLING_PYTHON=$V/bin/python bounded 600 pi --mode json --session-dir $D/pi-sessions \
+  (cd $P && clean PATH=$V/bin:${(j.:.)path} GRAFTLING_PYTHON=$V/bin/python $BOUND 600 pi --mode json --session-dir $D/pi-sessions \
      --extension $EXT --provider $PI_PROVIDER --model $PI_MODEL "$(<$D/host.prompt.txt)" < /dev/null > $D/stdout.jsonl 2> $D/stderr.txt) || print "pi rc=$?"
   clean $CONDA -I $CHECK pi-main $D/pi-sessions $D/stdout.jsonl | redact | tee $D/summary.txt && print "P: PASS" || print "P: FAIL or CANNOT (lines above)"
   next D
@@ -269,7 +270,7 @@ D)
   venv_check; load_key || return 1; begin D
   local DH=$D/dsh-home; mkdir -p $DH
   print -r -- "Call your GraphTraj MCP tool mcp__graphtraj__agents exactly once with {\"action\": \"execute\", \"feature\": \"status\", \"arguments\": {}} and mcp__graphtraj__tasks exactly once with {\"action\": \"discover\"}. Use no other tool. Then reply with one line: DONE-514-D followed by the exact names of the tools you have whose names start with mcp__, and for each call ok or the exact error." > $D/host.prompt.txt
-  (cd $P && clean DSH_HOME=$DH bounded 600 dsh --profile graphtraj514 --from-default-profile headless --patch $BASE/dsh-main.patch.yml \
+  (cd $P && clean DSH_HOME=$DH $BOUND 600 dsh --profile graphtraj514 --from-default-profile headless --patch $BASE/dsh-main.patch.yml \
      --json "$(<$D/host.prompt.txt)" < /dev/null > $D/stdout.jsonl 2> $D/stderr.txt) || print "dsh rc=$?"
   clean $CONDA -I $CHECK dsh-main $D/stdout.jsonl $DH | redact | tee $D/summary.txt && print "D: PASS" || print "D: FAIL or CANNOT (lines above)"
   next "T, then F (idle host), then R"

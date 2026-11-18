@@ -12,6 +12,8 @@
 #      CPU per phase (start / 30 s before the child's creation / 30 s after / child running / after its end), the
 #      busiest functions per phase and the counted whole-record reads (<12 min)
 #   T  the same at AFTER (VERIFY518_AFTER, default the Worktree HEAD), then S vs T (<12 min)
+#   M  read only: one graftling archive-header lookup over production's Session archives (production graftling)
+#   MA the same with the patched graftling (a51e100 + graftling-518.patch, extracted into <Harness>/tmp/518/graftling-after)
 #   G  GraphTraj full suite of the Worktree HEAD (background), graftling wheel from <Harness>/graftling
 #   R  results of the newest G
 #   U  USER, only if S or T reports a folder-trust or login refusal (waits for the user)
@@ -172,6 +174,25 @@ M)
   print -r -- "next: report $OUT/M.txt to the Leader"
   } 2>&1 | tee $OUT/M.txt
   ;;
+MA)
+  # AFTER of M: graftling a51e100 + graftling-518.patch (ed19e48), extracted here; production's archives only read.
+  local GA=$T/graftling-after AH=${VERIFY518_ARCHIVE_HARNESS:-$H}
+  say "[MA] read only, <2 min: M with the patched graftling ($GA) over $AH's Session archives. Dialog: none. Output also in $OUT/MA.txt"
+  { check_tmp || return 1
+  rm -rf $GA && mkdir -p $GA && git -C $G archive a51e100 | tar -x -C $GA || { print "STOP: cannot extract graftling a51e100"; return 1; }
+  (cd $GA && git apply -p1 $SD/graftling-518.patch) || { print "STOP: graftling-518.patch does not apply to a51e100"; return 1; }
+  print -r -- "graftling-after: a51e100 + $(sed -n 1p $SD/graftling-518.patch | cut -d' ' -f2 | cut -c1-12) at $GA/src"
+  print -r -- "load average: $(sysctl -n vm.loadavg 2>/dev/null) (another run on the host only slows the wall times)"
+  (cd $PYTEST_TMP && clean $H/.venv-runtime/bin/python -I -c 'import runpy, sys
+sys.path.insert(0, sys.argv[1])
+sys.argv = [sys.argv[2], "archives", sys.argv[3], "-"]
+runpy.run_path(sys.argv[0], run_name="__main__")' $GA/src $SD/probe518.py $AH)
+  print "Success: 'graftling imported from: $GA/src/graftling/__init__.py', the same lines as M (archive sizes, two"
+  print "'fresh ... native_header' runs, 'find_session by a missing native ID', 'reading only each header'). Nothing"
+  print "is written outside $GA. Compare with M.txt (BEFORE: about 30 s CPU per lookup)."
+  print -r -- "next: report $OUT/MA.txt to the Leader"
+  } 2>&1 | tee $OUT/MA.txt
+  ;;
 X)
   say "[X] rehearsal without the host: build BEFORE and scale it; dispatches nothing. Dialog: none."
   check_tmp || return 1
@@ -221,5 +242,5 @@ U)
   print "If it asks to log in instead, log in, then /exit. Send no message."
   print -r -- "next (Main): the refused step again (zsh $THIS S or T)"
   ;;
-*) print -r -- "usage: zsh $THIS 0|S|T|G|R|U" ; return 2 ;;
+*) print -r -- "usage: zsh $THIS 0|S|T|M|MA|X|G|R|U" ; return 2 ;;
 esac

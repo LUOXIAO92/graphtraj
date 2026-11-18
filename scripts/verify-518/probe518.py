@@ -190,8 +190,11 @@ def archives(harness: Path, _unused: str) -> int:
     """
     import time
 
+    import graftling
     from graftling.sessions.archive import SessionArchive
+    from graftling.sessions.reading import find_session
 
+    print(f'graftling imported from: {graftling.__file__}')
     root = harness / '.graphtraj/swarm'
     paths = sorted((root / 'sessions').glob('*/session.jsonl'))
     first = header = 0
@@ -209,6 +212,10 @@ def archives(harness: Path, _unused: str) -> int:
         found = SessionArchive(root).native_header('claude', 'no-such-session-518')
         print(f'fresh SessionArchive(root).native_header (as find_session / Claude collection), run {attempt}: '
               f'{time.process_time() - cpu:.2f} s CPU, {time.perf_counter() - began:.2f} s wall (found {found})')
+    began, cpu = time.perf_counter(), time.process_time()
+    found = find_session(root, 'no-such-session-518')
+    print(f'find_session by a missing native ID (one session_read): {time.process_time() - cpu:.2f} s CPU, '
+          f'{time.perf_counter() - began:.2f} s wall (found {found})')
     began, cpu = time.perf_counter(), time.process_time()
     for path in paths:
         with path.open('rb') as stream:

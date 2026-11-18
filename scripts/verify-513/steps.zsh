@@ -27,6 +27,9 @@ CONDA=$HOME/miniconda3/bin/python3.13
 RT=$H/.venv-runtime/lib/python3.13/site-packages
 V=$T/venv
 CHECK=${0:A:h}/check513.py
+# The Claude project Ct and C use. Main may set it outside the Harness (394 used /Users/luoxiao/agents-394):
+# a project under the Harness also sees the Harness's own .mcp.json servers and instruction files.
+CLAUDE_PROJECT=${CLAUDE_PROJECT:-$T/claude-project}
 STEP=${1:-}
 PYTEST_TMP=${TMPDIR:-/tmp}
 CLAUDE_MODEL=claude-sonnet-5-5
@@ -120,6 +123,12 @@ end_run() {  # $1 runtime, $2.. extra paths to scan; copies the data root's reco
 }
 CLAUDE_CHILD="    models: [$CLAUDE_MODEL]"
 
+project_path() {  # print the Claude project, warning when it lies inside the Harness
+  print -r -- "Claude project: $CLAUDE_PROJECT"
+  case ${CLAUDE_PROJECT:A}/ in ${H:A}/*) print -r -- "WARNING: inside the Harness ($H): its .mcp.json servers and instruction files reach this project" ;; esac
+  return 0
+}
+
 [[ -d $H/graphtraj && -d $H/.graphtraj ]] || { print "STOP: $H is not the Harness root"; return 1; }
 case $STEP in
 0)
@@ -158,7 +167,7 @@ B)
   print -r -- $C > $V/installed-commit
   (cd $PYTEST_TMP && $V/bin/python -I -c 'import graftling, yaml, websockets; print("graftling", graftling.__version__, graftling.__file__)
 import importlib.util as u; print("graphtraj importable:", u.find_spec("graphtraj") is not None)')
-  mkdir -p $T/claude-project
+  mkdir -p $CLAUDE_PROJECT
   print -r -- "wheel: $(print $N/graftling-*.whl)"; print -r -- "built from: $C"
   print -r -- "next (USER, plain Terminal): zsh ${0:A} Ct; then Main: C, X, P; USER: Pu; Main: D; then on an idle host F and R"
   ;;
@@ -193,9 +202,11 @@ R)
   print -r -- "next: report $f to the Leader"
   ;;
 Ct)
-  say "[Ct] USER in a plain Terminal. Dialog: one, Claude Code's 'Do you trust the files in this folder?' for $T/claude-project -> choose 'Yes, proceed', then type /exit. (none when trusted before)"
+  say "[Ct] USER in a plain Terminal. Dialog: one, Claude Code's 'Do you trust the files in this folder?' for $CLAUDE_PROJECT -> choose 'Yes, proceed', then type /exit. (none when trusted before; any MCP server dialog: press Esc, the step re-enables only graftling afterwards)"
+  project_path
   venv_check
-  local P=$T/claude-project
+  local P=$CLAUDE_PROJECT
+  mkdir -p $P
   (cd $P && $V/bin/python -m graftling.claude.host configuration --project $P --claude $(command -v claude) --write) >/dev/null
   # The project's own settings: Harness instruction files excluded (verify-common, Task 489) and the
   # project's .mcp.json server pre-enabled, so the trust dialog is the only one.
@@ -203,13 +214,16 @@ Ct)
   $V/bin/python -I -c 'import json, sys; p = sys.argv[1]; d = json.load(open(p)); d["enabledMcpjsonServers"] = ["graftling"]; json.dump(d, open(p, "w"), indent=2)' $P/.claude/settings.local.json
   print -r -- ".mcp.json servers: $($V/bin/python -I -c 'import json,sys; print(list(json.load(open(sys.argv[1]))["mcpServers"]))' $P/.mcp.json)"
   (cd $P && claude) || print "claude exit $?"
+  # Whatever the dialogs enabled, only graftling stays enabled (an `agents` server above this folder must not).
+  $V/bin/python -I -c 'import json, sys; p = sys.argv[1]; d = json.load(open(p)); d["enabledMcpjsonServers"] = ["graftling"]; json.dump(d, open(p, "w"), indent=2); print("enabledMcpjsonServers:", d["enabledMcpjsonServers"])' $P/.claude/settings.local.json
   print -r -- "next (Main): zsh ${0:A} C"
   ;;
 C)
-  say "[C] Claude Code host (configuration --write project $T/claude-project): claude -p -> create a reviewed Claude child -> wait. Dialog: none (Ct trusted the folder). At most 15 min."
+  say "[C] Claude Code host (configuration --write project $CLAUDE_PROJECT): claude -p -> create a reviewed Claude child -> wait. Dialog: none (Ct trusted the folder). At most 15 min."
+  project_path
   clean_env
   begin_run C claude $CLAUDE_CHILD || return 1
-  local P=$T/claude-project S=$(uuidgen | tr A-Z a-z)
+  local P=$CLAUDE_PROJECT S=$(uuidgen | tr A-Z a-z)
   (cd $P && $V/bin/python -m graftling.claude.host configuration --project $P --claude $(command -v claude) --write) >/dev/null
   $V/bin/python -I -c 'import json, sys
 p, root, claude = sys.argv[1:4]
@@ -234,6 +248,16 @@ print("host configuration loads; config.yml connections accepted (no model call)
   # The display hook's ui.log rows go to the native transcript, not necessarily the -p stream.
   local tr=($HOME/.claude/projects/*/$S.jsonl(N))
   (( $#tr )) && cp $tr $D/ || print -r -- "no native transcript $S.jsonl under ~/.claude/projects"
+  # The host plugin (.claude/skills) must have loaded and graftling must be the one MCP server; otherwise no
+  # association hook runs and the host refuses every call (claude/native_host.py), so there is nothing to judge.
+  $V/bin/python -I -c 'import json, sys
+init = next((json.loads(line) for line in open(sys.argv[1], errors="replace")
+             if "\"init\"" in line and json.loads(line).get("subtype") == "init"), {})
+warnings = json.dumps(init.get("plugin_warnings", []))
+servers = [server.get("name") for server in init.get("mcp_servers", [])]
+print("init plugin_warnings:", warnings); print("init mcp_servers:", servers)
+sys.exit(0 if "project-scope-suppressed-untrusted" not in warnings and servers == ["graftling"] else 1)' $D/stream.jsonl \
+    || { print -r -- "STOP: the host plugin did not load (folder not trusted for project plugins); run Ct for this path: CLAUDE_PROJECT=$P zsh ${0:A} Ct"; return 1; }
   end_run claude
   print -r -- "observables: names = stream.jsonl system init 'tools' (+ every file); child = an agents result line with last_message PONG-513; review = reviewer.log has no *__agents tool while the child's records name mcp__graftling__agents; display = '┌ '/'agents · ' rows in the native transcript $S.jsonl or the stream"
   print -r -- "next: zsh ${0:A} X"

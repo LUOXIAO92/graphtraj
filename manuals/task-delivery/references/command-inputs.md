@@ -148,8 +148,11 @@ in `evidence_refs`; a report stored outside Git is not a committed result path.
 Exception: a Session launched with read Worktree access (`worktree_access: read`,
 for example an investigator) changes no file, so it may name its own assigned
 report, already written with `submit_report`, in `result_refs` in the same
-`.state/...` form, alone or beside committed files. Runner checks the launch
-record, the assignment and that the report exists, and retains a copy in the
+`.state/...` form, alone or beside committed files. Runner takes the access from
+the Session's own records: the explicit value in its launch record (DSH
+`sandbox: read-only` counts as read), otherwise the role preset its mapping
+names; a missing or inconsistent record counts as write. It also checks the
+assignment and that the report exists, and retains a copy in the
 submission's `evidence_refs`. The commit is still the Worktree `HEAD`. A Session
 with write access must name committed files.
 

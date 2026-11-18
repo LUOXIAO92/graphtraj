@@ -72,19 +72,42 @@ def session_submissions(mapping: Mapping[str, Any], cwd: Path) -> list[dict[str,
             and event.get('session') == mapping.get('session')]
 
 
-def session_worktree_access(session_directory: Path, mapping: Mapping[str, Any]) -> str:
-    """Return the Worktree access the Session was launched with.
+def session_worktree_access(session_directory: Path, mapping: Mapping[str, Any], harness_root: Path) -> str:
+    """Return the Worktree access of the Session's role, from its own records.
 
     The retained launch must still match the Session's mapping; a missing or
-    inconsistent record counts as write access, the stricter result rule.
+    inconsistent record counts as write access, the stricter result rule. An
+    explicit launch value wins (Claude and Pi ``worktree_access``, DSH
+    ``sandbox``). Codex keeps access only inside its CLI arguments, so the
+    role named by the mapping decides: its retained inline role, else the
+    configured preset. Anything unreadable counts as write.
     """
+    from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles
+    from graphtraj.execution.runner_batch import read_session_task
     from graphtraj.execution.runner_control import _read_session_resume_request
 
     try:
         request, _, _ = _read_session_resume_request(session_directory, mapping)
     except RunnerError:
         return 'write'
-    return 'read' if request.get('worktree_access') == 'read' else 'write'
+    if request.get('worktree_access') in ('read', 'write'):
+        return request['worktree_access']
+    if request.get('sandbox') in ('read-only', 'workspace-write'):
+        return 'read' if request['sandbox'] == 'read-only' else 'write'
+    reference = mapping.get('role_reference')
+    if not isinstance(reference, str):
+        return 'write'
+    try:
+        preset = read_session_task(mapping, harness_root).inline_preset
+    except (RunnerError, OSError, ValueError, KeyError):
+        preset = None
+    try:
+        if preset is None:
+            roles = load_project_roles(harness_root)
+            preset = roles.presets[roles.resolve(reference)]
+    except (ProjectRolesError, KeyError):
+        return 'write'
+    return 'read' if preset.worktree_access == 'read' else 'write'
 
 
 # Task states in which a member's result or a new Round may be recorded.
@@ -158,7 +181,7 @@ def submit_session_result(
     assigned = set(_session_report_paths(alias, cwd))
     # A read-only Session changes no file, so its own submitted report may be
     # its result. Access comes from its retained launch, never the caller.
-    read_only = session_worktree_access(session_directory, mapping) == 'read'
+    read_only = session_worktree_access(session_directory, mapping, configuration.harness_root) == 'read'
     result_reports = []
     for reference in result_refs:
         supplied = Path(reference)

@@ -234,6 +234,45 @@ def test_read_only_session_submits_its_own_report_as_result(tmp_path: Path) -> N
             if event['event'] == 'result-submitted'] == [submission['event_id']]
 
 
+@pytest.mark.parametrize(('request_fields', 'preset_access', 'accepted'), [
+    ({}, 'read', True),                          # Codex: access only in CLI arguments; the preset decides
+    ({}, 'write', False),
+    ({}, None, False),                           # preset without worktree_access: write
+    ({'sandbox': 'read-only'}, 'write', True),   # DSH: an explicit launch value wins over the preset
+    ({'sandbox': 'workspace-write'}, 'read', False),
+])
+def test_runtime_access_from_launch_value_or_role_preset(
+    tmp_path: Path, request_fields: dict, preset_access: str | None, accepted: bool,
+) -> None:
+    """Task 521 R2: Codex and DSH launches have no worktree_access field."""
+    from graphtraj.configuration.project_roles import roles_file
+
+    runner, _, commit = result_project(tmp_path)
+    directory = runner / 'sessions/research@x1'
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    mapping['role_reference'] = 'research_team.researcher'
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    report = launch_with_access(runner, 'research@x1', 'read')
+    launch = yaml.safe_load((directory / 'launch.yml').read_text())
+    launch['adapter_request'] = {'session_parameters': {}, **request_fields}
+    (directory / 'launch.yml').write_text(yaml.safe_dump(launch))
+    researcher = {'runtime': 'codex', 'model': 'gpt-test'}
+    if preset_access is not None:
+        researcher['worktree_access'] = preset_access
+    roles_file(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    roles_file(tmp_path).write_text(yaml.safe_dump({
+        'roles': {'research_team': {'researcher': researcher}},
+        'role_tree': {'research_team.researcher': {}}}))
+    arguments = {'commit': commit, 'result_refs': [report], 'completion': 'Investigation complete'}
+    with runtime_caller(runner, 'research@x1'):
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Findings'}, cwd=tmp_path)
+        if accepted:
+            assert tools.submit_result(arguments, cwd=tmp_path).document['result_refs'] == [report]
+        else:
+            with pytest.raises(ValueError, match='Assigned reports belong in evidence_refs'):
+                tools.submit_result(arguments, cwd=tmp_path)
+
+
 def test_report_named_in_both_lists_and_mixed_with_files_is_retained_once(tmp_path: Path) -> None:
     """A read-only result may also name committed files; its report is copied once."""
     runner, _, commit = result_project(tmp_path)

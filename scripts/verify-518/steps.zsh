@@ -14,7 +14,9 @@
 #   T  the same at AFTER (VERIFY518_AFTER, default the Worktree HEAD), then S vs T (<12 min)
 #   M  read only: one graftling archive-header lookup over production's Session archives (production graftling)
 #   MA the same with the patched graftling (a51e100 + graftling-518.patch, extracted into <Harness>/tmp/518/graftling-after)
-#   G  GraphTraj full suite of the Worktree HEAD (background), graftling wheel from <Harness>/graftling
+#   G  GraphTraj full suite of the Worktree HEAD (background), graftling wheel built from the pinned commit
+#      VERIFY518_GRAFTLING_COMMIT (default ed19e48, the 518 fix) of <Harness>/graftling via git archive; GC: the
+#      same with --collect-only in the foreground (rehearsal)
 #   R  results of the newest G
 #   U  USER, only if S or T reports a folder-trust or login refusal (waits for the user)
 # Dialog: none in every Main step. No production install: .venv-runtime is only read (graftling, click, yaml,
@@ -199,29 +201,47 @@ X)
   build before $BEFORE_COMMIT && scale before || return 1
   print -r -- "rehearsal OK: $(project before)"
   ;;
-G)
-  say "[G] GraphTraj full suite of the Worktree HEAD, graftling as a wheel from $G (6 shards, --timeout 1500, -rA, background). Dialog: none. Returns at once."
+G|GC)
+  # GraphTraj (this Worktree's git checkout, editable) with graftling built as a wheel from the pinned commit
+  # GRAFTLING_COMMIT (default ed19e48 = the 518 fix), never from <Harness>/graftling's working tree (that stays on
+  # main a51e100, the unfixed 0.6.0). GC = the same venv and the same shard command with --collect-only, foreground
+  # (rehearsal; its output goes to GC-*, which R does not read).
+  local GLC=${VERIFY518_GRAFTLING_COMMIT:-ed19e48}
+  say "[$STEP] GraphTraj full suite of the Worktree HEAD with graftling $GLC as a wheel (6 shards, --timeout 1500, -rA$([[ $STEP == GC ]] && print ', --collect-only, foreground' || print ', background')). Dialog: none."
   check_tmp && quiet || return 1
-  [[ -d $G/src/graftling ]] || { print "STOP: $G/src/graftling missing"; return 1; }
-  print "graftling wheel source: $G at $(git -C $G rev-parse HEAD) ($(git -C $G branch --show-current))"
+  local GLF
+  GLF=$(git -C $G rev-parse --verify --quiet "$GLC^{commit}") || { print "STOP: graftling commit $GLC is not in $G"; return 1; }
   [[ -e $WT/src/graftling ]] && { print "STOP: $WT/src/graftling exists; GraphTraj must use the installed graftling"; return 1; }
   git -C $WT diff --quiet HEAD -- || { print "STOP: tracked changes in $WT are uncommitted"; return 1; }
-  local C=$(git -C $WT rev-parse --short HEAD)
-  local V=$T/venv-gt-$C N=$T/wheels-gt-$C R=$OUT/G-$C-$(date +%H%M%S)
+  local C=$(git -C $WT rev-parse --short HEAD) GS=${GLF[1,7]}
+  local SRC=$T/graftling-$GS V=$T/venv-gt-$C-gl-$GS N=$T/wheels-gl-$GS R=$OUT/$STEP-$C-gl-$GS-$(date +%H%M%S)
+  print -r -- "graftling wheel source: $G at commit $GLF (git archive into $SRC; not the working tree)"
   if [[ -x $V/bin/python ]]; then
-    print "reusing $V (made for $C)"
+    print "reusing $V (made for graphtraj $C + graftling $GS)"
   else
+    rm -rf $SRC $N && mkdir -p $SRC && git -C $G archive $GLF | tar -x -C $SRC || { print "STOP: cannot extract graftling $GLF"; return 1; }
     $CONDA -m venv --system-site-packages $V && copy_deps $V || return 1
     $CONDA -m pip wheel -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
-      -w $N $G/src/graftling >/dev/null || return 1
+      -w $N $SRC/src/graftling >/dev/null || return 1
     $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
       $N/graftling-*.whl -e $WT 2>&1 | grep -vi cache
   fi
-  (cd $PYTEST_TMP && $V/bin/python -I -c 'import graphtraj, graftling; print("graphtraj", graphtraj.__file__); print("graftling", graftling.__file__, graftling.__version__)')
+  (cd $PYTEST_TMP && $V/bin/python -I -c 'import sys, graphtraj, graftling, graftling.sessions.archive as archive
+print("graphtraj", graphtraj.__file__)
+print("graftling", graftling.__file__, graftling.__version__, "| built from commit", sys.argv[1])
+print("518 header-only lookup present:", hasattr(archive, "_archived_header"))' $GLF) || return 1
+  git -C $WT rev-parse --show-toplevel >/dev/null || { print "STOP: $WT is not a git checkout"; return 1; }
   mkdir -p $R
-  (cd $WT && TMPDIR=$PYTEST_TMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
-  print "started; result: tail -30 $R/suite.txt"
-  print -r -- "next, when it ends: zsh $THIS R"
+  if [[ $STEP == GC ]]; then
+    (cd $WT && TMPDIR=$PYTEST_TMP $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA --collect-only > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt)
+    tail -6 $R/suite.txt
+    print -r -- "collected per shard:"; grep -h -E '^[0-9]+ tests? collected|collected' $R/shards/*(N.) | tail -6
+    print -r -- "next: zsh $THIS G"
+  else
+    (cd $WT && TMPDIR=$PYTEST_TMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
+    print "started; result: tail -30 $R/suite.txt"
+    print -r -- "next, when it ends: zsh $THIS R"
+  fi
   ;;
 R)
   say "[R] results. Dialog: none."
@@ -242,5 +262,5 @@ U)
   print "If it asks to log in instead, log in, then /exit. Send no message."
   print -r -- "next (Main): the refused step again (zsh $THIS S or T)"
   ;;
-*) print -r -- "usage: zsh $THIS 0|S|T|M|MA|X|G|R|U" ; return 2 ;;
+*) print -r -- "usage: zsh $THIS 0|S|T|M|MA|X|GC|G|R|U" ; return 2 ;;
 esac

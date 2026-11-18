@@ -3,11 +3,13 @@
 Usage (a scratch venv's Python, -I):
   python -I probe518.py census HARNESS -       read only: sizes of production's records a Worker may read
                                                (Worldline, Runner Sessions, retained Traces, agents records, archives)
-  python -I probe518.py clone PROJECT HARNESS  copy production's Runner Session records into PROJECT's Runner,
-                                               sanitized: only .yml/.json/.jsonl files, no tool-process or descendants
-                                               records, every Harness path and home path rewritten into PROJECT, every
-                                               *pid value set to 99999 (above macOS's largest pid, so no process has it);
-                                               refuses when any '/Users/' path remains. Production is only read.
+  python -I probe518.py clone PROJECT HARNESS  copy production's Runner Session records into PROJECT's Runner and its
+                                               agents records into PROJECT's core data root, sanitized: only
+                                               .yml/.json/.jsonl files, no tool-process or descendants records, each
+                                               record parsed and rewritten (every Harness and home path moved into
+                                               PROJECT, every *pid value 99999, above macOS's largest pid, so no process
+                                               has it; every *marker value blanked) and refused when a production path
+                                               remains. Production is only read.
   python -I probe518.py phases RESULT PROJECT  Worker CPU in: start, 30 s before the child's creation, 30 s after it,
                                                rest of the child's run, after its end; per phase the busiest functions
                                                (inclusive samples) and the whole-record reads the profiler counted
@@ -149,6 +151,32 @@ def clone(project: Path, harness: str) -> int:
             files, size = files + 1, size + len(text)
     print(f'cloned {directories} Runner Session directories, {files} files, {size / 1e6:.1f} MB into {target} '
           f'(paths rewritten into {project}; pids {SAFE_PID})')
+    # The agents records the core scans (graftling control/agents), sanitized the same way.
+    from graphtraj.interfaces.agents import swarm_root
+
+    source, target = Path(harness) / '.graphtraj/swarm/control/agents', swarm_root(project) / 'control' / 'agents'
+    try:
+        records = sorted(path for path in source.glob('agent-*.json') if path.is_file() and not path.is_symlink())
+    except OSError as error:
+        print(f'agents records: not readable here ({type(error).__name__}); none copied')
+        return 0
+    target.mkdir(parents=True, exist_ok=True)
+    copied = size = 0
+    for path in records:
+        if (target / path.name).exists():
+            continue
+        try:
+            record = _sanitize(json.loads(path.read_text(encoding='utf-8')), replacements)
+        except (OSError, ValueError) as error:
+            print(f'skipped unreadable {path.name}: {type(error).__name__}')
+            continue
+        if _named(record, needles):
+            print(f'STOP: {path} still names a production path after rewriting; nothing more is copied')
+            return 1
+        text = json.dumps(record, ensure_ascii=False)
+        (target / path.name).write_text(text, encoding='utf-8')
+        copied, size = copied + 1, size + len(text)
+    print(f'cloned {copied} agents records, {size / 1e6:.1f} MB into {target} (same rewriting)')
     return 0
 
 

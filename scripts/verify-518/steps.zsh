@@ -5,8 +5,9 @@
 #      BEFORE (81dde17e + production graftling + the prof518 sampler), isolated project under /private/tmp/cpu-518,
 #      probe Task ready, one-line claude -p answer (model and login source name)
 #   S  BEFORE at production scale, profiled: a fresh BEFORE project gets a synthetic Worldline of production's
-#      event count (~4.9 KB each) and a sanitized copy of production's Runner Session records (paths rewritten into
-#      the project, pids 99999, no tool-process records); then verify-501's probe: a Runner-dispatched Claude member
+#      event count (~4.9 KB each) and a sanitized copy of production's Runner Session records and agents records
+#      (paths rewritten into the project, pids 99999, markers blanked, no tool-process records); then verify-501's
+#      probe: a Runner-dispatched Claude member
 #      creates an agents child (six sleeps ~2.5 min), waits, reads it back, retires it. Worker ps every ~10 s;
 #      CPU per phase (start / 30 s before the child's creation / 30 s after / child running / after its end), the
 #      busiest functions per phase and the counted whole-record reads (<12 min)
@@ -101,7 +102,7 @@ for path in map(Path, sys.argv[2:]):
 scale() {  # $1 label: production-sized Worldline and Runner Sessions in the isolated project
   local P=$(project $1)
   local events=$(cat $H/.graphtraj/core/state/worldline/*.jsonl | wc -l | tr -d ' ')
-  say "$1: seeding $events synthetic Worldline events (production has $events) and production's Runner Session records"
+  say "$1: seeding $events synthetic Worldline events (production has $events) and production's Runner Session and agents records"
   probe $1 seed $P $events || { print -r -- "STOP: seeding the Worldline failed (above)"; return 1; }
   probe518 $1 clone $P $H || { print -r -- "STOP: copying the Runner Session records failed (above)"; return 1; }
   (cd $P && clean $(venv $1)/bin/graphtraj task graph > /dev/null) && print "task graph after seeding: rc=0" \

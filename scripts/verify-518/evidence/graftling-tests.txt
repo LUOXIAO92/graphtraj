@@ -1,0 +1,19 @@
+# graftling clone /tmp/claude-501/g518/graftling, branch agent/518-archive-header-lookup, HEAD ed19e48; venv /tmp/claude-501/gvenv (conda 3.13 + production click/yaml/websockets; graftling editable from the clone); TMPDIR=/tmp/claude-501 (outside the Harness)
+## 1. tests/test_archive_header_lookup.py on the OLD archive.py (a51e100), placed in src/ (pytest.ini pythonpath=src)
+E           json.decoder.JSONDecodeError: Invalid control character at: line 1 column 243 (char 242)
+/Users/luoxiao/miniconda3/lib/python3.13/json/decoder.py:361: JSONDecodeError
+FAILED tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened
+1 failed, 1 passed in 0.09s
+## 2. the same on ed19e48
+2 passed in 0.13s
+## 3. focused archive/session tests on ed19e48
+151 passed, 12 skipped in 1.63s
+## 4. graftling full suite on the working tree that became ed19e48 (22:50-22:53, single process): python -m pytest -q -p no:cacheprovider -rfE
+616 passed, 21 skipped in 204.70s (0:03:24)
+exit=0
+
+## 5. graphtraj tests with the patched graftling (22:57-22:58; graphtraj = this Worktree at 2137ecb4, editable in the same venv)
+graftling /private/tmp/claude-501/g518/graftling/src/graftling/__init__.py
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/518-worker-cpu-after-child-create/src/graphtraj/__init__.py
+TMPDIR=$TMPDIR python -m pytest -q -p no:cacheprovider tests/test_agents_session_read.py tests/test_agent_archive_migration.py tests/test_claude_runtime.py -x
+105 passed, 1 skipped in 69.61s (0:01:09)

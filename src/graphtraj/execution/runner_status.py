@@ -437,7 +437,9 @@ def require_stopped_subtree(runner_directory: Path, alias: str, *, operation: st
     launching: set[str] = set()
     for path in [*(runner_directory / "sessions").iterdir(), *retained_session_directories(runner_directory)]:
         name = path.parent.name if path.name == "runner" else path.name
-        if name == alias:
+        # A name no alias can take (for example a Runtime's own `.claude`
+        # directory written under sessions/) is no Agent and parents none.
+        if name == alias or not ALIAS.fullmatch(name):
             continue
         if not path.is_dir() and not path.is_symlink():
             continue

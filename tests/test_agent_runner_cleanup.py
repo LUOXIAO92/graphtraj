@@ -996,6 +996,44 @@ def test_installed_cleanup_does_not_count_an_ended_uncollected_worker_as_executi
     assert not task.worktree.exists()
 
 
+@pytest.mark.parametrize("member", ("ended", "executing"))
+def test_installed_cleanup_ignores_a_non_agent_directory_under_sessions(
+    integrated_task: DeliveredTask, member: str,
+) -> None:
+    """A Runtime's own `.claude` directory under sessions/ is no Agent (523).
+
+    Production 519/520 were refused as worktree-busy with every member ended
+    because sessions/.claude/.cc-writes failed the stopped-subtree scan; an
+    executing member must still refuse.
+    """
+    task = integrated_task
+    (task.root / ".graphtraj/runner/sessions/.claude/.cc-writes").mkdir(parents=True)
+    agent = None
+    if member == "executing":
+        mapping_file = _task_mappings(task)[0] / "mapping.yml"
+        mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+        agent = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        mapping["worker_pid"] = mapping["runtime_pid"] = agent.pid
+        mapping_file.write_text(yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8")
+    try:
+        result = _cleanup(task)
+    finally:
+        if agent is not None:
+            agent.terminate()
+            agent.wait(timeout=5)
+
+    document = yaml.safe_load(result.stdout)
+    if member == "ended":
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert document["cleanup_status"] == "cleaned"
+        assert not task.worktree.exists()
+    else:
+        assert result.returncode == 1
+        assert document["error"]["code"] == "worktree-busy"
+        assert document["evidence"]["aliases"] == [_task_mappings(task)[0].name]
+        assert task.worktree.is_dir()
+
+
 @pytest.mark.parametrize("change", ("worktree", "branch"))
 def test_installed_cleanup_refuses_noncanonical_task_resources_without_partial_cleanup(
     change: str,

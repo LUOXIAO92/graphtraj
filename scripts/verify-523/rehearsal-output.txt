@@ -1,0 +1,110 @@
+# Rehearsal 2026-11-18 (Engineer sandbox; VERIFY523_BASE=$TMPDIR/v523; TMPDIR=/tmp/claude-501)
+## steps 0 and D (first D run, before diag523 seeded retained records)
+== [0] preflight. Dialog: none. Reads only.
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; runtime Python 3.13.11
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion 595d4dfa19c56951978d3827f70e8c2e1ffb7b83 (branch agent/523-cleanup-worktree-busy-after-completion); base 595d4dfa19c56951978d3827f70e8c2e1ffb7b83
+517: state /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/517-verify-checker-record-shapes status status: integrated
+   sessions: 517-verify_checker_record_shapes-handover0-engineer@engineer 517-verify_checker_record_shapes-handover0-team_leader@team_leader 
+519: state /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/519-standby-session-archive-latency status status: integrated
+   sessions: 519-standby_session_archive_latency-handover0-engineer@engineer 519-standby_session_archive_latency-handover0-team_leader@team_leader 
+520: state /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/520-unobserved-redaction-and-dsh-display status status: integrated
+   sessions: 520-unobserved_redaction_and_dsh_display-handover0-engineer@engineer 520-unobserved_redaction_and_dsh_display-handover0-team_leader@team_leader 
+Ready when: 519 and 520 are 'status: integrated' and each lists its two sessions.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/scripts/verify-523/steps.zsh D
+== [D] read-only diagnosis of /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/runner for 517 519 520. Dialog: none. No cleanup, no record written, no signal.
+run records: /tmp/claude-501/v523/runs/D-20261118T224450
+--- base 595d4dfa19c56951978d3827f70e8c2e1ffb7b83
+graphtraj source: /tmp/claude-501/v523/old-src/src/graphtraj
+names under sessions/ no alias can take: ['.claude']
+517 517-verify_checker_record_shapes-handover0-engineer@engineer: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+517 517-verify_checker_record_shapes-handover0-team_leader@team_leader: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+519 519-standby_session_archive_latency-handover0-engineer@engineer: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+519 519-standby_session_archive_latency-handover0-team_leader@team_leader: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+520 520-unobserved_redaction_and_dsh_display-handover0-engineer@engineer: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+520 520-unobserved_redaction_and_dsh_display-handover0-team_leader@team_leader: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+--- candidate 595d4dfa19c56951978d3827f70e8c2e1ffb7b83
+graphtraj source: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/src/graphtraj
+names under sessions/ no alias can take: ['.claude']
+517 517-verify_checker_record_shapes-handover0-engineer@engineer: subtree refused operation-failed; live pids none -> BUSY (worktree-busy)
+517 517-verify_checker_record_shapes-handover0-team_leader@team_leader: subtree refused operation-failed; live pids none -> BUSY (worktree-busy)
+519 519-standby_session_archive_latency-handover0-engineer@engineer: subtree refused operation-failed; live pids none -> BUSY (worktree-busy)
+519 519-standby_session_archive_latency-handover0-team_leader@team_leader: subtree refused operation-failed; live pids none -> BUSY (worktree-busy)
+520 520-unobserved_redaction_and_dsh_display-handover0-engineer@engineer: subtree refused operation-failed; live pids none -> BUSY (worktree-busy)
+520 520-unobserved_redaction_and_dsh_display-handover0-team_leader@team_leader: subtree refused operation-failed; live pids none -> BUSY (worktree-busy)
+expected: base -> 519/520 (and 517) BUSY by 'subtree refused alias-not-found' with no live pids, caused by
+the name '.claude' under sessions/; candidate -> every member 'not busy'. A live pid or a non-idle member stays BUSY.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/scripts/verify-523/steps.zsh T
+## step D (final)
+== [D] read-only diagnosis of /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/runner for 517 519 520. Dialog: none. No cleanup, no record written, no signal.
+run records: /tmp/claude-501/v523/runs/D-20261118T224551
+--- base 595d4dfa19c56951978d3827f70e8c2e1ffb7b83
+graphtraj source: /tmp/claude-501/v523/old-src/src/graphtraj
+retained Session records: configuration unreadable here; seeded from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state -> 272
+names under sessions/ no alias can take: ['.claude']
+517 517-verify_checker_record_shapes-handover0-engineer@engineer: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+517 517-verify_checker_record_shapes-handover0-team_leader@team_leader: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+519 519-standby_session_archive_latency-handover0-engineer@engineer: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+519 519-standby_session_archive_latency-handover0-team_leader@team_leader: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+520 520-unobserved_redaction_and_dsh_display-handover0-engineer@engineer: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+520 520-unobserved_redaction_and_dsh_display-handover0-team_leader@team_leader: subtree refused alias-not-found; live pids none -> BUSY (worktree-busy)
+--- candidate 595d4dfa19c56951978d3827f70e8c2e1ffb7b83
+graphtraj source: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/src/graphtraj
+retained Session records: configuration unreadable here; seeded from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state -> 272
+names under sessions/ no alias can take: ['.claude']
+517 517-verify_checker_record_shapes-handover0-engineer@engineer: subtree stopped; live pids none -> not busy
+517 517-verify_checker_record_shapes-handover0-team_leader@team_leader: subtree stopped; live pids none -> not busy
+519 519-standby_session_archive_latency-handover0-engineer@engineer: subtree stopped; live pids none -> not busy
+519 519-standby_session_archive_latency-handover0-team_leader@team_leader: subtree stopped; live pids none -> not busy
+520 520-unobserved_redaction_and_dsh_display-handover0-engineer@engineer: subtree stopped; live pids none -> not busy
+520 520-unobserved_redaction_and_dsh_display-handover0-team_leader@team_leader: subtree stopped; live pids none -> not busy
+expected: base -> 519/520 (and 517) BUSY by 'subtree refused alias-not-found' with no live pids, caused by
+the name '.claude' under sessions/; candidate -> every member 'not busy'. A live pid or a non-idle member stays BUSY.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/scripts/verify-523/steps.zsh T
+## step T with VERIFY523_PYTEST_ARGS=--collect-only
+== [T] pytest tests/test_agent_runner_cleanup.py in /tmp/claude-501/v523/venv-test. Dialog: none. A few minutes.
+run records: /tmp/claude-501/v523/runs/T-20261118T224609
+
+31 tests collected in 0.72s
+exit=0
+(no FAILED/ERROR lines)
+expected: all passed, including test_installed_cleanup_ignores_a_non_agent_directory_under_sessions[ended|executing]
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/scripts/verify-523/steps.zsh F
+## step T
+== [T] pytest tests/test_agent_runner_cleanup.py in /tmp/claude-501/v523/venv-test. Dialog: none. A few minutes.
+run records: /tmp/claude-501/v523/runs/T-20261118T224615
+ss.............................                                          [100%]
+29 passed, 2 skipped in 150.71s (0:02:30)
+exit=0
+(no FAILED/ERROR lines)
+expected: all passed, including test_installed_cleanup_ignores_a_non_agent_directory_under_sessions[ended|executing]
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/scripts/verify-523/steps.zsh F
+## new test against base runner_status.py (595d4dfa) placed in src/
+
+tests/test_agent_runner_cleanup.py:1033: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_agent_runner_cleanup.py::test_installed_cleanup_ignores_a_non_agent_directory_under_sessions[ended]
+FAILED tests/test_agent_runner_cleanup.py::test_installed_cleanup_ignores_a_non_agent_directory_under_sessions[executing]
+2 failed, 29 deselected in 12.84s
+E           AssertionError: task_id: '85'
+E             cleanup_status: refused
+E             worktree_path: /private/tmp/claude-501/pytest-of-luoxiao/pytest-78/test_installed_cleanup_ignores0/.graphtraj/.agent-worktrees/85-cleanup-integrated-task
+E             branch: agent/85-cleanup-integrated-task
+E             error:
+E               code: worktree-busy
+E               message: The Task Worktree has an executing Agent.
+E             evidence:
+## step F: --collect-only only (not run by the Engineer)
+run records: /tmp/claude-501/v523/runs/F-20261118T225953
+
+3641 tests collected in 3.52s
+exit=0
+(no FAILED/ERROR lines)
+expected: all passed, including test_installed_cleanup_ignores_a_non_agent_directory_under_sessions[ended|executing]
+== [C] AFTER PRODUCTION ADOPTION OF 595d4dfa19c56951978d3827f70e8c2e1ffb7b83 ONLY. This step prints; it runs nothing.
+Main, with the adopted GraphTraj, calls the public cleanup (tasks tool) once per Task:
+  mcp__graphtraj__tasks {"action": "execute", "feature": "cleanup", "arguments": {"task_id": "519"}}
+  mcp__graphtraj__tasks {"action": "execute", "feature": "cleanup", "arguments": {"task_id": "520"}}
+Dialog: at most the Runtime's own tool approval for mcp__graphtraj__tasks (choose: allow once).
+Expected observable for each: cleanup_status 'cleaned', standby_aliases naming the Leader and Engineer,
+the Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/<id>-<name> gone, branch agent/<id>-<name> deleted; runner/sessions/<id>-*
+kept unchanged (standby). Before that, 'zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/523-cleanup-worktree-busy-after-completion/scripts/verify-523/steps.zsh D' with the adopted code must show 'not busy' for both.

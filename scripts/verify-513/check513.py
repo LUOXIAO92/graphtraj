@@ -2,6 +2,8 @@
 
 Usage: python -I check513.py <runtime> <step dir> <reviewer log> <path>...
 Every <path> (file or directory) is scanned for the model-visible tool names.
+Child criterion (513 task.md): one agents call created a child and was not stopped by review. PONG-513 (the
+child's answer) is printed as information, not judged (517).
 """
 from __future__ import annotations
 
@@ -78,11 +80,23 @@ def main() -> None:
     state = 'PASS' if totals[NEW] > 0 and totals[OLD] == 0 else 'FAIL'
     say(state, f'retained records name {NEW} {totals[NEW]} times and {OLD} {totals[OLD]} times')
 
-    # 2. The child: its result reached the parent through agents (last_message carries the token).
+    # 2. The child (Task 513 criterion: one agents call created a child; review is check 3). graftling writes
+    # <data>/control/agents/<agent>.json when create succeeds, and the parent's own Runtime records (outside
+    # data/) must hold that agent id, i.e. the create result reached the parent. The child's reply token is
+    # informational only: a Claude child under native permission mode `default` may wait for a native
+    # permission answer that the host prompt never gives (513 Leader report), which is not a review stop.
     raw = '\n'.join(path.read_text(errors='replace') for path in files([str(step)]))
+    control = step / 'data' / 'control' / 'agents'
+    children = sorted(p.stem for p in control.glob('agent-*.json')) if control.is_dir() else []
+    parent_text = '\n'.join(path.read_text(errors='replace') for path in files([str(step)])
+                            if 'data' not in path.relative_to(step).parts)
+    created = [child for child in children if child in parent_text]
+    say('PASS' if created else 'FAIL',
+        f'an agents create call made a child and returned it to the parent: control records {children or "none"}; '
+        f'named in the parent records: {created or "none"}')
     answered = [line for line in raw.splitlines() if 'last_message' in line and TOKEN in line]
-    say('PASS' if answered else 'FAIL',
-        f'the created child answered {TOKEN} in an agents result (last_message): {len(answered)} record line(s)')
+    print(f'  info (not a criterion): the child answered {TOKEN} in an agents result (last_message): '
+          f'{len(answered)} record line(s)')
 
     # 3. Review: the reviewer was asked about other tools, never about the agents tool.
     asked = Path(reviewer_log).read_text().split() if Path(reviewer_log).is_file() else []

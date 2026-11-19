@@ -1,0 +1,2 @@
+wrote /tmp/claude-501/rehearse526/base/project/.graphtraj/swarm/sessions/83aefabbb56f9861a1fad0d93537ba53f6ae1921473130e41d207dc16bfde59d/session.jsonl
+wrote /tmp/claude-501/rehearse526/base/work-standalone/graftling-data/sessions/83aefabbb56f9861a1fad0d93537ba53f6ae1921473130e41d207dc16bfde59d/session.jsonl

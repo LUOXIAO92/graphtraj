@@ -1,0 +1,23 @@
+ERROR tests/test_agents_connections_presets.py
+ERROR tests/test_agents_server_name.py
+ERROR tests/test_approval_integration.py
+ERROR tests/test_approval_layers.py
+ERROR tests/test_codex_child_interpreter_shutdown_473.py
+ERROR tests/test_codex_independent_control.py
+ERROR tests/test_codex_review_relay.py
+ERROR tests/test_codex_tool_reclaim_462.py
+ERROR tests/test_dsh_standalone_child.py
+ERROR tests/test_dsh_standalone_host.py
+ERROR tests/test_dsh_startup.py
+ERROR tests/test_host_shutdown_stop.py
+ERROR tests/test_pi_dsh_notice_holding.py
+ERROR tests/test_pi_standalone_host.py::test_each_end_is_pushed_once_and_shutdown_ends_are_held
+ERROR tests/test_pi_standalone_host.py::test_pi_host_routes_creates_to_every_runtime
+ERROR tests/test_pi_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults
+FAILED tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
+FAILED tests/test_dsh_live.py::test_standalone_driver_with_only_independent_package
+FAILED tests/test_pi_standalone_host.py::test_codex_without_settings_is_refused_at_create
+FAILED tests/test_pi_standalone_host.py::test_host_start_refusals - json.deco...
+FAILED tests/test_pi_standalone_host.py::test_host_starts_from_root_only_and_closes_at_shutdown
+FAILED tests/test_runtime_dirs_git_ignored_526.py::test_archive_write_leaves_a_self_ignoring_sessions_directory
+FAILED tests/test_runtime_dirs_git_ignored_526.py::test_git_lists_user_files_but_no_graftling_runtime_files

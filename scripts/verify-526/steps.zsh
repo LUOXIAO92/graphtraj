@@ -243,15 +243,18 @@ C)
     [[ -f $BASE/screenshot-$s.png ]] && print "screenshot-$s.png: $(stat -f '%z bytes, %Sm' $BASE/screenshot-$s.png)" \
       || print "screenshot-$s.png: MISSING ($BASE/screenshot-$s.png)"
   done
-  print "DSH session files in $DH (excluding profiles/) that record an agents call: agents tool, workspace/changes events,"
-  print "and how many of those changes lines name a graftling path (sessions/, control/, live/, native/ under a root):"
+  # DSH appends workspace/changes ({turn} only, no paths) only when a turn's change list is non-empty. The prompts allow
+  # no file tool, so any such event in a session that records the UG/US agents call means DSH listed some file.
+  print "DSH session files in $DH (excluding profiles/) that record an agents call, and their workspace/changes events"
+  print "(the event carries only the turn, never paths; the listed files themselves are seen only in the screenshot):"
   local files=(${(f)"$(grep -rlIE 'mcp__(graftling|graphtraj|agents)__agents' $DH --exclude-dir=profiles 2>/dev/null)"})
-  (( ${#files} )) || print "  (none)"
+  (( ${#files} )) || print "  (none among uncompressed files)"
   for f in $files; do
     n=$(grep -c 'workspace/changes' $f || true)
-    r=$(grep 'workspace/changes' $f | grep -cE '(swarm|graftling-data)/(sessions|control|live|native)/' || true)
-    print "  ${f#$DH/}: tool $(grep -oE 'mcp__(graftling|graphtraj|agents)__agents' $f | sort -u | tr '\n' ' ')| workspace/changes events $n | naming graftling paths $r"
+    print "  ${f#$DH/}: tool $(grep -oE 'mcp__(graftling|graphtraj|agents)__agents' $f | sort -u | tr '\n' ' ')| workspace/changes events $n"
   done
+  local packed=(${(f)"$(find $DH -path $DH/profiles -prune -o -type f -name '*.jsonl.zstd' -print 2>/dev/null)"})
+  for f in $packed; do print "  ${f#$DH/}: compressed (.jsonl.zstd), not inspected"; done
   for r in $P/.graphtraj/swarm $GROOT_US; do
     a=($r/sessions/*/session.jsonl(N))
     print "graftling root $r: archives ${#a}"
@@ -266,8 +269,8 @@ C)
     print "git status --untracked-files=all in $s, lines under a graftling runtime directory (expected 0):" \
       "$(git -C $s status --porcelain --untracked-files=all | grep -cE '(swarm|graftling-data)/(sessions|control|live|native)/' || true)"
   done
-  print "Expected: no screenshot shows a file-change card under DONE-526-UG / DONE-526-US; 'naming graftling paths 0' for"
-  print "every session file; sessions/.gitignore present with bytes '*\\\\n'. Main reads the screenshots (Read tool) and records only what they show."
+  print "Expected: no screenshot shows a file-change card under DONE-526-UG / DONE-526-US; 'workspace/changes events 0' in"
+  print "each session file recording the UG/US agents call; sessions/.gitignore present with bytes '*\\\\n'. Main reads the screenshots (Read tool) and records only what they show."
   ;;
 *) print -r -- "usage: zsh $THIS 0|US|UG|C"; return 2 ;;
 esac

@@ -10,3 +10,5 @@ C (after simulated write, correction of C's output format): rc=0
 C (rerun after print -r fix): rc=0
 C (final rerun): rc=0
 US (rerun on final script): rc=0
+C (correction 1: workspace/changes count only, .jsonl.zstd listed): rc=0
+C with fixture session files (ug.jsonl: 1 changes event; us.jsonl: 0; packed.jsonl.zstd), fixture then removed: rc=0

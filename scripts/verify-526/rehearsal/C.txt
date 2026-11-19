@@ -1,0 +1,17 @@
+RUN IN: Main's Bash (reads only).
+== [C] screenshots, DSH changes events, graftling archives and their .gitignore. Dialog: none.
+screenshot-UG.png: MISSING (/tmp/claude-501/rehearse526/base/screenshot-UG.png)
+screenshot-US.png: MISSING (/tmp/claude-501/rehearse526/base/screenshot-US.png)
+DSH session files in /tmp/claude-501/rehearse526/base/dsh-home (excluding profiles/) that record an agents call: agents tool, workspace/changes events,
+and how many of those changes lines name a graftling path (sessions/, control/, live/, native/ under a root):
+  (none)
+graftling root /tmp/claude-501/rehearse526/base/project/.graphtraj/swarm: archives 1
+  sessions/83aefabbb56f9861a1fad0d93537ba53f6ae1921473130e41d207dc16bfde59d/session.jsonl (1 lines, Nov 19 22:47:41 2026)
+  sessions/.gitignore: present, bytes *\n
+graftling root /tmp/claude-501/rehearse526/base/work-standalone/graftling-data: archives 1
+  sessions/83aefabbb56f9861a1fad0d93537ba53f6ae1921473130e41d207dc16bfde59d/session.jsonl (1 lines, Nov 19 22:47:41 2026)
+  sessions/.gitignore: present, bytes *\n
+git status --untracked-files=all in /tmp/claude-501/rehearse526/base/project, lines under a graftling runtime directory (expected 0): 0
+git status --untracked-files=all in /tmp/claude-501/rehearse526/base/work-standalone, lines under a graftling runtime directory (expected 0): 0
+Expected: no screenshot shows a file-change card under DONE-526-UG / DONE-526-US; 'naming graftling paths 0' for
+every session file; sessions/.gitignore present with bytes '*\n'. Main reads the screenshots (Read tool) and records only what they show.

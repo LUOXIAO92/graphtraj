@@ -1,0 +1,12 @@
+BASE=/tmp/claude-501/rehearse526/base entries at start: 0; run inside the Claude sandbox (Main-equivalent Bash)
+0 (real plugin add in sandbox, no model): rc=1
+0 (plugin assumed, no model): rc=0
+UG (plugin assumed): rc=0
+US (plugin assumed): rc=0
+C (before any graftling write): rc=0
+simulated graftling archive write (rehearsal venv graftling 40a0099f07) into both roots: rc=0
+C (after simulated write): rc=0
+C (after simulated write, correction of C's output format): rc=0
+C (rerun after print -r fix): rc=0
+C (final rerun): rc=0
+US (rerun on final script): rc=0

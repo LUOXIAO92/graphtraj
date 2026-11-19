@@ -1,0 +1,36 @@
+RUN IN: Main's Bash or a Terminal (this step only prints). The server line below: the USER's plain Terminal (Terminal.app, not the Claude sandbox: it serves a local port and opens the browser), then the browser.
+REHEARSAL: graftling-dsh assumed present in web526
+note: graftling-dsh is in web526; its agents-host row stays inert here (no GRAFTLING_DSH_CONFIG)
+== [UG] GraphTraj DSH Main (graphtraj-main row): one mcp__graphtraj__agents call in the browser UI of the isolated web profile web526. One model call.
+Dialogs: one native dialog, the macOS folder chooser in step 1b (only on a loopback Terminal launch; otherwise
+DSH's in-app browse dialog). Inside the page DSH may ask to approve the tool call: approve it once.
+
+1. In a plain Terminal where DEEPSEEK_API_KEY is set as usual (check: echo ${DEEPSEEK_API_KEY:+set}), paste this one line:
+
+cd /tmp/claude-501/rehearse526/base/project && env DSH_HOME=/tmp/claude-501/rehearse526/base/dsh-home PATH=/opt/homebrew/bin:$PATH /opt/homebrew/bin/dsh --profile web526 --patch /tmp/claude-501/rehearse526/base/graphtraj-main.patch.yml --port 0
+
+   It prints the served URL (http://127.0.0.1:<port>/...) and opens it in the default browser. If no browser opens,
+   open that printed URL yourself.
+1b. Select the workspace first: the page creates the Session in the workspace selected in the page, not in the
+   server's cwd (an existing workspace such as 'base' = /tmp/claude-501/rehearse526/base fails: 'GraphTraj Config was not found').
+   Click the composer's 'ワークスペースを選択' (or the sidebar workspace menu) -> 'ワークスペースを追加…'.
+   A folder chooser opens (native macOS chooser on a loopback Terminal launch, else DSH's in-app browse dialog).
+   Native: press Cmd-Shift-G; in-app: edit the path field. Enter exactly:
+     /tmp/claude-501/rehearse526/base/project
+   and choose 開く/Open. Then select that workspace ('project') in the composer.
+2. In the page start a NEW conversation (workspace 'project') and paste this prompt exactly (also in /tmp/claude-501/rehearse526/base/prompt-UG.txt):
+
+Call the MCP tool mcp__graphtraj__agents exactly once with {"action": "execute", "feature": "status", "arguments": {}}. Use no other tool. Then reply with one line: DONE-526-UG followed by the exact name of the tool you called and ok or the exact error.
+
+3. Wait until the turn has finished and the reply line DONE-526-UG is shown (the changes card, if any, appears
+   under the reply when the turn ends).
+4. Screenshot the area from the mcp__graphtraj__agents call card down to everything below the DONE-526-UG reply line, so that
+   whatever card sits under the reply is visible (Cmd-Shift-4, drag). Save or move it to exactly:
+     /tmp/claude-501/rehearse526/base/screenshot-UG.png
+5. Stop the server with Ctrl-C in that Terminal.
+
+Expected (526): NO card 'session.jsonl を編集しました' (or any other file-change card) under the DONE-526-UG reply.
+Before the fix 522's UG showed 'session.jsonl を編集しました +23 −1' there. Workspace 'project' is a git work tree and
+the graftling data root (/tmp/claude-501/rehearse526/base/project/.graphtraj/swarm) is inside it.
+The conclusion is only what the screenshot and step C show.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/526-dsh-workspace-shows-graftling-session-archive/scripts/verify-526/steps.zsh US (USER, plain Terminal)

@@ -1,0 +1,21 @@
+RUN IN: Main's Bash (the plugin add, if missing, is then done once by the USER in a plain Terminal; then rerun 0).
+== [0] preflight. Dialog: none. Builds the candidate graftling wheel and a venv (no network), the isolated DSH home, adds graftling-dsh to web527, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+graftling candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/527-dsh-agents-native-tool-card/tmp/527/graftling c64a311b4ab8c8cdf3dcfa401c45b9e3aba17b4c (DSH's browser shows agents calls in its native Tool card (527))
+isolated layout: BASE=/tmp/claude-501/rehearse527/base  work=/tmp/claude-501/rehearse527/base/work-standalone  venv=/tmp/claude-501/rehearse527/base/venv  DSH_HOME=/tmp/claude-501/rehearse527/base/dsh-home (never ~/.dsh)
+venv /tmp/claude-501/rehearse527/base/venv already holds graftling c64a311b4a
+venv: graftling 0.6.1 from /tmp/claude-501/rehearse527/base/venv/lib/python3.13/site-packages/graftling/__init__.py
+venv graftling-dsh client.mjs = candidate's file
+== patch: llm = DeepSeek provider row; graftling host config for the agents-host row
+== isolated web profile web527 in /tmp/claude-501/rehearse527/base/dsh-home (fresh copy of the shipped web template on first run), then graftling-dsh
+profile web527: present (/tmp/claude-501/rehearse527/base/dsh-home/profiles/web527)
+REHEARSAL: graftling-dsh assumed present in web527
+REHEARSAL: graftling-dsh assumed present in web527
+REHEARSAL: installed client.mjs check skipped (plugin assumed)
+graftling-dsh tool view keys: []; injected slots: ["conversation.chat.node"]
+== composed web profile (dsh --dump-config; rows that matter)
+US rows: llm-deepseek (expected agents-host llm-deepseek)
+configured model (agent-default-model row):  provider: deepseek-official model: deepseek-flash 
+VERIFY527_NOMODEL: no model call (rehearsal)
+Ready when: venv graftling from c64a311b4a, the candidate graftling-dsh in web527, view keys [] with injected slots ["conversation.chat.node"], US rows agents-host llm-deepseek, and one READY-527 line naming the model.
+next (USER, plain Terminal): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/527-dsh-agents-native-tool-card/scripts/verify-527/steps.zsh US

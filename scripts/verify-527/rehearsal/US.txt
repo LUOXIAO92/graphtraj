@@ -1,0 +1,37 @@
+RUN IN: Main's Bash or a Terminal (this step only prints). The server line below: the USER's plain Terminal (Terminal.app, not the Claude sandbox: it serves a local port and opens the browser), then the browser.
+REHEARSAL: graftling-dsh assumed present in web527
+== [US] graftling alone (graftling-dsh agents-host row, candidate c64a311b4a): one mcp__graftling__agents call in the browser UI of the isolated web profile web527. One model call.
+Dialogs: exactly one native dialog, the macOS folder chooser in step 1b; in it you choose the folder
+  /tmp/claude-501/rehearse527/base/work-standalone
+(on a launch that is not loopback DSH shows its in-app browse dialog instead). Inside the page DSH may ask to approve
+the tool call: approve it once.
+
+1. In a plain Terminal where DEEPSEEK_API_KEY is set as usual (check: echo ${DEEPSEEK_API_KEY:+set}), paste this one line:
+
+cd /tmp/claude-501/rehearse527/base/work-standalone && env DSH_HOME=/tmp/claude-501/rehearse527/base/dsh-home PATH=/opt/homebrew/bin:$PATH GRAFTLING_PYTHON=/tmp/claude-501/rehearse527/base/venv/bin/python GRAFTLING_DSH_CONFIG=/tmp/claude-501/rehearse527/base/dsh-host.json /opt/homebrew/bin/dsh --profile web527 --patch /tmp/claude-501/rehearse527/base/llm.patch.yml --port 0
+
+   It prints the served URL (http://127.0.0.1:<port>/...) and opens it in the default browser. If no browser opens,
+   open that printed URL yourself.
+1b. Add and select the workspace first: the page creates the Session in the workspace selected in the page, not in
+   the server's cwd. Click the composer's 'ワークスペースを選択' (or the sidebar workspace menu) -> 'ワークスペースを追加…'.
+   The folder chooser opens (native macOS chooser; in-app browse dialog otherwise). Native: press Cmd-Shift-G;
+   in-app: edit the path field. Enter exactly:
+     /tmp/claude-501/rehearse527/base/work-standalone
+   and choose 開く/Open. Then select that workspace ('work-standalone') in the composer.
+2. In the page start a NEW conversation (新規セッション, workspace 'work-standalone') and paste this prompt exactly
+   (also in /tmp/claude-501/rehearse527/base/prompt-US.txt):
+
+Call the MCP tool mcp__graftling__agents exactly once with {"action": "execute", "feature": "status", "arguments": {}}. Use no other tool. Then reply with one line: DONE-527-US followed by the exact name of the tool you called and ok or the exact error.
+
+3. Wait for the reply line DONE-527-US. If the group 'ツールを呼び出しました' is collapsed, click it open. Then click the
+   disclosure arrow (or the title) of the card 'ツール呼び出し · mcp__graftling__agents · execute' so that its IN and OUT show.
+4. Screenshot the expanded card with its title, IN and OUT, plus the DONE-527-US reply line (Cmd-Shift-4, drag).
+   Save or move it to exactly:
+     /tmp/claude-501/rehearse527/base/screenshot-US.png
+5. Stop the server with Ctrl-C in that Terminal.
+
+Observable: /tmp/claude-501/rehearse527/base/screenshot-US.png exists and shows, for this conversation's mcp__graftling__agents call, DSH's native card titled
+'ツール呼び出し · mcp__graftling__agents · execute' with IN (the JSON arguments) and OUT, and no 'agents · status · …' row and no
+'Details' button (as mcp__graphtraj__agents in 522's screenshot-UG.png, unlike 522's screenshot-US.png).
+The conclusion is only what the screenshot shows.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/527-dsh-agents-native-tool-card/scripts/verify-527/steps.zsh C (Main's Bash)

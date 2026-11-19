@@ -1,0 +1,8 @@
+BASE=/tmp/claude-501/rehearse527/base entries at start: 0; host 26.6.2; run inside the Claude sandbox (Main-equivalent Bash); graftling candidate c64a311b4a
+0 (real plugin add in sandbox, no model): rc=1
+0 (plugin assumed, no model): rc=0
+US (plugin assumed): rc=0
+US (no plugin): rc=1
+C: rc=0
+C (rehearsal: node_modules/graftling-dsh linked to the venv's candidate dsh/): rc=0
+C (rehearsal: installed client.mjs = graftling 483b16a8's): rc=0

@@ -1,0 +1,7 @@
+RUN IN: Main's Bash (reads only).
+== [C] the screenshot, the agents tool names in the isolated DSH home /tmp/claude-501/rehearse527/base/dsh-home, and web527's installed client. Dialog: none.
+screenshot-US.png: MISSING (/tmp/claude-501/rehearse527/base/screenshot-US.png)
+agents tool names in /tmp/claude-501/rehearse527/base/dsh-home (excluding profiles/), files and counts:
+  (none)
+web527 installed graftling-dsh client.mjs: SAME as c64a311b4ab8c8cdf3dcfa401c45b9e3aba17b4c:src/graftling/dsh/client.mjs (/private/tmp/claude-501/rehearse527/base/venv/lib/python3.13/site-packages/graftling/dsh/client.mjs)
+Main reads the screenshot (Read tool) and records only what it shows.

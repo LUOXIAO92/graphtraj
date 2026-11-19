@@ -1,0 +1,222 @@
+From c64a311b4ab8c8cdf3dcfa401c45b9e3aba17b4c Mon Sep 17 00:00:00 2001
+From: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 22:43:34 +0900
+Subject: [PATCH] DSH's browser shows agents calls in its native Tool card
+ (527)
+
+graftling-dsh's client module no longer registers a tool.call.toolview view
+(AgentsRow with its Details button) for mcp__graftling__agents or the older
+mcp__agents__agents, so both use the collapsible card DSH shows for every
+other tool, as mcp__graphtraj__agents already does. The incoming
+agent-message attribution on conversation.chat.node stays. The client no
+longer injects @deepseek-ai/dsh-client-ui-tool, which owns only the slot that
+view used; slots comes from dsh-client-ui-renderer and the chat node from
+dsh-client-ui-chat, both still injected. Version unchanged; CHANGELOG
+Unreleased and README updated.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/graftling/CHANGELOG.md         | 12 +++++++
+ src/graftling/README.md            |  3 +-
+ src/graftling/dsh/client.mjs       | 53 ++----------------------------
+ src/graftling/dsh/package.json     |  2 +-
+ tests/fixtures/dsh_client_view.mjs | 26 +++------------
+ tests/fixtures/dsh_mcp_plugin.mjs  |  6 +++-
+ tests/test_dsh_mcp.py              |  4 +--
+ 7 files changed, 29 insertions(+), 77 deletions(-)
+
+diff --git a/src/graftling/CHANGELOG.md b/src/graftling/CHANGELOG.md
+index 5f534f1..3761cfd 100644
+--- a/src/graftling/CHANGELOG.md
++++ b/src/graftling/CHANGELOG.md
+@@ -12,6 +12,18 @@ version that identifies everything listed under it.
+ 
+ The numbers in parentheses are the project's Task numbers.
+ 
++## Unreleased
++
++- DSH's browser shows agents calls in its own native Tool card (527). The `graftling-dsh`
++  client module no longer registers a `tool.call.toolview` view for
++  `mcp__graftling__agents` or the older `mcp__agents__agents`, so both now show as the
++  collapsible card DSH uses for every other tool (title, then the call's input and
++  output when expanded), as `mcp__graphtraj__agents` already did; the one-line
++  `agents · … · …` row and its *Details* button are gone. The module keeps the sender and
++  recipient it adds to incoming agent messages, and no longer asks DSH to load
++  `@deepseek-ai/dsh-client-ui-tool` first, which only that view used. The browser view is
++  not part of the public interface; nothing a model, host or archive sees changes.
++
+ ## 0.6.1 (compatible)
+ 
+ - A native Session lookup reads only archive headers (518). `SessionArchive.native_header`,
+diff --git a/src/graftling/README.md b/src/graftling/README.md
+index 6f3c18d..fb71e0d 100644
+--- a/src/graftling/README.md
++++ b/src/graftling/README.md
+@@ -377,7 +377,8 @@ instead of `mcp__agents__agents`. The tool keeps its name. After upgrading:
+ - Review exempts only the `agents` tool of the server the child registered; an `agents`
+   tool on any other MCP server is reviewed.
+ - Sessions created before keep their earlier calls under `mcp__agents__agents`. Archives
+-  and the DSH tool view still read that name. Resuming such a Session: see
++  still read that name, and DSH's browser shows those calls in its native Tool card like
++  any other. Resuming such a Session: see
+   [`CHANGELOG.md`](CHANGELOG.md) 0.6.0.
+ 
+ ## Known limits
+diff --git a/src/graftling/dsh/client.mjs b/src/graftling/dsh/client.mjs
+index 2f92c49..e36c62f 100644
+--- a/src/graftling/dsh/client.mjs
++++ b/src/graftling/dsh/client.mjs
+@@ -1,62 +1,13 @@
+-/** Official browser module/Tool view extension; never submits model input. */
++/** Official browser module: incoming agent-message attribution; never submits model input. */
+ window.__ModuleLoader__.load({
+   id: 'graftling-dsh',
+   factory(require) {
+     const { createElement: h } = require('react');
+ 
+-    function parse(text) {
+-      try { return JSON.parse(text); } catch { return undefined; }
+-    }
+-
+-    /** Read the same durable call/result facts as the existing native Tool row. */
+-    function communication(block, sessionId) {
+-      const request = parse(block.argsRaw || block.call?.argsRaw || '') || {};
+-      const args = request.arguments || {};
+-      const outbound = args.message || args.instruction;
+-      let document;
+-      for (const content of block.content || []) {
+-        if (content.type === 'text') {
+-          const candidate = parse(content.text);
+-          if (candidate && typeof candidate === 'object') document = candidate;
+-        }
+-      }
+-      const result = document?.result || {};
+-      return {
+-        sender: sessionId,
+-        recipient: document?.agent || args.agent || args.name || args.runtime || 'Agents',
+-        outbound: typeof outbound === 'string' ? outbound : undefined,
+-        state: result.state,
+-        error: document?.error?.message || result.last_result?.error?.message,
+-        operation: request.feature || request.action || 'agents',
+-      };
+-    }
+-
+-    function AgentsRow({ block, sessionId, phase, inspect }) {
+-      const fact = communication(block, sessionId);
+-      const body = (title, text, key) => text ? h('section', {
+-        key, style: { border: '1px solid currentColor', borderRadius: 8, padding: '8px 12px', margin: '6px 0' },
+-      }, h('div', { style: { fontSize: 12, opacity: 0.7 } }, title),
+-      h('div', { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, text)) : null;
+-      return h('div', { 'data-agent-communication': true },
+-        body(`${fact.sender} → ${fact.recipient}`, fact.outbound, 'outbound'),
+-        // Incoming body belongs to the native relay message, not a second Tool card.
+-        body('Agents', fact.error, 'error'),
+-        !fact.outbound && !fact.error
+-          ? h('div', null, `agents · ${fact.operation} · ${fact.state || phase}`) : null,
+-        inspect ? h('button', { type: 'button', onClick: inspect }, 'Details') : null);
+-    }
+-
+     return {
+       inject: ['slots'],
+-      communication,
+-      AgentsRow,
+       apply(ctx) {
+-        // graftling's server, and agents as Sessions before 0.6.0 recorded it.
+-        ctx.slots.inject('tool.call.toolview', () => {
+-          const disposers = ['mcp__graftling__agents', 'mcp__agents__agents'].map(key =>
+-            ctx.slots.register({ name: 'tool.call.toolview', key }, AgentsRow));
+-          return () => disposers.forEach(dispose => dispose?.());
+-        });
++        // agents calls keep DSH's native Tool card; this module adds no tool view (527).
+         ctx.slots.inject('conversation.chat.node', () => {
+           // The installed Chat package owns the body, disclosure and timestamp.
+           // Its public slot entry lets us add attribution without copying them.
+diff --git a/src/graftling/dsh/package.json b/src/graftling/dsh/package.json
+index d17d2ee..fc7908f 100644
+--- a/src/graftling/dsh/package.json
++++ b/src/graftling/dsh/package.json
+@@ -9,7 +9,7 @@
+     "bundle": { "patch": "./dsh.patch.yml" },
+     "client": {
+       "platform": "web",
+-      "inject": ["@deepseek-ai/dsh-client-ui-tool", "@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-chat"]
++      "inject": ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-chat"]
+     }
+   }
+ }
+diff --git a/tests/fixtures/dsh_client_view.mjs b/tests/fixtures/dsh_client_view.mjs
+index eb1c0c2..365652c 100644
+--- a/tests/fixtures/dsh_client_view.mjs
++++ b/tests/fixtures/dsh_client_view.mjs
+@@ -1,4 +1,4 @@
+-/** Pure browser-view projection: no host/model calls and no UI acceptance claim. */
++/** Pure browser-module projection: no host/model calls and no UI acceptance claim. */
+ import assert from 'node:assert/strict';
+ import { readFileSync } from 'node:fs';
+ import vm from 'node:vm';
+@@ -36,26 +36,10 @@ if (delayedNative) {
+   registerNative();
+   await new Promise(resolve => queueMicrotask(resolve));
+ }
+-// graftling's own server, and the name Sessions recorded before 0.6.0.
+-const toolViews = slots.entriesOfSlot('tool.call.toolview');
+-assert.deepEqual(toolViews.map(entry => entry.options.key).sort(), ['mcp__agents__agents', 'mcp__graftling__agents']);
+-assert.equal(toolViews[0].component, toolViews[1].component);
+-const registered = toolViews.find(entry => entry.options.key === 'mcp__graftling__agents');
+-const block = { kind: 'tool-result', call: { argsRaw: JSON.stringify({
+-  action: 'execute', feature: 'send', arguments: { agent: 'actual-child', message: 'outbound body' },
+-}) }, content: [{ type: 'text', text: JSON.stringify({ agent: 'actual-child', result: {
+-  state: 'standby', last_result: { last_message: 'relay owns this incoming body' },
+-} }) }] };
+-const before = JSON.stringify(block);
+-const first = registered.component({ block, sessionId: 'actual-parent-session', phase: 'result' });
+-const replay = registered.component({ block, sessionId: 'actual-parent-session', phase: 'result' });
+-assert.equal(JSON.stringify(first), JSON.stringify(replay));
+-assert.equal(JSON.stringify(block), before);
+-const rendered = JSON.stringify(first);
+-assert.match(rendered, /actual-parent-session → actual-child/);
+-assert.match(rendered, /outbound body/);
+-assert.doesNotMatch(rendered, /relay owns this incoming body/);
+-console.log('Pure native Tool view: outbound source/body; incoming relay not duplicated');
++// agents calls, under graftling's server or the name Sessions recorded before 0.6.0,
++// keep DSH's native Tool card: graftling adds no tool view of its own (527).
++assert.deepEqual(slots.entriesOfSlot('tool.call.toolview'), []);
++console.log('Native Tool card: no tool.call.toolview entry for agents calls');
+ 
+ // Real native slot selection keeps the original renderer under our attribution.
+ const incoming = slots.entriesOfSlot('conversation.chat.node')
+diff --git a/tests/fixtures/dsh_mcp_plugin.mjs b/tests/fixtures/dsh_mcp_plugin.mjs
+index c1724b9..6118d57 100644
+--- a/tests/fixtures/dsh_mcp_plugin.mjs
++++ b/tests/fixtures/dsh_mcp_plugin.mjs
+@@ -44,7 +44,11 @@ try {
+   assert.ok(entry);
+   const bundle = await ctx.clientModules.fetchBundle(new Request(new URL(entry.url, 'http://fixture/')));
+   assert.equal(bundle.status, 200);
+-  assert.match(await bundle.text(), /tool.call.toolview/);
++  // The delivered bundle adds incoming-message attribution and leaves agents calls to
++  // DSH's native Tool card (527).
++  const text = await bundle.text();
++  assert.match(text, /conversation\.chat\.node/);
++  assert.doesNotMatch(text, /tool\.call\.toolview/);
+   async function create(id, meta, parent) {
+     const session = ctx.sessions.create(id, { meta: { cwd: process.cwd(), ...meta } });
+     const agent = { id, session };
+diff --git a/tests/test_dsh_mcp.py b/tests/test_dsh_mcp.py
+index 4880924..3c690f5 100644
+--- a/tests/test_dsh_mcp.py
++++ b/tests/test_dsh_mcp.py
+@@ -46,8 +46,8 @@ def test_delivered_plugin_native_scopes(tmp_path: Path) -> None:
+ 
+ 
+ @pytest.mark.parametrize("registration_order", ["ready", "delayed"])
+-def test_browser_tool_view_preserves_model_content(registration_order: str) -> None:
+-    """Project outgoing text without replaying calls or duplicating inbound relay."""
++def test_browser_module_keeps_native_tool_card(registration_order: str) -> None:
++    """agents calls keep DSH's native Tool card; incoming messages gain true attribution."""
+     node, dsh = shutil.which('node'), shutil.which('dsh')
+     if node is None or dsh is None:
+         pytest.skip('Installed DSH slots and Node are required for the browser projection fixture.')
+-- 
+2.50.1 (Apple Git-155)
+

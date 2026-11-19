@@ -1,0 +1,2 @@
+RUN IN: Main's Bash or a Terminal (this step only prints). The server line below: the USER's plain Terminal (Terminal.app, not the Claude sandbox: it serves a local port and opens the browser), then the browser.
+STOP: graftling-dsh is not in web527; run step 0 (it prints the plugin command)

@@ -1,0 +1,21 @@
+RUN IN: Main's Bash (the plugin add, if missing, is then done once by the USER in a plain Terminal; then rerun 0).
+== [0] preflight. Dialog: none. Builds the candidate graftling wheel and a venv (no network), the isolated DSH home, adds graftling-dsh to web527, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+graftling candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/527-dsh-agents-native-tool-card/tmp/527/graftling c64a311b4ab8c8cdf3dcfa401c45b9e3aba17b4c (DSH's browser shows agents calls in its native Tool card (527))
+isolated layout: BASE=/tmp/claude-501/rehearse527/base  work=/tmp/claude-501/rehearse527/base/work-standalone  venv=/tmp/claude-501/rehearse527/base/venv  DSH_HOME=/tmp/claude-501/rehearse527/base/dsh-home (never ~/.dsh)
+venv: graftling 0.6.1 from /tmp/claude-501/rehearse527/base/venv/lib/python3.13/site-packages/graftling/__init__.py
+venv graftling-dsh client.mjs = candidate's file
+== patch: llm = DeepSeek provider row; graftling host config for the agents-host row
+== isolated web profile web527 in /tmp/claude-501/rehearse527/base/dsh-home (fresh copy of the shipped web template on first run), then graftling-dsh
+profile web527: created (/tmp/claude-501/rehearse527/base/dsh-home/profiles/web527)
+graftling-dsh missing from web527 or not the candidate's: trying dsh plugin add here (fails inside the Claude sandbox: pnpm store lock EPERM)
+dsh plugin add failed (rc 1):
+    × adding a new package
+    ╰─▶ Failed to open the store operation lock at "pnpm-store-operation-locks":
+        Operation not permitted (os error 1)
+  dsh: plugin command failed; diagnostics: /tmp/claude-501/rehearse527/base/dsh-home/profiles/web527/.plugin-manager/logs/operation-NCLHMq/pnpm.log
+
+STOP: the candidate graftling-dsh is not in web profile web527 (/tmp/claude-501/rehearse527/base/dsh-home/profiles/web527; installed client: /tmp/claude-501/rehearse527/base/dsh-home/profiles/web527/node_modules/graftling-dsh/client.mjs).
+USER: open a plain Terminal (Terminal.app, not this sandbox) and paste this one line (dialog: none expected):
+  cd /tmp/claude-501/rehearse527/base && env DSH_HOME=/tmp/claude-501/rehearse527/base/dsh-home PATH=/tmp/claude-501/rehearse527/base/bin:/opt/homebrew/bin:$PATH npm_config_store_dir=/tmp/claude-501/rehearse527/base/pnpm-store /opt/homebrew/bin/dsh plugin --profile web527 add /tmp/claude-501/rehearse527/base/venv/lib/python3.13/site-packages/graftling/dsh
+It ends with dsh's plugin summary and no error. Then Main reruns: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/527-dsh-agents-native-tool-card/scripts/verify-527/steps.zsh 0

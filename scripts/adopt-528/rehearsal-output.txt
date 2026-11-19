@@ -1,0 +1,364 @@
+
+======== empty base: /tmp/claude-501/adopt528-rehearsal removed; zsh -n of every zsh file
+REHEARSAL PASS: zsh -n rehearse.zsh
+REHEARSAL PASS: zsh -n steps.zsh
+REHEARSAL PASS: base /tmp/claude-501/adopt528-rehearsal/project/tmp/528 absent before 00
+graftling repository (read only): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling | v0.6.2 type tag -> 4a002129f8b97f32980afd59e5a1a64c428fe684
+REHEARSAL PASS: the graftling repository read is the real one (no stand-in)
+
+======== setup: fake production = graphtraj 8267f9e5a89dd8f504e5da916e6102b4bbff23c3 + graftling v0.6.1 (real repository, git archive), plugin, configuration
+graftling-0.6.1-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+Create dev from 168bfed35dfd6cf1360a42aa3746eb49f18b816d? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+fake production .mcp.json servers: ['graphtraj']
+
+======== 00 (Main found through claude --continue; 528 markers absent in production; .mcp.json graphtraj only)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+Version: 0.1.0
+Version: 0.6.1
+.mcp.json servers: ['graphtraj'] | servers running graphtraj/graftling: ['graphtraj']
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+525 backup COMPLETE marker: present
+markers expected absent: PASS (8/8)
+REPORT 528 526 .gitignore .graphtraj/swarm/sessions: no .gitignore
+REPORT 528 526 .gitignore .graphtraj/swarm/control: no .gitignore
+REPORT 528 526 .gitignore .graphtraj/swarm/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/swarm/native: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/sessions: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/control: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/native: directory absent
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt528-rehearsal/project/tmp/528/main.session)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+Version: 0.1.0
+Version: 0.6.1
+.mcp.json servers: ['graphtraj'] | servers running graphtraj/graftling: ['graphtraj']
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+525 backup COMPLETE marker: present
+markers expected absent: PASS (8/8)
+REPORT 528 526 .gitignore .graphtraj/swarm/sessions: no .gitignore
+REPORT 528 526 .gitignore .graphtraj/swarm/control: no .gitignore
+REPORT 528 526 .gitignore .graphtraj/swarm/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/swarm/native: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/sessions: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/control: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/native: directory absent
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /tmp/claude-501/adopt528-rehearsal/project/tmp/528/main.session)
+REHEARSAL PASS: 00 exit 0, MAIN found
+REHEARSAL PASS: 00: 528 markers absent in production (8/8)
+REHEARSAL PASS: 00: production graftling 0.6.1 and 525's backup listed COMPLETE
+REHEARSAL PASS: 00: .mcp.json CHECK PASS (graphtraj only, as 515 left it)
+REHEARSAL PASS: 00: isolated vproject OK and answer check OK
+REHEARSAL PASS: 00: 526 REPORT lists the data roots (no .gitignore with 0.6.1)
+REHEARSAL PASS: 00 next is B with the real path
+
+======== B (graftling from git archive v0.6.2 of <Harness>/graftling; graphtraj 8267f9e5a89dd8f504e5da916e6102b4bbff23c3 only for the scratch venv)
+REHEARSAL PASS: B exit 0
+### the Worktree carries no product change beyond 8267f9e5 = production's graphtraj (scripts only; 528 does not reinstall GraphTraj)
+git diff 8267f9e5 HEAD -- src tests plugins: empty | HEAD b8e1a79a410f8889919d9a35093f239aa2e2c4c8
+production graphtraj Requires-Dist: graftling<0.7,>=0.6.0
+v0.6.2 peels to 4a002129f8b97f32980afd59e5a1a64c428fe684…: yes
+v0.6.2 is an annotated tag (cat-file -t: tag): yes
+v0.6.2 tagger: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 2026-11-19 23:33:36 +0900
+v0.6.2 commit author / committer: LUOXIAO92 89069722+LUOXIAO92@users.noreply.github.com / LUOXIAO92 89069722+LUOXIAO92@users.noreply.github.com
+graphtraj archive carries no src/graftling: yes
+220ac6356a134f73f07a1e5a167b5a350d53b0f83f5b9abc4b15fd1d613b542b  graftling-0.6.2-py3-none-any.whl
+graphtraj wheel of 8267f9e5 for the scratch venv only (never installed): f5e3e4686ca5a5c84396e2a672a1aca922b9f9e626e643fa0460f7e839ce0ac5  graphtraj-0.1.0-py3-none-any.whl
+graftling wheel version: 0.6.2
+graftling wheel carries 526's ignore_in_git (graftling/locks.py def ignore_in_git): 1 | 527 client.mjs lines naming tool.call.toolview/AgentsRow: 0
+graphtraj wheel carries graftling/: 0 files (expect 0)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+### the Worktree carries no product change beyond 8267f9e5 = production's graphtraj (scripts only; 528 does not reinstall GraphTraj)
+git diff 8267f9e5 HEAD -- src tests plugins: empty | HEAD b8e1a79a410f8889919d9a35093f239aa2e2c4c8
+production graphtraj Requires-Dist: graftling<0.7,>=0.6.0
+v0.6.2 peels to 4a002129f8b97f32980afd59e5a1a64c428fe684…: yes
+v0.6.2 is an annotated tag (cat-file -t: tag): yes
+v0.6.2 tagger: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 2026-11-19 23:33:36 +0900
+v0.6.2 commit author / committer: LUOXIAO92 89069722+LUOXIAO92@users.noreply.github.com / LUOXIAO92 89069722+LUOXIAO92@users.noreply.github.com
+graphtraj archive carries no src/graftling: yes
+220ac6356a134f73f07a1e5a167b5a350d53b0f83f5b9abc4b15fd1d613b542b  graftling-0.6.2-py3-none-any.whl
+graphtraj wheel of 8267f9e5 for the scratch venv only (never installed): f5e3e4686ca5a5c84396e2a672a1aca922b9f9e626e643fa0460f7e839ce0ac5  graphtraj-0.1.0-py3-none-any.whl
+graftling wheel version: 0.6.2
+graftling wheel carries 526's ignore_in_git (graftling/locks.py def ignore_in_git): 1 | 527 client.mjs lines naming tool.call.toolview/AgentsRow: 0
+graphtraj wheel carries graftling/: 0 files (expect 0)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+成功: 'git diff 8267f9e5 HEAD -- src tests plugins: empty'（GraphTraj 不重装）；'production graphtraj Requires-Dist: graftling<0.7,>=0.6.0'；'v0.6.2 peels to 4a002129f8b97f32980afd59e5a1a64c428fe684…: yes' 与 'v0.6.2 is an annotated tag (cat-file -t: tag): yes'；tagger 与 author/committer 为 LUOXIAO92 noreply；/tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/wheels-8267f9e5 只有 graftling-0.6.2 一个 wheel；'graftling wheel version: 0.6.2'；'… def ignore_in_git): 1 | 527 … toolview/AgentsRow: 0'；carries graftling/: 0；leaked: 0。
+REHEARSAL PASS: B: Worktree src/tests/plugins = 8267f9e5a89dd8f504e5da916e6102b4bbff23c3; production graphtraj requires graftling<0.7,>=0.6.0
+REHEARSAL PASS: B: v0.6.2 annotated, peels to 4a002129…, graftling 0.6.2 with ignore_in_git and no toolview, carries 0, leaked 0
+REHEARSAL PASS: B: tagger and commit identity are the noreply LUOXIAO92
+REHEARSAL PASS: B: the install directory holds only the graftling wheel
+REHEARSAL PASS: B negative: a tag that does not peel to the phase-A commit STOPs
+REHEARSAL PASS: B negative: the 0.6.1 tag (no 526/527, version 0.6.1) STOPs at the version
+REHEARSAL PASS: B negative: a ref that peels to the commit but is no annotated tag (the commit id) STOPs
+
+======== G through the real entry, limited by VERIFY528_TESTS to tests/test_agent_runner_cleanup.py (conftest fixtures; not --collect-only)
+claude: /tmp/claude-501/adopt528-rehearsal/stub/claude -> /private/tmp/claude-501/adopt528-rehearsal/stub/claude | version: 2.1.325 (stub Claude Code) | same as recorded at 00 (2.1.325 (stub Claude Code)): yes
+[G] Main. 全套测试（GraphTraj 8267f9e5 = 本 Worktree，editable + graftling v0.6.2 的 wheel；6 分片，后台；每次新的 pytest 临时根目录，在 Harness 之外）。对话框: 无。立即返回；约 25 分钟（单进程约 73 分钟）。不要同时运行其它测试，也不要在 G 运行时跑 Vc。
+git diff 8267f9e5 HEAD -- src tests plugins: empty | uncommitted there: none
+TMPDIR of the run is outside the Harness: yes (/private/tmp/claude-501/verify-528-G-20261119T234757 not under /private/tmp/claude-501/adopt528-rehearsal/project; no Harness marker above it)
+load average: sysctl: sysctl fmt -1 1024 1: Operation not permitted | other test runs: 0
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/528-production-adoption-graftling-0-6-2/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/adopt528-rehearsal/project/tmp/528/venv-g-8267f9e5-gl-0.6.2/lib/python3.13/site-packages/graftling/__init__.py | 526 ignore_in_git: True | pytest 9.1.1
+graftling wheel: graftling-0.6.2-py3-none-any.whl built from git archive v0.6.2 4a002129f8b97f32980afd59e5a1a64c428fe684
+pytest temp root (new for this run; TMPDIR of every shard): /private/tmp/claude-501/verify-528-G-20261119T234757
+earlier G temp roots (kept; delete by hand later): 3 /private/tmp/claude-501/verify-528-G-20261119T234014 /private/tmp/claude-501/verify-528-G-20261119T234345 
+REHEARSAL: tests limited to tests/test_agent_runner_cleanup.py (plain pytest, same venv, temp root and exit file)
+started in the background at 23:48:00; output: /tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/G-8267f9e5-20261119T234800/suite.txt ('exit=' when it ends; ~25 min with 6 shards)
+成功: 'TMPDIR of the run is outside the Harness: yes'；graphtraj 的路径（/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/528-production-adoption-graftling-0-6-2/src/graphtraj）；'graftling 0.6.2 … | 526 ignore_in_git: True'；新的 pytest temp root；'started in the background'。
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/528-production-adoption-graftling-0-6-2/scripts/adopt-528/steps.zsh V    （G 结束后，即 suite.txt 末行 exit=…: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/528-production-adoption-graftling-0-6-2/scripts/adopt-528/steps.zsh GR）
+REHEARSAL PASS: G started: graftling 0.6.2 with ignore_in_git from the B wheel, new temp root outside the Harness
+REHEARSAL PASS: G imported graphtraj from the Worktree
+ss.............................                                          [100%]
+29 passed, 2 skipped in 135.94s (0:02:15)
+exit=0
+REHEARSAL PASS: G ran real tests: passed > 0, exit=0
+known source 523 F: 2 failures listed; files read: 1/1
+known source 521 F: 1 failures listed; files read: 1/1
+known source 518 G: 0 failures listed; files read: 7/7
+known source 525 G: 1 failures listed; files read: 7/7
+known source 525 G decision: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/525-production-adoption-graftling-0-6-1/teams/1/rounds/1/leader.md present; names test_interrupt_returns_after_slow_terminal_record as known: yes
+known source 516: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md present; 6 test ids, 2 files, clock message
+G failures: 0 | NEW: 0 | run ended: yes
+CHECK 528 G no NEW failure (516 and the accepted 523/521/518/525 runs are known): PASS
+known source 523 F: 2 failures listed; files read: 1/1
+known source 521 F: 1 failures listed; files read: 1/1
+known source 518 G: 0 failures listed; files read: 7/7
+known source 525 G: 1 failures listed; files read: 7/7
+known source 525 G decision: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/525-production-adoption-graftling-0-6-1/teams/1/rounds/1/leader.md present; names test_interrupt_returns_after_slow_terminal_record as known: yes
+known source 516: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md present; 6 test ids, 2 files, clock message
+G failures: 0 | NEW: 0 | run ended: yes
+CHECK 528 G no NEW failure (516 and the accepted 523/521/518/525 runs are known): PASS
+成功: 'CHECK 528 G no NEW failure …: PASS'（每个失败都是 'known (来源)'；525 G 的 test_interrupt_returns_after_slow_terminal_record 为 known (525 G)）；'run ended: yes'。PENDING: G 还在运行，稍后重跑 GR。NEW: 交 Leader（可先对该测试单独重跑一次，按 516 的做法记录）。
+REHEARSAL PASS: GR: known sources read (516, 523 F, 521 F, 518 G, 525 G + decision) and no NEW failure
+  known (516)  tests/test_claude_native_host.py::test_anything - empty output
+  NEW  tests/test_new_thing.py::test_x - boom
+  known (521 F)  tests/test_pi_generic_execution.py::test_graphtraj_member_launch_matches_base - x
+  known (525 G)  tests/test_team_replacement.py::test_interrupt_returns_after_slow_terminal_record - Failed: timeout
+  known (516)  tests/test_y.py::test_z - RuntimeError: system time precedes the chronologically last event
+CHECK 528 G no NEW failure (516 and the accepted 523/521/518/525 runs are known): FAIL
+REHEARSAL PASS: GR negative: known (521 F / 516 file / 525 G / 516 clock) and one NEW -> FAIL
+
+======== V (stub plugin validate): plugin SAME; graftling files = 526/527 + version + docs; graphtraj unchanged; markers both ways
+REHEARSAL PASS: V exit 0
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+SAME    hooks/host_context.mjs
+CHECK 528 candidate plugin bytes equal production's (no plugin trust dialog expected): PASS
+528 graftling CODE files 0.6.1 -> 0.6.2: ['graftling/control.py', 'graftling/dsh/client.mjs', 'graftling/dsh/package.json', 'graftling/locks.py', 'graftling/sessions/archive.py'] | unexpected 0 | expected but equal 0: OK
+528 graftling VERSION files 0.6.1 -> 0.6.2: ['graftling/__init__.py', 'graftling/pi/package.json'] | unexpected 0 | expected but equal 0: OK
+528 graftling DOC files 0.6.1 -> 0.6.2: ['graftling/CHANGELOG.md', 'graftling/README.md'] | unexpected 0 | expected but equal 0: OK
+graftling wheel vs /tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/gsrc-0.6.2/src/graftling (git archive): 95 files, differing 0: SAME
+graphtraj wheel 8267f9e5 vs production: files 140 same=140 differing=0
+CHECK 528 graphtraj unchanged (wheel 8267f9e5 vs production): PASS
+markers expected present: PASS (8/8)
+markers expected absent: PASS (8/8)
+CHECK 503 layout python is the venv: PASS (/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5 vs /private/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.2', '/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling-0.6.2.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.2.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/wheels-8267f9e5/graftling-0.6.2-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling/__init__.py version 0.6.2)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+503 layout: PASS (0 failed)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling/: PASS
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+SAME    hooks/host_context.mjs
+CHECK 528 candidate plugin bytes equal production's (no plugin trust dialog expected): PASS
+528 graftling CODE files 0.6.1 -> 0.6.2: ['graftling/control.py', 'graftling/dsh/client.mjs', 'graftling/dsh/package.json', 'graftling/locks.py', 'graftling/sessions/archive.py'] | unexpected 0 | expected but equal 0: OK
+528 graftling VERSION files 0.6.1 -> 0.6.2: ['graftling/__init__.py', 'graftling/pi/package.json'] | unexpected 0 | expected but equal 0: OK
+528 graftling DOC files 0.6.1 -> 0.6.2: ['graftling/CHANGELOG.md', 'graftling/README.md'] | unexpected 0 | expected but equal 0: OK
+graftling wheel vs /tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/gsrc-0.6.2/src/graftling (git archive): 95 files, differing 0: SAME
+graphtraj wheel 8267f9e5 vs production: files 140 same=140 differing=0
+CHECK 528 graphtraj unchanged (wheel 8267f9e5 vs production): PASS
+markers expected present: PASS (8/8)
+markers expected absent: PASS (8/8)
+CHECK 503 layout python is the venv: PASS (/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5 vs /private/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.2', '/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling-0.6.2.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.2.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/wheels-8267f9e5/graftling-0.6.2-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling/__init__.py version 0.6.2)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /tmp/claude-501/adopt528-rehearsal/project/tmp/528/vvenv-8267f9e5/lib/python3.13/site-packages/graftling/: PASS
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+成功: 三行 SAME 与 'CHECK 528 candidate plugin bytes equal production's …: PASS'（不预期插件信任框）；三行 '528 graftling CODE/VERSION/DOC files 0.6.1 -> 0.6.2: … unexpected 0 | expected but equal 0: OK'（CODE: control.py、locks.py、sessions/archive.py、dsh/client.mjs、dsh/package.json；VERSION: __init__.py、pi/package.json（claude-plugin/ 不在 wheel 里）；DOC: CHANGELOG.md、README.md）；'graftling wheel vs …: differing 0: SAME'；
+  'CHECK 528 graphtraj unchanged (wheel 8267f9e5 vs production): PASS'；'markers expected present: PASS (8/8)' 与 'markers expected absent: PASS (8/8)'；'503 layout: PASS' 与两行 node resolves PASS；候选 ✘ 不多于 baseline；read_session failures=0；无 STOP。
+REHEARSAL PASS: V: three plugin files SAME and the CHECK PASS (no trust dialog expected)
+REHEARSAL PASS: V: graftling CODE/VERSION/DOC exactly as expected (OK x3) and wheel = git archive v0.6.2
+REHEARSAL PASS: V: graphtraj wheel 8267f9e5a89dd8f504e5da916e6102b4bbff23c3 equals production file by file
+REHEARSAL PASS: V: markers present in the candidate and absent in production (8/8)
+REHEARSAL PASS: V: one graftling and node resolution in the scratch venv
+REHEARSAL PASS: V wrote nothing to production entry files
+
+======== graftcode / gtdiff / markers negatives
+REHEARSAL PASS: graftcode negative: a wheel file that differs from the archive STOPs
+REHEARSAL PASS: graftcode negative: an extra CODE difference against production STOPs
+REHEARSAL PASS: graftcode negative: an expected CODE file that does not differ STOPs (expected but equal)
+REHEARSAL PASS: gtdiff negative: a differing graphtraj file FAILs
+REHEARSAL PASS: markers 'present' on production fails
+REHEARSAL PASS: markers 'absent' on the candidate fails
+
+======== Vu / Vc (stub claude: plugin not loaded, so Vc asks for Vu; setup shows graphtraj only in the isolated .mcp.json)
+REHEARSAL PASS: Vu names the isolated path and 'Yes, proceed'
+REHEARSAL PASS: Vc setup: isolated .mcp.json CHECK PASS and answer check OK
+REHEARSAL PASS: Vc with the stub asks for Vu
+
+======== Mpre / I (USER): GR shown, guard idle, backup, graftling-only install, graphtraj unchanged, configuration --write
+REHEARSAL PASS: Mpre: GR PASS shown and the restart reason with file:line
+REHEARSAL PASS: I exit 0
+      Successfully uninstalled graftling-0.6.1
+Successfully installed graftling-0.6.2
+PASS 100 FAIL 0
+CHECK 528 graphtraj unchanged (installed vs backup): PASS
+528 526 ignore_in_git: ignore_in_git | control uses it: True | archive uses it: True
+528 527 client.mjs registers AgentsRow/toolview: False | package.json injects dsh-client-ui-tool: False
+### 528 sources: the wheel graftling was installed from (direct_url.json) and what it was built from; graphtraj's as 525 left it
+graftling-0.6.2.dist-info direct_url: {"archive_info": {"hash": "sha256=fbd1d40fc58b238218bd3cfd58c3152e9680acb59b0db47136149a5c9d2057b8", "hashes": {"sha256": "fbd1d40fc58b238218bd3cfd58c3152e9680acb59b0db47136149a5c9d2057b8"}}, "url": "file:///tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/wheels-8267f9e5/graftling-0.6.2-py3-none-any.whl"}
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=460a866bc16bf886b8d1bd435daeddfec74ff8be7ce9a59f7474409baee795e0", "hashes": {"sha256": "460a866bc16bf886b8d1bd435daeddfec74ff8be7ce9a59f7474409baee795e0"}}, "url": "file:///tmp/claude-501/adopt528-rehearsal/oldwheels/graphtraj-0.1.0-py3-none-any.whl"}
+built from: graftling git archive v0.6.2 4a002129f8b97f32980afd59e5a1a64c428fe684 (B checked: annotated tag, peel; proddiff above: installed bytes = this wheel) | graphtraj not reinstalled (8267f9e5 since 525)
+markers expected present: PASS (8/8)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/wheels-8267f9e5/graftling-0.6.2-py3-none-any.whl editable=False)
+configuration --write rc=0 (output lines:        8; kept in /tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/raw-8267f9e5/I-configuration.txt)
+SAME-AS-VALIDATED
+plugin bytes as before the install: no plugin/hooks trust dialog expected (expected for 528)
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+      Successfully uninstalled graftling-0.6.1
+Successfully installed graftling-0.6.2
+PASS 100 FAIL 0
+CHECK 528 graphtraj unchanged (installed vs backup): PASS
+528 526 ignore_in_git: ignore_in_git | control uses it: True | archive uses it: True
+528 527 client.mjs registers AgentsRow/toolview: False | package.json injects dsh-client-ui-tool: False
+### 528 sources: the wheel graftling was installed from (direct_url.json) and what it was built from; graphtraj's as 525 left it
+graftling-0.6.2.dist-info direct_url: {"archive_info": {"hash": "sha256=fbd1d40fc58b238218bd3cfd58c3152e9680acb59b0db47136149a5c9d2057b8", "hashes": {"sha256": "fbd1d40fc58b238218bd3cfd58c3152e9680acb59b0db47136149a5c9d2057b8"}}, "url": "file:///tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/wheels-8267f9e5/graftling-0.6.2-py3-none-any.whl"}
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=460a866bc16bf886b8d1bd435daeddfec74ff8be7ce9a59f7474409baee795e0", "hashes": {"sha256": "460a866bc16bf886b8d1bd435daeddfec74ff8be7ce9a59f7474409baee795e0"}}, "url": "file:///tmp/claude-501/adopt528-rehearsal/oldwheels/graphtraj-0.1.0-py3-none-any.whl"}
+built from: graftling git archive v0.6.2 4a002129f8b97f32980afd59e5a1a64c428fe684 (B checked: annotated tag, peel; proddiff above: installed bytes = this wheel) | graphtraj not reinstalled (8267f9e5 since 525)
+markers expected present: PASS (8/8)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/wheels-8267f9e5/graftling-0.6.2-py3-none-any.whl editable=False)
+configuration --write rc=0 (output lines:        8; kept in /tmp/claude-501/adopt528-rehearsal/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/raw-8267f9e5/I-configuration.txt)
+SAME-AS-VALIDATED
+plugin bytes as before the install: no plugin/hooks trust dialog expected (expected for 528)
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+成功: Successfully installed graftling-0.6.2（pip 卸载 graftling-0.6.1；没有 graphtraj）；PASS n FAIL 0（只有 graftling wheel）；'CHECK 528 graphtraj unchanged (installed vs backup): PASS'；三个 -rw------- 备份入口文件；'graftling 0.6.2'；'528 526 ignore_in_git: ignore_in_git | control uses it: True | archive uses it: True'；'528 527 client.mjs registers AgentsRow/toolview: False | package.json injects dsh-client-ui-tool: False'；
+  graftling-0.6.2.dist-info direct_url 指向 wheels-8267f9e5/graftling-0.6.2-…whl，'built from: graftling git archive v0.6.2 4a002129f8b97f32980afd59e5a1a64c428fe684'；'markers expected present: PASS (8/8)'；'503 layout: PASS'；两行 node resolves PASS；SAME-AS-VALIDATED；'plugin bytes as before the install …'；'CHECK 515 .mcp.json has graphtraj, no agents …: PASS'；三行 'bytes unchanged: …'。
+REHEARSAL PASS: I: installed only graftling 0.6.2, proddiff PASS, markers present 8/8
+REHEARSAL PASS: I: installed graphtraj unchanged against the backup
+REHEARSAL PASS: I: 526/527 by name in the installed code
+REHEARSAL PASS: I: sources: direct_url names the wheels-8267f9e5 graftling wheel; built from v0.6.2 4a002129f8b97f32980afd59e5a1a64c428fe684
+REHEARSAL PASS: I: configuration --write rc=0, .mcp.json CHECK PASS, SAME-AS-VALIDATED, plugin as before, 3 entries unchanged
+REHEARSAL PASS: I: backup holds entries, plugin, tools; COMPLETE
+REHEARSAL PASS: I: prints the restart command and 'no dialog expected'
+
+======== M / Mp after the restart
+REHEARSAL PASS: M prompt asks for notices since the resume and the mcp__graphtraj__ tools; next Mp
+REHEARSAL PASS: Mp exit 0: four init CHECKs PASS
+REHEARSAL PASS: inbox: next is Nw (D/C/Cc dropped)
+
+======== N text, the 468 CPU window and the 526 .gitignore REPORT (fixture samples; not blocking)
+REHEARSAL PASS: N: one advisor member creates n528 through mcp__graphtraj__agents, waits, retires
+REPORT 525 468 Worker CPU 30 s before child creation: 0.600 CPU-s per wall-s (18.0 s over 30 s, 4 samples; not blocking)
+REPORT 525 468 Worker CPU 30 s after child creation: 0.100 CPU-s per wall-s (3.0 s over 30 s, 4 samples; not blocking)
+REPORT 528 468 comparison (labels above are cpu468.py's): 525 (graftling 0.6.1) 30 s before 0.538, after 0.112 CPU-s per wall-s
+REPORT 528 526 .gitignore .graphtraj/swarm/sessions: present ('*', 2026-11-19 23:50:24)
+REPORT 528 526 .gitignore .graphtraj/swarm/control: no .gitignore
+REPORT 528 526 .gitignore .graphtraj/swarm/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/swarm/native: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/sessions: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/control: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/native: directory absent
+REPORT 525 468 Worker CPU 30 s before child creation: 0.600 CPU-s per wall-s (18.0 s over 30 s, 4 samples; not blocking)
+REPORT 525 468 Worker CPU 30 s after child creation: 0.100 CPU-s per wall-s (3.0 s over 30 s, 4 samples; not blocking)
+REPORT 528 468 comparison (labels above are cpu468.py's): 525 (graftling 0.6.1) 30 s before 0.538, after 0.112 CPU-s per wall-s
+REPORT 528 526 .gitignore .graphtraj/swarm/sessions: present ('*', 2026-11-19 23:50:24)
+REPORT 528 526 .gitignore .graphtraj/swarm/control: no .gitignore
+REPORT 528 526 .gitignore .graphtraj/swarm/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/swarm/native: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/sessions: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/control: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/native: directory absent
+REHEARSAL PASS: Nr: 468 window before 0.600 / after 0.100 reported, with 525's 0.538/0.112 for comparison
+REHEARSAL PASS: Nr: 526 REPORT per directory (sessions present '*', control no .gitignore, live/native directory absent)
+REHEARSAL PASS: Nr: without notices the one-notice CHECK is PENDING (never PASS)
+REHEARSAL PASS: Nr: one completed notice line of an alias-less fixture is counted, not silently PASS
+
+======== R (rollback from the backup's own tools): venv, plugin and entry files restored
+DIFF entries=991 differences=31 (/tmp/claude-501/adopt528-rehearsal/project/.venv-runtime)
+graftling/sessions installed vs backup: Files /tmp/claude-501/adopt528-rehearsal/project/tmp/528/backup/venv/lib/python3.13/site-packages/graftling/sessions/archive.py and /tmp/claude-501/adopt528-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/sessions/archive.py differ
+expected (526 only adds the .gitignore call; format unchanged): archives written since the install are read by the restored code
+### venv restored whole from the backup
+SAME entries=991 differences=0 (/tmp/claude-501/adopt528-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt528-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+REPORT 528 526 .gitignore .graphtraj/swarm/sessions: present ('*', 2026-11-19 23:50:24)
+REPORT 528 526 .gitignore .graphtraj/swarm/control: no .gitignore
+REPORT 528 526 .gitignore .graphtraj/swarm/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/swarm/native: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/sessions: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/control: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/live: directory absent
+REPORT 528 526 .gitignore .graphtraj/core/runner/native: directory absent
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.6.1
+DIFF entries=991 differences=31 (/tmp/claude-501/adopt528-rehearsal/project/.venv-runtime)
+graftling/sessions installed vs backup: Files /tmp/claude-501/adopt528-rehearsal/project/tmp/528/backup/venv/lib/python3.13/site-packages/graftling/sessions/archive.py and /tmp/claude-501/adopt528-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/sessions/archive.py differ
+expected (526 only adds the .gitignore call; format unchanged): archives written since the install are read by the restored code
+### venv restored whole from the backup
+SAME entries=991 differences=0 (/tmp/claude-501/adopt528-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/tmp/claude-501/adopt528-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.6.1
+成功: venv 与 plugin 都是 SAME differences=0；三个入口文件 OK；pip check 通过；graftling/sessions 只有 archive.py 不同（expected）；Version graftling 0.6.1。
+REHEARSAL PASS: R exit 0; venv and plugin SAME
+REHEARSAL PASS: R: graftling/sessions differs only in archive.py (expected)
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+ERROR: Pipe to stdout was broken
+Exception ignored on flushing sys.stdout:
+BrokenPipeError: [Errno 32] Broken pipe
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+ERROR: Pipe to stdout was broken
+Exception ignored on flushing sys.stdout:
+BrokenPipeError: [Errno 32] Broken pipe
+REHEARSAL PASS: R: production graftling is 0.6.1 again, graphtraj still installed
+REHEARSAL PASS: R: the .gitignore 0.6.2 wrote is listed and kept
+REHEARSAL PASS: 525's backup under tmp/525 unchanged
+
+======== done: no exported key value in raw files
+REHEARSAL PASS: done: raw files containing an exported key value: 0
+
+REHEARSAL SUMMARY: 63 checks, all PASS
+RC=0

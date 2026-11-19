@@ -1,0 +1,27 @@
+RUN IN: Main's Bash (the plugin add, if missing, is then done once by the USER in a plain Terminal; then rerun 0).
+== [0] preflight. Dialog: none. Builds wheels and a venv (no network), the isolated project and DSH home, adds graftling-dsh to web526, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/526-dsh-workspace-shows-graftling-session-archive 53ff9407321ab48ed2af7487357504f741ed3b44 (branch agent/526-dsh-workspace-shows-graftling-session-archive); graftling: /tmp/claude-501/rehearse526/base/graftling-src 40a0099f07
+isolated layout: BASE=/tmp/claude-501/rehearse526/base  project=/tmp/claude-501/rehearse526/base/project  standalone work=/tmp/claude-501/rehearse526/base/work-standalone  venv=/tmp/claude-501/rehearse526/base/venv  DSH_HOME=/tmp/claude-501/rehearse526/base/dsh-home (never ~/.dsh)
+graftling source: /tmp/claude-501/rehearse526/base/graftling-src at 40a0099f07: Keep graftling's runtime directories out of the caller's git work tree (526)
+venv /tmp/claude-501/rehearse526/base/venv already holds 53ff9407321ab48ed2af7487357504f741ed3b44 + graftling 40a0099f07
+venv: graftling 0.6.1 graphtraj 0.1.0 from /tmp/claude-501/rehearse526/base/venv
+== isolated GraphTraj project and probe Task 1 (UG)
+roles OK
+probe Task 1 ready
+== patches: llm = DeepSeek provider row (US); graphtraj-main = GraphTraj's DSH Main row + llm (UG)
+== git standalone workspace (US): /tmp/claude-501/rehearse526/base/work-standalone, graftling data root /tmp/claude-501/rehearse526/base/work-standalone/graftling-data inside it (archives enabled)
+git work trees: project true, standalone true
+== isolated web profile web526 in /tmp/claude-501/rehearse526/base/dsh-home (fresh copy of the shipped web template on first run), then graftling-dsh
+profile web526: present (/tmp/claude-501/rehearse526/base/dsh-home/profiles/web526)
+REHEARSAL: graftling-dsh assumed present in web526
+REHEARSAL: graftling-dsh assumed present in web526
+graftling-dsh: in web526; web profile dependencies: []
+graftling-dsh tool view keys: ["mcp__graftling__agents","mcp__agents__agents"]
+== composed web profile per case (dsh --dump-config; rows that matter)
+US rows: llm-deepseek (expected agents-host llm-deepseek)
+UG rows: llm-deepseek graphtraj-main (expected llm-deepseek graphtraj-main)
+configured model (agent-default-model row):  provider: deepseek-official model: deepseek-flash 
+VERIFY526_NOMODEL: no model call (rehearsal)
+Ready when: graftling source at 40a0099f07, venv graftling 0.6.1, 'roles OK', 'probe Task 1 ready', both git work trees true, graftling-dsh in web526, the expected US and UG rows, and one READY-526 line naming the model.
+next (USER, plain Terminal): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/526-dsh-workspace-shows-graftling-session-archive/scripts/verify-526/steps.zsh UG

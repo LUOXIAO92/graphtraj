@@ -1,0 +1,29 @@
+RUN IN: Main's Bash (the plugin add, if missing, is then done once by the USER in a plain Terminal; then rerun 0).
+== [0] preflight. Dialog: none. Builds wheels and a venv (no network), the isolated project and DSH home, adds graftling-dsh to web526, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/526-dsh-workspace-shows-graftling-session-archive 53ff9407321ab48ed2af7487357504f741ed3b44 (branch agent/526-dsh-workspace-shows-graftling-session-archive); graftling: /tmp/claude-501/rehearse526/base/graftling-src 40a0099f07
+isolated layout: BASE=/tmp/claude-501/rehearse526/base  project=/tmp/claude-501/rehearse526/base/project  standalone work=/tmp/claude-501/rehearse526/base/work-standalone  venv=/tmp/claude-501/rehearse526/base/venv  DSH_HOME=/tmp/claude-501/rehearse526/base/dsh-home (never ~/.dsh)
+warning: remote HEAD refers to nonexistent ref, unable to checkout
+graftling source: /tmp/claude-501/rehearse526/base/graftling-src at 40a0099f07: Keep graftling's runtime directories out of the caller's git work tree (526)
+venv: graftling 0.6.1 graphtraj 0.1.0 from /tmp/claude-501/rehearse526/base/venv
+== isolated GraphTraj project and probe Task 1 (UG)
+Create dev from 2472b7e766206e90acae491dd6ac2d88606caa73? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+roles OK
+probe Task 1 ready
+== patches: llm = DeepSeek provider row (US); graphtraj-main = GraphTraj's DSH Main row + llm (UG)
+== git standalone workspace (US): /tmp/claude-501/rehearse526/base/work-standalone, graftling data root /tmp/claude-501/rehearse526/base/work-standalone/graftling-data inside it (archives enabled)
+git work trees: project true, standalone true
+== isolated web profile web526 in /tmp/claude-501/rehearse526/base/dsh-home (fresh copy of the shipped web template on first run), then graftling-dsh
+profile web526: created (/tmp/claude-501/rehearse526/base/dsh-home/profiles/web526)
+graftling-dsh not in web526: trying dsh plugin add here (fails inside the Claude sandbox: pnpm store lock EPERM)
+dsh plugin add failed (rc 1):
+    × adding a new package
+    ╰─▶ Failed to open the store operation lock at "pnpm-store-operation-locks":
+        Operation not permitted (os error 1)
+  dsh: plugin command failed; diagnostics: /tmp/claude-501/rehearse526/base/dsh-home/profiles/web526/.plugin-manager/logs/operation-LoQ5Zy/pnpm.log
+
+STOP: graftling-dsh is not in web profile web526 (/tmp/claude-501/rehearse526/base/dsh-home/profiles/web526/package.json).
+USER: open a plain Terminal (Terminal.app, not this sandbox) and paste this one line (dialog: none expected):
+  cd /tmp/claude-501/rehearse526/base && env DSH_HOME=/tmp/claude-501/rehearse526/base/dsh-home PATH=/tmp/claude-501/rehearse526/base/bin:/opt/homebrew/bin:$PATH npm_config_store_dir=/tmp/claude-501/rehearse526/base/pnpm-store /opt/homebrew/bin/dsh plugin --profile web526 add /tmp/claude-501/rehearse526/base/venv/lib/python3.13/site-packages/graftling/dsh
+It ends with dsh's plugin summary and no error. Then Main reruns: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/526-dsh-workspace-shows-graftling-session-archive/scripts/verify-526/steps.zsh 0

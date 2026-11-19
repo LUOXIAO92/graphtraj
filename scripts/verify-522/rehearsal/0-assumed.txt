@@ -1,0 +1,24 @@
+RUN IN: Main's Bash (the plugin add, if missing, is then done once by the USER in a plain Terminal; then rerun 0).
+== [0] preflight. Dialog: none. Builds wheels and a venv (no network), the isolated project and DSH home, adds graftling-dsh to web522, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/522-dsh-browser-agents-display 315ed3e9a60b8ffb09c0a4f20f6f5892893ba2ca (branch agent/522-dsh-browser-agents-display); graftling: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/graftling-dev 483b16a8d6
+isolated layout: BASE=/tmp/claude-501/rehearse522/base  project=/tmp/claude-501/rehearse522/base/project  standalone work=/tmp/claude-501/rehearse522/base/work-standalone  venv=/tmp/claude-501/rehearse522/base/venv  DSH_HOME=/tmp/claude-501/rehearse522/base/dsh-home (never ~/.dsh)
+venv /tmp/claude-501/rehearse522/base/venv already holds 315ed3e9a60b8ffb09c0a4f20f6f5892893ba2ca + graftling 483b16a8d6
+venv: graftling 0.6.1 graphtraj 0.1.0 from /tmp/claude-501/rehearse522/base/venv
+== isolated GraphTraj project and probe Task 1 (UG)
+roles OK
+probe Task 1 ready
+== patches: llm = DeepSeek provider row (US); graphtraj-main = GraphTraj's DSH Main row + llm (UG)
+== isolated web profile web522 in /tmp/claude-501/rehearse522/base/dsh-home (fresh copy of the shipped web template on first run), then graftling-dsh
+profile web522: present (/tmp/claude-501/rehearse522/base/dsh-home/profiles/web522)
+REHEARSAL: graftling-dsh assumed present in web522
+REHEARSAL: graftling-dsh assumed present in web522
+graftling-dsh: in web522; web profile dependencies: []
+graftling-dsh tool view keys: ["mcp__graftling__agents","mcp__agents__agents"]
+== composed web profile per case (dsh --dump-config; rows that matter)
+US rows: llm-deepseek (expected agents-host llm-deepseek)
+UG rows: llm-deepseek graphtraj-main (expected llm-deepseek graphtraj-main)
+configured model (agent-default-model row):  provider: deepseek-official model: deepseek-flash 
+VERIFY522_NOMODEL: no model call (rehearsal)
+Ready when: venv graftling 0.6.1, 'roles OK', 'probe Task 1 ready', graftling-dsh in web522, view keys [mcp__graftling__agents, mcp__agents__agents], the expected US and UG rows, and one READY-522 line naming the model.
+next (USER, plain Terminal): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/522-dsh-browser-agents-display/scripts/verify-522/steps.zsh US

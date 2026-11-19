@@ -1,0 +1,7 @@
+BASE=/tmp/claude-501/rehearse522/base entries at start: 0; host 26.6.2; run inside the Claude sandbox (Main-equivalent Bash)
+0 (real plugin add in sandbox, no model): rc=1
+0 (plugin assumed, no model): rc=0
+US (plugin assumed): rc=0
+UG (plugin assumed): rc=0
+US (no plugin): rc=1
+C: rc=0

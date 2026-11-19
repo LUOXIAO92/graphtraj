@@ -1,0 +1,25 @@
+RUN IN: Main's Bash (the plugin add, if missing, is then done once by the USER in a plain Terminal; then rerun 0).
+== [0] preflight. Dialog: none. Builds wheels and a venv (no network), the isolated project and DSH home, adds graftling-dsh to web522, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/522-dsh-browser-agents-display 315ed3e9a60b8ffb09c0a4f20f6f5892893ba2ca (branch agent/522-dsh-browser-agents-display); graftling: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/graftling-dev 483b16a8d6
+isolated layout: BASE=/tmp/claude-501/rehearse522/base  project=/tmp/claude-501/rehearse522/base/project  standalone work=/tmp/claude-501/rehearse522/base/work-standalone  venv=/tmp/claude-501/rehearse522/base/venv  DSH_HOME=/tmp/claude-501/rehearse522/base/dsh-home (never ~/.dsh)
+venv: graftling 0.6.1 graphtraj 0.1.0 from /tmp/claude-501/rehearse522/base/venv
+== isolated GraphTraj project and probe Task 1 (UG)
+Create dev from 1215e7d055cb23fedb7390f1346b48100342a005? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+roles OK
+probe Task 1 ready
+== patches: llm = DeepSeek provider row (US); graphtraj-main = GraphTraj's DSH Main row + llm (UG)
+== isolated web profile web522 in /tmp/claude-501/rehearse522/base/dsh-home (fresh copy of the shipped web template on first run), then graftling-dsh
+profile web522: created (/tmp/claude-501/rehearse522/base/dsh-home/profiles/web522)
+graftling-dsh not in web522: trying dsh plugin add here (fails inside the Claude sandbox: pnpm store lock EPERM)
+dsh plugin add failed (rc 1):
+    × adding a new package
+    ╰─▶ Failed to open the store operation lock at "pnpm-store-operation-locks":
+        Operation not permitted (os error 1)
+  dsh: plugin command failed; diagnostics: /tmp/claude-501/rehearse522/base/dsh-home/profiles/web522/.plugin-manager/logs/operation-tTyeOl/pnpm.log
+
+STOP: graftling-dsh is not in web profile web522 (/tmp/claude-501/rehearse522/base/dsh-home/profiles/web522/package.json).
+USER: open a plain Terminal (Terminal.app, not this sandbox) and paste this one line (dialog: none expected):
+  cd /tmp/claude-501/rehearse522/base && env DSH_HOME=/tmp/claude-501/rehearse522/base/dsh-home PATH=/tmp/claude-501/rehearse522/base/bin:/opt/homebrew/bin:$PATH npm_config_store_dir=/tmp/claude-501/rehearse522/base/pnpm-store /opt/homebrew/bin/dsh plugin --profile web522 add /tmp/claude-501/rehearse522/base/venv/lib/python3.13/site-packages/graftling/dsh
+It ends with dsh's plugin summary and no error. Then Main reruns: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/522-dsh-browser-agents-display/scripts/verify-522/steps.zsh 0

@@ -1,0 +1,7 @@
+RUN IN: Main's Bash (reads only).
+== [C] screenshots and the agents tool names recorded in the isolated DSH home /tmp/claude-501/rehearse522/base/dsh-home. Dialog: none.
+screenshot-US.png: MISSING (/tmp/claude-501/rehearse522/base/screenshot-US.png)
+screenshot-UG.png: MISSING (/tmp/claude-501/rehearse522/base/screenshot-UG.png)
+agents tool names in /tmp/claude-501/rehearse522/base/dsh-home (excluding profiles/), files and counts:
+  (none)
+Main reads the screenshots (Read tool) and records only what they show.

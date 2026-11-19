@@ -1,0 +1,27 @@
+RUN IN: Main's Bash or a Terminal (this step only prints). The server line below: the USER's plain Terminal (Terminal.app, not the Claude sandbox: it serves a local port and opens the browser), then the browser.
+REHEARSAL: graftling-dsh assumed present in web522
+== [US] graftling alone (graftling-dsh agents-host row): one mcp__graftling__agents call in the browser UI of the isolated web profile web522. One model call.
+Dialogs: none expected from macOS. Inside the page DSH may ask to approve the tool call: approve it once.
+
+1. In a plain Terminal where DEEPSEEK_API_KEY is set as usual (check: echo ${DEEPSEEK_API_KEY:+set}), paste this one line:
+
+cd /tmp/claude-501/rehearse522/base/work-standalone && env DSH_HOME=/tmp/claude-501/rehearse522/base/dsh-home PATH=/opt/homebrew/bin:$PATH GRAFTLING_PYTHON=/tmp/claude-501/rehearse522/base/venv/bin/python GRAFTLING_DSH_CONFIG=/tmp/claude-501/rehearse522/base/dsh-host.json /opt/homebrew/bin/dsh --profile web522 --patch /tmp/claude-501/rehearse522/base/llm.patch.yml --port 0
+
+   It prints the served URL (http://127.0.0.1:<port>/...) and opens it in the default browser. If no browser opens,
+   open that printed URL yourself.
+2. In the page start a NEW conversation and paste this prompt exactly (also in /tmp/claude-501/rehearse522/base/prompt-US.txt):
+
+Call the MCP tool mcp__graftling__agents exactly once with {"action": "execute", "feature": "status", "arguments": {}}. Use no other tool. Then reply with one line: DONE-522-US followed by the exact name of the tool you called and ok or the exact error.
+
+3. Wait for the reply line DONE-522-US. Find the card for the tool call (mcp__graftling__agents) in the conversation.
+   If it has a 'Details' button or a disclosure arrow, click it open.
+4. Screenshot the whole card (expanded details too) with the tool name or its row text visible, plus the
+   DONE-522-US reply line (Cmd-Shift-4, drag). Save or move it to exactly:
+     /tmp/claude-501/rehearse522/base/screenshot-US.png
+5. Stop the server with Ctrl-C in that Terminal.
+
+Observable for this case: /tmp/claude-501/rehearse522/base/screenshot-US.png exists and shows the card for the mcp__graftling__agents call of this conversation.
+Source prediction only (NOT observed; graftling dsh/client.mjs:55-57 registers AgentsRow for tool.call.toolview keys
+mcp__graftling__agents and mcp__agents__agents only): US renders as AgentsRow: a compact row 'sender → recipient' and 'agents · status · <state>', with a 'Details' button.
+The conclusion is only what the screenshot shows.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/522-dsh-browser-agents-display/scripts/verify-522/steps.zsh UG (USER, plain Terminal)

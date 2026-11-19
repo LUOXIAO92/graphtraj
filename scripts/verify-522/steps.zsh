@@ -183,7 +183,8 @@ US|UG)
   shot=$BASE/screenshot-$STEP.png
   PROMPT_TEXT $tool $STEP > $BASE/prompt-$STEP.txt
   say "[$STEP] $label: one $tool call in the browser UI of the isolated web profile $WEB. One model call."
-  print -r -- "Dialogs: none expected from macOS. Inside the page DSH may ask to approve the tool call: approve it once.
+  print -r -- "Dialogs: one native dialog, the macOS folder chooser in step 1b (only on a loopback Terminal launch; otherwise
+DSH's in-app browse dialog). Inside the page DSH may ask to approve the tool call: approve it once.
 
 1. In a plain Terminal where DEEPSEEK_API_KEY is set as usual (check: echo \${DEEPSEEK_API_KEY:+set}), paste this one line:
 
@@ -191,7 +192,14 @@ cd $cwd && env DSH_HOME=$DH PATH=/opt/homebrew/bin:\$PATH ${envs}$(command -v ds
 
    It prints the served URL (http://127.0.0.1:<port>/...) and opens it in the default browser. If no browser opens,
    open that printed URL yourself.
-2. In the page start a NEW conversation and paste this prompt exactly (also in $BASE/prompt-$STEP.txt):
+1b. Select the workspace first: the page creates the Session in the workspace selected in the page, not in the
+   server's cwd (an existing workspace such as '${BASE:t}' = $BASE fails: 'GraphTraj Config was not found').
+   Click the composer's 'ワークスペースを選択' (or the sidebar workspace menu) -> 'ワークスペースを追加…'.
+   A folder chooser opens (native macOS chooser on a loopback Terminal launch, else DSH's in-app browse dialog).
+   Native: press Cmd-Shift-G; in-app: edit the path field. Enter exactly:
+     $cwd
+   and choose 開く/Open. Then select that workspace ('${cwd:t}') in the composer.
+2. In the page start a NEW conversation (workspace '${cwd:t}') and paste this prompt exactly (also in $BASE/prompt-$STEP.txt):
 
 $(<$BASE/prompt-$STEP.txt)
 

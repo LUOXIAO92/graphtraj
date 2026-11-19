@@ -5,3 +5,5 @@ US (plugin assumed): rc=0
 UG (plugin assumed): rc=0
 US (no plugin): rc=1
 C: rc=0
+US (plugin assumed, correction round 1 rerun): rc=0
+UG (plugin assumed, correction round 1 rerun): rc=0

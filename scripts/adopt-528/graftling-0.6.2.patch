@@ -1,0 +1,99 @@
+From 4a002129f8b97f32980afd59e5a1a64c428fe684 Mon Sep 17 00:00:00 2001
+From: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 23:27:42 +0900
+Subject: [PATCH] graftling 0.6.2 (528)
+
+The changes since 0.6.1 are 526 (graftling writes a `.gitignore` holding `*`
+into its own sessions/, control/, live/ and native/ directories, so DSH's
+changes card no longer lists the session archive as a file edit) and 527
+(DSH's browser shows agents calls in its native Tool card). Neither changes a
+public name, result or archive format, so the release is compatible by
+section 7 and raises the patch version; GraphTraj's range
+graftling>=0.6.0,<0.7 includes it. Package, plugin and npm manifests and the
+CHANGELOG name 0.6.2; the CHANGELOG gains 526's entry.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/graftling/CHANGELOG.md                          | 13 +++++++++++--
+ src/graftling/__init__.py                           |  2 +-
+ .../claude-plugin/.claude-plugin/plugin.json        |  2 +-
+ src/graftling/dsh/package.json                      |  2 +-
+ src/graftling/pi/package.json                       |  2 +-
+ 5 files changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/src/graftling/CHANGELOG.md b/src/graftling/CHANGELOG.md
+index 3761cfd..85321cd 100644
+--- a/src/graftling/CHANGELOG.md
++++ b/src/graftling/CHANGELOG.md
+@@ -12,8 +12,17 @@ version that identifies everything listed under it.
+ 
+ The numbers in parentheses are the project's Task numbers.
+ 
+-## Unreleased
+-
++## 0.6.2 (compatible)
++
++- graftling keeps its runtime directories out of the caller's git work tree (526). When
++  a data root sits inside a git repository, DSH's per-turn changes card (which snapshots
++  the work tree with `git add --all`) listed the rewritten session archive as a file
++  edit. graftling now writes a `.gitignore` holding `*` into the graftling-named
++  subdirectories it writes (`sessions/`, `control/`, `live/`, `native/`) when they exist:
++  never at the caller's root, never over an existing file, and a failed write is
++  ignored. Archive content and format, public names and results are unchanged, so the
++  change is compatible (section 7 of the public interface). GraphTraj's range
++  `graftling>=0.6.0,<0.7` includes it.
+ - DSH's browser shows agents calls in its own native Tool card (527). The `graftling-dsh`
+   client module no longer registers a `tool.call.toolview` view for
+   `mcp__graftling__agents` or the older `mcp__agents__agents`, so both now show as the
+diff --git a/src/graftling/__init__.py b/src/graftling/__init__.py
+index 18dab7b..73a0133 100644
+--- a/src/graftling/__init__.py
++++ b/src/graftling/__init__.py
+@@ -12,7 +12,7 @@ this file; anything it does not list is internal.
+ 
+ # The only definition of the distribution version; packaging and every
+ # runtime report (MCP serverInfo, Codex clientInfo) read it from here.
+-__version__ = "0.6.1"
++__version__ = "0.6.2"
+ 
+ from importlib import import_module
+ 
+diff --git a/src/graftling/claude-plugin/.claude-plugin/plugin.json b/src/graftling/claude-plugin/.claude-plugin/plugin.json
+index def4def..bb2039a 100644
+--- a/src/graftling/claude-plugin/.claude-plugin/plugin.json
++++ b/src/graftling/claude-plugin/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "graftling",
+-  "version": "0.6.1",
++  "version": "0.6.2",
+   "description": "Make this Claude Code Session the host of child Agents through the agents tool. Needs the graftling wheel installed in a Python 3.12+ environment; set GRAFTLING_PYTHON to its python.",
+   "mcpServers": {
+     "agents": {
+diff --git a/src/graftling/dsh/package.json b/src/graftling/dsh/package.json
+index fc7908f..e8118ae 100644
+--- a/src/graftling/dsh/package.json
++++ b/src/graftling/dsh/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "graftling-dsh",
+-  "version": "0.6.1",
++  "version": "0.6.2",
+   "private": true,
+   "type": "module",
+   "main": "plugin.mjs",
+diff --git a/src/graftling/pi/package.json b/src/graftling/pi/package.json
+index cf1a56e..1dc3bbb 100644
+--- a/src/graftling/pi/package.json
++++ b/src/graftling/pi/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "graftling-pi",
+-  "version": "0.6.1",
++  "version": "0.6.2",
+   "private": true,
+   "description": "Graftling for Pi: start child Agents on any configured Runtime from a Pi Session.",
+   "keywords": ["pi-package"],
+-- 
+2.50.1 (Apple Git-155)
+

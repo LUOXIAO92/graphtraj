@@ -1,0 +1,60 @@
+# Task 521 rehearsal of scripts/verify-521/steps.zsh (Engineer, 2026-11-18 22:21 JST)
+# From an empty directory (/tmp/claude-501/521/rehearse/empty) with VERIFY521_BASE=/tmp/claude-501/521/rehearse/base (empty scratch), VERIFY521_STUB_BIN (stub claude
+# that only prints a READY-521 line) and VERIFY521_HOME (scratch catalog naming claude/anthropic/sonnet-5_5).
+# Covers P fully except the real host answer; D without a Session; usage; A up to the launch, which the stub
+# refuses (Claude Code version). The real investigator run (A) and the decision (D) need Main on the real host.
+
+## P (rc 0)
+
+### [P] preflight via /bin/zsh. Dialog: none. Waits: install <= 2 min, claude <= 120 s.
+ZSH_VERSION=5.9 (launched by: )
+candidate 939befb1455e3821dce08e0e9a54ee0152abf069 (uncommitted paths in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references: 0); BASE=/tmp/claude-501/521/rehearse/base
+pytest temp base: /private/tmp/claude-501 | outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: YES
+
+### candidate venv /tmp/claude-501/521/rehearse/base/venv: commit archived to /tmp/claude-501/521/rehearse/base/candidate and installed editable from there
+graphtraj: /private/tmp/claude-501/521/rehearse/base/candidate/src/graphtraj/__init__.py | from the archived commit: True | graftling: /tmp/claude-501/521/rehearse/base/venv/lib/python3.13/site-packages/graftling/__init__.py
+
+### isolated project /tmp/claude-501/521/rehearse/base/project (own git and .graphtraj; outside the Harness, so no Harness instruction file applies)
+Create dev from 2fed35acb415c8edac6039b418049826c7419eac? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+graphtraj runner directory: /private/tmp/claude-501/521/rehearse/base/project/.graphtraj/runner | project own: True
+roles OK (investigator: connection claude/anthropic/sonnet-5_5 = claude-sonnet-5-5, worktree_access read)
+task 1 read-only-report-result: status ready (ready before A; implementing after A started)
+
+### the new tests of this commit, collected only (pytest temp /private/tmp/claude-501, outside the Harness)
+tests/test_result_submission.py::test_read_only_session_submits_its_own_report_as_result
+tests/test_result_submission.py::test_report_named_in_both_lists_and_mixed_with_files_is_retained_once
+tests/test_result_submission.py::test_report_results_reject_foreign_unassigned_absent_and_write_sessions
+3/23 tests collected (20 deselected) in 0.23s
+
+### the host A uses, one call: claude -p --model claude-sonnet-5-5 (limit 120 s)
+claude answer: OK | READY-521 stub-claude (rehearsal stub, not a real host) logged in: n/a
+
+==> next (Main pastes): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh A 2>&1 | tee /tmp/claude-501/521/rehearse/base/out/A.txt
+
+## D before A, usage, A with the stub host
+
+### [D] Main's decide-result accepts 's submission. Dialog: none (Main's own CLI in the isolated project).
+STOP: no investigator Session of Task 1; run A first
+D rc=1
+usage: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/521-read-only-result-references/scripts/verify-521/steps.zsh P|A|D [alias]   (order P -> A -> D)
+usage rc=2
+
+### [A] one read-only investigator on Task 1 (claude, claude-sonnet-5-5): submit_report then submit_result naming its own report. Dialog: expected none (its one Bash git rev-parse runs sandboxed under permission_mode auto, and submit_report/submit_result are its own tasks tool calls); if a native permission request for that Bash command or a tasks tool call appears, the user approves it (Allow once). Waits: execution <= 600 s, submission <= 120 s.
+STOP: launch failed:
+retained_batch_file: /private/tmp/claude-501/521/rehearse/base/project/.graphtraj/state/batches/20261118T222049.545385+0900.yml
+tasks:
+- task_id: '1'
+  task_name: read-only-report-result
+  role: investigator
+  launch_status: failed
+  error:
+    code: invalid-config
+    message: Claude Code 2.1.299 or later is required.
+Claude Code 2.1.299 or later is required.
+A rc=1
+
+## D after the header fix
+
+### [D] Main's decide-result accepts the investigator's submission. Dialog: none (Main's own CLI in the isolated project).
+STOP: no investigator Session of Task 1; run A first

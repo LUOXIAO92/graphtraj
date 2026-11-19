@@ -192,6 +192,141 @@ def test_only_ordinary_receipts_are_kept_without_a_parent_turn(
         assert record['delivery'] == 'retained' and 'Forwarded.' in json.loads(record['notice'])['message']
 
 
+def launch_with_access(runner: Path, alias: str, access: str) -> str:
+    """Retain the launch record a Runner writes, with the role's Worktree access."""
+    directory = runner / 'sessions' / alias
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    (directory / 'launch.yml').write_text(yaml.safe_dump({
+        'operation': 'launch', 'runtime': mapping['runtime'], 'connection': {},
+        'adapter_request': {'worktree_access': access}, 'mapping': mapping,
+    }))
+    return mapping['report_files'][0]
+
+
+def test_read_only_session_submits_its_own_report_as_result(tmp_path: Path) -> None:
+    """Task 521: an investigator's report is its result, retained like evidence."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    runner, team, commit = result_project(tmp_path)
+    report = launch_with_access(runner, 'research@x1', 'read')
+    assert report == '.state/teams/1/rounds/1/researcher-x1.md'
+    with runtime_caller(runner, 'research@x1'):
+        written = tools.submit_report({'name': 'researcher-x1.md', 'text': 'Findings'}, cwd=tmp_path).document
+        arguments = {'commit': commit, 'result_refs': [report], 'evidence_refs': [],
+                     'completion': 'Investigation complete', 'unresolved': []}
+        submission = tools.submit_result(arguments, cwd=tmp_path).document
+        assert tools.submit_result(arguments, cwd=tmp_path).document == submission
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Later notes'}, cwd=tmp_path)
+    assert Path(written['report']) == team.parent / 'rounds/1/researcher-x1.md'
+    assert submission['candidate'] == commit and submission['result_refs'] == [report]
+    [retained] = submission['evidence_refs']
+    assert retained.startswith(f'{team.parent.relative_to(tmp_path).as_posix()}/traces/research@x1/'
+                               f'{submission["event_id"]}/')
+    assert retained.endswith('-researcher-x1.md') and (tmp_path / retained).read_text() == 'Findings'
+    with runtime_caller(runner, None):
+        assert tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document['submissions'] == [submission]
+        decision = tools.decide_result({
+            'submission_id': submission['event_id'], 'commit': commit, 'decision': 'accepted',
+            'reason': 'The report answers the question.', 'evidence_refs': [retained],
+        }, cwd=tmp_path).document
+    assert decision['event'] == 'team-round-accepted'
+    assert [event['event_id'] for event in read_worldline(tmp_path / 'state', tmp_path)
+            if event['event'] == 'result-submitted'] == [submission['event_id']]
+
+
+@pytest.mark.parametrize(('request_fields', 'preset_access', 'accepted'), [
+    ({}, 'read', True),                          # Codex: access only in CLI arguments; the preset decides
+    ({}, 'write', False),
+    ({}, None, False),                           # preset without worktree_access: write
+    ({'sandbox': 'read-only'}, 'write', True),   # DSH: an explicit launch value wins over the preset
+    ({'sandbox': 'workspace-write'}, 'read', False),
+])
+def test_runtime_access_from_launch_value_or_role_preset(
+    tmp_path: Path, request_fields: dict, preset_access: str | None, accepted: bool,
+) -> None:
+    """Task 521 R2: Codex and DSH launches have no worktree_access field."""
+    from graphtraj.configuration.project_roles import roles_file
+
+    runner, _, commit = result_project(tmp_path)
+    directory = runner / 'sessions/research@x1'
+    mapping = yaml.safe_load((directory / 'mapping.yml').read_text())
+    mapping['role_reference'] = 'research_team.researcher'
+    (directory / 'mapping.yml').write_text(yaml.safe_dump(mapping))
+    report = launch_with_access(runner, 'research@x1', 'read')
+    launch = yaml.safe_load((directory / 'launch.yml').read_text())
+    launch['adapter_request'] = {'session_parameters': {}, **request_fields}
+    (directory / 'launch.yml').write_text(yaml.safe_dump(launch))
+    researcher = {'runtime': 'codex', 'model': 'gpt-test'}
+    if preset_access is not None:
+        researcher['worktree_access'] = preset_access
+    roles_file(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    roles_file(tmp_path).write_text(yaml.safe_dump({
+        'roles': {'research_team': {'researcher': researcher}},
+        'role_tree': {'research_team.researcher': {}}}))
+    arguments = {'commit': commit, 'result_refs': [report], 'completion': 'Investigation complete'}
+    with runtime_caller(runner, 'research@x1'):
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Findings'}, cwd=tmp_path)
+        if accepted:
+            assert tools.submit_result(arguments, cwd=tmp_path).document['result_refs'] == [report]
+        else:
+            with pytest.raises(ValueError, match='Assigned reports belong in evidence_refs'):
+                tools.submit_result(arguments, cwd=tmp_path)
+
+
+def test_report_named_in_both_lists_and_mixed_with_files_is_retained_once(tmp_path: Path) -> None:
+    """A read-only result may also name committed files; its report is copied once."""
+    runner, _, commit = result_project(tmp_path)
+    report = launch_with_access(runner, 'research@x1', 'read')
+    with runtime_caller(runner, 'research@x1'):
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Findings'}, cwd=tmp_path)
+        submission = tools.submit_result({
+            'commit': commit, 'result_refs': [report, 'result.md'], 'evidence_refs': [report],
+            'completion': 'Investigation complete',
+        }, cwd=tmp_path).document
+    assert submission['result_refs'] == [report, 'result.md']
+    assert [(tmp_path / ref).read_text() for ref in submission['evidence_refs']] == ['Findings']
+
+
+def test_report_results_reject_foreign_unassigned_absent_and_write_sessions(tmp_path: Path) -> None:
+    """Only a read-only Session's own submitted report replaces committed files."""
+    from graphtraj.graph.delivery_worldline import read_worldline
+
+    runner, _, commit = result_project(tmp_path)
+    own = launch_with_access(runner, 'research@x1', 'read')
+    other = launch_with_access(runner, 'research@x2', 'read')
+    with runtime_caller(runner, 'research@x2'):
+        tools.submit_report({'name': 'researcher-x2.md', 'text': 'Other findings'}, cwd=tmp_path)
+    before = read_worldline(tmp_path / 'state', tmp_path)
+    arguments = {'commit': commit, 'completion': 'Done'}
+    with runtime_caller(runner, 'research@x1'):
+        for reference, message in [
+            (own, 'has not been submitted'),
+            (other, 'not a report assigned to this Session'),
+            ('.state/teams/1/rounds/1/investigation.md', 'not a report assigned to this Session'),
+            ('.state/../task.md', 'Worktree-relative'),
+        ]:
+            with pytest.raises(ValueError, match=message):
+                tools.submit_result({**arguments, 'result_refs': [reference]}, cwd=tmp_path)
+    for access in (None, 'write'):
+        if access is not None:
+            launch_with_access(runner, 'research@x3', access)
+        with runtime_caller(runner, 'research@x3'):
+            tools.submit_report({'name': 'researcher-x3.md', 'text': 'Notes'}, cwd=tmp_path)
+            with pytest.raises(ValueError, match='Assigned reports belong in evidence_refs'):
+                tools.submit_result({**arguments, 'result_refs': ['.state/teams/1/rounds/1/researcher-x3.md']},
+                                    cwd=tmp_path)
+    # A launch record that no longer matches the Session counts as write access.
+    launch = runner / 'sessions/research@x1/launch.yml'
+    document = yaml.safe_load(launch.read_text())
+    document['mapping']['worktree_path'] = str(tmp_path / 'elsewhere')
+    launch.write_text(yaml.safe_dump(document))
+    with runtime_caller(runner, 'research@x1'):
+        tools.submit_report({'name': 'researcher-x1.md', 'text': 'Findings'}, cwd=tmp_path)
+        with pytest.raises(ValueError, match='Assigned reports belong in evidence_refs'):
+            tools.submit_result({**arguments, 'result_refs': [own]}, cwd=tmp_path)
+    assert read_worldline(tmp_path / 'state', tmp_path) == before
+
+
 def test_submission_rejects_unowned_or_invalid_inputs(tmp_path: Path) -> None:
     """Role claims, foreign reports and absent/obsolete membership grant nothing."""
     import pytest

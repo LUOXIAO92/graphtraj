@@ -924,7 +924,10 @@ def submit_result(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> T
 
 
 register_tool('submit_result',
-              'Submit your committed task result and retain its evidence. Equivalent to agent-runner submit-result.',
+              'Submit your committed task result and retain its evidence. result_refs name committed files; '
+              'a Session with read-only Worktree access may instead name its own report already written by '
+              'submit_report (.state/...), which is retained with the evidence. '
+              'Equivalent to agent-runner submit-result.',
               {'type': 'object', 'properties': {
                   'commit': {'type': 'string'},
                   'result_refs': {'type': 'array', 'minItems': 1, 'items': {'type': 'string'}},

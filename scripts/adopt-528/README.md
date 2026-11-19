@@ -56,6 +56,55 @@ A running host keeps 0.6.1's code, so Main's own records gain 526's `.gitignore`
 guard also needs Main exited during I. The user does `/exit` in Main before I, and after I runs
 `cd <Harness> && claude --continue`.
 
+## Correction (round 2): 529's test fix, step Gt, GR on G+Gt
+
+Main's G failed one NEW test, `tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues`.
+The test took `native/.gitignore`, which 526 writes, for the agent directory, and it fails about half the runs.
+Task 529 fixes only that test. The changes:
+
+- **Guard** (`product_guard`; B, G, Gt, GR, I): the Worktree's `src`/`tests`/`plugins` must equal 8267f9e5, except
+  for exactly one file, `tests/test_pi_generic_execution.py`. The guard derives the fix commit
+  F = `git log -1 --format=%H 8267f9e5..HEAD -- tests/test_pi_generic_execution.py` and requires all of the following:
+  - the name-only diff 8267f9e5..HEAD in src/tests/plugins is exactly that file;
+  - F's own diff (first parent) in src/tests/plugins is that file only;
+  - `git diff F HEAD -- <file>` is empty.
+
+  It prints F and its subject, and STOPs on anything else. With no difference, the behaviour is as before.
+- **Gt** (Main, no dialog): reruns that file through G's machinery:
+  - the same guard, B's v0.6.2 wheel and G's venv with the Worktree editable;
+  - a new `${TMPDIR:-/tmp}/verify-528-Gt-<time>` root outside the Harness;
+  - `VERIFY528_REPEAT` runs (default 10), each with its own `--basetemp` and exit line, in the foreground at about
+    5 s per run.
+
+  Gt prints one summary line per run and the `native/` entries of run 1. The output goes to
+  `adoption/Gt-8267f9e5-<time>/`, and `adoption/Gt-latest` points at it.
+- **GR** judges Main's existing G together with the latest Gt. The G failure in that file counts as
+  `fixed (529 <F8>)` only when all of these hold:
+  - the latest Gt ran all its repeats (at least 3, each ended);
+  - Gt ran for the same F the guard finds now;
+  - the test passed (a PASSED line) in every repeat.
+
+  Every other G failure, and every failure inside a Gt run, is classified as before. Example: in a `/tmp`-symlinked
+  venv `test_graphtraj_member_launch_matches_base` fails for path reasons and is classified `known (521 F)`.
+  GR prints `CHECK 528 G+Gt no NEW failure: PASS|FAIL`. The G-alone CHECK is still printed, for information only.
+  Earlier GR.txt files are kept as `GR-<time>.txt`.
+- **Mpre** shows the G+Gt CHECK. **I** refuses to run without `CHECK 528 G+Gt no NEW failure: PASS` in GR.txt or
+  when the guard STOPs.
+
+Order from here: … GR (old: FAIL, done) → [529 merged into this Worktree] → **Gt** → **GR** → Vc → Mpre → /exit →
+I → restart → M … → N … → done → T.
+
+`rehearse-Gt.zsh` → `rehearsal-Gt.txt`. The rehearsal uses a scratch clone of the Worktree, with a stand-in commit
+that edits only that test, a copy of Main's real G, and real Gt runs (3 repeats) with the repository fixtures.
+Its negatives:
+
+- GR without Gt;
+- a forced-fail Gt;
+- a 1-repeat Gt;
+- an extra src change;
+- a fix commit that also touched another file;
+- no difference at all.
+
 ## Step order
 
 | Step | Who | Dialog | Time |

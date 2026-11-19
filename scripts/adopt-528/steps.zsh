@@ -158,6 +158,53 @@ ask_model() {   # $1 = tag, $2 = output name; extra args go to claude
 }
 wheel_of() { local f=($N/$1-*.whl(N)); print -r -- ${f[1]:-}; }
 gt_wheel() { local f=($GTW/graphtraj-*.whl(N)); print -r -- ${f[1]:-}; }   # 528: scratch venv only, never installed
+# 528 correction: the Worktree's src/tests/plugins must equal $TARGET, except EXACTLY one file, $TESTFIX, changed by
+# one fix commit F (Task 529: the test took native/.gitignore, which 526 writes, for the agent directory). F is derived
+# from the layout: the last commit after $TARGET touching $TESTFIX. Requires: name-only diff $TARGET..HEAD in
+# src/tests/plugins = $TESTFIX only; F's own diff (first parent) in src/tests/plugins = $TESTFIX only; F..HEAD leaves
+# $TESTFIX unchanged. Prints F and its subject; sets FIX (empty when there is no difference). Return 1 = STOP.
+TESTFIX=tests/test_pi_generic_execution.py
+FIX=""
+product_guard() {
+  FIX=""
+  local names=$(git -C $WT diff --name-only $TARGET HEAD -- src tests plugins) f own
+  print "git diff $C8 HEAD -- src tests plugins: ${${names//$'\n'/ }:-empty} | HEAD $(git -C $WT rev-parse HEAD)"
+  [[ -z $names ]] && { print "product guard: no difference from $C8 (no fix commit)"; return 0; }
+  [[ $names == $TESTFIX ]] || { print "STOP: src/tests/plugins differ from $C8 in more than $TESTFIX: ${names//$'\n'/ }"; return 1; }
+  f=$(git -C $WT log -1 --format=%H $TARGET..HEAD -- $TESTFIX)
+  [[ -n $f ]] || { print "STOP: $TESTFIX differs from $C8 but no commit after $C8 touches it"; return 1; }
+  own=$(git -C $WT diff --name-only $f^1 $f -- src tests plugins)
+  [[ $own == $TESTFIX ]] || { print "STOP: fix commit ${f[1,8]} also changes ${${own//$'\n'/ }:-nothing in src/tests/plugins} (only $TESTFIX allowed)"; return 1; }
+  [[ -z $(git -C $WT diff --name-only $f HEAD -- $TESTFIX) ]] || { print "STOP: $TESTFIX changed again after ${f[1,8]}"; return 1; }
+  FIX=$f
+  print -r -- "product guard: one allowed difference $TESTFIX by fix commit F=$f: $(git -C $WT log -1 --format=%s $f)"
+}
+# G's venv (also Gt's): conda --system-site-packages + production's click/yaml/websockets + B's graftling wheel +
+# this Worktree editable. Sets V. Reused while the graftling wheel is the same.
+g_venv() {
+  V=$BASE/venv-g-$C8-gl-$GVERSION
+  local gw=$(wheel_of graftling) sum=$(cd $N && shasum -a 256 graftling-*.whl | cut -c1-16)
+  if [[ -x $V/bin/python && -f $V/installed && $(<$V/installed) == "$sum" ]]; then print "reusing $V (graftling wheel $sum)"
+  else
+    [[ -e $V ]] && mv $V $V.$(date +%H%M%S)
+    $CONDA -m venv --system-site-packages $V || return 1
+    local S=$(site) D=($V/lib/python*/site-packages(N))
+    cp -Rp $S/click $S/click-*.dist-info(N) $S/yaml $S/_yaml(N) $S/[Pp]y[Yy][Aa][Mm][Ll]-*.dist-info(N) $S/websockets $S/websockets-*.dist-info(N) $D[1]/ || return 1
+    $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $gw || return 1
+    $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT 2>&1 | grep -vi cache
+    print -r -- "$sum" > $V/installed
+  fi
+}
+# A new pytest temp root under $PYTEST_TMP, outside the Harness, no Harness marker above it. $1 = name part (G or Gt).
+new_runtmp() {
+  case ${PYTEST_TMP:A}/ in ${H:A}/*) print "STOP: TMPDIR $PYTEST_TMP is inside the Harness; set TMPDIR outside it"; return 1 ;; esac
+  RUNTMP=${PYTEST_TMP:A}/verify-528-$1-$(date +%Y%m%dT%H%M%S)
+  [[ -e $RUNTMP ]] && { print "STOP: $RUNTMP exists; run again in a second"; return 1; }
+  local d=${RUNTMP:h}; while [[ $d != / ]]; do
+    [[ -e $d/.graphtraj || -e $d/.agents-control/claude-host.json ]] && { print "STOP: $d (above the pytest temp root) holds a Harness marker; set TMPDIR elsewhere"; return 1; }
+    d=${d:h}; done
+  print -r -- "TMPDIR of the run is outside the Harness: yes ($RUNTMP not under ${H:A}; no Harness marker above it)"
+}
 # 395: graphtraj/runtimes/graftling.mjs of venv $1 must resolve graftling to the sibling <site-packages>/graftling/.
 # Run with an empty environment (no GRAFTLING_PYTHON, PATH without python3), so the python fallback cannot answer.
 node_resolve() {
@@ -437,11 +484,9 @@ step_00() {
 }
 
 step_B() {
+  say "the Worktree carries no product change beyond $C8 = production's graphtraj (scripts only, and at most 529's $TESTFIX; 528 does not reinstall GraphTraj)"
+  product_guard || return 1
   rm -rf $SRC $GSRC $N $GTW; mkdir -p $SRC $GSRC $N $GTW   # this commit's own directories only
-  say "the Worktree carries no product change beyond $C8 = production's graphtraj (scripts only; 528 does not reinstall GraphTraj)"
-  local pd=$(git -C $WT diff --stat $TARGET HEAD -- src tests plugins)
-  print "git diff $C8 HEAD -- src tests plugins: ${pd:-empty} | HEAD $(git -C $WT rev-parse HEAD)"
-  [[ -z $pd ]] || { print "STOP: the Worktree changes product files after $C8"; return 1; }
   say "production graphtraj's graftling requirement (installed METADATA; must admit $GVERSION)"
   local preq=$(grep -hE '^Requires-Dist: graftling' $(site)/graphtraj-0.1.0.dist-info/METADATA 2>/dev/null)
   print "production graphtraj ${preq:-Requires-Dist: NOT FOUND}"
@@ -814,29 +859,13 @@ step_G() {
   setopt local_options no_bg_nice   # a background job must not try to renice itself (refused in a sandbox)
   [[ -f $N/SHA256SUMS ]] || { print "没有 B 步骤的 wheel，先运行 B。"; return 1; }
   (cd $N && shasum -a 256 -c --quiet SHA256SUMS) || return 1
-  local pd=$(git -C $WT diff --stat $TARGET HEAD -- src tests plugins) dirty=$(git -C $WT status --porcelain -- src tests plugins)
-  print "git diff $C8 HEAD -- src tests plugins: ${pd:-empty} | uncommitted there: ${dirty:-none}"
-  [[ -z $pd && -z $dirty ]] || { print "STOP: the Worktree's src/tests/plugins are not $C8"; return 1; }
+  local V RUNTMP gw=$(wheel_of graftling) dirty=$(git -C $WT status --porcelain -- src tests plugins)
+  product_guard || return 1
+  print "uncommitted in src/tests/plugins: ${dirty:-none}"; [[ -z $dirty ]] || { print "STOP: uncommitted changes in the Worktree's src/tests/plugins"; return 1; }
   [[ -e $WT/src/graftling ]] && { print "STOP: $WT/src/graftling exists; GraphTraj must use the installed graftling"; return 1; }
-  case ${PYTEST_TMP:A}/ in ${H:A}/*) print "STOP: TMPDIR $PYTEST_TMP is inside the Harness; set TMPDIR outside it"; return 1 ;; esac
-  local RUNTMP=${PYTEST_TMP:A}/verify-528-G-$(date +%Y%m%dT%H%M%S) d
-  [[ -e $RUNTMP ]] && { print "STOP: $RUNTMP exists; run again in a second"; return 1; }
-  d=${RUNTMP:h}; while [[ $d != / ]]; do
-    [[ -e $d/.graphtraj || -e $d/.agents-control/claude-host.json ]] && { print "STOP: $d (above the pytest temp root) holds a Harness marker; set TMPDIR elsewhere"; return 1; }
-    d=${d:h}; done
-  print -r -- "TMPDIR of the run is outside the Harness: yes ($RUNTMP not under ${H:A}; no Harness marker above it)"
+  new_runtmp G || return 1
   print -r -- "load average: $(sysctl -n vm.loadavg 2>&1) | other test runs: $(ps -axww -o pid=,command= 2>/dev/null | grep -E 'run_test_shards|-m pytest' | grep -vc grep)"
-  local V=$BASE/venv-g-$C8-gl-$GVERSION gw=$(wheel_of graftling) sum=$(cd $N && shasum -a 256 graftling-*.whl | cut -c1-16)
-  if [[ -x $V/bin/python && -f $V/installed && $(<$V/installed) == "$sum" ]]; then print "reusing $V (graftling wheel $sum)"
-  else
-    [[ -e $V ]] && mv $V $V.$(date +%H%M%S)
-    $CONDA -m venv --system-site-packages $V || return 1
-    local S=$(site) D=($V/lib/python*/site-packages(N))
-    cp -Rp $S/click $S/click-*.dist-info(N) $S/yaml $S/_yaml(N) $S/[Pp]y[Yy][Aa][Mm][Ll]-*.dist-info(N) $S/websockets $S/websockets-*.dist-info(N) $D[1]/ || return 1
-    $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $gw || return 1
-    $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT 2>&1 | grep -vi cache
-    print -r -- "$sum" > $V/installed
-  fi
+  g_venv || return 1
   mkdir -p $RUNTMP
   (cd $RUNTMP && $V/bin/python -I -c 'import graphtraj, graftling, graftling.locks as l, pytest; print("graphtraj", graphtraj.__file__); print("graftling", graftling.__version__, graftling.__file__, "| 526 ignore_in_git:", hasattr(l, "ignore_in_git"), "| pytest", pytest.__version__)') || return 1
   print -r -- "graftling wheel: ${gw:t} built from git archive $(<$N/GRAFTLING)"
@@ -854,8 +883,39 @@ step_G() {
   print -r -- $OUTG > $W/G-latest
 }
 
+# Gt (528 correction): targeted rerun of $TESTFIX through G's machinery (same guard, B's wheel, G's venv with this
+# Worktree editable, a NEW temp root verify-528-Gt-<time> outside the Harness), VERIFY528_REPEAT times (default 10),
+# each with its own basetemp and exit file. Foreground: ~5 s per run. GR judges G together with the latest Gt.
+step_Gt() {
+  [[ -f $N/SHA256SUMS ]] || { print "没有 B 步骤的 wheel，先运行 B。"; return 1; }
+  (cd $N && shasum -a 256 -c --quiet SHA256SUMS) || return 1
+  local V RUNTMP gw=$(wheel_of graftling) dirty=$(git -C $WT status --porcelain -- src tests plugins) n=${VERIFY528_REPEAT:-10} i d
+  product_guard || return 1
+  print "uncommitted in src/tests/plugins: ${dirty:-none}"; [[ -z $dirty ]] || { print "STOP: uncommitted changes in the Worktree's src/tests/plugins"; return 1; }
+  [[ -e $WT/src/graftling ]] && { print "STOP: $WT/src/graftling exists; GraphTraj must use the installed graftling"; return 1; }
+  [[ $n == <1-> ]] || { print "STOP: VERIFY528_REPEAT=$n is not a positive number"; return 1; }
+  new_runtmp Gt || return 1
+  g_venv || return 1
+  mkdir -p $RUNTMP
+  (cd $RUNTMP && $V/bin/python -I -c 'import graphtraj, graftling, graftling.locks as l, pytest; print("graphtraj", graphtraj.__file__); print("graftling", graftling.__version__, graftling.__file__, "| 526 ignore_in_git:", hasattr(l, "ignore_in_git"), "| pytest", pytest.__version__)') || return 1
+  local OUT=$W/Gt-$C8-$(date +%Y%m%dT%H%M%S); mkdir -p $OUT
+  { print -r -- "pytest temp root (new for this run): $RUNTMP"
+    print -r -- "candidate: $(git -C $WT rev-parse HEAD) | fix: ${FIX:-none} | graftling $(<$N/GRAFTLING)"
+    print -r -- "file: $TESTFIX | repeat: $n (each with basetemp $RUNTMP/bt-<i>)"; } | tee $OUT/run.txt
+  for i in {1..$n}; do
+    mkdir -p $OUT/run-$i
+    (cd $WT && TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rfEp --basetemp=$RUNTMP/bt-$i $TESTFIX > $OUT/run-$i/suite.txt 2>&1; print "exit=$?" >> $OUT/run-$i/suite.txt)
+    print -r -- "Gt run $i/$n: $(grep -E '[0-9]+ (passed|failed|error)' $OUT/run-$i/suite.txt | tail -1) | $(grep '^exit=' $OUT/run-$i/suite.txt)" | tee -a $OUT/run.txt
+  done
+  print "native/ entries in run 1 (526 writes .gitignore beside the agent directory):" | tee -a $OUT/run.txt
+  for d in $RUNTMP/bt-1/**/native(N/); do print -r -- "  ${d#$RUNTMP/}: $(ls -A $d | tr '\n' ' ')"; done | tee -a $OUT/run.txt
+  print "all repeats ran: $n" >> $OUT/run.txt
+  print -r -- $OUT > $W/Gt-latest
+  print -r -- "Gt output: $OUT"
+}
+
 case $STEP in
-help) print "顺序: 00 → B → G（后台约 25 分钟）→ V → GR（G 结束后）→ Vc（若要求则先 USER 做 Vu）→ Mpre → USER /exit Main → I（USER）→ USER: cd $H && claude --continue → M → Mp → Mps → inbox → Nw → N → Nr → Nt → done → [Leader 接受 528] → T；任何时候列计时器: timers；备份完成后可回退: R。"
+help) print "顺序: 00 → B → G（后台约 25 分钟）→ V → GR（G 结束后；528 中为 FAIL，已完成）→ [529 合并进本 Worktree] → Gt → GR → Vc（若要求则先 USER 做 Vu）→ Mpre → USER /exit Main → I（USER）→ USER: cd $H && claude --continue → M → Mp → Mps → inbox → Nw → N → Nr → Nt → done → [Leader 接受 528] → T；任何时候列计时器: timers；备份完成后可回退: R。"
   print "USER 只做: Vu（仅当 Vc 要求；信任框 'Yes, proceed'）、/exit Main、I、claude --continue（失败时 R）。其余都由 Main 运行。"
   next "zsh $THIS 00" ;;
 
@@ -880,13 +940,22 @@ G) cv; print "[G] Main. 全套测试（GraphTraj $C8 = 本 Worktree，editable +
   print "成功: 'TMPDIR of the run is outside the Harness: yes'；graphtraj 的路径（$WT/src/graphtraj）；'graftling $GVERSION … | 526 ignore_in_git: True'；新的 pytest temp root；'started in the background'。"
   next "zsh $THIS V    （G 结束后，即 suite.txt 末行 exit=…: zsh $THIS GR）" ;;
 
-GR) cv; print "[GR] Main，G 结束后。把失败逐条归为 known（516 或 523/521/518/525 被接受的全套结果）或 NEW。对话框: 无。只读。< 10 秒。"
+GR) cv; print "[GR] Main，G 结束后（以及每次 Gt 之后）。把 G 的失败逐条归为 known（516 或 523/521/518/525 被接受的全套结果）、fixed（529，须有最新 Gt 全部重复通过且守卫找到 F）或 NEW；Gt 各次运行的失败同样归类。对话框: 无。只读。< 10 秒。"
   OUTG=$(cat $W/G-latest 2>/dev/null); [[ -n $OUTG && -d $OUTG ]] || { print "没有 G 的运行记录；先运行 G。"; exit 1; }
+  OUTGT=$(cat $W/Gt-latest 2>/dev/null); [[ -n $OUTGT && -d $OUTGT ]] || OUTGT=""
+  [[ -e $R/GR.txt ]] && cp -p $R/GR.txt $R/GR-$(date +%Y%m%dT%H%M%S).txt   # earlier GR results are kept
   { print "G run: $OUTG"; cat $OUTG/run.txt; tail -6 $OUTG/suite.txt
-    $CONDA -I $SD/gr528.py $KNOWN $OUTG; } 2>&1 | tee $R/GR.txt; rc=${pipestatus[1]}
-  summary GR "$(grep -E '^(G |CHECK|known source|  (known|NEW))|passed|temp root' $R/GR.txt)"
-  print "成功: 'CHECK 528 G no NEW failure …: PASS'（每个失败都是 'known (来源)'；525 G 的 test_interrupt_returns_after_slow_terminal_record 为 known (525 G)）；'run ended: yes'。PENDING: G 还在运行，稍后重跑 GR。NEW: 交 Leader（可先对该测试单独重跑一次，按 516 的做法记录）。"
+    product_guard || print "product guard STOP: no fix commit is accepted"
+    print "Gt run: ${OUTGT:-none (run zsh $THIS Gt after 529 is merged)}"; [[ -n $OUTGT ]] && cat $OUTGT/run.txt
+    $CONDA -I $SD/gr528.py $KNOWN $OUTG "$OUTGT" "$FIX"; } 2>&1 | tee $R/GR.txt; rc=${pipestatus[1]}
+  summary GR "$(grep -E '^(G |Gt|CHECK|known source|product guard|  (known|NEW|fixed|Gt run))|passed|temp root' $R/GR.txt)"
+  print "成功: 'CHECK 528 G+Gt no NEW failure: PASS'（G 的每个失败都是 'known (来源)' 或 'fixed (529 <F8>; passed in every Gt repeat)'；Gt 各次运行没有 NEW；'run ended: yes'）。'CHECK 528 G no NEW failure (G alone …)' 只是信息。FAIL: 交 Leader。PENDING: G 还在运行。"
   next "zsh $THIS Vc" ; exit $rc ;;
+
+Gt) cv; print "[Gt] Main（529 合并进本 Worktree 之后；GR 之前）。对 $TESTFIX 的定向重跑：与 G 同一守卫、同一 venv（B 的 $GTAG wheel + 本 Worktree editable）、新的 pytest 临时根目录（Harness 之外），重复 ${VERIFY528_REPEAT:-10} 次，每次新 basetemp。对话框: 无。前台约 ${VERIFY528_REPEAT:-10} × 6 秒。"
+  logged $R/Gt.txt step_Gt || { print "\nGt 未完成（见上面的 STOP）。把 $R/Gt.txt 交给 Main。"; exit 1; }
+  print "成功: 'product guard: one allowed difference $TESTFIX by fix commit F=<hash>: <529 的标题>'；'TMPDIR of the run is outside the Harness: yes'；'graftling $GVERSION … | 526 ignore_in_git: True'；每行 'Gt run i/n: … passed … | exit=0'（若有失败，GR 归类）；native/ 列出 .gitignore 与 agent 目录。"
+  next "zsh $THIS GR" ;;
 
 V) cv; print "[V] Main. 安装前校验。对话框: 无。只读真实项目；scratch venv、候选插件、入口文件预测都在生产之外。约 2 分钟。"
   if logged $R/V.txt step_V; then
@@ -920,7 +989,7 @@ Vu) print "[Vu] USER（只有 Vc 要求时；需要终端和对话框，Main 做
   next "Main: zsh $THIS Vc" ;;
 
 Mpre) need_main; cv; print "[Mpre] Main，就在 USER /exit Main 之前（V、Vc 通过且 GR 为 PASS 之后）。486：重启前的生产 agents 控制记录快照（只读）。对话框: 无。约 1 分钟。"
-  grep -q 'CHECK 528 G no NEW failure.*: PASS' $R/GR.txt 2>/dev/null && print "GR: PASS" || print "GR 还不是 PASS（$R/GR.txt）：先等 G 结束并运行 GR，再让 USER 做 I。"
+  grep -q '^CHECK 528 G+Gt no NEW failure: PASS' $R/GR.txt 2>/dev/null && print "GR: PASS (CHECK 528 G+Gt no NEW failure: PASS)" || print "GR 还不是 PASS（$R/GR.txt 没有 'CHECK 528 G+Gt no NEW failure: PASS'）：先 Gt（529 合并后）再 GR；I 会拒绝运行。"
   $CONDA -I $SD/ctl497.py snap $H $CTL/Mpre.json 2>&1 | tee $R/Mpre.txt
   print "成功: 'GR: PASS' 与 'control records snapshot Mpre.json: agents=… executions=…'。Mps 在 claude --continue 之后对比它。"
   print "\n为什么要重启 Main: Main 的 tasks/agents 调用在它的 host 进程（graphtraj.runtimes.claude.host serve）里执行，该进程启动时一次性导入 graftling（graphtraj/runtimes/claude/host.py:25 graftling.claude、:28 graftling → graftling/__init__.py:47 graftling.control → control.py:70 graftling.locks；:71 graftling.sessions.archive → archive.py:24）。不重启，Main 自己的记录仍由 0.6.1 的代码写（没有 526 的 .gitignore）。503 的保护也要求安装时 Main 已退出。"
@@ -931,6 +1000,8 @@ I) need_main
   print "[I] USER. 等待成员结束、备份并安装。对话框: 无。需 Main 已 /exit；本步结束前不要打开 Main。安装约 3 分钟（等待时间另计）。"; cv
   [[ -e $BK ]] && { print "已存在 $BK，拒绝覆盖备份。若它是一次放弃的 I 留下的（没有 INSTALL-STARTED）: 告诉 Main，由 Main 把它改名移开后再运行 I。$R_HINT"; exit 1; }
   [[ -e $R/V.ok && -e $R/Vc.ok ]] || { print "V 或 Vc 还没有通过，先运行它们。"; exit 1; }
+  grep -q '^CHECK 528 G+Gt no NEW failure: PASS' $R/GR.txt 2>/dev/null || { print "GR 还不是 PASS（$R/GR.txt 没有 'CHECK 528 G+Gt no NEW failure: PASS'）。先由 Main 运行 Gt 与 GR。没有改动任何东西。"; exit 1; }
+  product_guard || { print "Worktree 守卫 STOP（见上）。没有改动任何东西。"; exit 1; }
   print "确认已在 Claude Code Main 里输入 /exit。按回车继续，Ctrl-C 放弃。"; read -r REPLY
   wait_idle "还没有改动任何东西（没有备份、没有安装）。" || exit 1
   date '+I start %F %T' | tee -a $R/I.txt

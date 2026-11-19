@@ -1,0 +1,123 @@
+
+======== empty base /private/tmp/claude-501/adopt528-rehearsal-gt; scratch clone of the Worktree; stand-in fix commit (only tests/test_pi_generic_execution.py)
+REHEARSAL PASS: zsh -n steps.zsh
+REHEARSAL PASS: clone at the Worktree's committed HEAD; src/tests/plugins = 8267f9e5
+5e689bd915d07adf376deb6ba811cd00107ed380 Stand-in for 529: select the agent directory under native/ (rehearsal only)
+
+ tests/test_pi_generic_execution.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+======== B through the guard (positive) and the old G judged alone
+REHEARSAL PASS: B exit 0 with the stand-in
+git diff 8267f9e5 HEAD -- src tests plugins: tests/test_pi_generic_execution.py | HEAD 5e689bd915d07adf376deb6ba811cd00107ed380
+product guard: one allowed difference tests/test_pi_generic_execution.py by fix commit F=5e689bd915d07adf376deb6ba811cd00107ed380: Stand-in for 529: select the agent directory under native/ (rehearsal only)
+git diff 8267f9e5 HEAD -- src tests plugins: tests/test_pi_generic_execution.py | HEAD 5e689bd915d07adf376deb6ba811cd00107ed380
+REHEARSAL PASS: B guard: one allowed difference, F = the stand-in, subject printed
+REHEARSAL PASS: copy of Main's real G holds the one NEW failure
+
+======== negative: no Gt yet -> GR not PASS
+Gt run: none (run zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/528-production-adoption-graftling-0-6-2/scripts/adopt-528/steps.zsh Gt after 529 is merged)
+  NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+CHECK 528 G no NEW failure (G alone; 516 and the accepted 523/521/518/525 runs are known): FAIL
+CHECK 528 G+Gt no NEW failure: FAIL
+Gt run: none (run zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/528-production-adoption-graftling-0-6-2/scripts/adopt-528/steps.zsh Gt after 529 is merged)
+  NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+CHECK 528 G no NEW failure (G alone; 516 and the accepted 523/521/518/525 runs are known): FAIL
+CHECK 528 G+Gt no NEW failure: FAIL
+REHEARSAL PASS: GR without Gt: exit 1, G+Gt FAIL, the test stays NEW
+
+======== Gt through the real entry, VERIFY528_REPEAT=3 (real runs of tests/test_pi_generic_execution.py with the repository fixtures)
+claude: /Users/luoxiao/.local/bin/claude -> /Users/luoxiao/.local/bin/claude | version: cv: operation not permitted: /Users/luoxiao/.local/bin/claude | recorded at 00: none yet (00 records it)
+[Gt] Main（529 合并进本 Worktree 之后；GR 之前）。对 tests/test_pi_generic_execution.py 的定向重跑：与 G 同一守卫、同一 venv（B 的 v0.6.2 wheel + 本 Worktree editable）、新的 pytest 临时根目录（Harness 之外），重复 3 次，每次新 basetemp。对话框: 无。前台约 3 × 6 秒。
+git diff 8267f9e5 HEAD -- src tests plugins: tests/test_pi_generic_execution.py | HEAD 5e689bd915d07adf376deb6ba811cd00107ed380
+product guard: one allowed difference tests/test_pi_generic_execution.py by fix commit F=5e689bd915d07adf376deb6ba811cd00107ed380: Stand-in for 529: select the agent directory under native/ (rehearsal only)
+uncommitted in src/tests/plugins: none
+TMPDIR of the run is outside the Harness: yes (/private/tmp/claude-501/verify-528-Gt-20261120T003118 not under /private/tmp/claude-501/adopt528-rehearsal-gt/project; no Harness marker above it)
+graphtraj /private/tmp/claude-501/adopt528-rehearsal-gt/wt/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/adopt528-rehearsal-gt/project/tmp/528/venv-g-8267f9e5-gl-0.6.2/lib/python3.13/site-packages/graftling/__init__.py | 526 ignore_in_git: True | pytest 9.1.1
+pytest temp root (new for this run): /private/tmp/claude-501/verify-528-Gt-20261120T003118
+candidate: 5e689bd915d07adf376deb6ba811cd00107ed380 | fix: 5e689bd915d07adf376deb6ba811cd00107ed380 | graftling v0.6.2 4a002129f8b97f32980afd59e5a1a64c428fe684
+file: tests/test_pi_generic_execution.py | repeat: 3 (each with basetemp /private/tmp/claude-501/verify-528-Gt-20261120T003118/bt-<i>)
+Gt run 1/3: 21 passed in 5.16s | exit=0
+Gt run 2/3: 21 passed in 3.82s | exit=0
+Gt run 3/3: 21 passed in 3.88s | exit=0
+native/ entries in run 1 (526 writes .gitignore beside the agent directory):
+  bt-1/test_task_free_child_launches_0/data/native: .gitignore agent-a73a15decaa4412b94b8d0d61cdd4f89 
+Gt output: /private/tmp/claude-501/adopt528-rehearsal-gt/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/Gt-8267f9e5-20261120T003121
+成功: 'product guard: one allowed difference tests/test_pi_generic_execution.py by fix commit F=<hash>: <529 的标题>'；'TMPDIR of the run is outside the Harness: yes'；'graftling 0.6.2 … | 526 ignore_in_git: True'；每行 'Gt run i/n: … passed … | exit=0'（若有失败，GR 归类）；native/ 列出 .gitignore 与 agent 目录。
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/528-production-adoption-graftling-0-6-2/scripts/adopt-528/steps.zsh GR
+REHEARSAL PASS: Gt exit 0; guard found F; temp root outside the Harness; graftling 0.6.2 with ignore_in_git
+REHEARSAL PASS: Gt: three runs, each with its own basetemp and exit line
+REHEARSAL PASS: Gt: native/ of run 1 lists .gitignore beside the agent directory
+product guard: one allowed difference tests/test_pi_generic_execution.py by fix commit F=5e689bd915d07adf376deb6ba811cd00107ed380: Stand-in for 529: select the agent directory under native/ (rehearsal only)
+Gt run: /private/tmp/claude-501/adopt528-rehearsal-gt/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/Gt-8267f9e5-20261120T003121
+Gt run 1/3: 21 passed in 5.16s | exit=0
+Gt run 2/3: 21 passed in 3.82s | exit=0
+Gt run 3/3: 21 passed in 3.88s | exit=0
+Gt Gt-8267f9e5-20261120T003121: repeats 3/3 (need >= 3, all run: yes) | Gt fix 5e689bd915d07adf376deb6ba811cd00107ed380 | guard fix 5e689bd915d07adf376deb6ba811cd00107ed380 | same: yes
+  fixed (529 5e689bd9; passed in every Gt repeat)  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+CHECK 528 G no NEW failure (G alone; 516 and the accepted 523/521/518/525 runs are known): FAIL
+CHECK 528 G+Gt no NEW failure: PASS
+product guard: one allowed difference tests/test_pi_generic_execution.py by fix commit F=5e689bd915d07adf376deb6ba811cd00107ed380: Stand-in for 529: select the agent directory under native/ (rehearsal only)
+Gt run: /private/tmp/claude-501/adopt528-rehearsal-gt/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/Gt-8267f9e5-20261120T003121
+Gt run 1/3: 21 passed in 5.16s | exit=0
+Gt run 2/3: 21 passed in 3.82s | exit=0
+Gt run 3/3: 21 passed in 3.88s | exit=0
+Gt Gt-8267f9e5-20261120T003121: repeats 3/3 (need >= 3, all run: yes) | Gt fix 5e689bd915d07adf376deb6ba811cd00107ed380 | guard fix 5e689bd915d07adf376deb6ba811cd00107ed380 | same: yes
+  fixed (529 5e689bd9; passed in every Gt repeat)  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+CHECK 528 G no NEW failure (G alone; 516 and the accepted 523/521/518/525 runs are known): FAIL
+CHECK 528 G+Gt no NEW failure: PASS
+REHEARSAL PASS: GR: the G failure is 'fixed (529 5e689bd9…)', G+Gt PASS, exit 0
+REHEARSAL PASS: GR kept the earlier GR result
+REHEARSAL PASS: Mpre shows the G+Gt PASS
+
+======== negative: Gt with a failing repeat (forced fail, still only tests/test_pi_generic_execution.py) -> GR FAIL
+Gt run 1/3: 1 failed, 20 passed in 3.60s | exit=1
+Gt run 2/3: 1 failed, 20 passed in 3.48s | exit=1
+Gt run 3/3: 1 failed, 20 passed in 3.52s | exit=1
+Gt run: /private/tmp/claude-501/adopt528-rehearsal-gt/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/Gt-8267f9e5-20261120T003136
+Gt run 1/3: 1 failed, 20 passed in 3.60s | exit=1
+Gt run 2/3: 1 failed, 20 passed in 3.48s | exit=1
+Gt run 3/3: 1 failed, 20 passed in 3.52s | exit=1
+  Gt run 1: NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+  Gt run 2: NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+  Gt run 3: NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+Gt Gt-8267f9e5-20261120T003136: repeats 3/3 (need >= 3, all run: yes) | Gt fix 2efdee906d96704fb9138b5986f4f6ed5f490c99 | guard fix 2efdee906d96704fb9138b5986f4f6ed5f490c99 | same: yes
+  NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+CHECK 528 G no NEW failure (G alone; 516 and the accepted 523/521/518/525 runs are known): FAIL
+CHECK 528 G+Gt no NEW failure: FAIL
+Gt run: /private/tmp/claude-501/adopt528-rehearsal-gt/project/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/Gt-8267f9e5-20261120T003136
+Gt run 1/3: 1 failed, 20 passed in 3.60s | exit=1
+Gt run 2/3: 1 failed, 20 passed in 3.48s | exit=1
+Gt run 3/3: 1 failed, 20 passed in 3.52s | exit=1
+  Gt run 1: NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+  Gt run 2: NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+  Gt run 3: NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+Gt Gt-8267f9e5-20261120T003136: repeats 3/3 (need >= 3, all run: yes) | Gt fix 2efdee906d96704fb9138b5986f4f6ed5f490c99 | guard fix 2efdee906d96704fb9138b5986f4f6ed5f490c99 | same: yes
+  NEW  tests/test_pi_generic_execution.py::test_task_free_child_launches_messages_and_continues
+CHECK 528 G no NEW failure (G alone; 516 and the accepted 523/521/518/525 runs are known): FAIL
+CHECK 528 G+Gt no NEW failure: FAIL
+REHEARSAL PASS: GR with failing Gt repeats: exit 1, Gt runs show NEW, G+Gt FAIL
+
+======== negative: the good Gt but too few repeats (1) -> GR FAIL
+REHEARSAL PASS: GR with a 1-repeat Gt: exit 1, G+Gt FAIL
+
+======== negative: an extra src change after the fix -> STOP
+STOP: src/tests/plugins differ from 8267f9e5 in more than tests/test_pi_generic_execution.py: src/graphtraj/__init__.py tests/test_pi_generic_execution.py
+REHEARSAL PASS: Gt STOPs on an extra src change
+REHEARSAL PASS: GR with that tree: guard STOP, no fix accepted, G+Gt FAIL
+
+======== negative: the fix commit also touches another file (reverted later, so only F's own diff shows it) -> STOP
+730d5761 Rehearsal: revert the other file only
+7a9b3890 Rehearsal: fix that also touches another test
+397372ee adopt-528: steps to adopt graftling v0.6.2 in production, GraphTraj unchanged (528)
+tests/test_pi_generic_execution.py
+STOP: fix commit 7a9b3890 also changes tests/test_agent_runner_cleanup.py tests/test_pi_generic_execution.py (only tests/test_pi_generic_execution.py allowed)
+REHEARSAL PASS: Gt STOPs when the fix commit also changed another file
+
+======== no difference at all (today's tree): the guard passes as before, with no fix; GR then grants no 'fixed'
+REHEARSAL PASS: guard with no difference: 'no difference from 8267f9e5 (no fix commit)', no STOP from the guard
+REHEARSAL PASS: GR on today's tree with the stand-in's Gt: fix differs, G+Gt FAIL
+
+REHEARSAL SUMMARY: 19 checks, all PASS

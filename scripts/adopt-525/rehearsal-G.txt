@@ -1,0 +1,59 @@
+# Rehearsal of G through the real entry (zsh steps.zsh G), VERIFY525_TESTS=tests/test_agent_runner_cleanup.py
+# (repository conftest fixtures; real tests, not --collect-only), graftling wheel from git -C <Harness>/graftling archive v0.6.1 (annotated, 483b16a8)
+## steps.zsh G output
+claude: /tmp/claude-501/adopt525-rehearsal/stub/claude -> /private/tmp/claude-501/adopt525-rehearsal/stub/claude | version: 2.1.325 (stub Claude Code) | same as recorded at 00 (2.1.325 (stub Claude Code)): yes
+[G] Main. 全套测试（GraphTraj 8267f9e5 + graftling v0.6.1 的 wheel；6 分片，后台；每次新的 pytest 临时根目录，在 Harness 之外）。对话框: 无。立即返回；约 25 分钟（单进程约 73 分钟）。不要同时运行其它测试。
+git diff 8267f9e5 HEAD -- src tests plugins: empty | uncommitted there: none
+load average: sysctl: sysctl fmt -1 1024 1: Operation not permitted | other test runs: 0
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/525-production-adoption-graftling-0-6-1/src/graphtraj/__init__.py
+graftling 0.6.1 /tmp/claude-501/adopt525-rehearsal/project/tmp/525/venv-g-8267f9e5-gl-0.6.1/lib/python3.13/site-packages/graftling/__init__.py | 518 _archived_header: True | pytest 9.1.1
+graftling wheel: graftling-0.6.1-py3-none-any.whl built from git archive v0.6.1 483b16a8d6e05b1c866e69439fada8478791f1fb
+pytest temp root (new for this run; TMPDIR of every shard): /private/tmp/claude-501/verify-525-G-20261119T203324
+earlier G temp roots (kept; delete by hand later): 5 /private/tmp/claude-501/verify-525-G-20261119T202415 /private/tmp/claude-501/verify-525-G-20261119T202857 
+REHEARSAL: tests limited to tests/test_agent_runner_cleanup.py (plain pytest, same venv, temp root and exit file)
+started in the background at 20:33:27; output: /tmp/claude-501/adopt525-rehearsal/project/.graphtraj/core/state/tasks/525-production-adoption-graftling-0-6-1/adoption/G-8267f9e5-20261119T203327/suite.txt ('exit=' when it ends; ~25 min with 6 shards)
+成功: 打印 graphtraj 的路径（/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/525-production-adoption-graftling-0-6-1/src/graphtraj）、'graftling 0.6.1 … | 518 _archived_header: True'、新的 pytest temp root、'started in the background'。
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/525-production-adoption-graftling-0-6-1/scripts/adopt-525/steps.zsh V    （G 结束后，即 suite.txt 末行 exit=…: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/525-production-adoption-graftling-0-6-1/scripts/adopt-525/steps.zsh GR）
+## /tmp/claude-501/adopt525-rehearsal/project/.graphtraj/core/state/tasks/525-production-adoption-graftling-0-6-1/adoption/G-8267f9e5-20261119T203327/run.txt
+pytest temp root (new for this run; TMPDIR of every shard): /private/tmp/claude-501/verify-525-G-20261119T203324
+candidate: a6b50dcbf885f13c9b81469e373a404e1ed4fea9 (src/tests/plugins = 8267f9e5) | graftling v0.6.1 483b16a8d6e05b1c866e69439fada8478791f1fb
+REHEARSAL: tests limited to tests/test_agent_runner_cleanup.py (plain pytest, same venv, temp root and exit file)
+## /tmp/claude-501/adopt525-rehearsal/project/.graphtraj/core/state/tasks/525-production-adoption-graftling-0-6-1/adoption/G-8267f9e5-20261119T203327/suite.txt
+ss.............................                                          [100%]
+29 passed, 2 skipped in 134.58s (0:02:14)
+exit=0
+## steps.zsh GR output
+claude: /tmp/claude-501/adopt525-rehearsal/stub/claude -> /private/tmp/claude-501/adopt525-rehearsal/stub/claude | version: 2.1.325 (stub Claude Code) | same as recorded at 00 (2.1.325 (stub Claude Code)): yes
+[GR] Main，G 结束后。把失败逐条归为 known（516 或 523/521/518 被接受的全套结果）或 NEW。对话框: 无。只读。< 10 秒。
+G run: /tmp/claude-501/adopt525-rehearsal/project/.graphtraj/core/state/tasks/525-production-adoption-graftling-0-6-1/adoption/G-8267f9e5-20261119T203327
+pytest temp root (new for this run; TMPDIR of every shard): /private/tmp/claude-501/verify-525-G-20261119T203324
+candidate: a6b50dcbf885f13c9b81469e373a404e1ed4fea9 (src/tests/plugins = 8267f9e5) | graftling v0.6.1 483b16a8d6e05b1c866e69439fada8478791f1fb
+REHEARSAL: tests limited to tests/test_agent_runner_cleanup.py (plain pytest, same venv, temp root and exit file)
+ss.............................                                          [100%]
+29 passed, 2 skipped in 134.58s (0:02:14)
+exit=0
+known source 523 F: 2 failures listed; files read: 1/1
+known source 521 F: 1 failures listed; files read: 1/1
+known source 518 G: 0 failures listed; files read: 7/7
+known source 516: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md present; 6 test ids, 2 files, clock message
+G summary lines: ['29 passed, 2 skipped in 134.58s (0:02:14)']
+G failures: 0 | NEW: 0 | run ended: yes
+CHECK 525 G no NEW failure (516 and the accepted 523/521/518 runs are known): PASS
+
+----- 复制给 Main 的摘要（GR）-----
+G run: /tmp/claude-501/adopt525-rehearsal/project/.graphtraj/core/state/tasks/525-production-adoption-graftling-0-6-1/adoption/G-8267f9e5-20261119T203327
+pytest temp root (new for this run; TMPDIR of every shard): /private/tmp/claude-501/verify-525-G-20261119T203324
+REHEARSAL: tests limited to tests/test_agent_runner_cleanup.py (plain pytest, same venv, temp root and exit file)
+29 passed, 2 skipped in 134.58s (0:02:14)
+known source 523 F: 2 failures listed; files read: 1/1
+known source 521 F: 1 failures listed; files read: 1/1
+known source 518 G: 0 failures listed; files read: 7/7
+known source 516: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md present; 6 test ids, 2 files, clock message
+G summary lines: ['29 passed, 2 skipped in 134.58s (0:02:14)']
+G failures: 0 | NEW: 0 | run ended: yes
+CHECK 525 G no NEW failure (516 and the accepted 523/521/518 runs are known): PASS
+-----
+成功: 'CHECK 525 G no NEW failure …: PASS'（每个失败都是 'known (来源)'）；'run ended: yes'。PENDING: G 还在运行，稍后重跑 GR。NEW: 交 Leader（可先对该测试单独重跑一次，按 516 的做法记录）。
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/525-production-adoption-graftling-0-6-1/scripts/adopt-525/steps.zsh Vc

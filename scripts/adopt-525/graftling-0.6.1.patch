@@ -1,0 +1,97 @@
+From 483b16a8d6e05b1c866e69439fada8478791f1fb Mon Sep 17 00:00:00 2001
+From: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 19:45:00 +0900
+Subject: [PATCH] graftling 0.6.1 (525)
+
+The change since 0.6.0 is 518's header-only native Session lookup, released
+as 0.6.1. It changes no public name, result or archive format and returns the
+same results, so it is compatible by section 7 and raises the patch version.
+Package, plugin and npm manifests and the CHANGELOG name 0.6.1.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/graftling/CHANGELOG.md                        | 15 +++++++++++++++
+ src/graftling/__init__.py                         |  2 +-
+ .../claude-plugin/.claude-plugin/plugin.json      |  2 +-
+ src/graftling/dsh/package.json                    |  2 +-
+ src/graftling/pi/package.json                     |  2 +-
+ 5 files changed, 19 insertions(+), 4 deletions(-)
+
+diff --git a/src/graftling/CHANGELOG.md b/src/graftling/CHANGELOG.md
+index 309b4e7..5f534f1 100644
+--- a/src/graftling/CHANGELOG.md
++++ b/src/graftling/CHANGELOG.md
+@@ -12,6 +12,21 @@ version that identifies everything listed under it.
+ 
+ The numbers in parentheses are the project's Task numbers.
+ 
++## 0.6.1 (compatible)
++
++- A native Session lookup reads only archive headers (518). `SessionArchive.native_header`,
++  which `find_session` uses for every `session_read` by native ID and Claude collection
++  uses when a Session starts, decoded the whole first line of every archive under the
++  root to take its header. That line also holds the archive's resolved observations, so
++  each lookup decoded them all: in one store of 1490 archives (13 GB, 5.09 GB of it on
++  first lines) a lookup took 30.7 s CPU, now 0.17 s. The header is now decoded from the
++  line's compact prefix (`{"archiveVersion":1,"header":...}`); any other shape, or a
++  header that does not decode there, is read whole as before, with the same errors.
++  Opening an archive still reads and validates all of it. No public name, argument,
++  result, error or archive format changes; the results are the same, only faster, so
++  the change is compatible (section 7 of the public interface). GraphTraj's range
++  `graftling>=0.6.0,<0.7` includes it.
++
+ ## 0.6.0 (incompatible)
+ 
+ graftling's own MCP server is named `graftling` on every Runtime (513). Claude Code,
+diff --git a/src/graftling/__init__.py b/src/graftling/__init__.py
+index 8a253b5..18dab7b 100644
+--- a/src/graftling/__init__.py
++++ b/src/graftling/__init__.py
+@@ -12,7 +12,7 @@ this file; anything it does not list is internal.
+ 
+ # The only definition of the distribution version; packaging and every
+ # runtime report (MCP serverInfo, Codex clientInfo) read it from here.
+-__version__ = "0.6.0"
++__version__ = "0.6.1"
+ 
+ from importlib import import_module
+ 
+diff --git a/src/graftling/claude-plugin/.claude-plugin/plugin.json b/src/graftling/claude-plugin/.claude-plugin/plugin.json
+index 4821472..def4def 100644
+--- a/src/graftling/claude-plugin/.claude-plugin/plugin.json
++++ b/src/graftling/claude-plugin/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "graftling",
+-  "version": "0.6.0",
++  "version": "0.6.1",
+   "description": "Make this Claude Code Session the host of child Agents through the agents tool. Needs the graftling wheel installed in a Python 3.12+ environment; set GRAFTLING_PYTHON to its python.",
+   "mcpServers": {
+     "agents": {
+diff --git a/src/graftling/dsh/package.json b/src/graftling/dsh/package.json
+index 663cba5..d17d2ee 100644
+--- a/src/graftling/dsh/package.json
++++ b/src/graftling/dsh/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "graftling-dsh",
+-  "version": "0.6.0",
++  "version": "0.6.1",
+   "private": true,
+   "type": "module",
+   "main": "plugin.mjs",
+diff --git a/src/graftling/pi/package.json b/src/graftling/pi/package.json
+index 41e4c87..cf1a56e 100644
+--- a/src/graftling/pi/package.json
++++ b/src/graftling/pi/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "graftling-pi",
+-  "version": "0.6.0",
++  "version": "0.6.1",
+   "private": true,
+   "description": "Graftling for Pi: start child Agents on any configured Runtime from a Pi Session.",
+   "keywords": ["pi-package"],
+-- 
+2.50.1 (Apple Git-155)
+

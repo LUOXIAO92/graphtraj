@@ -64,7 +64,10 @@ def test_task_free_child_launches_messages_and_continues(
     assert filesystem['denyWrite'][0] == pi_environment['agent_dir'] and filesystem['denyWrite'][-1] == str(locked)
     assert not any(Path(path).name in {'.graphtraj', '.codex', 'config.yml', 'roles.yml', 'hooks'}
                    for paths in filesystem.values() for path in paths)
-    directory = next((data / 'native').iterdir())
+    # native/ also holds files such as graftling's .gitignore; the one member is the only directory.
+    directories = [path for path in (data / 'native').iterdir() if path.is_dir()]
+    assert len(directories) == 1, sorted(path.name for path in (data / 'native').iterdir())
+    directory = directories[0]
     argv = json.loads((directory / 'pi-process.json').read_text())['argv']
     assert argv[:7] == [request['executable'], '--mode', 'rpc', '--provider', 'deepseek', '--model', 'deepseek-flash']
     assert argv[-2:] == ['--extension', str(Path(execution.__file__).with_name('extension.mjs'))]

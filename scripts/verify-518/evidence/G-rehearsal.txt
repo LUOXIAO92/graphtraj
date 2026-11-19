@@ -1,0 +1,26 @@
+# G/GC rehearsal (Engineer sandbox): from an empty directory, VERIFY518_T/OUT/PR in TMPDIR; zsh -n OK. In the sandbox, sysctl and ps are blocked (quiet check prints that); on Main's host they work.
+== [GC] GraphTraj full suite of the Worktree HEAD with graftling ed19e48 as a wheel (6 shards, --timeout 1500, -rA, --collect-only, foreground). Dialog: none.
+pytest temp: $TMPDIR (outside the Harness)
+sysctl: sysctl fmt -1 1024 1: Operation not permitted
+load average: 
+quiet:2: operation not permitted: ps
+graftling wheel source: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling at commit ed19e48f0d9c0e6e0a5fd1ff69b0ed4e8f2dcd7a (git archive into $TMPDIR/rg/t/graftling-ed19e48; not the working tree)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/518-worker-cpu-after-child-create/src/graphtraj/__init__.py
+graftling $TMPDIR/rg/t/venv-gt-73f31c39-gl-ed19e48/lib/python3.13/site-packages/graftling/__init__.py 0.6.0 | built from commit ed19e48f0d9c0e6e0a5fd1ff69b0ed4e8f2dcd7a
+518 header-only lookup present: True
+ABNORMAL $TMPDIR/rg/out/GC-73f31c39-gl-ed19e48-234306/shards/shard-5.log: exit 0
+no tests ran
+logs: $TMPDIR/rg/out/GC-73f31c39-gl-ed19e48-234306/shards
+exit=1
+(run_test_shards counts no passed tests under --collect-only, so it prints ABNORMAL/'no tests ran' for every shard; expected here)
+collected per shard (exit 0 each expected, no 'error' lines):
+  shard-0.log: 730 tests collected in 1.50s 
+  shard-1.log: 523 tests collected in 1.44s 
+  shard-2.log: 484 tests collected in 1.48s 
+  shard-3.log: 725 tests collected in 1.49s 
+  shard-4.log: 539 tests collected in 1.44s 
+  shard-5.log: 637 tests collected in 1.50s 
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/518-worker-cpu-after-child-create/scripts/verify-518/steps.zsh G
+# R after GC (R reads only G-* results):
+== [R] results. Dialog: none.
+no G result under $TMPDIR/rg/out yet; run: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/518-worker-cpu-after-child-create/scripts/verify-518/steps.zsh G

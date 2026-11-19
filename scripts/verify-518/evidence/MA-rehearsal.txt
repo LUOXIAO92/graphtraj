@@ -1,0 +1,14 @@
+# MA rehearsal (Engineer sandbox, 23:04): zsh steps.zsh MA from an empty directory with VERIFY518_T/OUT/PR in TMPDIR and VERIFY518_ARCHIVE_HARNESS=<synthetic root: bench518.py seed, 1490 archives, 5.10 GB first lines>; zsh -n OK. sysctl is blocked in the sandbox only.
+pytest temp: $TMPDIR (outside the Harness)
+graftling-after: a51e100 + ed19e48f0d9c at $TMPDIR/r518ma/t/graftling-after/src
+load average:  (another run on the host only slows the wall times)
+graftling imported from: $TMPDIR/r518ma/t/graftling-after/src/graftling/__init__.py
+Session archives: 1490, 5.10 GB; first lines 5.10 GB, of which headers 0.80 MB
+fresh SessionArchive(root).native_header (as find_session / Claude collection), run 1: 0.12 s CPU, 0.20 s wall (found None)
+fresh SessionArchive(root).native_header (as find_session / Claude collection), run 2: 0.10 s CPU, 0.10 s wall (found None)
+find_session by a missing native ID (one session_read): 0.09 s CPU, 0.09 s wall (found None)
+reading only each header (64 KiB prefix): 0.05 s CPU, 0.05 s wall
+Success: 'graftling imported from: $TMPDIR/r518ma/t/graftling-after/src/graftling/__init__.py', the same lines as M (archive sizes, two
+'fresh ... native_header' runs, 'find_session by a missing native ID', 'reading only each header'). Nothing
+is written outside $TMPDIR/r518ma/t/graftling-after. Compare with M.txt (BEFORE: about 30 s CPU per lookup).
+next: report $TMPDIR/r518ma/out/MA.txt to the Leader

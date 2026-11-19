@@ -1,0 +1,26 @@
+# Read only: 10 s windows above 0.5 CPU in each retained production Nw468-ps.txt (bursts518.py)
+478-production-adoption-466-477: 44 samples over 433s, total 179 CPU-s; child created ~  101s, ended ~  262s
+   burst     0s ..    40s:  35.5 CPU-s (0.88)
+   burst    91s ..   131s:  35.7 CPU-s (0.89)
+   burst   262s ..   342s:  77.7 CPU-s (0.97)
+492-production-adoption-480-487: 80 samples over 796s, total 283 CPU-s; child created ~  141s, ended ~  353s
+   burst     0s ..    40s:  37.0 CPU-s (0.91)
+   burst   121s ..   172s:  42.2 CPU-s (0.84)
+   burst   373s ..   544s: 158.3 CPU-s (0.93)
+497-production-adoption-488-495: 66 samples over 656s, total 269 CPU-s; child created ~  121s, ended ~  282s
+   burst     0s ..    40s:  35.8 CPU-s (0.89)
+   burst   101s ..   141s:  37.0 CPU-s (0.92)
+   burst   282s ..   464s: 166.6 CPU-s (0.92)
+499-production-adoption-496-498: 62 samples over 615s, total 278 CPU-s; child created ~  121s, ended ~  293s
+   burst     0s ..    51s:  42.0 CPU-s (0.83)
+   burst   111s ..   152s:  38.6 CPU-s (0.96)
+   burst   303s ..   333s:  28.6 CPU-s (0.95)
+   burst   353s ..   494s: 132.3 CPU-s (0.94)
+503-production-adoption-graftling-split: 67 samples over 665s, total 259 CPU-s; child created ~  101s, ended ~  282s
+   burst     0s ..    40s:  36.0 CPU-s (0.89)
+   burst    81s ..   121s:  37.9 CPU-s (0.94)
+   burst   292s ..   443s: 145.1 CPU-s (0.96)
+515-production-adoption-mcp-server-names: 67 samples over 666s, total 259 CPU-s; child created ~  101s, ended ~  282s
+   burst     0s ..    30s:  29.1 CPU-s (0.96)
+   burst    91s ..   131s:  38.7 CPU-s (0.96)
+   burst   292s ..   454s: 151.6 CPU-s (0.94)

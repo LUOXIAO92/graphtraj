@@ -1,0 +1,11 @@
+# 518 sandbox benchmark, 2026-11-18 22:55 JST; synthetic archives seeded by: bench518.py seed <ROOT> 1490 3.42
+== BEFORE (production graftling 0.6.0 = a51e100): graftling /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py; 1490 archives, first lines 5.10 GB
+  fresh native_header (missing Session), run 1:   13.39 s CPU   14.21 s wall -> None
+  fresh native_header (missing Session), run 2:   13.70 s CPU   15.54 s wall -> None
+  find_session by native ID, run 1:   13.75 s CPU   15.60 s wall -> claude:51800488-0000-4000-8000-000000000488
+  find_session by native ID, run 2:   13.82 s CPU   15.67 s wall -> claude:51800488-0000-4000-8000-000000000488
+== AFTER (agent/518-archive-header-lookup ed19e48): graftling /private/tmp/claude-501/g518/graftling/src/graftling/__init__.py; 1490 archives, first lines 5.10 GB
+  fresh native_header (missing Session), run 1:    0.10 s CPU    0.12 s wall -> None
+  fresh native_header (missing Session), run 2:    0.09 s CPU    0.09 s wall -> None
+  find_session by native ID, run 1:    0.10 s CPU    0.10 s wall -> claude:51800488-0000-4000-8000-000000000488
+  find_session by native ID, run 2:    0.11 s CPU    0.11 s wall -> claude:51800488-0000-4000-8000-000000000488

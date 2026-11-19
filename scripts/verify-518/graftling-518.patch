@@ -1,0 +1,166 @@
+From ed19e48f0d9c0e6e0a5fd1ff69b0ed4e8f2dcd7a Mon Sep 17 00:00:00 2001
+From: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 22:53:45 +0900
+Subject: [PATCH] A native Session lookup reads only archive headers, not the
+ observations on their first lines (518)
+
+SessionArchive.native_header (used by find_session for every session_read by
+native ID and by Claude collection when a Session starts) decoded the whole
+first line of every archive under the root to take its header. That line also
+holds the archive's resolved observations: in production 5.09 GB of 13 GB over
+1490 archives, about 30 s CPU per lookup, which made a member's Worker run at
+~100% for 30-40 s at its start, at an agents child's creation, and for each
+session_read. Each header is now decoded from the line's compact prefix
+({"archiveVersion":1,"header":...}); any other shape, or a header that does
+not decode, is read whole as before, with the same errors. Opening an archive
+still reads and validates all of it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/graftling/sessions/archive.py   | 37 ++++++++++++--
+ tests/test_archive_header_lookup.py | 78 +++++++++++++++++++++++++++++
+ 2 files changed, 110 insertions(+), 5 deletions(-)
+ create mode 100644 tests/test_archive_header_lookup.py
+
+diff --git a/src/graftling/sessions/archive.py b/src/graftling/sessions/archive.py
+index 1860d58..f0a6808 100644
+--- a/src/graftling/sessions/archive.py
++++ b/src/graftling/sessions/archive.py
+@@ -111,6 +111,37 @@ def _replace(path: Path, content: bytes) -> None:
+             temporary.unlink(missing_ok=True)
+ 
+ 
++# How every first line this module writes begins (``_encode`` is compact, ``archiveVersion`` and ``header`` lead).
++_HEADER_PREFIX = b'{"archiveVersion":1,"header":'
++_HEADER_READ = 65536
++
++
++def _archived_header(path: Path) -> dict:
++    """Return one archive's header without decoding the rest of its first line.
++
++    That line also holds every resolved observation, often half the archive, and a
++    lookup over all archives needs only their headers (518). A line in any other
++    shape, or a header that does not decode from its prefix, is read whole as
++    before, with the same errors. Opening the archive itself still reads it all.
++    """
++    with path.open('rb') as stream:
++        data = stream.read(_HEADER_READ)
++        while data.startswith(_HEADER_PREFIX):
++            line, newline, _ = data.partition(b'\n')
++            try:
++                return json.JSONDecoder().raw_decode(line.decode('utf-8'), len(_HEADER_PREFIX))[0]
++            except ValueError:
++                more = b'' if newline else stream.read(_HEADER_READ)
++                if not more:
++                    break
++                data += more
++    with path.open(encoding='utf-8') as stream:
++        metadata = json.loads(next(stream))
++    if metadata.get('archiveVersion') != 1:
++        raise ValueError('Unsupported Session archive version.')
++    return metadata['header']
++
++
+ class _Same:
+     """A list's items, equal to another only if it holds the very same objects."""
+ 
+@@ -762,11 +793,7 @@ class SessionArchive:
+         if revision != self._native_revision:
+             headers = {}
+             for path in directory.glob('*/session.jsonl'):
+-                with path.open(encoding='utf-8') as stream:
+-                    metadata = json.loads(next(stream))
+-                if metadata.get('archiveVersion') != 1:
+-                    raise ValueError('Unsupported Session archive version.')
+-                header = upgrade_header(metadata['header'])
++                header = upgrade_header(_archived_header(path))
+                 native = header.get('native', {})
+                 key = (native.get('runtime'), native.get('sessionId'), native.get('agentId'))
+                 headers.setdefault(key, {})[header['id']] = header
+diff --git a/tests/test_archive_header_lookup.py b/tests/test_archive_header_lookup.py
+new file mode 100644
+index 0000000..641463e
+--- /dev/null
++++ b/tests/test_archive_header_lookup.py
+@@ -0,0 +1,78 @@
++"""Looking up an archive by native Session reads only archive headers (518).
++
++An archive's first line holds its header and every resolved observation, often
++half the file. ``SessionArchive.native_header`` (and ``find_session``, which uses
++it) needs only the headers of all archives under the root, so a lookup never
++decodes the rest of those lines; opening an archive still reads all of it.
++"""
++import json
++from pathlib import Path
++
++import pytest
++
++from graftling.sessions.archive import JsonlSessionStore, SessionArchive, archive_path
++from graftling.sessions.reading import find_session
++
++
++def header(native: str, archive_id: str | None = None, **extra: object) -> dict:
++    """Return a valid v5 Claude header for native Session ``native``."""
++    return {'version': 5, 'id': archive_id or 'claude:' + native, 'createdAt': 100, 'isSeeded': False,
++            'native': {'runtime': 'claude', 'sessionId': native, 'locator': f'/native/{native}.jsonl'}, **extra}
++
++
++def archive(root: Path, value: dict) -> Path:
++    """Create one archive as graftling writes it and return its file."""
++    path = archive_path(root, value['id'])
++    JsonlSessionStore.create(path, value)
++    return path
++
++
++def first_line(path: Path, replace: tuple[str, str]) -> None:
++    """Rewrite the archive's first line text in place (simulating a damaged or foreign file)."""
++    line, rest = path.read_text(encoding='utf-8').split('\n', 1)
++    assert replace[0] in line
++    path.write_text(line.replace(*replace) + '\n' + rest, encoding='utf-8')
++
++
++def test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened(tmp_path: Path) -> None:
++    """A lookup takes every header without decoding observations; the damaged archive itself still raises."""
++    wanted = archive(tmp_path, header('n-a'))
++    damaged = archive(tmp_path, header('n-b'))
++    # Valid header, then a first-line tail that is not JSON: only the archive's own reads may see it.
++    first_line(damaged, ('"observations":[]', '"observations":[{"unterminated'))
++
++    found = SessionArchive(tmp_path).native_header('claude', 'n-a')
++    assert found == header('n-a')
++    assert SessionArchive(tmp_path).native_header('claude', 'n-b') == header('n-b')
++    assert find_session(tmp_path, 'n-a').path == wanted
++    with pytest.raises(ValueError):
++        JsonlSessionStore(damaged)
++    with pytest.raises(ValueError):
++        find_session(tmp_path, 'n-b')
++
++
++def test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes(tmp_path: Path) -> None:
++    """The same headers give the same answers and errors as reading whole lines."""
++    # A header longer than one read, and a line in another key order, are still found.
++    archive(tmp_path, header('n-big', note='x' * 200_000))
++    reordered = archive(tmp_path, header('n-order'))
++    line, rest = reordered.read_text(encoding='utf-8').split('\n', 1)
++    metadata = json.loads(line)
++    reordered.write_text(json.dumps({'observations': metadata.pop('observations'), **metadata},
++                                    separators=(',', ':')) + '\n' + rest, encoding='utf-8')
++    lookup = SessionArchive(tmp_path)
++    assert lookup.native_header('claude', 'n-big')['note'] == 'x' * 200_000
++    assert lookup.native_header('claude', 'n-order') == header('n-order')
++    assert lookup.native_header('claude', 'n-none') is None
++
++    # Two unrelated archives claiming one native Session remain a conflict.
++    archive(tmp_path, header('n-twice', 'claude:first'))
++    archive(tmp_path, header('n-twice', 'claude:second'))
++    with pytest.raises(ValueError, match='multiple canonical archive IDs'):
++        SessionArchive(tmp_path).native_header('claude', 'n-twice')
++
++    # An unsupported archive version still refuses every lookup.
++    other = archive(tmp_path, header('n-version'))
++    first_line(other, ('{"archiveVersion":1,', '{"archiveVersion":2,'))
++    with pytest.raises(ValueError, match='Unsupported Session archive version'):
++        SessionArchive(tmp_path).native_header('claude', 'n-big')
+-- 
+2.50.1 (Apple Git-155)
+

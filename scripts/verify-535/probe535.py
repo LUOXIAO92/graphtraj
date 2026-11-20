@@ -1,6 +1,7 @@
 """Task 535 P / Pr: one real-host probe of Codex's delegation cell (542 Q2 F2, Q4). No product code is changed.
 
-usage: python -I probe535.py send <project> <since epoch> <out json>      (P: the ACTIVE venv's python, cwd = project)
+usage: python -I probe535.py send <project> <since epoch> <out json> [plain|quoted]   (P / P2: the ACTIVE venv's
+       python, cwd = project; P2 = 'quoted': source n535probe2, the same body with every line prefixed '> ')
        python -I probe535.py read <project> <since epoch> <sessions dir> <out json>   (Pr: read only)
 
 send: the Main thread is the session of the last codex:SessionStart claim in <project>'s continuity.jsonl written at
@@ -26,6 +27,14 @@ BODY = '\n'.join([
     '> quoted line', '', f'Facts: execution_id `{"0" * 32}` · outcome `completed`'])
 
 
+def quoted(body: str) -> str:
+    """P2: every line one blockquote line ('>' alone for a blank line)."""
+    return '\n'.join(f'> {line}' if line else '>' for line in body.split('\n'))
+
+
+VARIANTS = {'plain': ('n535probe', BODY), 'quoted': ('n535probe2', quoted(BODY))}
+
+
 def wrapper(source: str, body: str) -> str:
     """542 F2: exactly this layout; the TUI parses it to draw 'Sent by Codex from task <source>'."""
     return (f'<codex_delegation>\n  <source_thread_id>{escape(source)}</source_thread_id>\n'
@@ -45,7 +54,7 @@ def main_claim(project: Path, since: float) -> dict | None:
     return main[-1] if main else None
 
 
-def send(project: Path, since: float, out: Path) -> int:
+def send(project: Path, since: float, out: Path, variant: str = 'plain') -> int:
     from graphtraj.runtimes.codex.app_server import CodexAppServer
     from graphtraj.workspace.runner_project import runtime_executable
 
@@ -56,7 +65,7 @@ def send(project: Path, since: float, out: Path) -> int:
     thread = claim['session']
     home = (claim.get('connection') or {}).get('codex_home') or os.environ.get('CODEX_HOME') or str(Path.home() / '.codex')
     params = {'threadId': thread, 'input': [], 'toolOutput': {
-        'name': 'send_message_to_thread', 'namespace': 'codex_app', 'output': wrapper(SOURCE, BODY)}}
+        'name': 'send_message_to_thread', 'namespace': 'codex_app', 'output': wrapper(*VARIANTS[variant])}}
     print(f'Main thread: {thread} | CODEX_HOME {home}')
     print('toolOutput.output sent:'); print(params['toolOutput']['output'])
     if os.environ.get('VERIFY535_PROBE_STUB'):
@@ -124,8 +133,8 @@ def read(project: Path, since: float, sessions: Path, out: Path) -> int:
 
 if __name__ == '__main__':
     mode = sys.argv[1] if len(sys.argv) > 1 else ''
-    if mode == 'send' and len(sys.argv) == 5:
-        sys.exit(send(Path(sys.argv[2]).resolve(), float(sys.argv[3]), Path(sys.argv[4])))
+    if mode == 'send' and len(sys.argv) in (5, 6) and (sys.argv[5:] or ['plain'])[0] in VARIANTS:
+        sys.exit(send(Path(sys.argv[2]).resolve(), float(sys.argv[3]), Path(sys.argv[4]), *sys.argv[5:]))
     if mode == 'read' and len(sys.argv) == 6:
         sys.exit(read(Path(sys.argv[2]).resolve(), float(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5])))
     print(__doc__)

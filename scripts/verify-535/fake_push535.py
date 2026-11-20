@@ -40,8 +40,7 @@ def main(out: Path, project: Path, session: str) -> int:
                 'execution': EXECUTION})
     [params] = captured
     rows = [{'type': 'session_meta', 'payload': {'id': session, 'cwd': str(project)}},
-            {'type': 'response_item', 'payload': {'type': 'function_call_output', 'name': params['toolOutput']['name'],
-                                                  'output': params['toolOutput']['output']}}]
+            {'type': 'response_item', 'payload': {'type': 'function_call_output', **params['toolOutput']}}]
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows), encoding='utf-8')
     print('captured toolOutput (first line):', params['toolOutput']['output'].splitlines()[0])

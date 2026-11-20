@@ -19,7 +19,7 @@ GLDEV=${VERIFY535_GLDEV:-$H/.graphtraj/core/worktrees/graftling-dev}   # baselin
 GLREPO=${VERIFY535_GLREPO:-$WT/.scratch/graftling}    # untracked clone (its git dir: $WT/.scratch/graftling-git)
 GTBASE=8ac35e3195f3735b9742a7beff3842333cb4e48a       # GraphTraj dev the Worktree branched from
 GLBASE=f67d147a222d7db214ecad14d24809debad999a4       # graftling dev (533's notice_text)
-GLC=${VERIFY535_GLC:-87d83d68d55615c15f5ca3fd3f4ba200c0c27349}   # candidate graftling (send_host_event text)
+GLC=${VERIFY535_GLC:-ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7}   # candidate graftling (send_host_event text + delegation_from; on dev fc081a3f)
 GTFILES=src/graphtraj/runtimes/codex/display_hook.py,src/graphtraj/runtimes/codex/host_events.py,tests/codex_stdio_peer.py,tests/test_codex_agent_display.py,tests/test_codex_main_root_notice_401.py,tests/test_current_host_events.py,tests/test_mcp_host_tools.py
 BASE=${VERIFY535_BASE:-$H/tmp/535}                    # scratch venvs and wheels (Main creates it)
 W=${VERIFY535_W:-$H/.graphtraj/core/state/tasks/535-codex-main-agents-message-display/realhost/535}   # raw output
@@ -162,10 +162,11 @@ step_B() {
   print "GraphTraj product files changed $GTBASE..HEAD: ${(j:, :)${(f)prod}}"
   [[ ${(j:,:)${(f)prod}} == $GTFILES ]] || { print "STOP: expected exactly $GTFILES"; return 1; }
   print "CHECK 535 GraphTraj product diff is exactly the 535 files: PASS"
-  print "graftling files changed $GLBASE..$GLC: $(git -C $GLREPO diff --name-only $GLBASE $GLC | tr '\n' ' ')"
+  print "graftling files changed by 535 (dev fc081a3f..$GLC): $(git -C $GLREPO diff --name-only fc081a3f $GLC | tr '\n' ' ')"
   build cand $WT HEAD $GLREPO $GLC || return 1
   (cd $BASE && $BASE/cand/venv/bin/python -I -c 'import inspect; from graftling.codex.app_server import CodexAppServer
-print("candidate send_host_event takes text:", "text" in inspect.signature(CodexAppServer.send_host_event).parameters)')
+p = inspect.signature(CodexAppServer.send_host_event).parameters
+print("candidate send_host_event takes text:", "text" in p, "| delegation_from:", "delegation_from" in p)')
 }
 
 step_V() {  # $1 = base (Vb) | cand (V)

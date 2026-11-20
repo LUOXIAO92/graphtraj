@@ -75,7 +75,7 @@ ok = sorted(h) == ["PostToolUse", "SessionStart", "Stop"] and cmd("SessionStart"
   and cmd("PostToolUse") == cmd("Stop") == ["graphtraj.runtimes.codex.display_hook"]
 print("hooks.json:", {e: cmd(e) for e in sorted(h)}); sys.exit(0 if ok else 1)' $F/vproject/.codex/hooks.json
 check "Vb: stale main-sessions cleared; fresh child name in the prompt" sh -c "[ ! -e $F/vproject/.graphtraj/runner/main-sessions ] && grep -qE 'child name for this run .*: n535[0-9]{4}' $F/Vb.out && grep -q \"name \$(cat $F/w/child-name)\" $F/w/V-prompt.txt"
-S B > $F/B.out 2>&1; check "B: exact 535 diff, candidate wheels + venv, send_host_event takes text" sh -c "grep -q 'CHECK 535 GraphTraj product diff is exactly the 535 files: PASS' $F/B.out && grep -q 'venv pip check rc=0' $F/B.out && grep -q 'candidate send_host_event takes text: True' $F/B.out"
+S B > $F/B.out 2>&1; check "B: exact 535 diff, candidate wheels + venv, send_host_event takes text" sh -c "grep -q 'CHECK 535 GraphTraj product diff is exactly the 535 files: PASS' $F/B.out && grep -q 'venv pip check rc=0' $F/B.out && grep -q 'candidate send_host_event takes text: True | delegation_from: True' $F/B.out"
 grep -E '^GraphTraj |^graftling |files changed' $F/B.out
 S V > $F/V.out 2>&1; check "V: same hooks.json as Vb (no new hook review), active -> cand, role PASS" sh -c "cmp -s $F/hooks-vb.json $F/vproject/.codex/hooks.json && grep -q 'active -> $F/base/cand' $F/V.out && grep -q 'CHECK 535 child role resolves: PASS' $F/V.out"
 # Vr picks the MAIN's rollout by its continuity claim, even with a NEWER decoy rollout of the same cwd (a child's).
@@ -92,7 +92,7 @@ S Vr > $F/Vr-old.out 2>&1; check "Vr picks the Main's rollout (not the newer dec
 grep -E 'Main session|CHECK' $F/Vr-old.out | head -7
 rm $R/rollout-*.jsonl
 push cand rollout-main-new.jsonl $MAIN; sleep 1; push base rollout-decoy-old.jsonl $DECOY
-S Vr > $F/Vr-new.out 2>&1; check "Vr picks the Main's rollout (not the newer decoy) and PASSes on the CANDIDATE push" sh -c "grep -q 'Main session $MAIN: rollout .*rollout-main-new.jsonl' $F/Vr-new.out && grep -q '^CHECK 535 notices: PASS' $F/Vr-new.out"
+S Vr > $F/Vr-new.out 2>&1; check "Vr picks the Main's rollout (not the newer decoy) and PASSes on the CANDIDATE push" sh -c "grep -q 'Main session $MAIN: rollout .*rollout-main-new.jsonl' $F/Vr-new.out && grep -q 'delegation output, namespace codex_app, source agent-n535' $F/Vr-new.out && grep -q '^CHECK 535 notices: PASS' $F/Vr-new.out"
 rm $F/vproject/.graphtraj/runner/main-sessions/continuity.jsonl
 S Vr > $F/Vr-none.out 2>&1; check "Vr without a Main claim: FAIL" grep -q 'FAIL: no codex:SessionStart Main claim' $F/Vr-none.out
 sed -n '/---- notice/,/CHECK 535 notices/p' $F/Vr-new.out

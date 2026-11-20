@@ -19,6 +19,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from xml.sax.saxutils import unescape
 
 FORBIDDEN = ('permissions', 'session_id', 'terminal_confirmed')
 MARKDOWN = re.compile(r'^(#{1,6} |[-*] |\d+\. |> )', re.M)
@@ -94,9 +95,16 @@ def main(sessions: Path, project: Path, child: str, since: float) -> int:
             continue
         payload = record.get('payload') or {}
         kind = f"{record.get('type')}/{payload.get('type')}"
-        if kind == 'response_item/function_call_output' and payload.get('name') == 'graftling':
+        if kind == 'response_item/function_call_output' and payload.get('name') in ('graftling', 'send_message_to_thread'):
             output = payload.get('output')
-            notices.append((number, output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)))
+            output = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
+            if payload.get('name') == 'send_message_to_thread':
+                # 535 phase 2: Codex's delegation output; judge the notice inside it (quoted, XML-escaped).
+                print(f'line {number}: delegation output, namespace {payload.get("namespace")}, '
+                      f'source {re.search(r"<source_thread_id>(.*?)</source_thread_id>", output)[1] if "<source_thread_id>" in output else None}')
+                body = unescape(output.split('<input>', 1)[-1].rsplit('</input>', 1)[0])
+                output = '\n'.join(line[2:] if line.startswith('> ') else line.lstrip('>') for line in body.split('\n'))
+            notices.append((number, output))
         elif 'agents/MCP' in line or 'Second message' in line:
             shown.append((number, kind))
     print(f'pushed notices (function_call_output name graftling): {len(notices)}')

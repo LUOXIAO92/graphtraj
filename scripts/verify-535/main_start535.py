@@ -7,8 +7,10 @@ current_main + recorded_by_main), and for Codex only GraphTraj's SessionStart ho
 records that claim. But a Task-free agents child is `codex exec` in the same project: it runs the same project hook,
 session_entry.session_source classifies source 'exec' as 'main', and the child became the current Main, so the
 notice went to its ended thread (Vb try 1, pre-existing product defect reported by the Leader; not fixed by 535).
-So this wrapper passes the event to graphtraj.runtimes.codex.stop_hook only when the transcript's session_meta
-source is 'cli' (the interactive TUI); any other session gets {}. Stop's completion checker and SessionEnd are not
+So this wrapper returns {} only when the transcript's session_meta source is 'exec' (the agents child) and passes
+every other SessionStart to graphtraj.runtimes.codex.stop_hook: there is no real-host evidence of which source the
+interactive TUI records ('cli', or 'appServer'/'vscode' through the shared app-server), and stop_hook itself still
+refuses unknown sources. Stop's completion checker and SessionEnd are not
 installed: 535 shows messages, not the completion check.
 """
 import json
@@ -32,7 +34,7 @@ def source(transcript: object) -> object:
 def main() -> int:
     raw = sys.stdin.read()
     event = json.loads(raw)
-    if event.get('hook_event_name') != 'SessionStart' or source(event.get('transcript_path')) != 'cli':
+    if event.get('hook_event_name') != 'SessionStart' or source(event.get('transcript_path')) == 'exec':
         print(json.dumps({}))
         return 0
     return subprocess.run([sys.executable, '-m', 'graphtraj.runtimes.codex.stop_hook'], input=raw, text=True).returncode

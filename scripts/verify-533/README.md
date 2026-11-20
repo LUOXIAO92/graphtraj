@@ -2,7 +2,8 @@
 
 Candidates: GraphTraj = this Worktree's HEAD (533 changes no GraphTraj product file; B checks that against
 27029f96), graftling = `f67d147a` on branch `agent/533-claude-main-agents-message-display` of the untracked clone
-`.scratch/graftling` (git dir `.scratch/graftling-git`; bundle in `.state/teams/1/rounds/1/graftling-533.bundle`).
+`.scratch/graftling` (git dir `.scratch/graftling-git`; bundle `.scratch/graftling-533.bundle`, requires 4a002129 = v0.6.2, sha256 a1f694a7…; `.state` refused the
+bundle's lock file).
 
 Main runs `zsh <abs path>/steps.zsh <step>`; every step prints the next command with real values.
 

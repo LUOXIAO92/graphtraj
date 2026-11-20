@@ -11,6 +11,7 @@
 # $GLREPO (branch agent/533-claude-main-agents-message-display, based on graftling dev 4a002129 = v0.6.2).
 # Only rehearse.zsh sets VERIFY533_*. The defaults are the real paths.
 set -u
+setopt no_bg_nice   # background suites must not try to renice themselves (refused in a sandbox)
 SD=${0:A:h}; THIS=${0:A}
 H=${VERIFY533_H:-/Users/luoxiao/workspace/you-are-a-product-architect-delivery}
 WT=${VERIFY533_WT:-$H/.graphtraj/core/worktrees/533-claude-main-agents-message-display}

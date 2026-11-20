@@ -1,0 +1,26 @@
+== [X] rehearsal without the host: build BEFORE and scale it; dispatches nothing. Dialog: none.
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+== before: scratch venv from c917f5fc + graftling from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/graftling + prof531 (writes /tmp/claude-501/r531/t/prof-before)
+graphtraj: /private/tmp/claude-501/r531/t/src-before/src/graphtraj/__init__.py | under /tmp/claude-501/r531/t/src-before: True
+graftling: /private/tmp/claude-501/r531/t/venv-before/lib/python3.13/site-packages/graftling/__init__.py 0.6.2
+profiler hook prof501: not used (531 uses prof531)
+profiler hook prof531: /tmp/claude-501/r531/t/venv-before/lib/python3.13/site-packages/prof531.py
+== before: isolated project /tmp/claude-501/r531/p/project-before (own git, own .graphtraj; Claude settings without the Harness instruction files)
+Create dev from 265fa5dc8a2625f184aa08d67063cccd8fd02b65? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+$ task register --task-file /tmp/claude-501/r531/p/project-before/.graphtraj/probe-501/register.yml -> rc=0
+$ task update --state-file /tmp/claude-501/r531/p/project-before/.graphtraj/probe-501/state.yml -> rc=0
+$ graphtraj doctor -> rc=0
+roles OK
+$ graphtraj task graph -> rc=0
+probe Task ready: YES
+graphtraj project root: /private/tmp/claude-501/r531/p/project-before | isolated: True
+git top level: /private/tmp/claude-501/r531/p/project-before | isolated: True
+CLAUDE.md/CLAUDE.local.md at or above the project: none
+isolation: OK
+== before: seeding 8883 synthetic Worldline events (production has 8883) and production's Runner Session and agents records
+seeded 8883 synthetic events before the project's 2; one read_worldline: 8885 events, 0.27 s CPU, 0.27 s wall
+cloned 524 Runner Session directories, 9109 files, 346.1 MB into /tmp/claude-501/r531/p/project-before/.graphtraj/runner/sessions (paths rewritten into /tmp/claude-501/r531/p/project-before; pids 99999)
+cloned 0 agents records, 0.0 MB into /tmp/claude-501/r531/p/project-before/.graphtraj/swarm/control/agents (same rewriting)
+task graph after seeding: rc=0
+rehearsal OK: /tmp/claude-501/r531/p/project-before

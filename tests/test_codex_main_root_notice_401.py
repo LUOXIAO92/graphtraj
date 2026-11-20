@@ -42,11 +42,14 @@ def sent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list:
         async def __aexit__(self, *_: object) -> None:
             return None
 
-        async def send_host_event(self, session: str, event: dict, text: str) -> dict:
+        async def send_host_event(self, session: str, event: dict, text: str, *, delegation_from: str) -> dict:
             from graftling import notice_text
+            from graphtraj.runtimes.codex.host_events import quoted
 
-            # 535: the Main reads the Runtime-independent notice text; the event is unchanged.
-            assert text == notice_text(event)
+            # 535: the Main reads the Runtime-independent notice text, quoted, as Codex's delegation
+            # output from the child's alias; the event is unchanged.
+            assert text == quoted(notice_text(event)) and text.startswith('> [Graftling notice from ')
+            assert delegation_from == event['alias']
             if Transport.failure is not None:
                 raise Transport.failure
             events.append((self.home, session, event))

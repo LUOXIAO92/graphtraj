@@ -1,0 +1,224 @@
+# zsh scripts/verify-533/rehearse.zsh $TMPDIR/reh533  (2026-11-20 22:42:38 JST; Worktree HEAD 27029f96a92d001eb1e9da6e7dda25bfa34c1777)
+== rehearsal in /private/tmp/claude-501/reh533 (stub claude; real candidate commits)
+REHEARSAL PASS 00: version gate, isolation OK, answer check OK
+answer check (expect clean): OK
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh B
+REHEARSAL PASS B: wheels + venv; candidate mod has ui.place and UserMessage; notice_text
+### candidates: GraphTraj 27029f96a92d001eb1e9da6e7dda25bfa34c1777 (Worktree HEAD) | graftling f67d147a222d7db214ecad14d24809debad999a4
+GraphTraj product diff 27029f96a92d001eb1e9da6e7dda25bfa34c1777..HEAD (533 expects none): none
+graftling f67d147a222d7db214ecad14d24809debad999a4: Match placed rows by id: the validator refuses $.plugin.name as a value (533) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+graftling 0.6.2 /private/tmp/claude-501/reh533/base/venv/lib/python3.13/site-packages/graftling/__init__.py | notice_text: True
+graphtraj /private/tmp/claude-501/reh533/base/venv/lib/python3.13/site-packages/graphtraj/__init__.py
+REHEARSAL PASS V: written mod is 533's; USER command and prompt printed
+REHEARSAL PASS Vr on the new notice text: PASS
+REHEARSAL PASS Vr on the old JSON notice: FAIL (the check can fail)
+REHEARSAL PASS G: TMPDIR outside the Harness printed; both limited runs exit=0
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-533-gt-20261120T224230 | graftling temp /private/tmp/claude-501/verify-533-gl-20261120T224230
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/reh533/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling suite imports /private/tmp/claude-501/reh533/base/gl-src/src/graftling/__init__.py
+==> /private/tmp/claude-501/reh533/w/G-20261120T224230/graphtraj.txt <==
+16 passed in 0.78s
+exit=0
+
+==> /private/tmp/claude-501/reh533/w/G-20261120T224230/graftling.txt <==
+8 passed in 0.18s
+exit=0
+== rehearsal: 6 passed, 0 failed
+===== 00.out
+[00] Main. 预检。对话框: 无。约 1 分钟。
+
+### shell (expect zsh)
+ZSH_VERSION=5.9 | running: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh
+
+### Claude Code version (533 needs >= 2.1.314 for $.ui.place)
+claude: /private/tmp/claude-501/reh533/stub/claude -> /private/tmp/claude-501/reh533/stub/claude | version: 2.1.325 (stub Claude Code)
+Claude Code >= 2.1.314: yes
+
+### isolated project /private/tmp/claude-501/reh533/H/tmp/vproject-533: own git, own .graphtraj (setup by production's graphtraj, read only), own settings (489)
+Setup plan:
+- CREATE: GraphTraj Config: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/config.yml
+- CREATE: GraphTraj Roles: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/roles.yml
+- CREATE: Agent Worktree Directory: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/.agent-worktrees
+- CREATE: Harness State Directory: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/state
+- CREATE: Harness Runner Directory: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/runner
+- CREATE: Create dev branch from 3434fe9c18d762843f84b07587e81200d0d1e993
+- CREATE: Integration Worktree on dev: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/.agent-worktrees/dev
+- CREATE: Integration state link: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/.agent-worktrees/dev/.state -> /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/state
+- CREATE: Integration CONTEXT.md link: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/.agent-worktrees/dev/CONTEXT.md -> /private/tmp/claude-501/reh533/H/tmp/vproject-533/CONTEXT.md
+- CREATE: Integration docs link: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/.agent-worktrees/dev/docs -> /private/tmp/claude-501/reh533/H/tmp/vproject-533/docs
+- REGISTER: Ignore Worktree views in /private/tmp/claude-501/reh533/H/tmp/vproject-533/.git/info/exclude
+Proposed dev base: 3434fe9c18d762843f84b07587e81200d0d1e993
+Create dev from 3434fe9c18d762843f84b07587e81200d0d1e993? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+project settings: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/settings.local.json | claudeMdExcludes 7 | cc-plugin-agents-md@builtin: False
+graphtraj project root: /private/tmp/claude-501/reh533/H/tmp/vproject-533 | git top level: /private/tmp/claude-501/reh533/H/tmp/vproject-533 | CLAUDE.md at or above: none
+isolation: OK
+
+### claude -p one-line answer from the isolated project (expect claude-opus-5-5, logged in, no Harness AGENTS.md)
+claude -p rc=0 (142 = 120 s timeout)
+init record: yes | plugins: [] | cc-plugin-agents-md loaded: NO
+answer: 533-OK claude-opus-5-5, logged in | is_error: False | models: ['claude-opus-5-5']
+instruction files the model reported: ['NONE'] | Harness files among them: none
+echo of the prompt: no | distinctive Harness AGENTS.md line in the answer: no
+host answered: yes | Harness instruction file loaded: NO
+answer check (expect clean): OK
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh B
+===== B.out
+[B] Main. 从确切提交构建两个 wheel 和 scratch venv（/private/tmp/claude-501/reh533/base）。对话框: 无。约 1 分钟。
+
+### candidates: GraphTraj 27029f96a92d001eb1e9da6e7dda25bfa34c1777 (Worktree HEAD) | graftling f67d147a222d7db214ecad14d24809debad999a4
+GraphTraj product diff 27029f96a92d001eb1e9da6e7dda25bfa34c1777..HEAD (533 expects none): none
+graftling f67d147a222d7db214ecad14d24809debad999a4: Match placed rows by id: the validator refuses $.plugin.name as a value (533) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+a98bbab64c934668ec7d5d74f3813360f0f782d599711b50daa681e356479010  graftling-0.6.2-py3-none-any.whl
+c6e07805f7ed499e94ffcf997886d00ce09ab2a98c817c1bd5585c78d05a35e6  graphtraj-0.1.0-py3-none-any.whl
+
+### scratch venv /private/tmp/claude-501/reh533/base/venv: both wheels + production's click, yaml, websockets
+WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found.
+scratch venv pip check rc=0
+graftling 0.6.2 /private/tmp/claude-501/reh533/base/venv/lib/python3.13/site-packages/graftling/__init__.py | notice_text: True
+graphtraj /private/tmp/claude-501/reh533/base/venv/lib/python3.13/site-packages/graphtraj/__init__.py
+candidate mod has ui.place / UserMessage render: True True
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh V    （也可以先 zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh G）
+===== V.out
+[V] Main 准备隔离项目，然后 USER 在真实 claude 里操作一次。对话框: Main 无；USER 一个（信任框）。
+
+### isolated project with the CANDIDATE graphtraj + graftling
+project settings: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/settings.local.json | claudeMdExcludes 7 | cc-plugin-agents-md@builtin: False
+graphtraj project root: /private/tmp/claude-501/reh533/H/tmp/vproject-533 | git top level: /private/tmp/claude-501/reh533/H/tmp/vproject-533 | CLAUDE.md at or above: none
+isolation: OK
+[
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/settings.local.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host/hooks/hooks.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/claude-host/config.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.mcp.json"
+]
+project settings: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/settings.local.json | claudeMdExcludes 7 | cc-plugin-agents-md@builtin: False
+
+### written plugin /private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host
+ui.place calls in the written mod: 1
+UserMessage render in the written mod: yes
+14:const PLUGIN = null;
+17:const SERVER = "graphtraj";
+
+### claude plugin validate (no ✘ expected)
+claude: /private/tmp/claude-501/reh533/stub/claude -> /private/tmp/claude-501/reh533/stub/claude | version: 2.1.325 (stub Claude Code)
+✔ Validation passed (stub)
+
+### USER（真实交互式 Claude Code，Main 做不了）
+1) 在普通 Terminal 运行（一行）:
+   cd /private/tmp/claude-501/reh533/H/tmp/vproject-533 && claude --allowedTools mcp__graphtraj__agents,mcp__graphtraj__tasks
+2) 预期恰好一个原生对话框：插件/hooks（或文件夹）信任框，选 'Yes, proceed'。若出现别的框，按 Esc 并把标题告诉 Main。
+3) 粘贴下面整段提示（也在 /private/tmp/claude-501/reh533/w/V-prompt.txt），回车:
+----- prompt -----
+Use only the mcp__graphtraj__agents tool (not Claude Code's own subagents) for this check of how agents messages are shown.
+1. Call agents with {"action":"discover"} and then describe "create", so you know its arguments.
+2. Create ONE child: runtime claude, name n533, model claude-haiku-5-5 if the create schema allows a model. Its instruction is exactly this Markdown:
+
+## Task 533 display check
+
+Reply **without using any tool**, in Markdown, with:
+- a level-2 heading `## Reply from n533`
+- a bullet list of two items, one holding an inline code span like `agents`
+- one quoted line starting with `> `
+
+Then stop.
+
+3. Do NOT call wait or status. End your turn with one short sentence.
+4. When the completion notice from n533 arrives, call agents send to n533 with exactly this Markdown message, then again do NOT wait, and end your turn:
+
+### Second message
+
+1. Answer again in Markdown: a heading, a two-item list and a `code span`.
+2. Use no tool.
+
+5. When its second completion notice arrives, say DONE-533 and stop. Do not retire the child.
+------------------
+4) 截两张图: (i) 'agents → n533' 那一行（发出的消息，Markdown 渲染）; (ii) 来自 n533 的完成通知（粗体发送方 · completed、Markdown 内容、灰色 Facts 行）。
+5) 看到 DONE-533 后输入 /exit。把截图交给 Main。
+
+==> 下一步 / next（直接粘贴）: Main: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh Vr
+===== Vr-new.out
+[Vr] Main. 只读 USER 那次会话的记录。对话框: 无。<10 秒。
+
+### newest isolated Main transcript: /private/tmp/claude-501/reh533/projects/-x-vproject-533/new.jsonl (read only)
+agents calls by Main: ['create', 'send']
+notice prompts: 1
+--- notice record keys: ['message', 'origin', 'type']; origin-like fields: {"origin": {"kind": "plugin"}}
+title: sender=n533 event=completed execution=e1
+text (first 12 lines):
+  | [Graftling notice from n533 · completed · execution e1]
+  | 
+  | ## Reply from n533
+  | 
+  | - one `agents`
+  | - two
+  | 
+  | > quoted
+  | 
+  | Facts: execution_id `e1` · outcome `completed`
+PASS CHECK 533 Main created a child and sent it a message (agents create and send)
+PASS CHECK 533 at least one notice was pushed into Main
+PASS CHECK 533 each notice names sender and event
+INFO notice senders: ['n533']; child name 'n533' among them: yes
+PASS CHECK 533 a completed notice names its execution (title or Facts line)
+PASS CHECK 533 no 'permissions' / 'terminal_confirmed' / 'session_id' in notice text
+PASS CHECK 533 no escaped JSON (\n, \") in notice text
+PASS CHECK 533 notice content keeps Markdown lines (heading, list or quote at a line start)
+Vr533: PASS (7/7)
+===== Vr-old.out
+[Vr] Main. 只读 USER 那次会话的记录。对话框: 无。<10 秒。
+
+### newest isolated Main transcript: /private/tmp/claude-501/reh533/projects/-x-vproject-533/old.jsonl (read only)
+agents calls by Main: []
+notice prompts: 1
+--- notice record keys: ['message', 'type']; origin-like fields: {}
+title: sender=n533 event=completed execution=e1
+text (first 12 lines):
+  | [Graftling notice from n533 · completed · execution e1]
+  | Session execution ended:
+  | {"session": "s", "execution_id": "e1", "permissions": {}, "last_agent_message": "## x\n- y"}
+FAIL CHECK 533 Main created a child and sent it a message (agents create and send)
+PASS CHECK 533 at least one notice was pushed into Main
+PASS CHECK 533 each notice names sender and event
+INFO notice senders: ['n533']; child name 'n533' among them: yes
+PASS CHECK 533 a completed notice names its execution (title or Facts line)
+FAIL CHECK 533 no 'permissions' / 'terminal_confirmed' / 'session_id' in notice text
+FAIL CHECK 533 no escaped JSON (\n, \") in notice text
+FAIL CHECK 533 notice content keeps Markdown lines (heading, list or quote at a line start)
+Vr533: FAIL (3/7)
+===== G.out
+[G] Main. 两个全套测试（后台）。对话框: 无。立即返回。
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-533-gt-20261120T224230 | graftling temp /private/tmp/claude-501/verify-533-gl-20261120T224230
+
+### venv for GraphTraj: conda --system-site-packages + the candidate graftling wheel + this Worktree editable
+
+### venv for graftling: its archive f67d147a222d7db214ecad14d24809debad999a4 editable (graftling's tests require their own checkout)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/reh533/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling suite imports /private/tmp/claude-501/reh533/base/gl-src/src/graftling/__init__.py
+REHEARSAL: graphtraj tests limited to tests/test_claude_host_context.py tests/test_notice_delivery_372.py; graftling to tests/test_notice_text.py tests/test_claude_main_display.py
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh GR    （两个输出都有 'exit=' 之后）
+===== GR.out
+[GR] Main. 只读。对话框: 无。
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-533-gt-20261120T224230 | graftling temp /private/tmp/claude-501/verify-533-gl-20261120T224230
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/reh533/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling suite imports /private/tmp/claude-501/reh533/base/gl-src/src/graftling/__init__.py
+REHEARSAL: graphtraj tests limited to tests/test_claude_host_context.py tests/test_notice_delivery_372.py; graftling to tests/test_notice_text.py tests/test_claude_main_display.py
+---- graphtraj: /private/tmp/claude-501/reh533/w/G-20261120T224230/graphtraj.txt
+................                                                         [100%]
+16 passed in 0.78s
+exit=0
+---- graftling: /private/tmp/claude-501/reh533/w/G-20261120T224230/graftling.txt
+........                                                                 [100%]
+8 passed in 0.18s
+exit=0
+Judge FAILED/ERROR lines against 516's list (never blocking) and the 532-accepted baseline; any other is NEW.

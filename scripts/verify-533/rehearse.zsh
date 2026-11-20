@@ -42,7 +42,7 @@ runtimes:
     providers:
       anthropic:
         models:
-          opus-5_5: {id: claude-opus-5-5, source: native}
+          opus-5_5: {id: claude-opus-5-5, source: native, supported_efforts: [high, max]}
 EOF
 HOME=$F/home S V > $F/V.out 2>&1; check "V: MCP enabled, child role resolves (no model launched), written mod is 533's, USER command and prompt printed" sh -c "grep -q 'CHECK 533 graphtraj MCP server enabled in project settings: PASS' $F/V.out && grep -q 'CHECK 533 child role resolves: PASS (runtime claude, model claude-opus-5-5' $F/V.out && grep -q 'UserMessage render in the written mod: yes' $F/V.out && grep -q 'claude --allowedTools mcp__graphtraj__agents' $F/V.out && grep -q 'Pass NO model' $F/V.out && ! grep -q haiku $F/V.out"
 grep -E 'CHECK 533|roles file written' $F/V.out

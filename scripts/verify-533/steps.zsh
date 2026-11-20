@@ -175,7 +175,7 @@ print("enabledMcpjsonServers:", en, "| enableAllProjectMcpServers:", s.get("enab
 ok = "graphtraj" in en and "graphtraj" in m
 print("CHECK 533 graphtraj MCP server enabled in project settings:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)' $VPROJECT/.claude/settings.local.json $VPROJECT/.mcp.json || { print "STOP: the graphtraj MCP server is not enabled in $VPROJECT/.claude/settings.local.json"; return 1; }
-  say "child role: ONE role 'claude' (connection claude/anthropic/opus-5_5, effort low, permission_mode auto); resolved without launching a model"
+  say "child role: ONE role 'claude' (connection claude/anthropic/opus-5_5, effort high, permission_mode auto); resolved without launching a model"
   (cd $BASE && $VV/bin/python -I $SD/roles533.py $VPROJECT) || { print "STOP: the child role does not resolve (above); Main reports it to the Leader"; return 1; }
   prompt_text > $W/V-prompt.txt
   say "USER（真实交互式 Claude Code，Main 做不了）"

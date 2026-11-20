@@ -2,13 +2,44 @@
 pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
 69:pythonpath = ["src"]
 pytest imports (pyproject pythonpath = src of this tree): /private/tmp/claude-501/r531/t/old-src/src/graphtraj/runtimes/claude/adapter.py
+>       assert history_reads == []
+E       AssertionError: assert [PosixPath('/...nts_read_n0')] == []
+E         
+E         Left contains one more item: PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-121/test_unprotected_grants_read_n0')
 E         Use -v to get more diff
-
-tests/test_claude_resource_grants_531.py:44: AssertionError
-=========================== short test summary info ============================
+>       assert history_reads == []
+E       AssertionError: assert [PosixPath('/...nts_read_n1')] == []
+E         
+E         Left contains one more item: PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-121/test_unprotected_grants_read_n1')
+E         Use -v to get more diff
+>       assert history_reads == []
+E       AssertionError: assert [PosixPath('/...nts_read_n2')] == []
+E         
+E         Left contains one more item: PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-121/test_unprotected_grants_read_n2')
+E         Use -v to get more diff
+>       assert parsed == []
+E       AssertionError: assert ['research@x1...'research@x3'] == []
+E         
+E         Left contains 3 more items, first extra item: 'research@x1'
+E         Use -v to get more diff
+>       assert parsed == ['research@x1']
+E       AssertionError: assert ['research@x1...'research@x3'] == ['research@x1']
+E         
+E         Left contains 2 more items, first extra item: 'research@x2'
+E         Use -v to get more diff
+>       assert parsed == ['research@x2']
+E       AssertionError: assert ['research@x1...'research@x3'] == ['research@x2']
+E         
+E         At index 0 diff: 'research@x1' != 'research@x2'
+E         Left contains 2 more items, first extra item: 'research@x2'
+E         Use -v to get more diff
 FAILED tests/test_claude_resource_grants_531.py::test_unprotected_grants_read_no_session_record[grants0]
 FAILED tests/test_claude_resource_grants_531.py::test_unprotected_grants_read_no_session_record[grants1]
 FAILED tests/test_claude_resource_grants_531.py::test_unprotected_grants_read_no_session_record[grants2]
-3 failed, 1 passed in 0.26s
-Success: the adapter path under /tmp/claude-501/r531/t/old-src/src, and 'FAILED ... test_unprotected_grants_read_no_session_record[...]'
-(3 failures: history_reads == [root], not []); test_protected_grant_still_needs_an_associated_history passes.
+FAILED tests/test_caller_identity_lock_531.py::test_no_held_lock_parses_no_mapping
+FAILED tests/test_caller_identity_lock_531.py::test_only_the_held_session_is_parsed_and_owns_the_caller
+FAILED tests/test_caller_identity_lock_531.py::test_a_lock_held_for_another_pid_still_owns_nothing
+6 failed, 1 passed in 0.73s
+Success: the adapter path under /tmp/claude-501/r531/t/old-src/src; 'FAILED ... test_unprotected_grants_read_no_session_record[...]' x3
+(history_reads == [root], not []) and the 3 test_caller_identity_lock_531 tests FAILED only at their
+'assert parsed == ...' lines (every Session parsed); 6 failed, 1 passed.

@@ -53,8 +53,8 @@ from graphtraj.workspace.runner_project import discover_project_root
 project = Path(sys.argv[1]).resolve()
 root = discover_project_root(project)
 top = subprocess.run(['git', '-C', str(project), 'rev-parse', '--show-toplevel'], capture_output=True, text=True).stdout.strip()
-upward = [str(p / n) for p in (project, *project.parents) for n in ('AGENTS.md', 'AGENTS.override.md') if (p / n).exists()]
-print(f'graphtraj project root: {root} | git top level: {top} | AGENTS.md at or above: {upward or "none"}')
+upward = [str(p / n) for p in (project, *project.parents) for n in ('AGENTS.md', 'AGENTS.override.md', 'CLAUDE.md', 'CLAUDE.local.md') if (p / n).exists()]
+print(f'graphtraj project root: {root} | git top level: {top} | AGENTS.md/CLAUDE.md/CLAUDE.local.md at or above (Codex Main, Claude child): {upward or "none"}')
 ok = root == project and bool(top) and Path(top).resolve() == project and not upward
 print('isolation:', 'OK' if ok else 'NOT OK')
 sys.exit(0 if ok else 1)
@@ -94,7 +94,7 @@ build() {  # $1 label (base|cand) $2 GraphTraj repo $3 commit $4 graftling repo 
   print -r -- "$3 $5" > $L/commits
   (cd $BASE && $L/venv/bin/python -I -c 'import graftling, graphtraj; print("graftling", graftling.__version__, graftling.__file__); print("graphtraj", graphtraj.__file__)')
 }
-roles() { (cd $BASE && $ACTIVE/venv/bin/python -I $SD/roles535.py $PRODH $VPROJECT $CODEX_MODEL); }
+roles() { (cd $BASE && $ACTIVE/venv/bin/python -I $SD/roles535.py $VPROJECT); }
 codex_files() {  # the isolated project's OWN .codex: graphtraj MCP server + GraphTraj's Codex hooks, all via $ACTIVE
   local PY=$ACTIVE/venv/bin/python
   mkdir -p $VPROJECT/.codex
@@ -105,7 +105,7 @@ prompt_text() {
   cat <<EOF
 Use only the agents tool of the graphtraj MCP server (not Codex's own subagents) for this check of how agents messages are shown.
 1. Call agents with {"action":"discover"} and then describe "create", so you know its arguments.
-2. Create ONE child with only these selections: runtime codex, name $CHILD. Pass NO model, configuration, preset, connection or reasoning effort (the project's one role 'codex' supplies them). If create is refused, report the exact error text and stop; do not retry with other settings. Its instruction is exactly this Markdown:
+2. Create ONE child with only these selections: runtime claude, name $CHILD. Pass NO model, configuration, preset, connection or reasoning effort (the project's one role 'claude' supplies them). If create is refused, report the exact error text and stop; do not retry with other settings. Its instruction is exactly this Markdown:
 
 ## Task 535 display check
 
@@ -175,7 +175,7 @@ step_V() {  # $1 = base (Vb) | cand (V)
   say "$ACTIVE -> $L ($(cat $L/commits)): the isolated project now runs this graphtraj + graftling"
   vproject_init $ACTIVE/venv/bin/graphtraj && isolation $ACTIVE/venv/bin/python || { print "STOP: isolation NOT OK"; return 1; }
   codex_files || { print "STOP: project .codex files not written (above)"; return 1; }
-  say "child role: ONE role 'codex' copied from a production preset (runtime codex, model $CODEX_MODEL; production roles only read); resolved without launching a model"
+  say "child role: ONE role 'claude' (533's: connection claude/anthropic/opus-5_5, effort high, permission_mode auto; a Claude child runs no Codex hook); resolved without launching a model"
   roles || { print "STOP: the child role does not resolve (above); Main reports it to the Leader"; return 1; }
   say "stale Main state of the isolated project (only $VPROJECT/.graphtraj/runner/main-sessions): removed so no continuity redirects the notice"
   local MS=$VPROJECT/.graphtraj/runner/main-sessions
@@ -202,8 +202,10 @@ step_V() {  # $1 = base (Vb) | cand (V)
 }
 
 step_Vr() {
-  say "newest isolated Main rollout under $CODEX_HOME_USED/sessions whose cwd is $VPROJECT (read only)"
-  $CONDA -I $SD/vr535.py $CODEX_HOME_USED/sessions $VPROJECT $CHILD
+  local s=($W/V{base,cand}.start(N.om))
+  [[ -n ${s[1]:-} ]] || { print "no Vb/V start stamp in $W: run Vb or V first"; return 1; }
+  say "the MAIN's rollout: the last codex:SessionStart claim in $VPROJECT/.graphtraj/runner/main-sessions/continuity.jsonl after ${s[1]:t} ($(cat ${s[1]})), its rollout under $CODEX_HOME_USED/sessions (read only)"
+  $CONDA -I $SD/vr535.py $CODEX_HOME_USED/sessions $VPROJECT $CHILD $(cat ${s[1]})
 }
 
 # Full suites against the candidates, background; pytest temp roots under TMPDIR (outside the Harness).

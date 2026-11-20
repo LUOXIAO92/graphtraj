@@ -11,7 +11,7 @@ Main runs `zsh <abs path>/steps.zsh <step>`; every step prints the next command 
 |---|---|---|---|
 | 00 | Main | none | zsh, `claude --version` >= 2.1.314 (else STOP), isolated `/private/tmp/vproject-533` (own git, graphtraj setup by production's graphtraj, read only), `claude -p` answer check (model, login, no Harness AGENTS.md) |
 | B | Main | none | wheels from `git archive` of both exact commits into `<Harness>/tmp/533/wheels`; scratch venv `<Harness>/tmp/533/venv` |
-| V | Main, then USER | USER: one (plugin/hooks or folder trust: 'Yes, proceed') | candidate `configuration --write --claude` into the isolated project; prints the USER command and the prompt; USER takes two screenshots |
+| V | Main, then USER | USER: none expected (folder trusted in try 1; if a folder/MCP/hooks trust dialog still appears, choose its affirmative option and report the title) | candidate `configuration --write --claude` into the isolated project; checks `enabledMcpjsonServers` holds graphtraj; writes ONE role `claude` (connection claude/anthropic/opus-5_5, effort low, permission_mode auto; roles533.py) and resolves it without launching a model; prints the USER command and the prompt (create with runtime + name only); USER takes two screenshots |
 | Vr | Main | none | reads the newest isolated Main transcript; PASS/FAIL observables of the pushed notice text (sender/event/ids, no `permissions`, no escaped JSON, Markdown lines) and of the agents create/send calls |
 | G | Main | none | graphtraj (6 shards) and graftling full suites in the background against the candidates; pytest temp roots under `TMPDIR` (outside the Harness; printed) |
 | GR | Main | none | read only: tails and FAILED/ERROR lines of both suites |

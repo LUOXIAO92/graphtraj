@@ -85,7 +85,7 @@ prompt_text() {
   cat <<EOF
 Use only the mcp__graphtraj__agents tool (not Claude Code's own subagents) for this check of how agents messages are shown.
 1. Call agents with {"action":"discover"} and then describe "create", so you know its arguments.
-2. Create ONE child: runtime claude, name $CHILD, model claude-haiku-5-5 if the create schema allows a model. Its instruction is exactly this Markdown:
+2. Create ONE child with only these selections: runtime claude, name $CHILD. Pass NO model, configuration, preset, connection or reasoning effort (the project's one role 'claude' supplies them). If create is refused, report the exact error text and stop; do not retry with other models or settings. Its instruction is exactly this Markdown:
 
 ## Task 533 display check
 
@@ -159,11 +159,29 @@ step_V() {
   grep -q "component: 'UserMessage'" $P/hooks/host_context.mjs && print "UserMessage render in the written mod: yes" || { print "STOP: the written mod is not 533's"; return 1; }
   grep -nE '^const (PLUGIN|SERVER)' $P/hooks/host_context.mjs
   say "claude plugin validate (no ✘ expected)"; cv; $(claude_bin) plugin validate $P 2>&1 | tail -5
+  say "MCP approval: the project's .claude/settings.local.json must enable the .mcp.json server graphtraj (no separate MCP dialog)"
+  # configuration --write and claude_isolation leave enabledMcpjsonServers unset (try 1 showed the MCP dialog), so
+  # V merges graphtraj into the isolated project's OWN settings (never ~/.claude, never the Harness's).
+  $CONDA -I -c 'import json, sys
+p = sys.argv[1]; s = json.load(open(p)); m = json.load(open(sys.argv[2])).get("mcpServers") or {}
+en = list(s.get("enabledMcpjsonServers") or [])
+if "graphtraj" in m and "graphtraj" not in en:
+    s["enabledMcpjsonServers"] = en + ["graphtraj"]; open(p, "w").write(json.dumps(s, indent=2) + "\n")
+    print("enabledMcpjsonServers: graphtraj added to", p)
+else:
+    print("enabledMcpjsonServers: graphtraj already present (or not in .mcp.json)")
+en = s.get("enabledMcpjsonServers") or []
+print("enabledMcpjsonServers:", en, "| enableAllProjectMcpServers:", s.get("enableAllProjectMcpServers"), "| .mcp.json servers:", sorted(m))
+ok = "graphtraj" in en and "graphtraj" in m
+print("CHECK 533 graphtraj MCP server enabled in project settings:", "PASS" if ok else "FAIL")
+sys.exit(0 if ok else 1)' $VPROJECT/.claude/settings.local.json $VPROJECT/.mcp.json || { print "STOP: the graphtraj MCP server is not enabled in $VPROJECT/.claude/settings.local.json"; return 1; }
+  say "child role: ONE role 'claude' (connection claude/anthropic/opus-5_5, effort low, permission_mode auto); resolved without launching a model"
+  (cd $BASE && $VV/bin/python -I $SD/roles533.py $VPROJECT) || { print "STOP: the child role does not resolve (above); Main reports it to the Leader"; return 1; }
   prompt_text > $W/V-prompt.txt
   say "USER（真实交互式 Claude Code，Main 做不了）"
   print "1) 在普通 Terminal 运行（一行）:"
   print -r -- "   cd $VPROJECT && claude --allowedTools mcp__graphtraj__agents,mcp__graphtraj__tasks"
-  print "2) 预期恰好一个原生对话框：插件/hooks（或文件夹）信任框，选 'Yes, proceed'。若出现别的框，按 Esc 并把标题告诉 Main。"
+  print "2) 预期对话框: 无（上次已信任此文件夹；graphtraj MCP 已在项目设置中启用，见上方 CHECK）。若仍出现信任框（文件夹、MCP server 'graphtraj' 或 hooks），选它的肯定选项（信任/使用，例如 'Yes, I trust this folder' / 'Use this and all future MCP servers'），并把对话框标题告诉 Main。其它任何框按 Esc 并报告标题。"
   print "3) 粘贴下面整段提示（也在 $W/V-prompt.txt），回车:"
   print -- "----- prompt -----"; cat $W/V-prompt.txt; print -- "------------------"
   print "4) 截两张图: (i) 'agents → $CHILD' 那一行（发出的消息，Markdown 渲染）; (ii) 来自 $CHILD 的完成通知（粗体发送方 · completed、Markdown 内容、灰色 Facts 行）。"
@@ -225,7 +243,7 @@ mkdir -p $W
 case ${1:-help} in
   00) print "[00] Main. 预检。对话框: 无。约 1 分钟。"; logged $W/00.txt step_00 && next "zsh $THIS B" ;;
   B)  print "[B] Main. 从确切提交构建两个 wheel 和 scratch venv（$BASE）。对话框: 无。约 1 分钟。"; logged $W/B.txt step_B && next "zsh $THIS V    （也可以先 zsh $THIS G）" ;;
-  V)  print "[V] Main 准备隔离项目，然后 USER 在真实 claude 里操作一次。对话框: Main 无；USER 一个（信任框）。"; logged $W/V.txt step_V ;;
+  V)  print "[V] Main 准备隔离项目，然后 USER 在真实 claude 里操作一次。对话框: Main 无；USER 预期无（文件夹已在第一次尝试时信任）。"; logged $W/V.txt step_V ;;
   Vr) print "[Vr] Main. 只读 USER 那次会话的记录。对话框: 无。<10 秒。"; logged $W/Vr.txt step_Vr ;;
   G)  print "[G] Main. 两个全套测试（后台）。对话框: 无。立即返回。"; logged $W/G.txt step_G ;;
   GR) print "[GR] Main. 只读。对话框: 无。"; logged $W/GR.txt step_GR ;;

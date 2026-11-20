@@ -1,0 +1,84 @@
+.......FFF.                                                              [100%]
+=================================== FAILURES ===================================
+___ test_task_without_local_parent_is_detached_from_its_mapped_remote_parent ___
+
+project = PosixPath('/private/tmp/claude-501/534-old-bt2/test_task_without_local_parent0/target-project')
+remote = PosixPath('/private/tmp/claude-501/534-old-bt2/test_task_without_local_parent0/remote.json')
+
+    def test_task_without_local_parent_is_detached_from_its_mapped_remote_parent(
+        project: Path, remote: Path,
+    ) -> None:
+        """Revising 2 to no parent unlinks #43 from #44 once; local records stay as revised."""
+        _register_summary()
+        _backup_task("2")
+        _backup_task("1")
+        assert json.loads(remote.read_text())["parents"] == {"43": 44}
+    
+        _reparent(_FIRST, None)
+        detached = _backup_task("2")
+>       assert detached["hierarchy"] == [{
+            "parent": None, "child": "2", "outcome": "unlinked",
+            "previous_parent": "1", "previous_parent_issue": 44,
+        }]
+E       AssertionError: assert [] == [{'parent': N...t': '1', ...}]
+E         
+E         Right contains one more item: {'parent': None, 'child': '2', 'outcome': 'unlinked', 'previous_parent': '1', ...}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/534-old/tests/test_github_backup.py:404: AssertionError
+________ test_child_reparented_to_another_mapped_summary_is_moved_once _________
+
+project = PosixPath('/private/tmp/claude-501/534-old-bt2/test_child_reparented_to_anoth0/target-project')
+remote = PosixPath('/private/tmp/claude-501/534-old-bt2/test_child_reparented_to_anoth0/remote.json')
+
+    def test_child_reparented_to_another_mapped_summary_is_moved_once(
+        project: Path, remote: Path,
+    ) -> None:
+        """Both the child's backup and the new summary's backup move a child from a mapped parent."""
+        _register_summary()
+        _operate("task_register", _task(task_id="4", task_name="other", title="Other summary"))
+        numbers = {key: _backup_task(key)["backup"]["issue"]["number"] for key in "2314"}
+        assert json.loads(remote.read_text())["parents"] == {
+            str(numbers["2"]): numbers["1"], str(numbers["3"]): numbers["1"]}
+    
+        _reparent(_FIRST, "4")
+        _reparent(_SECOND, "4")
+        moved = _backup_task("2")
+>       assert moved["hierarchy"] == [{
+            "parent": "4", "child": "2", "outcome": "moved",
+            "previous_parent": "1", "previous_parent_issue": numbers["1"],
+        }]
+E       AssertionError: assert [{'parent': '...ue': 46, ...}] == [{'parent': '...t': '1', ...}]
+E         
+E         At index 0 diff: {'parent': '4', 'child': '2', 'outcome': 'other-parent', 'expected_parent_issue': 46, 'remote_parent_issue': 45} != {'parent': '4', 'child': '2', 'outcome': 'moved', 'previous_parent': '1', 'previous_parent_issue': 45}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/534-old/tests/test_github_backup.py:434: AssertionError
+___ test_task_without_local_parent_under_an_external_issue_is_only_reported ____
+
+project = PosixPath('/private/tmp/claude-501/534-old-bt2/test_task_without_local_parent1/target-project')
+remote = PosixPath('/private/tmp/claude-501/534-old-bt2/test_task_without_local_parent1/remote.json')
+
+    def test_task_without_local_parent_under_an_external_issue_is_only_reported(
+        project: Path, remote: Path,
+    ) -> None:
+        """External #1 is not a mapped Task, so #43 stays under it and nothing is written."""
+        _backup_task("42")
+        document = json.loads(remote.read_text())
+        document["parents"] = {"43": 1}
+        remote.write_text(json.dumps(document))
+    
+        reported = _backup_task("42")
+>       assert reported["hierarchy"] == [{
+            "parent": None, "child": "42", "outcome": "other-parent", "remote_parent_issue": 1}]
+E       AssertionError: assert [] == [{'parent': N...nt_issue': 1}]
+E         
+E         Right contains one more item: {'parent': None, 'child': '42', 'outcome': 'other-parent', 'remote_parent_issue': 1}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/534-old/tests/test_github_backup.py:467: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_github_backup.py::test_task_without_local_parent_is_detached_from_its_mapped_remote_parent
+FAILED tests/test_github_backup.py::test_child_reparented_to_another_mapped_summary_is_moved_once
+FAILED tests/test_github_backup.py::test_task_without_local_parent_under_an_external_issue_is_only_reported
+3 failed, 8 passed in 4.67s

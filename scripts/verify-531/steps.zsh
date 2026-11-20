@@ -130,7 +130,8 @@ member() {  # $1 label
 # G's venv (also Gt's): conda --system-site-packages + production's click/yaml/websockets + graftling wheel built
 # from git archive $GCOMMIT (never the working tree) + this Worktree editable. Sets V.
 g_venv() {
-  local GS=${GCOMMIT[1,8]} SRC=$T/graftling-$GS N=$T/wheels-gl-$GS
+  local GS=${GCOMMIT[1,8]}
+  local SRC=$T/graftling-$GS N=$T/wheels-gl-$GS
   V=$T/venv-g-gl-$GS
   git -C $G cat-file -e $GCOMMIT^{commit} || { print "STOP: graftling $GCOMMIT is not in $G"; return 1; }
   if [[ -x $V/bin/python && -f $V/installed ]]; then print "reusing $V (graftling $GS; this Worktree editable)"

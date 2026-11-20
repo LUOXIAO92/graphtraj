@@ -1,0 +1,14 @@
+== [O] Main or Engineer. The new 531 test against BEFORE c917f5fc (must FAIL there). Dialog: none. ~1 min.
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+69:pythonpath = ["src"]
+pytest imports (pyproject pythonpath = src of this tree): /private/tmp/claude-501/r531/t/old-src/src/graphtraj/runtimes/claude/adapter.py
+E         Use -v to get more diff
+
+tests/test_claude_resource_grants_531.py:44: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_claude_resource_grants_531.py::test_unprotected_grants_read_no_session_record[grants0]
+FAILED tests/test_claude_resource_grants_531.py::test_unprotected_grants_read_no_session_record[grants1]
+FAILED tests/test_claude_resource_grants_531.py::test_unprotected_grants_read_no_session_record[grants2]
+3 failed, 1 passed in 0.26s
+Success: the adapter path under /tmp/claude-501/r531/t/old-src/src, and 'FAILED ... test_unprotected_grants_read_no_session_record[...]'
+(3 failures: history_reads == [root], not []); test_protected_grant_still_needs_an_associated_history passes.

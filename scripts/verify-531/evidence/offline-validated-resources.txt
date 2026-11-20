@@ -1,0 +1,6 @@
+adapter from /private/tmp/claude-501/r531/t/src-before/src/graphtraj/runtimes/claude/adapter.py
+  _validated_resources(0 grants) at 524 Session dirs: 8.60 s CPU
+  _validated_resources(1 grants) at 524 Session dirs: 8.48 s CPU
+adapter from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/531-child-create-runner-record-walk/src/graphtraj/runtimes/claude/adapter.py
+  _validated_resources(0 grants) at 524 Session dirs: 0.00 s CPU
+  _validated_resources(1 grants) at 524 Session dirs: 0.00 s CPU

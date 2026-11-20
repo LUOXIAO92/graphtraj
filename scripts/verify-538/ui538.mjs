@@ -407,6 +407,23 @@ try {
     }
     log('no incoming-notice block (section[data-agent-incoming] / section[data-turn-trigger]) on the page');
   }
+  // 538 r1: where a notice's text is in the DOM at all (S: a relay claimed inside a running turn is a DSH 'context'
+  // node, ContextInjectionRow): every element whose own text starts with a notice title or a relay-sender line,
+  // with whether it is rendered visibly; plus the relay/trigger markers DSH and graftling-dsh put on the page.
+  observed.dom = await page.evaluate(() => {
+    const hits = [];
+    for (const e of document.querySelectorAll('body *')) {
+      const own = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
+      if (!/^\[(Graftling|GraphTraj) notice from |^From session /.test(own)) continue;
+      const box = e.getBoundingClientRect();
+      hits.push({ tag: e.tagName.toLowerCase(), visible: !!e.getClientRects().length && box.height > 0,
+        text: own.slice(0, 120), inThink: !!e.closest('[data-reasoning], [data-process]') });
+    }
+    return { hits, relaySender: document.querySelectorAll('[data-context-relay-sender]').length,
+      turnTrigger: document.querySelectorAll('[data-turn-trigger]').length,
+      agentIncoming: document.querySelectorAll('[data-agent-incoming]').length,
+      contextText: document.querySelectorAll('[data-context-text]').length };
+  }).catch((e) => ({ error: e.message }));
   writeFileSync(join(cfg.out, 'observed.json'), JSON.stringify(observed, null, 2));
   log(`observed: ${JSON.stringify({ tools: observed.tools.map((t) => [t.file, t.inShown, t.send]), notices: observed.notices.map((n) => [n.file, n.graftlingSection, n.showsGraphtrajAsSender, n.adjacentRepeatedLines.length]) })}`);
   phase('shots', true);

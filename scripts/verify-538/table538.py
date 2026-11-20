@@ -27,3 +27,5 @@ for run in ('run1', 'run2'):
             f"\n       {n['file']}: graftling-section={n['graftlingSection']} sender-graphtraj={n['showsGraphtrajAsSender']}"
             f" repeated-lines={n['adjacentRepeatedLines']} markdown-source={n['markdownSource']}"
             for n in o['notices']))
+        if 'dom' in o:
+            print(f"   dom: {o['dom']}")

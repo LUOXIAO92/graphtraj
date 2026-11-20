@@ -1,0 +1,15 @@
+== [GR] Main. Read only. Newest G and Gt; FAILED/ERROR lines classed known (528 accepted G, 516) or NEW. <10 s.
+---- G /tmp/claude-501/r531/out/G-eced68e0-20261120T201043
+pytest temp root: /private/tmp/claude-501/verify-531-G-20261120T201043
+candidate: eced68e06b59eba3c71cda43bc2628457fd84818 | graftling 4a002129f8b97f32980afd59e5a1a64c428fe684
+REHEARSAL: tests limited to tests/test_claude_resource_grants_531.py tests/test_member_history_grants.py (plain pytest, same venv, temp root and exit file)
+.....                                                                    [100%]
+5 passed in 1.05s
+exit=0
+(no FAILED/ERROR lines)
+---- Gt /tmp/claude-501/r531/out/Gt-eced68e0-20261120T200819
+119 passed, 1 skipped in 113.03s (0:01:53)
+exit=0
+(no FAILED/ERROR lines)
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line in G or Gt.
+next: report /tmp/claude-501/r531/out/GR.txt to the Leader

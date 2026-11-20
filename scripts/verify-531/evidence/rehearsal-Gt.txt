@@ -1,0 +1,15 @@
+== [Gt] Main. Focused 531 tests + the 459/495/496/498/501 guarantee tests via G's venv, foreground. Dialog: none. ~3 min.
+uncommitted in src/tests/plugins: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-531-Gt-20261120T200819
+reusing /tmp/claude-501/r531/t/venv-g-gl-4a002129 (graftling 4a002129; this Worktree editable)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/531-child-create-runner-record-walk/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/r531/t/venv-g-gl-4a002129/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+candidate: eced68e06b59eba3c71cda43bc2628457fd84818 | graftling wheel from git archive 4a002129f8b97f32980afd59e5a1a64c428fe684
+files: tests/test_claude_resource_grants_531.py tests/test_claude_runtime.py tests/test_member_history_grants.py tests/test_tool_descendants_459.py tests/test_tool_descendant_argv_refresh_495.py tests/test_tool_descendants_496.py tests/test_tool_descendants_498.py tests/test_delivery_worldline.py
+................................................                         [100%]
+119 passed, 1 skipped in 113.03s (0:01:53)
+exit=0
+(no FAILED/ERROR lines)
+Success: 'N passed' with exit=0 and '(no FAILED/ERROR lines)'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/531-child-create-runner-record-walk/scripts/verify-531/steps.zsh GR  (when G's suite.txt ends with exit=)

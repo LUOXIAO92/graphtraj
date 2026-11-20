@@ -25,15 +25,14 @@ class PiManagedExecution(PiExecution):
         self.independent = False
         self.packages.append(str(Path(__file__).resolve().parents[2]))
 
-        from graftling import default_config
         from graftling.sessions import SessionArchive
-        from graphtraj.interfaces.agents import attachment_private_paths, swarm_root
+        from graphtraj.interfaces.agents import attachment_private_paths, default_archive, swarm_root
 
         project = Path(self.request['harness_root'])
         # The archive resolves attachments against, and keeps private, this project's .codex.
         self.request.setdefault('project_root', str(project))
         root = swarm_root(project)
-        self.archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
+        self.archive = SessionArchive(root, **default_archive(root))
         self.archive_private_paths = attachment_private_paths(project, self.request.get('worktree_path'))
         # The agents driver path replaces this with its own receiver.
         self.parent_notice = self._notify_direct_parent

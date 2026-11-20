@@ -152,10 +152,29 @@ def archive_choices(root: Path) -> dict[str, bool]:
             **explicit_choices(swarm_root(root))}
 
 
+def default_archive(directory: Path) -> dict[str, bool]:
+    """Turn archiving on at first use in GraphTraj's own data root, kept out of git.
+
+    ``directory`` is ``swarm_root``, which GraphTraj chooses, never the user.
+    In a project that is a git work tree, DSH's per-turn changes card lists
+    every file git does not ignore, so the first agents call would show the
+    data root's ``config.yml`` and ``live/config.lock`` as edits (530). A
+    ``.gitignore`` holding ``*`` ignores the data root and itself; an existing
+    one is kept and a failed write never blocks the call.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        with (directory / ".gitignore").open("x", encoding="utf-8") as stream:
+            stream.write("*\n")
+    except OSError:
+        pass
+    return default_config(directory, **ARCHIVE_DEFAULTS)
+
+
 def configured_archive(root: Path) -> ConfiguredSessionArchive:
     """Bind GraphTraj to the tool-owned archive choices without overriding users."""
     directory = swarm_root(root)
-    default_config(directory, **ARCHIVE_DEFAULTS)
+    default_archive(directory)
     return ConfiguredSessionArchive(directory, **read_config(directory))
 
 
@@ -248,7 +267,7 @@ class GraphTrajAgents:
                                     roots=MainRoots(runner_directory(root)),
                                     event_receiver=self._main_notice, request_notices="decisions",
                                     session_reads=self._project_reads)
-        default_config(swarm_root(root), save_normalized_sessions=True)
+        default_archive(swarm_root(root))
 
     def _main_notice(self, notice: dict) -> bool | str:
         """Queue a Main-created root Agent's end or question for the Main now in control.

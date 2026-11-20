@@ -15,7 +15,7 @@ REHEARSAL PASS Vb: stale main-sessions cleared; fresh child name in the prompt
 REHEARSAL PASS B: exact 535 diff, candidate wheels + venv, send_host_event takes text
 GraphTraj product files changed 8ac35e3195f3735b9742a7beff3842333cb4e48a..HEAD: src/graphtraj/runtimes/codex/display_hook.py, src/graphtraj/runtimes/codex/host_events.py, tests/codex_stdio_peer.py, tests/test_codex_agent_display.py, tests/test_codex_main_root_notice_401.py, tests/test_current_host_events.py, tests/test_mcp_host_tools.py
 graftling files changed f67d147a222d7db214ecad14d24809debad999a4..87d83d68d55615c15f5ca3fd3f4ba200c0c27349: src/graftling/CHANGELOG.md src/graftling/PUBLIC_API.md src/graftling/codex/app_server.py tests/test_codex_host_event_text.py 
-GraphTraj 04422f990ec29e19c21048db1bc2ec8e4e9e41dc verify-535: the Main claim skips only an exec child; every other source reaches stop_hook (535)
+GraphTraj c31f13aa6f0a20d4e71024e752a42ece14b355f0 verify-535: a Claude child (no Codex hooks), SessionStart claim direct, Vr reads the Main's rollout by its claim (535)
 graftling 87d83d68d55615c15f5ca3fd3f4ba200c0c27349 Codex host event: optional text, the tool output the Main reads (535)
 graftling 0.6.2 /private/tmp/claude-501/reh535/base/cand/venv/lib/python3.13/site-packages/graftling/__init__.py
 REHEARSAL PASS V: same hooks.json as Vb (no new hook review), active -> cand, role PASS
@@ -23,7 +23,7 @@ REHEARSAL PASS Vr picks the Main's rollout (not the newer decoy) and FAILs on th
 Main session 01a1f989-main-0000-0000-000000000535: rollout /private/tmp/claude-501/reh535/codex-home/sessions/2026/11/21/rollout-main-old.jsonl
   CHECK not an escaped JSON document: FAIL
   CHECK no permissions/session_id/terminal_confirmed: PASS
-  CHECK names the child (n5350052 or agent-…): PASS
+  CHECK names the child (n5350120 or agent-…): PASS
   CHECK carries an execution id (32 hex): PASS
   CHECK Markdown lines kept as lines: FAIL
 CHECK 535 notices: FAIL
@@ -40,21 +40,45 @@ REHEARSAL PASS Vr without a Main claim: FAIL
 > quoted
   CHECK not an escaped JSON document: PASS
   CHECK no permissions/session_id/terminal_confirmed: PASS
-  CHECK names the child (n5350052 or agent-…): PASS
+  CHECK names the child (n5350120 or agent-…): PASS
   CHECK carries an execution id (32 hex): PASS
   CHECK Markdown lines kept as lines: PASS
 records holding the display box or the sent message (information): none
 CHECK 535 notices: PASS
+P.json: send_message_to_thread codex_app | thread 01a1f989-main-0000-0000-000000000535
+REHEARSAL PASS P: sends ONE turn/start to the Main thread with name send_message_to_thread, namespace codex_app, 542's exact wrapper (XML-escaped), prints USER lines and Pr
+P prints the USER lines, the PASS criterion and Pr
+REHEARSAL PASS Pr: reads the Main's rollout (not the decoy) from the probe on: the output and the model's reply
+Main 01a1f989-main-0000-0000-000000000535: rollout /private/tmp/claude-501/reh535/codex-home/sessions/2026/11/21/rollout-probe-main.jsonl (of 2 with that session id)
+---- line 2 response_item/function_call_output name=send_message_to_thread namespace=codex_app
+<codex_delegation>
+  <source_thread_id>n535probe</source_thread_id>
+  <input>[Graftling notice from n535probe · completed · execution 00000000000000000000000000000000]
+
+## Probe heading
+
+This is **bold** and `code`.
+
+- item one
+- item two
+
+&gt; quoted line
+
+Facts: execution_id `00000000000000000000000000000000` · outcome `completed`</input>
+</codex_delegation>
+---- line 3 response_item/message name=None namespace=None
+Noted the notice from n535probe.
+probe output in the Main rollout: YES
 REHEARSAL PASS G: TMPDIR outside the Harness printed; both limited runs exit=0
-TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-535-gt-20261121T005233 | graftling temp /private/tmp/claude-501/verify-535-gl-20261121T005233
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-535-gt-20261121T012008 | graftling temp /private/tmp/claude-501/verify-535-gl-20261121T012008
 graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/535-codex-main-agents-message-display/src/graphtraj/__init__.py
 graftling 0.6.2 /private/tmp/claude-501/reh535/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
 graftling suite imports /private/tmp/claude-501/reh535/base/cand/gl-src/src/graftling/__init__.py
-==> /private/tmp/claude-501/reh535/w/G-20261121T005233/graphtraj.txt <==
-19 passed, 6 skipped in 8.03s
+==> /private/tmp/claude-501/reh535/w/G-20261121T012008/graphtraj.txt <==
+19 passed, 6 skipped in 7.30s
 exit=0
 
-==> /private/tmp/claude-501/reh535/w/G-20261121T005233/graftling.txt <==
-7 passed in 0.25s
+==> /private/tmp/claude-501/reh535/w/G-20261121T012008/graftling.txt <==
+7 passed in 0.26s
 exit=0
-== rehearsal: 12 passed, 0 failed
+== rehearsal: 14 passed, 0 failed

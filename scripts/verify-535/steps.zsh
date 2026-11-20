@@ -208,6 +208,29 @@ step_Vr() {
   $CONDA -I $SD/vr535.py $CODEX_HOME_USED/sessions $VPROJECT $CHILD $(cat ${s[1]})
 }
 
+# Probe of Codex's delegation cell (542 Q2 F2 / Q4): one turn/start toolOutput into the USER's idle Main. Script only.
+probe_since() { local s=($W/V{base,cand}.start(N.om)); [[ -n ${s[1]:-} ]] && cat ${s[1]} || print 0; }
+step_P() {
+  [[ -L $ACTIVE && -x $ACTIVE/venv/bin/python ]] || { print "没有 $ACTIVE（先运行 B0/Vb 或 B/V）。"; return 1; }
+  say "USER 应已在另一个 Terminal 里（若尚未，先做这两行再重跑 P）:"
+  print -r -- "   cd $VPROJECT && codex -m $CODEX_MODEL"
+  print -r -- "   输入: Reply only READY-535 and wait.     （对话框: 预期无，hooks.json 未变；看到 READY-535 后保持 Codex 打开、空闲）"
+  say "probe: ONE turn/start toolOutput {name send_message_to_thread, namespace codex_app, <codex_delegation> wrapper} into the Main thread ($ACTIVE -> $(readlink $ACTIVE))"
+  (cd $VPROJECT && clean env VERIFY535_PROBE_STUB=${VERIFY535_PROBE_STUB:-} $ACTIVE/venv/bin/python -I $SD/probe535.py send $VPROJECT $(probe_since) $W/P.json) \
+    || { print "STOP: the probe was not sent (above). Main reports the text to the Leader."; return 1; }
+  date +%s > $W/P.start
+  say "USER 现在看 Codex 屏幕（不要输入任何东西，等这一轮结束）"
+  print "PASS = 出现一个块 '• Sent by Codex from task n535probe'，其中 'Probe heading' 是标题样式、'bold' 是粗体、'code' 是彩色行内代码、列表与引用已渲染；没有字面的 '##'、'**'、反引号。"
+  print "FAIL = 没有这个块，或块里是原样 Markdown。"
+  print "同时记下模型这一轮的反应：它把这当成被委派的任务去做事（例如调用工具、回复 n535probe），还是当作信息简单确认？"
+  print "截图（整块 + 模型的回复）保存为 $H/.graphtraj/core/state/tasks/535-codex-main-agents-message-display/realhost/probe.png，然后输入 /exit。"
+  next "zsh $THIS Pr    （USER 截图并 /exit 之后）"
+}
+step_Pr() {
+  say "Main rollout after the probe (read only): the function_call_output and the model's reply"
+  $CONDA -I $SD/probe535.py read $VPROJECT $(probe_since) $CODEX_HOME_USED/sessions $W/Pr.json
+}
+
 # Full suites against the candidates, background; pytest temp roots under TMPDIR (outside the Harness).
 step_G() {
   local N=$BASE/cand/wheels GLSRC=$BASE/cand/gl-src
@@ -263,5 +286,7 @@ case ${1:-help} in
   Vr) print "[Vr] Main. 只读 USER 那次会话的 rollout。对话框: 无。<10 秒。"; logged $W/Vr.txt step_Vr ;;
   G)  print "[G] Main. 两个全套测试（后台）。对话框: 无。立即返回。"; logged $W/G.txt step_G ;;
   GR) print "[GR] Main. 只读。对话框: 无。"; logged $W/GR.txt step_GR ;;
+  P)  print "[P] USER 先开 codex 并让它空闲；Main 再运行 P，发出一次委派单元探针。对话框: 无。一轮模型调用。"; logged $W/P.txt step_P ;;
+  Pr) print "[Pr] Main. 只读 Main rollout 里探针之后的记录。对话框: 无。"; logged $W/Pr.txt step_Pr ;;
   *)  print "usage: zsh $THIS 00|B0|T|Vb|Vr|B|V|G|GR   (order: 00 → B0 → T (USER trust) → Vb → USER → Vr → B → V → USER → Vr; G after B, then GR)"; next "zsh $THIS 00" ;;
 esac

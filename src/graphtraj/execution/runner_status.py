@@ -15,7 +15,7 @@ import yaml
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
 from graphtraj.execution.runner_models import RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import current_parent_connection, session_operation
-from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
+from graphtraj.execution.runner_heartbeat import any_ownership_held, ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
 from graphtraj.execution.runner_transport import valid_terminal_launch_failure
 from graphtraj.runtimes import runtime_adapter
@@ -214,6 +214,11 @@ def _live_session_owners(runner_directory: Path) -> Dict[int, str]:
         ) from error
     owners: Dict[int, str] = {}
     for alias in aliases:
+        # A Session none of whose owner locks is held has no live owner; the
+        # check below would refuse it, so its mapping need not be parsed.
+        if (not ALIAS.fullmatch(alias)
+                or not any_ownership_held(session_record_directory(runner_directory, alias))):
+            continue
         try:
             mapping, session_directory = read_alias_mapping(runner_directory, alias)
         except RunnerError:

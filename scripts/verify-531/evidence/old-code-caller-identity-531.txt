@@ -1,0 +1,16 @@
+>       assert parsed == []
+E       AssertionError: assert ['research@x1...'research@x3'] == []
+E         
+E         Left contains 3 more items, first extra item: 'research@x1'
+E         Use -v to get more diff
+>       assert parsed == ['research@x1']
+E       AssertionError: assert ['research@x1...'research@x3'] == ['research@x1']
+E         
+E         Left contains 2 more items, first extra item: 'research@x2'
+E         Use -v to get more diff
+>       assert parsed == ['research@x2']
+E       AssertionError: assert ['research@x1...'research@x3'] == ['research@x2']
+E         
+E         At index 0 diff: 'research@x1' != 'research@x2'
+E         Left contains 2 more items, first extra item: 'research@x2'
+E         Use -v to get more diff

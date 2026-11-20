@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -130,6 +131,23 @@ def ownership_is_held(directory: Path, pid: int) -> bool:
     finally:
         os.close(descriptor)
     return False
+
+
+def any_ownership_held(directory: Path) -> bool:
+    """Return whether a live process holds any owner lock in ``directory``.
+
+    Reads no record: a Session whose locks are all free has no live owner, so
+    a caller lookup can pass it without parsing its mapping.
+    """
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return False
+    return any(ownership_is_held(directory, int(match.group(1)))
+               for match in map(_LOCK_NAME.fullmatch, names) if match)
+
+
+_LOCK_NAME = re.compile(r"owner-([0-9]+)\.lock")
 
 
 def _lock_path(directory: Path, pid: int) -> Path:

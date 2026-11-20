@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 // The installed graftling distribution (the range in pyproject.toml), wherever it is.
 import { graftlingModule } from '../graftling.mjs';
 
-const { loadHostSdk, registerAgents, registerAgentDisplay, sessionEnvironment, startAgentHost } =
+const { loadHostSdk, registerAgents, registerAgentDisplay, registerNoticeDisplay, sessionEnvironment, startAgentHost } =
   graftlingModule('pi/extension.mjs');
 export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost };
+// The custom message type of a GraphTraj Main notice.
+const NOTICE_TYPE = 'graphtraj:main-notice';
 
 // This installation's scripts: <prefix>/lib/pythonX.Y/site-packages/graphtraj/runtimes/pi
 // -> <prefix>/bin, as in a venv, a `pip install --user` or a framework Python.
@@ -95,15 +97,19 @@ export function startCollection(ctx, environment) {
 }
 
 /**
- * Deliver this Main's queued GraphTraj notices as one custom message that
- * starts a turn when idle; acknowledge only after Pi took the message.
+ * Deliver this Main's queued GraphTraj notices, each as one custom message that
+ * starts a turn when idle; acknowledge only after Pi took them. The model reads
+ * each notice's whole text; `details` is what registerNoticeDisplay draws (536).
  */
 export async function deliverNotices(pi, ctx, environment) {
   const pending = await nativeEntry(ctx, environment, { event: 'notices' });
   if (pending.error) throw new Error(pending.error);
   if (!pending.notices) return 0;
-  pi.sendMessage({ customType: 'graphtraj:main-notice', content: pending.text, display: true },
+  for (const { text, sender, event, body } of pending.items) {
+    pi.sendMessage({ customType: NOTICE_TYPE, content: text, display: true,
+      details: { sender, event, body, source: 'graphtraj' } },
     { triggerTurn: true, deliverAs: 'followUp' });
+  }
   const acknowledged = await nativeEntry(ctx, environment, { event: 'notices_ack', position: pending.position });
   if (acknowledged.error) throw new Error(acknowledged.error);
   return pending.notices;
@@ -124,6 +130,7 @@ export default function graphtraj(pi) {
   // One notice loop for the Session currently associated as Main; a later
   // session_start or shutdown ends the earlier loop.
   let noticeLoop = 0;
+  let noticeDisplay = false;
   const pullNotices = (ctx, environment, loop = ++noticeLoop) => {
     const timer = setTimeout(async () => {
       if (loop !== noticeLoop) return;
@@ -160,6 +167,10 @@ export default function graphtraj(pi) {
     if (result.error) ctx.ui.notify(result.error, 'error');
     else if (result.source === 'main') {
       ctx.ui.notify('GraphTraj Main Session associated.', 'info');
+      if (ctx.hasUI && !noticeDisplay) {
+        registerNoticeDisplay(pi, await loadHostSdk(), NOTICE_TYPE);
+        noticeDisplay = true;
+      }
       pullNotices(ctx, environment);
     }
     if (!result.error && ['main', 'child'].includes(result.source)) {

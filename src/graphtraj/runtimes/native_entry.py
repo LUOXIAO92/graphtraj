@@ -50,13 +50,24 @@ def main_notices(event: dict, runner: Path, connection: dict) -> dict:
     ``notices`` reads without consuming and returns the rendered Main input
     with the queue position. ``notices_ack`` records that position once the
     host's native input took the text, so an interrupted delivery is offered again.
+    ``items`` gives each notice as ``graftling.notice_text`` (``text``, the model
+    input) and what a host draws: ``sender``, ``event`` and the Markdown ``body``
+    without the title and ``Facts`` lines (536).
     """
+    from graftling import notice_text
     from graphtraj.execution.main_continuity import acknowledge_notices, pending_notices, render_notices
 
     runtime, session = connection['runtime'], connection['session']
     if event['event'] == 'notices':
         notices, position = pending_notices(runner, runtime, session)
-        return {'notices': len(notices), 'text': render_notices(notices), 'position': position}
+        items = []
+        for notice in notices:
+            text = notice_text({**notice['event'], 'request': notice['event'].get('request_id')})
+            parts = text.split('\n\n')
+            body = '\n\n'.join(parts[1:-1] if len(parts) > 2 and parts[-1].startswith('Facts: ') else parts[1:])
+            items.append({'text': text, 'sender': notice['event'].get('alias') or 'graphtraj',
+                          'event': notice['event'].get('event') or 'event', 'body': body})
+        return {'notices': len(notices), 'text': render_notices(notices), 'items': items, 'position': position}
     if type(event.get('position')) is not int:
         raise ValueError('Expected the position returned by notices.')
     acknowledge_notices(runner, runtime, session, event['position'])

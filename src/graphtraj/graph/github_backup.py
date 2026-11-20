@@ -18,8 +18,11 @@ back into the Task graph. Mappings live in ``<state>/task-backups.yml``::
 A Task with local children also publishes integrated / required child counts
 and a dependency DAG of its children. After publishing, the Issue is attached
 as a real Sub-issue to its mapped parent, and its mapped children to it;
-endpoints are resolved only through mappings, unmapped ones are reported as
-pending and a child already under another parent is reported, never moved.
+endpoints are resolved only through mappings and unmapped ones are reported as
+pending. The relation follows the local parent: a Task without one is detached
+from a mapped remote parent (``unlinked``) and a child under a different mapped
+parent is moved (``moved``); a remote parent that is not mapped is reported as
+``other-parent`` and never changed.
 
 Remote requests use the installed ``gh api`` command, so its existing login or
 the standard ``GH_TOKEN`` / ``GITHUB_TOKEN`` variables supply credentials and
@@ -214,22 +217,50 @@ def _link(
     mapping: dict[str, Any],
     records: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Attach the mapped Issue to its mapped parent and its mapped children as Sub-issues.
+    """Make the mapped Issue's Sub-issue relations follow the local parent and children.
 
     Remote Issues are resolved only through mappings of the same host and
-    repository. A child already under another parent is reported, never moved;
-    an unmapped endpoint is reported as pending.
+    repository, and only relations between mapped Issues are written: a Task
+    without a local parent is detached from a mapped remote parent, and a child
+    under a different mapped parent is moved. A remote parent that is not
+    mapped is reported, never changed; an unmapped endpoint is reported as
+    pending.
     """
+    same = [item for item in backups if item["issue"] is not None
+            and (item["host"], item["repository"]) == (mapping["host"], mapping["repository"])]
+
     def mapped(key: str | None) -> dict[str, Any] | None:
-        return next((item["issue"] for item in backups if item["issue"] is not None and (
-            item["task_id"], item["host"], item["repository"]) == (
-            key, mapping["host"], mapping["repository"])), None)
+        return next((item["issue"] for item in same if item["task_id"] == key), None)
+
+    def owner(number: int) -> str | None:
+        return next((item["task_id"] for item in same if item["issue"]["number"] == number), None)
+
+    def remote_parent(child: dict[str, Any]) -> int | None:
+        try:
+            return gh_api(host, "GET", "{0}/{1}/parent".format(base, child["number"]))["number"]
+        except RemoteError as error:
+            if "HTTP 404" not in str(error):
+                raise
+            return None
 
     task_id = mapping["task_id"]
-    pairs   = [(records[task_id]["parent_id"], task_id)] if records[task_id]["parent_id"] else []
-    pairs  += [(task_id, child) for child in records[task_id]["children"] if mapped(child)]
     host, base = mapping["host"], "repos/{0}/issues".format(mapping["repository"])
     report  = []
+    if not records[task_id]["parent_id"]:
+        current = remote_parent(mapping["issue"])
+        if current is not None:
+            previous = owner(current)
+            entry    = {"parent": None, "child": task_id}
+            report.append(entry)
+            if previous is None:
+                entry.update(outcome="other-parent", remote_parent_issue=current)
+            else:
+                gh_api(host, "DELETE", "{0}/{1}/sub_issue".format(base, current),
+                       {"sub_issue_id": mapping["issue"]["id"]})
+                entry.update(outcome="unlinked", previous_parent=previous,
+                             previous_parent_issue=current)
+    pairs   = [(records[task_id]["parent_id"], task_id)] if records[task_id]["parent_id"] else []
+    pairs  += [(task_id, child) for child in records[task_id]["children"] if mapped(child)]
     for parent_id, child_id in pairs:
         parent, child = mapped(parent_id), mapped(child_id)
         entry = {"parent": parent_id, "child": child_id}
@@ -237,21 +268,20 @@ def _link(
         if parent is None:
             entry["outcome"] = "pending"
             continue
-        try:
-            current = gh_api(host, "GET", "{0}/{1}/parent".format(base, child["number"]))["number"]
-        except RemoteError as error:
-            if "HTTP 404" not in str(error):
-                raise
-            current = None
-        if current is None:
-            gh_api(host, "POST", "{0}/{1}/sub_issues".format(base, parent["number"]),
-                   {"sub_issue_id": child["id"]})
-            entry["outcome"] = "linked"
-        elif current == parent["number"]:
+        current  = remote_parent(child)
+        previous = owner(current) if current is not None else None
+        if current == parent["number"]:
             entry["outcome"] = "unchanged"
-        else:
+        elif current is not None and previous is None:
             entry.update(outcome="other-parent", expected_parent_issue=parent["number"],
                          remote_parent_issue=current)
+        else:
+            payload = {"sub_issue_id": child["id"]}
+            if current is not None:
+                payload["replace_parent"] = True
+                entry.update(previous_parent=previous, previous_parent_issue=current)
+            gh_api(host, "POST", "{0}/{1}/sub_issues".format(base, parent["number"]), payload)
+            entry["outcome"] = "linked" if current is None else "moved"
     return report
 
 

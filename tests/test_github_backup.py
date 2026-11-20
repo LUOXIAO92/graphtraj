@@ -43,10 +43,18 @@ url    = urlsplit(target)
 parts  = url.path.split("/")
 issues = state["issues"]
 if len(parts) == 6:
-    # Sub-issue endpoints: GET .../{child}/parent and POST .../{parent}/sub_issues.
+    # Sub-issue endpoints: GET .../{child}/parent, POST .../{parent}/sub_issues
+    # (optionally replace_parent) and DELETE .../{parent}/sub_issue.
     parents = state.setdefault("parents", {})
+    if method == "DELETE":
+        child = next(issue for issue in issues if issue["id"] == payload["sub_issue_id"])
+        assert parents.get(str(child["number"])) == int(parts[4]), "not a Sub-issue of this parent"
+        del parents[str(child["number"])]
+        finish(next(issue for issue in issues if issue["number"] == int(parts[4])))
     if method == "POST":
         child = next(issue for issue in issues if issue["id"] == payload["sub_issue_id"])
+        if payload.get("replace_parent"):
+            parents.pop(str(child["number"]), None)
         assert str(child["number"]) not in parents, "GitHub rejects a second parent"
         parents[str(child["number"])] = int(parts[4])
         finish(next(issue for issue in issues if issue["number"] == int(parts[4])))
@@ -359,6 +367,107 @@ def test_other_remote_parent_is_reported_and_never_moved_or_imported(
     assert _sub_issue_writes(remote) == []
     local = {task["task_id"]: task for task in _operate("task_graph", {})["tasks"]}
     assert (local["2"]["parent_id"], local["2"]["status"]) == ("1", "pending")
+
+
+_FIRST  = {"task_id": "2", "task_name": "first", "title": "First"}
+_SECOND = {"task_id": "3", "task_name": "second", "title": "Second", "dependencies": ["2"]}
+
+
+def _reparent(definition: dict[str, Any], parent_id: str | None) -> None:
+    """Change one local Task's parent through the public revision operation."""
+    current = next(task for task in _operate("task_graph", {})["tasks"]
+                   if task["task_id"] == definition["task_id"])
+    _operate("task_revise", {
+        "product_preserving": True, "caused_by_event_ids": [], "evidence_refs": ["README.md"],
+        "tasks": [{**_task(**definition, parent_id=parent_id),
+                   "current_definition": current["current_definition"]}],
+    })
+
+
+def _hierarchy_writes(remote: Path) -> list[dict[str, Any]]:
+    """Return every Sub-issue write (link, move or unlink) the fake remote received."""
+    return [request for request in json.loads(remote.read_text())["requests"]
+            if request["method"] in ("POST", "DELETE") and "/sub_issue" in request["target"]]
+
+
+def test_task_without_local_parent_is_detached_from_its_mapped_remote_parent(
+    project: Path, remote: Path,
+) -> None:
+    """Revising 2 to no parent unlinks #43 from #44 once; local records stay as revised."""
+    _register_summary()
+    _backup_task("2")
+    _backup_task("1")
+    assert json.loads(remote.read_text())["parents"] == {"43": 44}
+
+    _reparent(_FIRST, None)
+    detached = _backup_task("2")
+    assert detached["hierarchy"] == [{
+        "parent": None, "child": "2", "outcome": "unlinked",
+        "previous_parent": "1", "previous_parent_issue": 44,
+    }]
+    assert json.loads(remote.read_text())["parents"] == {}
+    assert _hierarchy_writes(remote)[-1]["method"] == "DELETE"
+    assert _hierarchy_writes(remote)[-1]["target"] == "repos/owner/repo/issues/44/sub_issue"
+    assert _hierarchy_writes(remote)[-1]["payload"] == {"sub_issue_id": 9043}
+
+    writes = len(_hierarchy_writes(remote))
+    assert _backup_task("2")["hierarchy"] == []
+    assert _backup_task("1")["hierarchy"] == []
+    assert len(_hierarchy_writes(remote)) == writes
+    local = {task["task_id"]: task for task in _operate("task_graph", {})["tasks"]}
+    assert local["2"]["parent_id"] is None
+
+
+def test_child_reparented_to_another_mapped_summary_is_moved_once(
+    project: Path, remote: Path,
+) -> None:
+    """Both the child's backup and the new summary's backup move a child from a mapped parent."""
+    _register_summary()
+    _operate("task_register", _task(task_id="4", task_name="other", title="Other summary"))
+    numbers = {key: _backup_task(key)["backup"]["issue"]["number"] for key in "2314"}
+    assert json.loads(remote.read_text())["parents"] == {
+        str(numbers["2"]): numbers["1"], str(numbers["3"]): numbers["1"]}
+
+    _reparent(_FIRST, "4")
+    _reparent(_SECOND, "4")
+    moved = _backup_task("2")
+    assert moved["hierarchy"] == [{
+        "parent": "4", "child": "2", "outcome": "moved",
+        "previous_parent": "1", "previous_parent_issue": numbers["1"],
+    }]
+    summary = _backup_task("4")
+    assert summary["hierarchy"] == [
+        {"parent": "4", "child": "2", "outcome": "unchanged"},
+        {"parent": "4", "child": "3", "outcome": "moved",
+         "previous_parent": "1", "previous_parent_issue": numbers["1"]},
+    ]
+    assert json.loads(remote.read_text())["parents"] == {
+        str(numbers["2"]): numbers["4"], str(numbers["3"]): numbers["4"]}
+    moves = [request["payload"] for request in _hierarchy_writes(remote)][-2:]
+    assert moves == [{"sub_issue_id": 9000 + numbers["2"], "replace_parent": True},
+                     {"sub_issue_id": 9000 + numbers["3"], "replace_parent": True}]
+
+    writes = len(_hierarchy_writes(remote))
+    again  = _backup_task("4")
+    assert [entry["outcome"] for entry in again["hierarchy"]] == ["unchanged", "unchanged"]
+    assert _backup_task("1")["hierarchy"] == []
+    assert len(_hierarchy_writes(remote)) == writes
+
+
+def test_task_without_local_parent_under_an_external_issue_is_only_reported(
+    project: Path, remote: Path,
+) -> None:
+    """External #1 is not a mapped Task, so #43 stays under it and nothing is written."""
+    _backup_task("42")
+    document = json.loads(remote.read_text())
+    document["parents"] = {"43": 1}
+    remote.write_text(json.dumps(document))
+
+    reported = _backup_task("42")
+    assert reported["hierarchy"] == [{
+        "parent": None, "child": "42", "outcome": "other-parent", "remote_parent_issue": 1}]
+    assert json.loads(remote.read_text())["parents"] == {"43": 1}
+    assert _hierarchy_writes(remote) == []
 
 
 def test_progress_counts_only_active_children_and_marks_each_state() -> None:

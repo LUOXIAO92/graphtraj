@@ -380,30 +380,34 @@ try {
   }
   if (blocks.length) reached.push('notice-shot');
   else {
-    // no block: the notice reached the model inside a running turn (S); shot = the region around the marker reply
+    // no block: the notice reached the model inside a running turn; shot = the visible region around the marker
+    // reply. 538 c2: only visible HTMLElements are candidates, and the shot is a page clip of that region's box
+    // (an element shot failed with 'Node is either not visible or not an HTMLElement' on G run2).
     const box = await page.evaluate((m) => {
+      const shown = (e) => e instanceof HTMLElement && e.getClientRects().length > 0 && e.getBoundingClientRect().height > 0;
       let best = null;
       for (const e of document.querySelectorAll('body *')) {
-        if (e.closest('nav, aside, form, [role=dialog]')) continue;
+        if (e.closest('nav, aside, form, [role=dialog]') || !shown(e)) continue;
         const t = e.innerText ?? '';
         if (!t.includes(m) || e.getBoundingClientRect().width < 200) continue;
         if (!best || t.length < (best.innerText ?? '').length) best = e;
       }
-      if (!best) return false;
-      // 538 r1: up until the region also holds where the notice shows (the Think that mentions it), bounded
+      if (!best) return null;
+      // up until the region also holds where the notice shows (the Think that mentions it), bounded
       let e = best;
       for (let i = 0; i < 12 && e.parentElement; i++) {
         if (/notice/i.test((e.innerText ?? '').replace(m, '')) || (e.parentElement.innerText ?? '').length > 20000) break;
-        e = e.parentElement;
+        if (shown(e.parentElement)) e = e.parentElement; else break;
       }
-      e.setAttribute('data-ui538-shot', 'notice-region');
-      return true;
+      const r = e.getBoundingClientRect();
+      return { x: Math.max(0, r.left + scrollX), y: Math.max(0, r.top + scrollY), width: Math.max(1, r.width),
+        height: Math.max(1, Math.min(r.height, 4000)), text: e.innerText ?? '' };
     }, cfg.noticeMarker);
     if (box) {
-      const loc = page.locator('[data-ui538-shot="notice-region"]');
-      await loc.screenshot({ path: join(cfg.out, 'b-notice-region.png') }).catch((e) => log(`notice region shot: ${e.message}`));
-      writeFileSync(join(cfg.out, 'b-notice-region.txt'), await loc.innerText().catch(() => ''));
-      reached.push('notice-region-shot');
+      const { text, ...clip } = box;
+      await page.screenshot({ path: join(cfg.out, 'b-notice-region.png'), fullPage: true, clip })
+        .then(() => reached.push('notice-region-shot')).catch((e) => log(`notice region shot: ${e.message}`));
+      writeFileSync(join(cfg.out, 'b-notice-region.txt'), text);
     }
     log('no incoming-notice block (section[data-agent-incoming] / section[data-turn-trigger]) on the page');
   }
@@ -424,6 +428,9 @@ try {
       agentIncoming: document.querySelectorAll('[data-agent-incoming]').length,
       contextText: document.querySelectorAll('[data-context-text]').length };
   }).catch((e) => ({ error: e.message }));
+  // 538 c2: which form the notice took in this run: its own block (a turn opened by it) or in-turn (claimed inside a
+  // running turn, answered there; no block). Arrival timing decides it, so run1 and run2 may differ.
+  observed.noticeForm = blocks.length ? 'block' : notice ? 'in-turn' : 'none';
   writeFileSync(join(cfg.out, 'observed.json'), JSON.stringify(observed, null, 2));
   log(`observed: ${JSON.stringify({ tools: observed.tools.map((t) => [t.file, t.inShown, t.send]), notices: observed.notices.map((n) => [n.file, n.graftlingSection, n.showsGraphtrajAsSender, n.adjacentRepeatedLines.length]) })}`);
   phase('shots', true);

@@ -1,0 +1,35 @@
+# c2 rehearsal 2026-11-21 02:52:32 at 2a786cd9, cwd = Worktree, empty BASE; VERIFY538_NOMODEL/ASSUME_PLUGIN/NOBROWSER (cases STOP: no browser/key here)
+== [after] build GraphTraj 2a786cd90b + graftling 3448ebacb9 under $TMPDIR/538/rehC2/base/after (DSH_HOME=$TMPDIR/538/rehC2/base/after/dsh-home, never ~/.dsh)
+venv: graftling 0.6.2 | graphtraj 0.1.0
+roles OK
+probe Task 1 ready
+STOP: the after phase is not built or step 00 was not run
+STOP: the after phase is not built or step 00 was not run
+STOP: the after phase is not built or step 00 was not run
+STOP: the after phase is not built or step 00 was not run
+archive|tar exit: 0; files extracted: 1332
+wheel ok: filename=graphtraj-0.1.0-py3-none-any.whl
+archive|tar exit: 0; files extracted: 100
+wheel ok: filename=graftling-0.6.2-py3-none-any.whl
+## T (focused real tests) + TR
+== [T] full GraphTraj suite of the AFTER build (Worktree HEAD + graftling 3448ebacb9), 6 shards, --timeout 1500, -rA, in the background (~25 min). Dialog: none. pytest TMPDIR=$TMPDIR/538/rehC2/pytmp (outside the Harness).
+AFTER build: venv: graftling 0.6.2 | graphtraj 0.1.0
+graftling 0.6.2 $TMPDIR/538/rehC2/base/after/venv-tests/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+candidate: 2a786cd90be442390b642ed2313bf22dafa58c0b | graftling 3448ebacb993abb7fe0f34f0d48a4044e2b61322
+REHEARSAL: tests limited to tests/test_dsh_main_notice_display_538.py tests/test_pi_dsh_main_continuity.py::test_host_integration_delivers_then_acknowledges tests/test_pi_main_notice_display_536.py (plain pytest, same venv, temp root and exit file)
+4 passed in 4.47s
+exit=0
+(no FAILED/ERROR lines)
+Success: exit=0, or only 'known (516)' lines; any 'NEW' line goes to the Leader.
+
+## graftling 3448ebac focused (clone editable venv-gl): tests/test_dsh_standalone_host.py tests/test_pi_dsh_notice_holding.py tests/test_notice_text.py tests/test_dsh_mcp.py
+88 passed, 2 skipped (test_dsh_mcp.py:58 no @deepseek-ai/dsh-client-ui-slots in installed DSH, as 527)
+## same two updated host/plugin tests on the previous host.py/plugin.mjs (70542bc5)
+            'agents-notice:exec-1:completed', 'agents-notice:exec-2:failed', 'agents-notice:exec-3:request:t']
+FAILED tests/test_dsh_standalone_host.py::test_notice_receiver_outcomes - Ass...
+FAILED tests/test_dsh_standalone_host.py::test_plugin_host_row_relays_each_notice_to_its_main_session
+2 failed, 22 deselected in 0.34s
+
+## graftling full suite on 3448ebac (venv-gl, clone editable)
+629 passed, 21 skipped in 215.71s (0:03:35)
+exit=0

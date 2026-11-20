@@ -6,6 +6,9 @@
 #   BEFORE = graftling 4a002129 (v0.6.2, production) + GraphTraj c917f5fc (this Worktree's base)
 #   AFTER  = graftling 95cffda1 (530: live/ ignores itself before config.lock) + GraphTraj 974cb8e9 (530: GraphTraj's
 #            own .graphtraj/swarm gets a '*' .gitignore before its config.yml is written)
+# WITHDRAWN (correction 1, see RESULT.md): BEFORE did not reproduce from the real entry, so the AFTER build refers to a
+# withdrawn fix: GraphTraj 974cb8e9 is reverted (4282f569) and graftling 95cffda1 stays unmerged, not to be adopted.
+# UG2/US2/C2 and T/TR were not run.
 # Each build has its OWN fresh git project and git standalone workspace; no data root exists before its UG/US turn.
 #   zsh scripts/verify-530/steps.zsh <STEP>        (from this Task's Worktree)
 # Order: 0 (Main) -> UG, US (USER, BEFORE) -> C (Main) -> UG2, US2 (USER, AFTER) -> C2 (Main) -> T (Main) -> TR (Main).

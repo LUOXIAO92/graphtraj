@@ -81,7 +81,9 @@ const PROMPT_HEAD = cfg.prompt.split('\n')[0].slice(0, 60);   // identifies the 
 // STOPs if it holds one literally), so the user's bubble never matches; prose quoting a marker is not a whole leaf.
 async function markerLine(marker) {
   return page.evaluate((m) => [...document.querySelectorAll('body *')].some((e) => !e.children.length
-    && !e.closest('nav, aside, form, [role=dialog]') && (e.innerText ?? '').trim() === m), marker).catch(() => false);
+    && !e.closest('nav, aside, form, [role=dialog]')
+    // 538 c3: a whole line of the leaf (SENT and GOT may be two lines of one reply)
+    && (e.innerText ?? '').split('\n').some((l) => l.trim() === m)), marker).catch(() => false);
 }
 // First-run modals that DSH 0.2.2-alpha.2 can show in a plain web page before the composer. Each is body-portaled and
 // sets #root inert (OnboardingModal / SignInDialog). Labels are the exact English strings from the installed source:

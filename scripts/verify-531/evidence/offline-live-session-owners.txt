@@ -1,0 +1,2 @@
+private/tmp/claude-501/r531/t/src-before _live_session_owners: 0 live, 0.447 CPU-s over 524 dirs
+rees/531-child-create-runner-record-walk _live_session_owners: 0 live, 0.029 CPU-s over 524 dirs

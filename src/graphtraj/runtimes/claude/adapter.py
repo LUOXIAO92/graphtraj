@@ -107,13 +107,18 @@ def _validated_resources(value: object, root: Path, state: Path, home: Path) -> 
         raise RuntimeAdapterError('ROLE_CONFIG_INVALID', 'claude.read_paths must list absolute resource paths.')
     protected = (project_cli_directory(root),
                  root / '.codex', Path.home() / '.codex', home)
-    history = project_history_files(root)
+    # The history exemption only matters for a grant that touches a protected
+    # path; reading every Session record for any other grant costs seconds.
+    history = None
     for resource in value:
         path = Path(resource).resolve()
+        if not any(path.is_relative_to(item.resolve()) or item.resolve().is_relative_to(path) for item in protected):
+            continue
+        if history is None:
+            history = project_history_files(root)
         if path in history and not path.is_relative_to(project_cli_directory(root).resolve()):
             continue
-        if any(path.is_relative_to(item.resolve()) or item.resolve().is_relative_to(path) for item in protected):
-            raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose control or Runtime credentials.')
+        raise RuntimeAdapterError('RUNTIME_ACCESS_DENIED', 'A Claude resource grant would expose control or Runtime credentials.')
     return list(value)
 
 

@@ -197,8 +197,9 @@ step_G() {
     (cd $WT && TMPDIR=$GT $V1/bin/python -m pytest -p no:cacheprovider -q -rfE ${=VERIFY533_TESTS} > $OUT/graphtraj.txt 2>&1; print "exit=$?" >> $OUT/graphtraj.txt)
     (cd $GLSRC && TMPDIR=$GL $V2/bin/python -m pytest -p no:cacheprovider -q -rfE ${=VERIFY533_GLTESTS:-tests/test_notice_text.py} > $OUT/graftling.txt 2>&1; print "exit=$?" >> $OUT/graftling.txt)
   else
-    (cd $WT && TMPDIR=$GT nohup $V1/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $OUT/shards -- -rA > $OUT/graphtraj.txt 2>&1; print "exit=$?" >> $OUT/graphtraj.txt) &!
-    (cd $GLSRC && TMPDIR=$GL nohup $V2/bin/python -m pytest -p no:cacheprovider -q -rfE > $OUT/graftling.txt 2>&1; print "exit=$?" >> $OUT/graftling.txt) &!
+    # No nohup: it fails without a console ("can't detach", exit 127); &! already disowns the job.
+    (cd $WT && TMPDIR=$GT $V1/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $OUT/shards -- -rA > $OUT/graphtraj.txt 2>&1; print "exit=$?" >> $OUT/graphtraj.txt) &!
+    (cd $GLSRC && TMPDIR=$GL $V2/bin/python -m pytest -p no:cacheprovider -q -rfE > $OUT/graftling.txt 2>&1; print "exit=$?" >> $OUT/graftling.txt) &!
     print "started both suites in the background at $(date +%T) (~25 min); each output ends with 'exit=N'"
   fi
   print -r -- $OUT > $W/G-latest

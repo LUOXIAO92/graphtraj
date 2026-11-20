@@ -1,0 +1,69 @@
+$ mkdir <empty dir> && cd <empty dir>   (ls -A | wc -l -> 0)
+$ VERIFY539_BASE=$TMPDIR/rh539/base VERIFY539_NODE=/private/tmp/dsh-ui-537/node VERIFY539_NOMODEL=1 VERIFY539_ASSUME_PLUGIN=1 zsh <WT>/scripts/verify-539/steps.zsh 0
+# Engineer sandbox: dsh plugin add and ~/Library/Caches (Playwright headless shell) are not reachable here, hence ASSUME_PLUGIN and the browser STOP; Main ran both in 537.
+== [0] preflight (Main's Bash). Dialog: none. Two venvs (no network), project-before (setup by 9ae7a149) and project-after (setup by 18c67324), isolated DSH home with web539 + graftling-dsh, playwright-core, headless browser, one one-line model answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+BEFORE GraphTraj 9ae7a1491f49816687a4f7f481f7fabc57981f85; AFTER (candidate) 18c673246fc46053618eee469f3f16fa285580ff (branch agent/539-dsh-changes-card-lists-graphtraj-inbox); graftling 4a002129f8 from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
+isolated layout: BASE=/tmp/claude-501/rh539/base, DSH_HOME=/tmp/claude-501/rh539/base/dsh-home (never ~/.dsh), web profile web539
+venv /tmp/claude-501/rh539/base/venv-before: GraphTraj 9ae7a1491f + graftling 4a002129f8
+venv /tmp/claude-501/rh539/base/venv-after: GraphTraj 18c673246f + graftling 4a002129f8
+venv before: graftling 0.6.2 | graphtraj /tmp/claude-501/rh539/base/venv-before/lib/python3.13/site-packages/graphtraj/__init__.py
+== public setup of /tmp/claude-501/rh539/base/project-before by GraphTraj 9ae7a149
+  setup: Setup plan:
+  setup: - CREATE: GraphTraj Config: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/config.yml
+  setup: - CREATE: GraphTraj Roles: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/roles.yml
+  setup: - CREATE: Agent Worktree Directory: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/.agent-worktrees
+  setup: - CREATE: Harness State Directory: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/state
+  setup: - CREATE: Harness Runner Directory: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/runner
+  setup: - CREATE: Create dev branch from d0a2f63241668a252d2a321845ef46bcb9d2ceaa
+  setup: - CREATE: Integration Worktree on dev: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/.agent-worktrees/dev
+  setup: - CREATE: Integration state link: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/.agent-worktrees/dev/.state -> /private/tmp/claude-501/rh539/base/project-before/.graphtraj/state
+  setup: - CREATE: Integration CONTEXT.md link: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/.agent-worktrees/dev/CONTEXT.md -> /private/tmp/claude-501/rh539/base/project-before/CONTEXT.md
+  setup: - CREATE: Integration docs link: /private/tmp/claude-501/rh539/base/project-before/.graphtraj/.agent-worktrees/dev/docs -> /private/tmp/claude-501/rh539/base/project-before/docs
+  setup: - REGISTER: Ignore Worktree views in /private/tmp/claude-501/rh539/base/project-before/.git/info/exclude
+  setup: Proposed dev base: d0a2f63241668a252d2a321845ef46bcb9d2ceaa
+  setup: Create dev from d0a2f63241668a252d2a321845ef46bcb9d2ceaa? [y/N]: Created Integration Worktree on dev.
+  setup: GraphTraj project setup complete.
+roles OK
+probe Task 1 ready
+  /tmp/claude-501/rh539/base/project-before/.graphtraj/.gitignore: absent
+  not ignored: .graphtraj/runner/main-sessions/inbox/x.jsonl
+  not ignored: .graphtraj/state/x
+  not ignored: .graphtraj/config.yml
+  not ignored: notes-539.txt
+venv after: graftling 0.6.2 | graphtraj /tmp/claude-501/rh539/base/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py
+== public setup of /tmp/claude-501/rh539/base/project-after by GraphTraj 18c67324
+  setup: Setup plan:
+  setup: - CREATE: GraphTraj Config: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/config.yml
+  setup: - CREATE: GraphTraj Roles: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/roles.yml
+  setup: - CREATE: Agent Worktree Directory: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/.agent-worktrees
+  setup: - CREATE: Harness State Directory: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/state
+  setup: - CREATE: Harness Runner Directory: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/runner
+  setup: - CREATE: Create dev branch from 914d5580e9f965cc030602e1fee5e0c8324a751d
+  setup: - CREATE: Integration Worktree on dev: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/.agent-worktrees/dev
+  setup: - CREATE: Integration state link: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/.agent-worktrees/dev/.state -> /private/tmp/claude-501/rh539/base/project-after/.graphtraj/state
+  setup: - CREATE: Integration CONTEXT.md link: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/.agent-worktrees/dev/CONTEXT.md -> /private/tmp/claude-501/rh539/base/project-after/CONTEXT.md
+  setup: - CREATE: Integration docs link: /private/tmp/claude-501/rh539/base/project-after/.graphtraj/.agent-worktrees/dev/docs -> /private/tmp/claude-501/rh539/base/project-after/docs
+  setup: - REGISTER: Ignore Worktree views in /private/tmp/claude-501/rh539/base/project-after/.git/info/exclude
+  setup: - REGISTER: Ignore GraphTraj runtime files in /private/tmp/claude-501/rh539/base/project-after/.graphtraj/.gitignore
+  setup: Proposed dev base: 914d5580e9f965cc030602e1fee5e0c8324a751d
+  setup: Create dev from 914d5580e9f965cc030602e1fee5e0c8324a751d? [y/N]: Created Integration Worktree on dev.
+  setup: GraphTraj project setup complete.
+roles OK
+probe Task 1 ready
+  /tmp/claude-501/rh539/base/project-after/.graphtraj/.gitignore: present
+  ignored:     .graphtraj/runner/main-sessions/inbox/x.jsonl
+  ignored:     .graphtraj/state/x
+  not ignored: .graphtraj/config.yml
+  not ignored: notes-539.txt
+== isolated web profile web539 in /tmp/claude-501/rh539/base/dsh-home, then graftling-dsh
+profile web539: created (/tmp/claude-501/rh539/base/dsh-home/profiles/web539)
+REHEARSAL: graftling-dsh assumed present in web539
+REHEARSAL: graftling-dsh assumed present in web539
+graftling-dsh: in web539
+G before rows: llm-deepseek graphtraj-main (expected llm-deepseek graphtraj-main)
+G after rows: llm-deepseek graphtraj-main (expected llm-deepseek graphtraj-main)
+== playwright-core 1.65.1 in /private/tmp/dsh-ui-537/node (no browser download) and the headless browser
+playwright-core: 1.65.1
+STOP: no cached Playwright headless shell found (searched $HOME/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac*/chrome-headless-shell). Google Chrome is not used automatically; set VERIFY539_BROWSER=<path to a headless browser>.
+rc=1

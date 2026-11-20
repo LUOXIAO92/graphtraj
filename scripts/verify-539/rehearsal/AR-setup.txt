@@ -1,0 +1,19 @@
+# AR rehearsal: a fresh project set up by 9ae7a149 (venv-before), then the candidate's setup twice (venv-after), outside DSH
+$ graphtraj setup  (venv-before, 9ae7a149)
+- REGISTER: Ignore Worktree views in /private/tmp/claude-501/rh539/repair-project/.git/info/exclude
+GraphTraj project setup complete.
+(eval):print:1: bad option: - 
+?? .graphtraj/runner/main-sessions/inbox/k.jsonl
+?? .graphtraj/runner/main-sessions/inbox/k.lock
+?? notes-539.txt
+$ graphtraj setup  (venv-after, candidate 18c67324)
+- ALREADY CONFIGURED: Ignore Worktree views in /private/tmp/claude-501/rh539/repair-project/.git/info/exclude
+- REGISTER: Ignore GraphTraj runtime files in /private/tmp/claude-501/rh539/repair-project/.graphtraj/.gitignore
+GraphTraj project setup complete.
+?? .graphtraj/config.yml
+?? .graphtraj/roles.yml
+?? notes-539.txt
+$ graphtraj setup  (venv-after, again)
+- ALREADY CONFIGURED: Ignore Worktree views in /private/tmp/claude-501/rh539/repair-project/.git/info/exclude
+- ALREADY CONFIGURED: Ignore GraphTraj runtime files in /private/tmp/claude-501/rh539/repair-project/.graphtraj/.gitignore
+GraphTraj project setup complete.

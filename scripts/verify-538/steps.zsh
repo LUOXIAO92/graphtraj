@@ -29,7 +29,7 @@ GTBASE=9ae7a1491f49816687a4f7f481f7fabc57981f85                # GraphTraj dev t
 GLBASE=fc081a3f1cf2664f603d4deba14a86d59a16fd8f                # graftling dev (536)
 GLSRC=$H/graftling                                             # read only (git archive of $GLBASE)
 GLREPO=${VERIFY538_GLREPO:-$WT/.scratch/graftling}             # untracked clone, branch agent/538-dsh-graphtraj-notice-block-display
-GLC=${VERIFY538_GLC:-}                                         # candidate graftling commit (set when the candidate exists)
+GLC=${VERIFY538_GLC:-70542bc58fa69cfb6fb62bdf5f5cb0b8046646ec} # candidate graftling (clone branch agent/538-dsh-graphtraj-notice-block-display)
 BASE=${VERIFY538_BASE:-/private/tmp/dsh-ui-538}
 NODE=$BASE/node
 CONDA=$HOME/miniconda3/bin/python3.13
@@ -332,8 +332,8 @@ T)
   setopt local_options no_bg_nice
   say "[T] full GraphTraj suite of the AFTER build (Worktree HEAD + graftling ${GLC[1,10]:-?}), 6 shards, --timeout 1500, -rA, in the background (~25 min). Dialog: none. pytest TMPDIR=$PYTEST_TMP (outside the Harness)."
   case ${PYTEST_TMP:A}/ in ${H:A}/*) print "STOP: TMPDIR $PYTEST_TMP is inside the Harness; set TMPDIR outside it"; return 1 ;; esac
-  phase_vars after
-  [[ -f $V/installed ]] || { print "STOP: run step A first (it builds the AFTER venv)"; return 1; }
+  build_phase after > $BASE/T-build.txt 2>&1 || { tail -5 $BASE/T-build.txt; print "STOP: the AFTER build failed ($BASE/T-build.txt)"; return 1; }
+  print "AFTER build: $(grep -E '^venv:' $BASE/T-build.txt)"
   local dirty=$(git -C $WT status --porcelain -- src tests plugins)
   print "uncommitted in src/tests/plugins: ${dirty:-none}"; [[ -z $dirty ]] || { print "STOP: uncommitted changes in $WT"; return 1; }
   # as verify-531 g_venv: conda's site packages (pytest) + production's deps + the AFTER graftling wheel + this

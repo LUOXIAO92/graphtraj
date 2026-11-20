@@ -1,0 +1,37 @@
+........................................................................ [ 11%]
+........................................................................ [ 22%]
+...................................................................sssss [ 33%]
+sssssss................................................................. [ 44%]
+..........................ssssssss.........F............................ [ 56%]
+......................................................s................. [ 67%]
+........................................................................ [ 78%]
+........................................................................ [ 89%]
+..................................................................       [100%]
+=================================== FAILURES ===================================
+_______________ test_dsh_child_launch_needs_no_graphtraj_setting _______________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-117/test_dsh_child_launch_needs_no0')
+dsh = {'executable': '/private/tmp/claude-501/pytest-of-luoxiao/pytest-117/test_dsh_child_launch_needs_no0/dsh/bin/dsh', 'model': 'deepseek-flash', 'sandbox': 'workspace-write'}
+
+    def test_dsh_child_launch_needs_no_graphtraj_setting(tmp_path: Path, dsh: dict) -> None:
+        """The MCP command, connection variable, package and plugin all come from agents."""
+        host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+        invoke, _, _ = claude_main(host, tmp_path)
+        agent = invoke('create', runtime='dsh', instruction='x')['agent']
+        invoke('wait', agent=agent, timeout_seconds=10)
+        [service] = FakeDshService.instances
+        environment = service.environment
+        assert not [name for name in environment if name.startswith('GRAPHTRAJ_')]
+        assert environment['DSH_AGENT_PACKAGE'] == str(Path(dsh['executable']).resolve().parent.parent / 'package.json')
+        assert environment['GRAFTLING_CONNECTION'].startswith(str(tmp_path / '.scratch'))
+        [plugin] = [row['insert'][0] for row in service.patches
+                    if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
+>       assert Path(plugin['name']) == ROOT / 'src/graftling/dsh/plugin.mjs'
+E       AssertionError: assert PosixPath('/tmp/claude-501/g530/src/graftling/dsh/plugin.mjs') == (PosixPath('/private/tmp/claude-501/g530') / 'src/graftling/dsh/plugin.mjs')
+E        +  where PosixPath('/tmp/claude-501/g530/src/graftling/dsh/plugin.mjs') = Path('/tmp/claude-501/g530/src/graftling/dsh/plugin.mjs')
+
+/tmp/claude-501/g530/tests/test_dsh_standalone_child.py:322: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../../../../../tmp/claude-501/g530/tests/test_dsh_standalone_child.py::test_dsh_child_launch_needs_no_graphtraj_setting
+1 failed, 620 passed, 21 skipped in 205.76s (0:03:25)
+exit=1

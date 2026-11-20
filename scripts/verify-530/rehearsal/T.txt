@@ -1,0 +1,15 @@
+RUN IN: Main's Bash. Dialog: none. Returns at once; the suites run one after another in the background.
+== [T] graftling full suite on 4a002129f8 and 95cffda1ff, then GraphTraj full suite (6 shards) on 974cb8e956 with graftling 4a002129f8.
+GraphTraj's base c917f5fcca: its full suite is the accepted adopt-528 G/Gt/GR evidence (no rerun here).
+load average: sysctl: sysctl fmt -1 1024 1: Operation not permitted | other test runs: 0
+pytest TMPDIR=${TMPDIR:-/tmp} = /tmp/claude-501; this run's temp root /private/tmp/claude-501/verify-530-T-20261120T201225 is outside the Harness: yes
+graftling /private/tmp/claude-501/rehearse530/base/t/graftling-4a002129f8/src/graftling/__init__.py | pytest 9.1.1
+graftling /private/tmp/claude-501/rehearse530/base/t/graftling-95cffda1ff/src/graftling/__init__.py | pytest 9.1.1
+graphtraj /private/tmp/claude-501/rehearse530/base/t/graphtraj-974cb8e956/src/graphtraj/__init__.py | default_archive: True | graftling 0.6.2 /tmp/claude-501/rehearse530/base/t/v-graphtraj-974cb8e956/lib/python3.13/site-packages/graftling/__init__.py
+pytest temp root: /private/tmp/claude-501/verify-530-T-20261120T201225
+candidate: 974cb8e95680ac607e420329517470aca9239629
+graftling 4a002129f8 vs 95cffda1ff; GraphTraj 974cb8e956 + graftling 4a002129f8
+REHEARSAL: graftling tests limited to tests/test_config_lock_git_ignored_530.py tests/test_runtime_dirs_git_ignored_526.py tests/test_claude_jsonl.py
+REHEARSAL: GraphTraj tests limited to tests/test_swarm_root_git_ignored_530.py tests/test_pi_generic_execution.py tests/test_managed_sessions.py (plain pytest)
+started in the background at 20:12:25; output /tmp/claude-501/rehearse530/base/runs/T-20261120T201225 ('all done' in run.txt when it ends; graftling ~3+3 min, GraphTraj ~25 min).
+next (Main, when run.txt says 'all done'): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/530-graftling-root-files-in-dsh-changes/scripts/verify-530/steps.zsh TR

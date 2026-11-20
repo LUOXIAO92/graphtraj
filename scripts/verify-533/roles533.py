@@ -3,7 +3,7 @@
 usage: python -I roles533.py <project>    (the candidate scratch venv's python)
 
 Precedent: scripts/verify-519/prep519.py. The role uses the connection the Harness's opus_coding_team presets use
-(claude/anthropic/opus-5_5, from the user's ~/.graphtraj/connections.yml, read only), reasoning_effort low, Claude
+(claude/anthropic/opus-5_5, from the user's ~/.graphtraj/connections.yml, read only), reasoning_effort high, Claude
 permission_mode auto. The check repeats the Task-free agents driver's choice (agent_driver.py: a role named after
 the runtime, else exactly one role using it), then resolve_preset + resolve_child_role. Exit 0 = PASS.
 """
@@ -20,7 +20,8 @@ CONNECTION = 'claude/anthropic/opus-5_5'
 
 def main(project: Path) -> int:
     path = roles_file(project)
-    document = {'roles': {'claude': {'connection': CONNECTION, 'reasoning_effort': 'low',
+    # Exactly the production preset opus_coding_team.engineer, which resolves today ('low' is refused by the catalog).
+    document = {'roles': {'claude': {'connection': CONNECTION, 'reasoning_effort': 'high',
                                      'claude': {'permission_mode': 'auto'}}},
                 'role_tree': {'claude': {}}}
     path.write_text(yaml.safe_dump(document, sort_keys=False), encoding='utf-8')

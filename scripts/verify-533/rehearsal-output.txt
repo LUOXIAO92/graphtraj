@@ -291,3 +291,84 @@ exit=0
 8 passed in 0.17s
 exit=0
 Judge FAILED/ERROR lines against 516's list (never blocking) and the 532-accepted baseline; any other is NEW.
+
+===== 2026-11-20 23:25:26 JST V-only rerun after the effort fix (roles533.py high; stand-in catalog supported_efforts [high, max]); base/venv from the run above
+[V] Main 准备隔离项目，然后 USER 在真实 claude 里操作一次。对话框: Main 无；USER 预期无（文件夹已在第一次尝试时信任）。
+
+### isolated project with the CANDIDATE graphtraj + graftling
+project settings: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/settings.local.json | claudeMdExcludes 14 | cc-plugin-agents-md@builtin: False
+graphtraj project root: /private/tmp/claude-501/reh533/H/tmp/vproject-533 | git top level: /private/tmp/claude-501/reh533/H/tmp/vproject-533 | CLAUDE.md at or above: none
+isolation: OK
+[
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/settings.local.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host/hooks/hooks.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/claude-host/config.json",
+  "/private/tmp/claude-501/reh533/H/tmp/vproject-533/.mcp.json"
+]
+project settings: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.claude/settings.local.json | claudeMdExcludes 14 | cc-plugin-agents-md@builtin: False
+
+### written plugin /tmp/claude-501/reh533/H/tmp/vproject-533/.claude/skills/graphtraj-claude-host
+ui.place calls in the written mod: 1
+UserMessage render in the written mod: yes
+14:const PLUGIN = null;
+17:const SERVER = "graphtraj";
+
+### claude plugin validate (no ✘ expected)
+claude: /tmp/claude-501/reh533/stub/claude -> /private/tmp/claude-501/reh533/stub/claude | version: 2.1.325 (stub Claude Code)
+✔ Validation passed (stub)
+
+### MCP approval: the project's .claude/settings.local.json must enable the .mcp.json server graphtraj (no separate MCP dialog)
+enabledMcpjsonServers: graphtraj already present (or not in .mcp.json)
+enabledMcpjsonServers: ['graphtraj'] | enableAllProjectMcpServers: None | .mcp.json servers: ['graphtraj']
+CHECK 533 graphtraj MCP server enabled in project settings: PASS
+
+### child role: ONE role 'claude' (connection claude/anthropic/opus-5_5, effort high, permission_mode auto); resolved without launching a model
+roles file written: /private/tmp/claude-501/reh533/H/tmp/vproject-533/.graphtraj/roles.yml
+roles:
+  claude:
+    connection: claude/anthropic/opus-5_5
+    reasoning_effort: high
+    claude:
+      permission_mode: auto
+role_tree:
+  claude: {}
+CHECK 533 child role resolves: PASS (runtime claude, model claude-opus-5-5, reasoning_effort high, role claude, roles ['claude'])
+
+### USER（真实交互式 Claude Code，Main 做不了）
+1) 在普通 Terminal 运行（一行）:
+   cd /tmp/claude-501/reh533/H/tmp/vproject-533 && claude --allowedTools mcp__graphtraj__agents,mcp__graphtraj__tasks
+2) 预期对话框: 无（上次已信任此文件夹；graphtraj MCP 已在项目设置中启用，见上方 CHECK）。若仍出现信任框（文件夹、MCP server 'graphtraj' 或 hooks），选它的肯定选项（信任/使用，例如 'Yes, I trust this folder' / 'Use this and all future MCP servers'），并把对话框标题告诉 Main。其它任何框按 Esc 并报告标题。
+3) 粘贴下面整段提示（也在 /tmp/claude-501/reh533/w/V-prompt.txt），回车:
+----- prompt -----
+Use only the mcp__graphtraj__agents tool (not Claude Code's own subagents) for this check of how agents messages are shown.
+1. Call agents with {"action":"discover"} and then describe "create", so you know its arguments.
+2. Create ONE child with only these selections: runtime claude, name n533. Pass NO model, configuration, preset, connection or reasoning effort (the project's one role 'claude' supplies them). If create is refused, report the exact error text and stop; do not retry with other models or settings. Its instruction is exactly this Markdown:
+
+## Task 533 display check
+
+Reply **without using any tool**, in Markdown, with:
+- a level-2 heading `## Reply from n533`
+- a bullet list of two items, one holding an inline code span like `agents`
+- one quoted line starting with `> `
+
+Then stop.
+
+3. Do NOT call wait or status. End your turn with one short sentence.
+4. When the completion notice from n533 arrives, call agents send to n533 with exactly this Markdown message, then again do NOT wait, and end your turn:
+
+### Second message
+
+1. Answer again in Markdown: a heading, a two-item list and a `code span`.
+2. Use no tool.
+
+5. When its second completion notice arrives, say DONE-533 and stop. Do not retire the child.
+------------------
+4) 截两张图: (i) 'agents → n533' 那一行（发出的消息，Markdown 渲染）; (ii) 来自 n533 的完成通知（粗体发送方 · completed、Markdown 内容、灰色 Facts 行）。
+5) 看到 DONE-533 后输入 /exit。把截图交给 Main。
+
+==> 下一步 / next（直接粘贴）: Main: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/533-claude-main-agents-message-display/scripts/verify-533/steps.zsh Vr
+===== negative: scratch copy of roles533.py with 'low' against the same stand-in catalog
+CHECK 533 child role resolves: FAIL (ProjectRolesError: GraphTraj Roles is invalid.
+- The selected reasoning effort is not supported by this model.)

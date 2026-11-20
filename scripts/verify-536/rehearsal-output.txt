@@ -1,0 +1,50 @@
+== rehearsal in /private/tmp/claude-501/reh536 (stub pi for 00/V0/V1; real commits)
+REHEARSAL PASS 00: isolation OK, pi answer, next command
+env: bound: No such file or directory
+Ready when: isolation OK and one READY-536 line naming the model.
+
+==> 下一步 / next（直接粘贴）: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/536-pi-main-agents-message-display/scripts/verify-536/steps.zsh B
+REHEARSAL PASS B: exact diff; baseline without, candidate with the notice renderer; pip check rc=0 twice
+CHECK 536 GraphTraj product diff is exactly the three 536 files: PASS
+graftling candidate: fc081a3f1cf2664f603d4deba14a86d59a16fd8f Pi draws an agents notice as who · event over its Markdown body (536) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+baseline: GraphTraj 8ac35e3195f3735b9742a7beff3842333cb4e48a + graftling f67d147a222d7db214ecad14d24809debad999a4 | extension /private/tmp/claude-501/reh536/base/venv-baseline/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs
+baseline: notice renderer in the extension: 0
+candidate: GraphTraj 86b3d7a7bddae29b9628dd2bf0798081f2609078 + graftling fc081a3f1cf2664f603d4deba14a86d59a16fd8f | extension /private/tmp/claude-501/reh536/base/venv-candidate/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs
+candidate: notice renderer in the extension: 3
+REHEARSAL PASS V0: child role resolves (no model), USER pi command with --session-dir and --extension, prompt printed
+extension: /private/tmp/claude-501/reh536/base/venv-baseline/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs | notice renderer in it: 0
+   cd /private/tmp/claude-501/reh536/H/tmp/vproject-536 && PATH=/private/tmp/claude-501/reh536/base/venv-baseline/bin:$PATH GRAFTLING_PYTHON=/private/tmp/claude-501/reh536/base/venv-baseline/bin/python pi --session-dir /private/tmp/claude-501/reh536/w/pi-V0 --extension /private/tmp/claude-501/reh536/base/venv-baseline/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs --provider deepseek --model deepseek-flash
+REHEARSAL PASS V1: child role resolves (no model), USER pi command with --session-dir and --extension, prompt printed
+extension: /private/tmp/claude-501/reh536/base/venv-candidate/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs | notice renderer in it: 3
+   cd /private/tmp/claude-501/reh536/H/tmp/vproject-536 && PATH=/private/tmp/claude-501/reh536/base/venv-candidate/bin:$PATH GRAFTLING_PYTHON=/private/tmp/claude-501/reh536/base/venv-candidate/bin/python pi --session-dir /private/tmp/claude-501/reh536/w/pi-V1 --extension /private/tmp/claude-501/reh536/base/venv-candidate/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs --provider deepseek --model deepseek-flash
+/private/tmp/claude-501/reh536/w/pi-V0/session.jsonl notice rows: 1
+/private/tmp/claude-501/reh536/w/pi-V1/session.jsonl notice rows: 1
+REHEARSAL PASS Vr: V0 (BASELINE) FAIL, V1 (CANDIDATE) PASS
+Pi Session file: /private/tmp/claude-501/reh536/w/pi-V0/session.jsonl
+- notice [GraphTraj notice from n536 · completed · execution e1]
+    FAIL model input has the title with execution id
+    FAIL no escaped JSON / permissions in the content
+    FAIL display details (sender, event, body)
+    FAIL body has no title or JSON
+Vr536: FAIL
+Pi Session file: /private/tmp/claude-501/reh536/w/pi-V1/session.jsonl
+- notice [Graftling notice from n536 · completed · execution e1]
+    PASS model input has the title with execution id
+    PASS no escaped JSON / permissions in the content
+    PASS display details (sender, event, body)
+    PASS body has no title or JSON
+Vr536: PASS
+Expected: V0 FAIL (BEFORE: JSON in the notice, no display details); V1 PASS (AFTER).
+REHEARSAL PASS G: TMPDIR outside the Harness printed; both limited runs exit=0
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-536-gt-20261120T235435 | graftling temp /private/tmp/claude-501/verify-536-gl-20261120T235435
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/536-pi-main-agents-message-display/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/reh536/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling suite imports /private/tmp/claude-501/reh536/base/src-candidate/gl/src/graftling/__init__.py
+==> /private/tmp/claude-501/reh536/w/G-20261120T235435/graphtraj.txt <==
+11 passed in 3.41s
+exit=0
+
+==> /private/tmp/claude-501/reh536/w/G-20261120T235435/graftling.txt <==
+6 passed in 0.52s
+exit=0
+== rehearsal: 6 passed, 0 failed

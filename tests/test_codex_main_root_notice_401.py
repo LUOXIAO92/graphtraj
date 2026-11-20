@@ -42,7 +42,11 @@ def sent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> list:
         async def __aexit__(self, *_: object) -> None:
             return None
 
-        async def send_host_event(self, session: str, event: dict) -> dict:
+        async def send_host_event(self, session: str, event: dict, text: str) -> dict:
+            from graftling import notice_text
+
+            # 535: the Main reads the Runtime-independent notice text; the event is unchanged.
+            assert text == notice_text(event)
             if Transport.failure is not None:
                 raise Transport.failure
             events.append((self.home, session, event))

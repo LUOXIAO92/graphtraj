@@ -282,7 +282,8 @@ for line in incoming():
             assert params['input'] == []
             assert params['toolOutput']['name'] == 'graftling'
             prompt = params['toolOutput']['output']
-            assert json.loads(prompt)['source'] in {'graphtraj', 'agents'}
+            # GraphTraj's Main notices are graftling.notice_text (535); graftling's own host sends JSON.
+            assert prompt.startswith('[Graftling notice from ') or json.loads(prompt)['source'] in {'graphtraj', 'agents'}
             if os.environ.get('PEER_HOST_EVENTS'):
                 with open(os.environ['PEER_HOST_EVENTS'], 'a') as stream:
                     stream.write(prompt + '\n')

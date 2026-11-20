@@ -157,8 +157,21 @@ def current_connection() -> dict | None:
     }
 
 
+# The single switch for the notice's look in Codex: one blockquote (a coloured bar and tint on every line,
+# the only isolation the delegation cell offers, 535). To drop it: `QUOTE_NOTICE = False`.
+QUOTE_NOTICE = True
+
+
+def quoted(text: str) -> str:
+    """Return ``text`` as one Markdown blockquote ('>' alone for a blank line), when QUOTE_NOTICE is on."""
+    if not QUOTE_NOTICE:
+        return text
+    return '\n'.join(f'> {line}' if line else '>' for line in text.split('\n'))
+
+
 def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
     """Use a bounded proxy connection to the existing service for this event only."""
+    from graftling import notice_text
     from graphtraj.runtimes.codex.app_server import CodexAppServer
     from graphtraj.workspace.runner_project import discover_project_root, runtime_executable
 
@@ -206,7 +219,12 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
                         pass  # The check ended before submission.
             submitted_at = time.time()
             try:
-                result = await client.send_host_event(connection['session'], event)
+                # The Main reads the Runtime-independent notice text (533's), not the
+                # event's JSON; the event itself is validated and recorded unchanged.
+                # As Codex's delegation output the TUI draws it as "Sent by Codex from
+                # task <alias>" over rendered Markdown (535; probed on Codex 0.171.0).
+                result = await client.send_host_event(connection['session'], event, quoted(notice_text(event)),
+                                                      delegation_from=event['alias'])
             except RuntimeAdapterError as error:
                 if getattr(error, 'request_written', False):
                     # Written, then unacknowledged: the host may already have

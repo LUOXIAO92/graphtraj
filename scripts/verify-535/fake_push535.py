@@ -1,6 +1,6 @@
 """Rehearsal only: one Codex rollout whose pushed notice is what GraphTraj's REAL send_event writes.
 
-usage: python -I fake_push535.py <rollout out> <project>     (run with the B0 or B venv's python, cwd = project)
+usage: python -I fake_push535.py <rollout out> <project> <session id>     (run with the B0 or B venv's python, cwd = project)
 
 GraphTraj's graphtraj.runtimes.codex.host_events.send_event and graftling's real CodexAppServer.send_host_event
 run unchanged; only graftling's native transport (process start and JSON-RPC _call) is replaced, capturing the
@@ -17,7 +17,7 @@ EXECUTION = 'e' * 32
 MESSAGE = '## Reply from n535\n\n- one `agents`\n- two\n\n> quoted'
 
 
-def main(out: Path, project: Path) -> int:
+def main(out: Path, project: Path, session: str) -> int:
     from graphtraj.runtimes.codex.host_events import send_event
 
     captured = []
@@ -39,7 +39,7 @@ def main(out: Path, project: Path) -> int:
                {'source': 'graphtraj', 'alias': 'agent-n535', 'event': 'completed', 'message': MESSAGE,
                 'execution': EXECUTION})
     [params] = captured
-    rows = [{'type': 'session_meta', 'payload': {'cwd': str(project)}},
+    rows = [{'type': 'session_meta', 'payload': {'id': session, 'cwd': str(project)}},
             {'type': 'response_item', 'payload': {'type': 'function_call_output', 'name': params['toolOutput']['name'],
                                                   'output': params['toolOutput']['output']}}]
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -49,4 +49,4 @@ def main(out: Path, project: Path) -> int:
 
 
 if __name__ == '__main__':
-    sys.exit(main(Path(sys.argv[1]).absolute(), Path(sys.argv[2]).resolve()))
+    sys.exit(main(Path(sys.argv[1]).absolute(), Path(sys.argv[2]).resolve(), sys.argv[3]))

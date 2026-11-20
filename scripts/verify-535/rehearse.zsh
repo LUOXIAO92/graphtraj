@@ -64,41 +64,37 @@ S 00 > $F/00.out 2>&1; check "00: isolation OK, codex exec answer names gpt-6-lu
 grep -E 'codex:|codex login|header model' $F/00.out
 S B0 > $F/B0.out 2>&1; check "B0: baseline wheels + venv from 8ac35e31 and f67d147a" sh -c "grep -q 'venv pip check rc=0' $F/B0.out && grep -q '^GraphTraj 8ac35e31' $F/B0.out && grep -q '^graftling f67d147a' $F/B0.out && grep -q 'steps.zsh T' $F/B0.out"
 S T > $F/T.out 2>&1; check "T: one dialog (directory trust), no prompt, /exit" sh -c "grep -q 'Do you trust the contents of this directory' $F/T.out && grep -q '/exit' $F/T.out && grep -q 'steps.zsh Vb' $F/T.out"
-S Vb > $F/Vb.out 2>&1; check "Vb: project .codex written via active link, role (astra engineer -> luna, effort medium) resolves (no model), USER command + prompt" sh -c "grep -q 'CHECK 535 child role resolves: PASS (runtime codex, model gpt-6-luna, reasoning_effort medium' $F/Vb.out && grep -q 'role codex = production astra_coding_team.engineer' $F/Vb.out && grep -q 'codex/deepseek/deepseek-flash | does not resolve' $F/Vb.out &&grep -q 'base/active/venv/bin/graphtraj-mcp' $F/Vb.out && grep -q 'codex.display_hook' $F/Vb.out && grep -q 'codex -m gpt-6-luna' $F/Vb.out && grep -q 'Pass NO model' $F/Vb.out"
-sed -n '/^production presets/,/CHECK 535 child role/p' $F/Vb.out
-# Without gpt-6-luna in the catalog Vb STOPs before the USER part and says why.
-catalog without > $F/home/.graphtraj/connections.yml
-S Vb > $F/Vb-noluna.out 2>&1; check "Vb without gpt-6-luna in the catalog: FAIL with the reason, STOP before the USER part" sh -c "grep -q 'CHECK 535 child role resolves: FAIL (ValueError: the catalog has no codex model with id or key gpt-6-luna)' $F/Vb-noluna.out && grep -q 'codex/openai/gpt-6-astra: id gpt-6-astra' $F/Vb-noluna.out && grep -q 'STOP: the child role does not resolve' $F/Vb-noluna.out && ! grep -q '粘贴下面整段提示' $F/Vb-noluna.out"
-grep -E 'CHECK 535|STOP' $F/Vb-noluna.out
-catalog with > $F/home/.graphtraj/connections.yml
+S Vb > $F/Vb.out 2>&1; check "Vb: project .codex via active link, ONE role claude (533's) resolves without a model, USER command + prompt (runtime claude), one dialog" sh -c "grep -q 'CHECK 535 child role resolves: PASS (runtime claude, model claude-opus-5-5, reasoning_effort high' $F/Vb.out && grep -q 'base/active/venv/bin/graphtraj-mcp' $F/Vb.out && grep -q 'codex -m gpt-6-luna' $F/Vb.out && grep -q 'runtime claude, name n535' $F/Vb.out && grep -q \"the project's one role 'claude'\" $F/Vb.out && grep -q '恰好一个' $F/Vb.out && grep -q 'CLAUDE.md/CLAUDE.local.md at or above (Codex Main, Claude child): none' $F/Vb.out"
+grep -E 'CHECK 535|roles file written|at or above' $F/Vb.out
 cp $F/vproject/.codex/hooks.json $F/hooks-vb.json
-# Correction round 1: hooks.json holds no Stop completion checker or SessionEnd, and the SessionStart claim ignores
-# ONLY an `exec` child (its session would otherwise become the current Main); every other source reaches stop_hook
-# (here 'appServer': the wrapper hands it on, so its output is stop_hook's, not the wrapper's {}); stale main-sessions
-# removed; fresh child name.
-print -r -- '{"type":"session_meta","payload":{"source":"exec"}}' > $F/child-rollout.jsonl
-CLAIM=$(print -r -- "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"session_id\":\"x\",\"cwd\":\"$F/vproject\",\"transcript_path\":\"$F/child-rollout.jsonl\"}" \
-  | (cd $F/vproject && $F/base/active/venv/bin/python -I $SD/main_start535.py))
-# A non-exec source is handed to stop_hook (stub codex on PATH, rehearsal CODEX_HOME: no real host is contacted).
-print -r -- '{"type":"session_meta","payload":{"source":"appServer"}}' > $F/main-rollout.jsonl
-print -r -- "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"session_id\":\"x\",\"cwd\":\"$F/vproject\",\"transcript_path\":\"$F/main-rollout.jsonl\"}" \
-  | (cd $F/vproject && env PATH=$F/stub:/usr/bin:/bin CODEX_HOME=$F/codex-home /usr/bin/perl -e 'alarm 60; exec @ARGV' \
-       $F/base/active/venv/bin/python -I $SD/main_start535.py) > $F/claim-main.out 2>&1
-print "claim for a non-exec source (handed to stop_hook; output and exit code are stop_hook's): rc=$? $(tail -c 300 $F/claim-main.out)"
-check "SessionStart of a non-exec source is handed to stop_hook (not the wrapper's {})" sh -c "[ \"\$(cat $F/claim-main.out)\" != '{}' ]"
-check "Vb hooks: SessionStart claim + display only; an exec child's SessionStart is ignored; main-sessions cleared; fresh child name" sh -c "! grep -q 'stop_hook' $F/vproject/.codex/hooks.json && ! grep -q SessionEnd $F/vproject/.codex/hooks.json && grep -q main_start535.py $F/vproject/.codex/hooks.json && [ '$CLAIM' = '{}' ] && [ ! -e $F/vproject/.graphtraj/runner/main-sessions ] && grep -qE 'child name for this run .*: n535[0-9]{4}' $F/Vb.out && grep -q \"name \$(cat $F/w/child-name)\" $F/w/V-prompt.txt"
+check "Vb hooks.json: exactly SessionStart(stop_hook) + PostToolUse(display) + Stop(display); no checker, no SessionEnd; main-sessions cleared; fresh child name" \
+  $F/base/active/venv/bin/python -I -c 'import json, sys
+h = json.load(open(sys.argv[1]))["hooks"]
+cmd = lambda e: [x["command"].split(" -m ")[1].split()[0] for g in h[e] for x in g["hooks"]]
+ok = sorted(h) == ["PostToolUse", "SessionStart", "Stop"] and cmd("SessionStart") == ["graphtraj.runtimes.codex.stop_hook"] \
+  and cmd("PostToolUse") == cmd("Stop") == ["graphtraj.runtimes.codex.display_hook"]
+print("hooks.json:", {e: cmd(e) for e in sorted(h)}); sys.exit(0 if ok else 1)' $F/vproject/.codex/hooks.json
+check "Vb: stale main-sessions cleared; fresh child name in the prompt" sh -c "[ ! -e $F/vproject/.graphtraj/runner/main-sessions ] && grep -qE 'child name for this run .*: n535[0-9]{4}' $F/Vb.out && grep -q \"name \$(cat $F/w/child-name)\" $F/w/V-prompt.txt"
 S B > $F/B.out 2>&1; check "B: exact 535 diff, candidate wheels + venv, send_host_event takes text" sh -c "grep -q 'CHECK 535 GraphTraj product diff is exactly the 535 files: PASS' $F/B.out && grep -q 'venv pip check rc=0' $F/B.out && grep -q 'candidate send_host_event takes text: True' $F/B.out"
 grep -E '^GraphTraj |^graftling |files changed' $F/B.out
-S V > $F/V.out 2>&1; check "V: same hooks.json as Vb (no new hook review), active -> cand" sh -c "cmp -s $F/hooks-vb.json $F/vproject/.codex/hooks.json && grep -q 'active -> $F/base/cand' $F/V.out && grep -q 'CHECK 535 child role resolves: PASS' $F/V.out"
-# Vr on rollouts holding what the REAL send_event of each venv writes.
-R=$F/codex-home/sessions/2026/11/21
-(cd $F/vproject && $F/base/base/venv/bin/python -I $SD/fake_push535.py $R/rollout-old.jsonl $F/vproject) > $F/push-old.out 2>&1
-S Vr > $F/Vr-old.out 2>&1; check "Vr on the BASELINE push (escaped JSON): FAIL (the check can fail)" grep -q '^CHECK 535 notices: FAIL' $F/Vr-old.out
-grep -E 'CHECK' $F/Vr-old.out | head -6
-rm $R/rollout-old.jsonl
-(cd $F/vproject && $F/base/cand/venv/bin/python -I $SD/fake_push535.py $R/rollout-new.jsonl $F/vproject) > $F/push-new.out 2>&1
-cat $F/push-new.out
-S Vr > $F/Vr-new.out 2>&1; check "Vr on the CANDIDATE push (notice text): PASS" grep -q '^CHECK 535 notices: PASS' $F/Vr-new.out
+S V > $F/V.out 2>&1; check "V: same hooks.json as Vb (no new hook review), active -> cand, role PASS" sh -c "cmp -s $F/hooks-vb.json $F/vproject/.codex/hooks.json && grep -q 'active -> $F/base/cand' $F/V.out && grep -q 'CHECK 535 child role resolves: PASS' $F/V.out"
+# Vr picks the MAIN's rollout by its continuity claim, even with a NEWER decoy rollout of the same cwd (a child's).
+# Each case: the Main's rollout holds one venv's REAL send_event output, the decoy the other's.
+R=$F/codex-home/sessions/2026/11/21; MAIN=01a1f989-main-0000-0000-000000000535; DECOY=01a1f99f-child-000-0000-000000000535
+mkdir -p $F/vproject/.graphtraj/runner/main-sessions
+claims() {  # an older claim before V's stamp (ignored), then the Main's codex:SessionStart claim after it
+  print -r -- "{\"at\": 1, \"entry\": \"codex:SessionStart:startup\", \"runtime\": \"codex\", \"session\": \"$DECOY\"}
+{\"at\": $(( $(cat $F/w/Vcand.start) + 1 )), \"entry\": \"codex:SessionStart:startup\", \"runtime\": \"codex\", \"session\": \"$MAIN\"}" > $F/vproject/.graphtraj/runner/main-sessions/continuity.jsonl
+}
+push() { (cd $F/vproject && $F/base/$1/venv/bin/python -I $SD/fake_push535.py $R/$2 $F/vproject $3) >> $F/push.out 2>&1; }
+claims; push base rollout-main-old.jsonl $MAIN; sleep 1; push cand rollout-decoy-new.jsonl $DECOY
+S Vr > $F/Vr-old.out 2>&1; check "Vr picks the Main's rollout (not the newer decoy) and FAILs on the BASELINE push" sh -c "grep -q 'Main session $MAIN: rollout .*rollout-main-old.jsonl' $F/Vr-old.out && grep -q '^CHECK 535 notices: FAIL' $F/Vr-old.out"
+grep -E 'Main session|CHECK' $F/Vr-old.out | head -7
+rm $R/rollout-*.jsonl
+push cand rollout-main-new.jsonl $MAIN; sleep 1; push base rollout-decoy-old.jsonl $DECOY
+S Vr > $F/Vr-new.out 2>&1; check "Vr picks the Main's rollout (not the newer decoy) and PASSes on the CANDIDATE push" sh -c "grep -q 'Main session $MAIN: rollout .*rollout-main-new.jsonl' $F/Vr-new.out && grep -q '^CHECK 535 notices: PASS' $F/Vr-new.out"
+rm $F/vproject/.graphtraj/runner/main-sessions/continuity.jsonl
+S Vr > $F/Vr-none.out 2>&1; check "Vr without a Main claim: FAIL" grep -q 'FAIL: no codex:SessionStart Main claim' $F/Vr-none.out
 sed -n '/---- notice/,/CHECK 535 notices/p' $F/Vr-new.out
 # G's entry with real tests (GraphTraj tests using repository fixtures; graftling's tests of the change).
 VERIFY535_TESTS="tests/test_current_host_events.py tests/test_codex_main_root_notice_401.py tests/test_codex_agent_display.py" \

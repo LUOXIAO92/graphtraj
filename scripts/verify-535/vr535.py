@@ -1,6 +1,10 @@
-"""Task 535 Vr: read the newest interactive Codex Main rollout of the isolated project (read only).
+"""Task 535 Vr: read the interactive Codex Main's rollout of the isolated project (read only).
 
-usage: python -I vr535.py <codex sessions dir> <project> <child name>
+usage: python -I vr535.py <codex sessions dir> <project> <child name> <V start epoch>
+
+The Main is the session of the last continuity claim (<project>/.graphtraj/runner/main-sessions/continuity.jsonl)
+written at or after the V start stamp whose entry starts with codex:SessionStart; its rollout is the one whose
+session_meta id is that session (try 2 picked a child's newer rollout with the same cwd). FAIL if none.
 
 Observables, per pushed notice (response_item function_call_output named 'graftling', the record the model reads;
 484 I2 showed it is the toolOutput of graftling's send_host_event):
@@ -35,6 +39,15 @@ def rollouts(sessions: Path, project: Path) -> list[Path]:
     return sorted(found, key=lambda path: path.stat().st_mtime, reverse=True)
 
 
+def session_id(path: Path) -> str | None:
+    """session_meta.payload.id of one rollout."""
+    try:
+        with path.open(encoding='utf-8') as handle:
+            return (json.loads(handle.readline()).get('payload') or {}).get('id')
+    except (OSError, ValueError):
+        return None
+
+
 def judge(text: str, child: str) -> list[tuple[str, bool]]:
     try:
         parsed = json.loads(text)
@@ -49,13 +62,30 @@ def judge(text: str, child: str) -> list[tuple[str, bool]]:
     ]
 
 
-def main(sessions: Path, project: Path, child: str) -> int:
-    paths = rollouts(sessions, project)
+def main_session(project: Path, since: float) -> str | None:
+    """The session of the last codex:SessionStart claim written at or after ``since`` (the Main, not the child)."""
+    path = project / '.graphtraj/runner/main-sessions/continuity.jsonl'
+    try:
+        claims = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+    except (OSError, ValueError) as error:
+        print(f'continuity unreadable: {path}: {error}')
+        return None
+    print(f'continuity {path}: {[(c.get("entry"), c.get("session")) for c in claims]}')
+    main = [c for c in claims if float(c.get('at', 0)) >= since and str(c.get('entry') or '').startswith('codex:SessionStart')]
+    return main[-1]['session'] if main else None
+
+
+def main(sessions: Path, project: Path, child: str, since: float) -> int:
+    session = main_session(project, since)
+    if session is None:
+        print(f'FAIL: no codex:SessionStart Main claim in continuity at or after {since}; the USER part of Vb/V comes first')
+        return 1
+    paths = [path for path in rollouts(sessions, project) if session_id(path) == session]
     if not paths:
-        print(f'no rollout under {sessions} with cwd {project} yet; the USER part of Vb/V comes first')
+        print(f'FAIL: no rollout under {sessions} whose session_meta id is the Main session {session}')
         return 1
     path = paths[0]
-    print(f'newest isolated Main rollout: {path} (of {len(paths)})')
+    print(f'Main session {session}: rollout {path}')
     notices, shown = [], []
     for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
         try:
@@ -83,7 +113,7 @@ def main(sessions: Path, project: Path, child: str) -> int:
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(Path(sys.argv[1]), Path(sys.argv[2]).resolve(), sys.argv[3]))
+    sys.exit(main(Path(sys.argv[1]), Path(sys.argv[2]).resolve(), sys.argv[3], float(sys.argv[4])))

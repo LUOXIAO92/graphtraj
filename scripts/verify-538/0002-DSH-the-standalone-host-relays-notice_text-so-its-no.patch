@@ -1,0 +1,163 @@
+From 3448ebacb993abb7fe0f34f0d48a4044e2b61322 Mon Sep 17 00:00:00 2001
+From: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+Date: Sat, 21 Nov 2026 02:51:04 +0900
+Subject: [PATCH 2/2] =?UTF-8?q?DSH:=20the=20standalone=20host=20relays=20n?=
+ =?UTF-8?q?otice=5Ftext,=20so=20its=20notice=20shows=20as=20who=20=C2=B7?=
+ =?UTF-8?q?=20event=20over=20Markdown=20(538)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+graftling-dsh's plugin titled a host notice '[agents notice from …]' with the raw
+message, which the browser module could not read as a notice, so DSH showed
+'From Agent / Session' and the content only as plain text in its card. The host's
+notice line now carries notice_text (title with the execution, Markdown content,
+Facts) and the plugin relays it as the body; a host without it keeps the older title.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/graftling/CHANGELOG.md        |  6 ++++++
+ src/graftling/PUBLIC_API.md       |  8 ++++----
+ src/graftling/dsh/host.py         |  7 +++++--
+ src/graftling/dsh/plugin.mjs      |  6 +++++-
+ src/graftling/install/dsh.md      |  5 +++--
+ tests/test_dsh_standalone_host.py | 13 ++++++++++---
+ 6 files changed, 33 insertions(+), 12 deletions(-)
+
+diff --git a/src/graftling/CHANGELOG.md b/src/graftling/CHANGELOG.md
+index 3eb25d1..f824b5c 100644
+--- a/src/graftling/CHANGELOG.md
++++ b/src/graftling/CHANGELOG.md
+@@ -14,6 +14,12 @@ The numbers in parentheses are the project's Task numbers.
+ 
+ ## Unreleased (compatible; the next version is 0.6.3)
+ 
++- DSH shows an agents notice as who · event over its Markdown (538). The DSH host relays
++  `notice_text` (its notice line gains `text`); graftling-dsh's browser module draws the
++  notice title's sender and event over the content through DSH's `MarkdownText`, prints an
++  equal agent/session pair once and leaves out a recipient that is the open conversation.
++  DSH's own card below keeps the model's text.
++
+ - The Claude Code Main shows agents traffic as who and what (533). A pushed notice's text
+   is the new public `notice_text(event)`, the same for every Runtime: the unchanged title
+   `[Graftling notice from <alias> · <event>[ · execution <id>]]`, then the content as
+diff --git a/src/graftling/PUBLIC_API.md b/src/graftling/PUBLIC_API.md
+index cc6bb55..c00e7df 100644
+--- a/src/graftling/PUBLIC_API.md
++++ b/src/graftling/PUBLIC_API.md
+@@ -1604,11 +1604,11 @@ What the parent sees today:
+   their Session: a new or forked Pi Session does not receive them.
+ - **DSH host** (1.7): it enables `request_notices` and `hold_notices`, for
+   children of every Runtime it runs. Each notice `{"id", "agent", "session", "event",
+-  "message", "execution"}` (the id as for Claude above) goes to the plugin,
+-  which hands it to the existing `agentMessages.receive` relay
++  "message", "execution", "text"}` (the id as for Claude above; `text` is `notice_text`, 538) goes
++  to the plugin, which hands it to the existing `agentMessages.receive` relay
+   (`dsh/communication.mjs`): one native `agent-message` relay message from
+-  the child's Agent and Session, text `[agents notice from <agent> ·
+-  <event> · execution <execution>]` followed by the message, communication id `agents-notice:<id>`,
++  the child's Agent and Session, text `text` (a host without it: `[agents notice from <agent> ·
++  <event> · execution <execution>]` followed by the message), communication id `agents-notice:<id>`,
+   placed in the Session's next-step inbox with a wake. The relay admits one
+   id once per Session, including across processes, by looking for it in the
+   Session's persisted events and inbox (`communication.mjs` `deliver`); that is
+diff --git a/src/graftling/dsh/host.py b/src/graftling/dsh/host.py
+index 8f3274d..31897e1 100644
+--- a/src/graftling/dsh/host.py
++++ b/src/graftling/dsh/host.py
+@@ -25,7 +25,7 @@ from typing import Any, Callable, Mapping, TextIO
+ 
+ from graftling import AgentControl, AgentsError, AgentsResult, Caller, bind
+ from graftling.connection import agents_connection
+-from graftling.notices import notice_id
++from graftling.notices import notice_id, notice_text
+ from graftling.process import process_ancestors, process_arguments, process_executable
+ from graftling.shutdown import CLOSE_SECONDS, exit_if_unconfirmed, stop_children
+ 
+@@ -175,7 +175,10 @@ class Notices:
+                 self.stream.write(json.dumps({'notice': {
+                     'id': identity, 'agent': notice['agent'], 'session': notice.get('session'),
+                     'event': notice['outcome'], 'message': message,
+-                    'execution': notice['execution']}}) + '\n')
++                    'execution': notice['execution'],
++                    # 538: the Runtime-independent text (533) the plugin relays as the model input
++                    'text': notice_text({'alias': notice['agent'], 'event': notice['outcome'], 'message': message,
++                                         'execution': notice['execution'], 'request': notice.get('request')})}}) + '\n')
+                 self.stream.flush()
+             except (OSError, ValueError):
+                 self.waiting.pop(identity, None)
+diff --git a/src/graftling/dsh/plugin.mjs b/src/graftling/dsh/plugin.mjs
+index 09d12f7..b11e1f3 100644
+--- a/src/graftling/dsh/plugin.mjs
++++ b/src/graftling/dsh/plugin.mjs
+@@ -39,8 +39,12 @@ export function sessionEnvironment(agent) {
+ export function noticeMessage(notice, session) {
+   const { id, agent, event, message, execution } = notice;
+   const named = execution ? ` · execution ${execution}` : '';
++  // 538: the host's notice_text (title with the execution, Markdown content, Facts), which graftling-dsh's
++  // browser module draws as who · event over Markdown; the older title only for a host that sends none.
++  const body = typeof notice.text === 'string' && notice.text ? notice.text
++    : `[agents notice from ${agent} · ${event}${named}]\n${message}`;
+   return { id: `agents-notice:${id}`, sessionId: session, senderSessionId: notice.session || agent,
+-    sender: agent, recipient: session, body: `[agents notice from ${agent} · ${event}${named}]\n${message}` };
++    sender: agent, recipient: session, body };
+ }
+ 
+ /**
+diff --git a/src/graftling/install/dsh.md b/src/graftling/install/dsh.md
+index d0a8bfe..ab2fd7b 100644
+--- a/src/graftling/install/dsh.md
++++ b/src/graftling/install/dsh.md
+@@ -101,8 +101,9 @@ handler fails with that text, and the Session has no `agents` tool.
+   `mcp__graftling__agents`.
+ - Ask it to use the `agents` tool, not DSH's own subagents, to create a Claude child that
+   answers one word, and to `wait` for it before ending the task.
+-- A notice appears in the Session as a relay message `[agents notice from <agent> ·
+-  completed · execution <execution>]` followed by the answer.
++- A notice appears in the Session as `<agent> · completed` over the answer as Markdown; DSH's
++  native card under it holds the model's text `[Graftling notice from <agent> · completed ·
++  execution <execution>]`, the answer and a `Facts:` line.
+ - `status` shows `last_result.notification: delivered` and `state: standby`.
+ 
+ ## Children on other Runtimes
+diff --git a/tests/test_dsh_standalone_host.py b/tests/test_dsh_standalone_host.py
+index 0c2abb9..db89268 100644
+--- a/tests/test_dsh_standalone_host.py
++++ b/tests/test_dsh_standalone_host.py
+@@ -234,7 +234,9 @@ def test_notice_receiver_outcomes() -> None:
+     sender, pipe = notices()
+     assert sender.receive(notice()) is True
+     assert pipe.lines == [{'notice': {'id': 'exec-1:completed', 'agent': 'agent-1', 'session': 'child',
+-                                      'event': 'completed', 'message': 'answer', 'execution': 'exec-1'}}]
++                                      'event': 'completed', 'message': 'answer', 'execution': 'exec-1',
++                                      'text': '[Graftling notice from agent-1 · completed · execution exec-1]'
++                                              '\n\nanswer'}}]
+     assert sender.receive(notice(parent='agent-0')) is False
+     assert sender.receive(notice(creator={'session': 'another-main'})) is False
+     assert len(pipe.lines) == 1
+@@ -449,7 +451,10 @@ import json, os, sys
+ launch = json.loads(sys.stdin.readline())
+ def notice(identity, event, message):
+     print(json.dumps({'notice': {'id': identity, 'agent': 'agent-1', 'session': 'child-session',
+-                                 'event': event, 'message': message, 'execution': identity.split(':')[0]}}), flush=True)
++                                 'event': event, 'message': message, 'execution': identity.split(':')[0],
++                                 # 538: the real host also sends notice_text; the plugin relays it as the body
++                                 **({'text': '[Graftling notice from agent-1 · completed · execution exec-1]\\n\\nthe answer'}
++                                    if event == 'completed' else {})}}), flush=True)
+ print(json.dumps({'connection': '/fake/address'}), flush=True)
+ acknowledgements = []
+ for identity, event, message in (('exec-1:completed', 'completed', 'the answer'),
+@@ -504,7 +509,9 @@ def test_plugin_host_row_relays_each_notice_to_its_main_session(tmp_path: Path)
+     first = shown['received'][0]
+     assert (first['sessionId'], first['recipient'], first['sender'], first['senderSessionId']) == (
+         'dsh-main', 'dsh-main', 'agent-1', 'child-session')
+-    assert first['body'] == '[agents notice from agent-1 · completed · execution exec-1]\nthe answer'
++    assert first['body'] == '[Graftling notice from agent-1 · completed · execution exec-1]\n\nthe answer'
++    # A host that sends no text keeps the older title (538 fallback).
++    assert shown['received'][1]['body'] == '[agents notice from agent-1 · failed · execution exec-2]\nprovider refused'
+     assert log['acknowledgements'] == [{'ack': 'exec-1:completed', 'shown': True},
+                                        {'ack': 'exec-2:failed', 'shown': False},
+                                        {'ack': 'exec-3:request:t', 'shown': True}]
+-- 
+2.50.1 (Apple Git-155)
+

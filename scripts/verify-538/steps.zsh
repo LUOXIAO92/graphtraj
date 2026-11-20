@@ -29,7 +29,7 @@ GTBASE=9ae7a1491f49816687a4f7f481f7fabc57981f85                # GraphTraj dev t
 GLBASE=fc081a3f1cf2664f603d4deba14a86d59a16fd8f                # graftling dev (536)
 GLSRC=$H/graftling                                             # read only (git archive of $GLBASE)
 GLREPO=${VERIFY538_GLREPO:-$WT/.scratch/graftling}             # untracked clone, branch agent/538-dsh-graphtraj-notice-block-display
-GLC=${VERIFY538_GLC:-70542bc58fa69cfb6fb62bdf5f5cb0b8046646ec} # candidate graftling (clone branch agent/538-dsh-graphtraj-notice-block-display)
+GLC=${VERIFY538_GLC:-3448ebacb993abb7fe0f34f0d48a4044e2b61322} # candidate graftling (clone branch agent/538-dsh-graphtraj-notice-block-display)
 BASE=${VERIFY538_BASE:-/private/tmp/dsh-ui-538}
 NODE=$BASE/node
 CONDA=$HOME/miniconda3/bin/python3.13
@@ -133,7 +133,7 @@ PROMPT_TEXT() {  # $1 tool, $2 child runtime, $3 child model ('' = none). Marker
   print -r -- "Use the MCP tool $1. Do exactly these four steps and nothing else.
 1. Call $1 with {\"action\": \"execute\", \"feature\": \"create\", \"arguments\": {${margs}\"name\": \"echo538\", \"instruction\": \"$reply\"}}. Use exactly these arguments; add no others and do not try other models.
 2. Call $1 with {\"action\": \"execute\", \"feature\": \"wait\", \"arguments\": {\"agent\": <the agent id that step 1 returned>, \"timeout_seconds\": 180}}, so the member's first reply has ended before you send.
-3. Call $1 with {\"action\": \"execute\", \"feature\": \"send\", \"arguments\": {\"agent\": <the same agent id>, \"message\": \"## Report 538\\n\\n- first item\\n- second item with \`code span\`\\n\\n\`\`\`text\\nline one\\nline two\\n\`\`\`\\n\\nReply in the same Markdown form as before.\"}}.
+3. Call $1 with {\"action\": \"execute\", \"feature\": \"send\", \"arguments\": {\"agent\": <the same agent id>, \"message\": \"## Report 538\\n\\n- first item\\n- second item with \`code span\`\\n\\n\`\`\`text\\nline one\\nline two\\n\`\`\`\\n\\nReply with a level-2 heading Reply 538, a two-item bullet list (gamma, delta) and a fenced code block holding the line: echo reply.\"}}.
 4. Do not wait for the member after step 3. End your turn with exactly one line made of the two words SENT and 538 joined by a hyphen.
 If step 1, 2 or 3 fails, call nothing else and end your turn with exactly one line made of the two words FAILED and 538 joined by a hyphen.
 Notice rule: each notice saying that this member ended or replied gets exactly one line made of the three words GOT, NOTICE and 538 joined by hyphens, and nothing else. If such a notice arrives before you have written the step 4 line, write only that notice line and end your turn; do not write the step 4 line after it."

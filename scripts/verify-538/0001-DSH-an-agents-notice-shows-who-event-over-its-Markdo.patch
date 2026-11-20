@@ -1,0 +1,145 @@
+From 70542bc58fa69cfb6fb62bdf5f5cb0b8046646ec Mon Sep 17 00:00:00 2001
+From: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+Date: Sat, 21 Nov 2026 02:14:46 +0900
+Subject: [PATCH] =?UTF-8?q?DSH:=20an=20agents=20notice=20shows=20who=20?=
+ =?UTF-8?q?=C2=B7=20event=20over=20its=20Markdown,=20each=20value=20once?=
+ =?UTF-8?q?=20(538)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+graftling-dsh's browser module wrapped DSH's turn-trigger with 'From Agent / Session'
+and 'To Agent / Session', printing equal agent/session ids twice and the open
+conversation's own id twice. A notice (notice_text's title) now shows who · event
+over its Markdown content through DSH's MarkdownText; the title and Facts stay in
+DSH's native card for the model. Other relays print an equal pair once and omit a
+recipient that is this conversation.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/graftling/dsh/client.mjs       | 46 +++++++++++++++++++++++++++---
+ tests/fixtures/dsh_client_view.mjs | 31 ++++++++++++++++++++
+ 2 files changed, 73 insertions(+), 4 deletions(-)
+
+diff --git a/src/graftling/dsh/client.mjs b/src/graftling/dsh/client.mjs
+index e36c62f..2da739f 100644
+--- a/src/graftling/dsh/client.mjs
++++ b/src/graftling/dsh/client.mjs
+@@ -3,6 +3,31 @@ window.__ModuleLoader__.load({
+   id: 'graftling-dsh',
+   factory(require) {
+     const { createElement: h } = require('react');
++    // DSH's own Markdown view, as its Chat package uses it; plain text when this DSH has none.
++    let MarkdownText = null;
++    try { ({ MarkdownText } = require('@deepseek-ai/dsh-client-ui-primitives')); } catch { MarkdownText = null; }
++    // notice_text's first line; its last paragraph names the facts the model acts on (538).
++    const TITLE = /^\[(?:Graftling|GraphTraj) notice from (.+?) · ([^\]]+?)(?: · execution \S+)?\]$/;
++
++    /** A notice as who, event and its Markdown content, or null for any other message. */
++    function noticeParts(content) {
++      const text = (Array.isArray(content) ? content : []).filter(block => block?.type === 'text')
++        .map(block => block.text).join('\n');
++      const [title, ...rest] = text.split('\n\n');
++      const match = TITLE.exec(title ?? '');
++      if (!match) return null;
++      if (rest.length && rest.at(-1).startsWith('Facts: ')) rest.pop();
++      return { who: match[1], event: match[2], body: rest.join('\n\n') };
++    }
++
++    function markdown(text, t) {
++      if (!MarkdownText) return h('div', { style: { whiteSpace: 'pre-wrap' } }, text);
++      const label = key => (typeof t === 'function' ? t(key) : key);
++      return h(MarkdownText, { text, labels: {
++        code: { copyLabel: label('copy'), copiedLabel: label('copied'), toolbarLabels: {
++          codeLabel: label('codeBlock.title'), wrapLabel: label('codeBlock.wrap'), unwrapLabel: label('codeBlock.unwrap') } },
++        footnotes: label('markdown.footnotes') } });
++    }
+ 
+     return {
+       inject: ['slots'],
+@@ -19,6 +44,9 @@ window.__ModuleLoader__.load({
+             if (!native) return;
+             const NativeTrigger = native.component;
+ 
++            // Each value once (538): a session equal to its agent, and a recipient that is this
++            // conversation itself, add nothing. A notice shows who · event over its Markdown; the
++            // native card below still holds the model's text (title with the execution, Facts).
+             function IncomingAgentMessage(props) {
+               const source = props.node.data.source;
+               const original = h(NativeTrigger, props);
+@@ -28,11 +56,21 @@ window.__ModuleLoader__.load({
+               const field = (label, agent, session) => h('div', null,
+                 h('dt', { style: { fontSize: 12, opacity: 0.7 } }, label),
+                 h('dd', { style: { margin: 0, overflowWrap: 'anywhere' } },
+-                  h('div', null, agent), h('div', null, session)));
++                  h('div', null, agent), session === agent ? null : h('div', null, session)));
++              const notice = noticeParts(props.node.data.content);
++              const fields = [];
++              if (!notice) {
++                fields.push(field(source.senderSessionId === source.senderAgentId ? 'From' : 'From Agent / Session',
++                  source.senderAgentId, source.senderSessionId));
++              }
++              if (source.recipientAgentId !== props.sessionId) {
++                fields.push(field('To Agent / Session', source.recipientAgentId, props.sessionId));
++              }
+               return h('section', { 'data-agent-incoming': source.communicationId },
+-                h('dl', { style: { margin: '8px 0', display: 'grid', gap: 8 } },
+-                  field('From Agent / Session', source.senderAgentId, source.senderSessionId),
+-                  field('To Agent / Session', source.recipientAgentId, props.sessionId)),
++                notice ? h('div', { 'data-agent-notice': true, style: { margin: '8px 0' } },
++                  h('div', { style: { fontWeight: 600, overflowWrap: 'anywhere' } }, `${notice.who} · ${notice.event}`),
++                  notice.body ? h('div', { style: { marginTop: 4 } }, markdown(notice.body, props.t)) : null) : null,
++                fields.length ? h('dl', { style: { margin: '8px 0', display: 'grid', gap: 8 } }, ...fields) : null,
+                 original);
+             }
+ 
+diff --git a/tests/fixtures/dsh_client_view.mjs b/tests/fixtures/dsh_client_view.mjs
+index 365652c..dbe3868 100644
+--- a/tests/fixtures/dsh_client_view.mjs
++++ b/tests/fixtures/dsh_client_view.mjs
+@@ -13,7 +13,10 @@ vm.runInNewContext(readFileSync(clientPath, 'utf8'), { window: { __ModuleLoader_
+   load(definition) { module = definition; },
+ } } });
+ assert.equal(module.id, 'graftling-dsh');
++function MarkdownText(props) { return props.text; }
+ const views = module.factory(name => {
++  // react, and DSH's Markdown view from the primitives its Chat package uses (538)
++  if (name === '@deepseek-ai/dsh-client-ui-primitives') return { MarkdownText };
+   assert.equal(name, 'react');
+   return { createElement: (tag, props, ...children) => ({ tag, props, children }) };
+ });
+@@ -72,3 +75,31 @@ for (const other of [{ kind: 'goal' }, { kind: 'agent-message', senderSessionId:
+   assert.equal(original.props, unchanged);
+ }
+ console.log('Native keyed slot: true sender/recipient, one unchanged body, other triggers delegated');
++
++// 538: a GraphTraj/Graftling notice relayed from the member to this conversation: who · event over
++// the Markdown content (DSH's MarkdownText), no title or Facts line, and each value once: the sender's
++// equal agent/session ids and a recipient that is this conversation are not printed.
++const noticeText = '[Graftling notice from agent-abc · completed · execution exec-1]\n\n'
++  + '## Result 538\n\n- alpha\n- beta\n\n```\necho 538\n```\n\nFacts: execution_id `exec-1` · outcome `completed`';
++const noticeSource = Object.freeze({ kind: 'agent-message', form: 'relay', senderSessionId: 'agent-abc',
++  senderAgentId: 'agent-abc', recipientAgentId: 'main-session', communicationId: 'graphtraj-notice:main-session:2:0' });
++const noticeProps = Object.freeze({ sessionId: 'main-session', t: key => `t:${key}`, node: Object.freeze({ kind: 'turn-trigger',
++  data: Object.freeze({ source: noticeSource, seq: 48, time: 12346, content: Object.freeze([{ type: 'text', text: noticeText }]) }) }) });
++const shown = incoming.component(noticeProps);
++assert.equal(shown.children.at(-1).tag, NativeTrigger);       // the model's text stays in DSH's card
++assert.equal(shown.children.at(-1).props, noticeProps);
++const ours = JSON.stringify(shown.children.slice(0, -1));
++assert.equal(ours.match(/agent-abc/g).length, 1);
++assert.ok(ours.includes('agent-abc · completed'));
++assert.ok(!/From|To Agent|main-session|Facts|exec-1|Graftling notice/.test(ours), ours);
++const md = shown.children[0].children[1].children[0];
++assert.equal(md.tag, MarkdownText);
++assert.equal(md.props.text, '## Result 538\n\n- alpha\n- beta\n\n```\necho 538\n```');
++assert.equal(md.props.labels.code.copyLabel, 't:copy');
++// A plain relay whose agent and session ids are equal: 'From' and the value once.
++const plain = incoming.component({ ...noticeProps, node: { ...noticeProps.node, data: { ...noticeProps.node.data,
++  content: [{ type: 'text', text: 'plain message' }] } } });
++const plainOurs = JSON.stringify(plain.children.slice(0, -1));
++assert.equal(plainOurs.match(/agent-abc/g).length, 1);
++assert.ok(plainOurs.includes('"From"') && !plainOurs.includes('main-session'), plainOurs);
++console.log('Notice: who · event over Markdown; each value once; the native card keeps the model text');
+-- 
+2.50.1 (Apple Git-155)
+

@@ -159,6 +159,7 @@ def current_connection() -> dict | None:
 
 def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
     """Use a bounded proxy connection to the existing service for this event only."""
+    from graftling import notice_text
     from graphtraj.runtimes.codex.app_server import CodexAppServer
     from graphtraj.workspace.runner_project import discover_project_root, runtime_executable
 
@@ -206,7 +207,9 @@ def send_event(connection: Mapping[str, Any], event: dict[str, str]) -> dict:
                         pass  # The check ended before submission.
             submitted_at = time.time()
             try:
-                result = await client.send_host_event(connection['session'], event)
+                # The Main reads the Runtime-independent notice text (533's), not the
+                # event's JSON; the event itself is validated and recorded unchanged.
+                result = await client.send_host_event(connection['session'], event, notice_text(event))
             except RuntimeAdapterError as error:
                 if getattr(error, 'request_written', False):
                     # Written, then unacknowledged: the host may already have

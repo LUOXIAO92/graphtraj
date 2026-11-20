@@ -1514,13 +1514,14 @@ def _assert_native_budget_stop(
         params = message.get("params", {})
         if message.get("method") != "turn/start" or "toolOutput" not in params:
             continue
-        notice = json.loads(params["toolOutput"]["output"])
-        if notice["alias"] == alias and notice["message"] == stop["message"]:
+        # 535: the Main reads graftling.notice_text of the event: title line, then the message.
+        output = params["toolOutput"]["output"]
+        if output.startswith(f"[Graftling notice from {alias} · ") and stop["message"].strip() in output:
             assert params["input"] == []
             assert params["toolOutput"]["name"] == "graftling"
             assert params["threadId"] == thread_id
-            assert notice["source"] == "graphtraj"
-            assert notice["event"] == "execution-budget-exceeded"
+            assert output.split("\n", 1)[0].startswith(
+                f"[Graftling notice from {alias} · execution-budget-exceeded")
             received.append(message)
     assert len(received) == 1
 

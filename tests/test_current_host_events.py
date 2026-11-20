@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, wait_for_file
+from graftling import notice_text
 from graphtraj.runtimes.codex.host_events import current_connection, send_event
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError
 from runner_fixtures import configure_harness
@@ -21,7 +22,7 @@ from test_task_budget_control import BODY
 
 
 PROXY = r'''
-import json, os, sys
+import json, os, re, sys
 from pathlib import Path
 if sys.argv[1:3] == ['app-server', 'proxy']:
     from websockets.server import ServerProtocol
@@ -69,11 +70,15 @@ if sys.argv[1:3] == ['app-server', 'proxy']:
             if request['method'] == 'turn/start':
                 assert initialized
                 params = request['params']
-                event = json.loads(params['toolOutput']['output'])
+                # 535: the Main reads graftling.notice_text of the event, not its JSON.
+                output = params['toolOutput']['output']
+                title = re.match(r'\[Graftling notice from (\S+) · ([^ \]]+)', output)
+                assert title, output
+                event = {'alias': title[1], 'event': title[2], 'text': output}
                 assert params['threadId'] == 'original-host'
                 assert set(params) == {'threadId', 'input', 'toolOutput'}
                 assert params['input'] == [] and params['toolOutput']['name'] == 'graftling'
-                if event['message'] == 'refuse':
+                if output.endswith('refuse'):
                     result = {'id':request['id'], 'error': {'code':-32600, 'message': 'direct input refused'}}
                 else:
                     result['result'] = {'turn': {'id': 'existing-or-new-turn', 'status': 'inProgress', 'items': []}}
@@ -120,10 +125,21 @@ def test_capture_and_native_refusal(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         assert (tmp_path / (event + '-received')).is_file()
     with pytest.raises(RuntimeAdapterError, match='direct input refused'):
         send_event(connection, {'source': 'graphtraj', 'alias': 'child', 'event': 'completed', 'message': 'refuse'})
+    markdown = {'source': 'graphtraj', 'alias': 'agent-child', 'event': 'completed', 'execution': 'e' * 32,
+                'message': '## Reply from n535\n\n- one\n- `agents`\n\n> quoted'}
+    send_event(connection, markdown)
     wire = [json.loads(line) for line in (tmp_path / 'wire.jsonl').read_text().splitlines()]
     assert {item['home'] for item in wire} == {str(tmp_path / 'owning-home')}
     assert (tmp_path / 'pong-received').is_file()
-    assert [item['request']['method'] for item in wire] == ['initialize', 'initialized', 'turn/start'] * 4
+    assert [item['request']['method'] for item in wire] == ['initialize', 'initialized', 'turn/start'] * 5
+    # 535: the toolOutput is the Runtime-independent notice text (533), Markdown kept as lines, ids in it.
+    outputs = [item['request']['params']['toolOutput']['output'] for item in wire
+               if item['request']['method'] == 'turn/start']
+    assert outputs[0] == notice_text({'source': 'graphtraj', 'alias': 'child', 'event': 'completed', 'message': 'notice'})
+    assert outputs[-1] == notice_text(markdown)
+    assert outputs[-1].startswith(f"[Graftling notice from agent-child · completed · execution {'e' * 32}]")
+    assert '\n## Reply from n535\n\n- one\n- `agents`\n\n> quoted' in outputs[-1]
+    assert not any(output.lstrip().startswith('{') or '"source"' in output for output in outputs)
 
 
 @pytest.mark.parametrize('entry', ['cli', 'json-line'])
@@ -285,7 +301,7 @@ def test_root_completion_after_entry_and_send_exit(
         wait_for_file(tmp_path / 'completed-received', timeout=15)
         wire = [json.loads(line) for line in (tmp_path / 'wire.jsonl').read_text().splitlines()]
         turns = [item for item in wire if item['request']['method'] == 'turn/start']
-        assert len([item for item in turns if json.loads(item['request']['params']['toolOutput']['output'])['event'] == 'completed']) == (2 if capture_host else 1)
+        assert len([item for item in turns if ' · completed' in item['request']['params']['toolOutput']['output'].split('\n', 1)[0]]) == (2 if capture_host else 1)
         assert json.loads((tmp_path / 'completed-received').read_text())['alias'] == alias
         # The first completion reached the dispatching Main; the later one the
         # Main that continued it. The recorded owner itself is unchanged.

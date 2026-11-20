@@ -10,13 +10,39 @@ F=${1:?usage: zsh rehearse.zsh <empty directory>}; F=${F:A}
 [[ -e $F && -n "$(ls -A $F 2>/dev/null)" ]] && { print "STOP: $F is not empty"; exit 1; }
 REALH=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 FH=$F/H; mkdir -p $FH/.graphtraj $F/stub $F/w $F/codex-home/sessions
-# A production-like roles file: one group whose Codex preset resolves to gpt-6-luna (the real one is unreadable here).
+# Stand-ins with the REAL layout (correction round 1): production roles use catalog connections and NO preset uses
+# gpt-6-luna (astra presets: codex/openai/gpt-6-astra, effort medium; coding_team: codex/deepseek/deepseek-flash);
+# the user's catalog ~/.graphtraj/connections.yml (HOME=$F/home here) holds codex/openai/gpt-6-luna.
 cat > $FH/.graphtraj/roles.yml <<'EOF'
 roles:
-  team:
-    codex_member: {runtime: codex, model: gpt-6-luna, worktree_access: read, instructions: AGENTS.md}
-    claude_member: {runtime: claude, model: claude-opus-5-5}
+  astra_coding_team:
+    team_leader: {connection: codex/openai/gpt-6-astra, reasoning_effort: medium, instructions: AGENTS.md}
+    engineer: {connection: codex/openai/gpt-6-astra, reasoning_effort: medium, instructions: AGENTS.md, reports: [engineer.md]}
+  coding_team:
+    engineer: {connection: codex/deepseek/deepseek-flash, reasoning_effort: medium}
+  opus_coding_team:
+    engineer: {connection: claude/anthropic/opus-5_5, reasoning_effort: high, claude: {permission_mode: auto}}
 EOF
+mkdir -p $F/home/.graphtraj
+catalog() {  # $1 = with|without gpt-6-luna
+  print -r -- "version: 1
+runtimes:
+  codex:
+    runtime: codex
+    providers:
+      openai:
+        models:
+          gpt-6-astra: {id: gpt-6-astra, source: native, supported_efforts: [low, medium, high, xhigh]}"
+  [[ $1 == with ]] && print -r -- "          gpt-6-luna: {id: gpt-6-luna, source: native, supported_efforts: [low, medium, high, xhigh]}"
+  print -r -- "  claude:
+    runtime: claude
+    providers:
+      anthropic:
+        models:
+          opus-5_5: {id: claude-opus-5-5, source: native, supported_efforts: [high, max]}"
+}
+catalog with > $F/home/.graphtraj/connections.yml
+export HOME=$F/home
 export VERIFY535_H=$FH VERIFY535_PRODH=$FH VERIFY535_BASE=$F/base VERIFY535_W=$F/w VERIFY535_VPROJECT=$F/vproject \
   VERIFY535_RT=$REALH/.venv-runtime VERIFY535_WT=${SD:h:h} VERIFY535_CODEX=$F/stub/codex \
   VERIFY535_CODEX_HOME=$F/codex-home VERIFY535_GLDEV=$REALH/.graphtraj/core/worktrees/graftling-dev
@@ -38,8 +64,13 @@ S 00 > $F/00.out 2>&1; check "00: isolation OK, codex exec answer names gpt-6-lu
 grep -E 'codex:|codex login|header model' $F/00.out
 S B0 > $F/B0.out 2>&1; check "B0: baseline wheels + venv from 8ac35e31 and f67d147a" sh -c "grep -q 'venv pip check rc=0' $F/B0.out && grep -q '^GraphTraj 8ac35e31' $F/B0.out && grep -q '^graftling f67d147a' $F/B0.out && grep -q 'steps.zsh T' $F/B0.out"
 S T > $F/T.out 2>&1; check "T: one dialog (directory trust), no prompt, /exit" sh -c "grep -q 'Do you trust the contents of this directory' $F/T.out && grep -q '/exit' $F/T.out && grep -q 'steps.zsh Vb' $F/T.out"
-S Vb > $F/Vb.out 2>&1; check "Vb: project .codex written via active link, role resolves (no model), USER command + prompt" sh -c "grep -q 'CHECK 535 child role resolves: PASS (runtime codex, model gpt-6-luna' $F/Vb.out && grep -q 'base/active/venv/bin/graphtraj-mcp' $F/Vb.out && grep -q 'codex.display_hook' $F/Vb.out && grep -q 'codex -m gpt-6-luna' $F/Vb.out && grep -q 'Pass NO model' $F/Vb.out"
-grep -E 'CHECK 535|roles file written|production presets' $F/Vb.out
+S Vb > $F/Vb.out 2>&1; check "Vb: project .codex written via active link, role (astra engineer -> luna, effort medium) resolves (no model), USER command + prompt" sh -c "grep -q 'CHECK 535 child role resolves: PASS (runtime codex, model gpt-6-luna, reasoning_effort medium' $F/Vb.out && grep -q 'role codex = production astra_coding_team.engineer' $F/Vb.out && grep -q 'codex/deepseek/deepseek-flash | does not resolve' $F/Vb.out &&grep -q 'base/active/venv/bin/graphtraj-mcp' $F/Vb.out && grep -q 'codex.display_hook' $F/Vb.out && grep -q 'codex -m gpt-6-luna' $F/Vb.out && grep -q 'Pass NO model' $F/Vb.out"
+sed -n '/^production presets/,/CHECK 535 child role/p' $F/Vb.out
+# Without gpt-6-luna in the catalog Vb STOPs before the USER part and says why.
+catalog without > $F/home/.graphtraj/connections.yml
+S Vb > $F/Vb-noluna.out 2>&1; check "Vb without gpt-6-luna in the catalog: FAIL with the reason, STOP before the USER part" sh -c "grep -q 'CHECK 535 child role resolves: FAIL (ValueError: the catalog has no codex model with id or key gpt-6-luna)' $F/Vb-noluna.out && grep -q 'codex/openai/gpt-6-astra: id gpt-6-astra' $F/Vb-noluna.out && grep -q 'STOP: the child role does not resolve' $F/Vb-noluna.out && ! grep -q '粘贴下面整段提示' $F/Vb-noluna.out"
+grep -E 'CHECK 535|STOP' $F/Vb-noluna.out
+catalog with > $F/home/.graphtraj/connections.yml
 cp $F/vproject/.codex/hooks.json $F/hooks-vb.json
 S B > $F/B.out 2>&1; check "B: exact 535 diff, candidate wheels + venv, send_host_event takes text" sh -c "grep -q 'CHECK 535 GraphTraj product diff is exactly the 535 files: PASS' $F/B.out && grep -q 'venv pip check rc=0' $F/B.out && grep -q 'candidate send_host_event takes text: True' $F/B.out"
 grep -E '^GraphTraj |^graftling |files changed' $F/B.out

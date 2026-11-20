@@ -1,7 +1,7 @@
 # verify-533 — Claude Code Main: agents messages shown as who + Markdown
 
-Candidates: GraphTraj = this Worktree's HEAD (533 changes no GraphTraj product file; B checks that against
-27029f96), graftling = `f67d147a` on branch `agent/533-claude-main-agents-message-display` of the untracked clone
+Candidates: GraphTraj = this Worktree's HEAD (533 changes exactly `src/graphtraj/runtimes/claude/host.py` and
+`tests/test_claude_main_notice_text_533.py`; B checks that against 27029f96), graftling = `f67d147a` on branch `agent/533-claude-main-agents-message-display` of the untracked clone
 `.scratch/graftling` (git dir `.scratch/graftling-git`; bundle `.scratch/graftling-533.bundle`, requires 4a002129 = v0.6.2, sha256 a1f694a7…; `.state` refused the
 bundle's lock file).
 

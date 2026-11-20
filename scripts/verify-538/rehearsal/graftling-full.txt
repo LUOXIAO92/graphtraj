@@ -1,0 +1,4 @@
+# graftling full suite on the clone 70542bc5 (2026-11-21 02:25:47); venv-gl = conda 3.13.11 --system-site-packages + deps from .venv-runtime + clone editable; TMPDIR=$TMPDIR/538/glfull
+629 passed, 21 skipped in 207.42s (0:03:27)
+exit=0
+(no FAILED/ERROR lines)

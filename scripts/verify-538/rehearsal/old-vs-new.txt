@@ -1,0 +1,34 @@
+# old vs new, 2026-11-21 02:23:57
+
+## GraphTraj tests/test_dsh_main_notice_display_538.py on OLD 9ae7a149 (git archive into $TMPDIR/538/old-src; venv-old = conda + deps + graftling fc081a3f wheel + old tree editable; pyproject pythonpath=src -> old src)
+43:    source: { kind: 'agent-message', form: 'relay', senderSessionId: 'graphtraj', senderAgentId: 'graphtraj',
+>       end, request = (item['message'] for item in shown['sent'])
+E       ValueError: not enough values to unpack (expected 2, got 1)
+FAILED tests/test_dsh_main_notice_display_538.py::test_dsh_main_gets_one_relay_per_notice_from_the_member
+1 failed in 0.81s
+
+## graftling tests/fixtures/dsh_client_view.mjs (new) with a stand-in SlotCore ($TMPDIR/538/slotstub; installed DSH 0.2.2-alpha.2 has no @deepseek-ai/dsh-client-ui-slots, so graftling's pytest skips it as in 527)
+### NEW client 70542bc5 (ready)
+Native Tool card: no tool.call.toolview entry for agents calls
+Native keyed slot: true sender/recipient, one unchanged body, other triggers delegated
+Notice: who · event over Markdown; each value once; the native card keeps the model text
+exit=0
+### NEW client (delayed)
+Native Tool card: no tool.call.toolview entry for agents calls
+Native keyed slot: true sender/recipient, one unchanged body, other triggers delegated
+Notice: who · event over Markdown; each value once; the native card keeps the model text
+exit=0
+### OLD client fc081a3f
+Native Tool card: no tool.call.toolview entry for agents calls
+Native keyed slot: true sender/recipient, one unchanged body, other triggers delegated
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+2 !== 1
+  generatedMessage: true,
+
+## graftling tests/test_dsh_mcp.py tests/test_notice_text.py on the clone (venv-gl: conda + deps + clone editable)
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+7 passed, 2 skipped in 1.05s

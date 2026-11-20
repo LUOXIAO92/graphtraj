@@ -1,0 +1,26 @@
+# T/TR rehearsal 2026-11-21 02:23:28 from empty dir; HEAD 4097a339fc73ecea16102687a08cdb6ab590c2d4; VERIFY538_TESTS = real fixture tests (repository conftest + project fixture); Engineer sandbox: VERIFY538_ASSUME_PLUGIN (pnpm store lock EPERM)
+== [T] full GraphTraj suite of the AFTER build (Worktree HEAD + graftling 70542bc58f), 6 shards, --timeout 1500, -rA, in the background (~25 min). Dialog: none. pytest TMPDIR=$TMPDIR/538/reh5/pytmp (outside the Harness).
+AFTER build: venv: graftling 0.6.2 | graphtraj 0.1.0
+uncommitted in src/tests/plugins: none
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display/src/graphtraj/__init__.py
+graftling 0.6.2 $TMPDIR/538/reh5/base/after/venv-tests/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+pytest temp root (outside the Harness): $TMPDIR/538/reh5/pytmp/graphtraj-538-20261121T022339
+candidate: 4097a339fc73ecea16102687a08cdb6ab590c2d4 | graftling 70542bc58fa69cfb6fb62bdf5f5cb0b8046646ec
+REHEARSAL: tests limited to tests/test_dsh_main_notice_display_538.py tests/test_pi_dsh_main_continuity.py::test_host_integration_delivers_then_acknowledges tests/test_pi_main_notice_display_536.py (plain pytest, same venv, temp root and exit file)
+started in the background at 02:23:39; output: $TMPDIR/538/reh5/base/after/suite-4097a339-20261121T022339/suite.txt (last line 'exit=N' when it ends)
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display/scripts/verify-538/steps.zsh TR    (when $TMPDIR/538/reh5/base/after/suite-4097a339-20261121T022339/suite.txt ends with exit=)
+....                                                                     [100%]
+4 passed in 3.56s
+exit=0
+== [TR] read only: the newest T result; FAILED/ERROR lines listed for comparison with dev (516's list does not block). Dialog: none.
+pytest temp root (outside the Harness): $TMPDIR/538/reh5/pytmp/graphtraj-538-20261121T022339
+candidate: 4097a339fc73ecea16102687a08cdb6ab590c2d4 | graftling 70542bc58fa69cfb6fb62bdf5f5cb0b8046646ec
+REHEARSAL: tests limited to tests/test_dsh_main_notice_display_538.py tests/test_pi_dsh_main_continuity.py::test_host_integration_delivers_then_acknowledges tests/test_pi_main_notice_display_536.py (plain pytest, same venv, temp root and exit file)
+....                                                                     [100%]
+4 passed in 3.56s
+exit=0
+(no FAILED/ERROR lines)
+Success: exit=0, or only 'known (516)' lines; any 'NEW' line goes to the Leader.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display/scripts/verify-538/steps.zsh C

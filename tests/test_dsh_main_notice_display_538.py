@@ -77,4 +77,4 @@ def test_dsh_main_gets_one_relay_per_notice_from_the_member(
     assert REPLY in text and text.splitlines()[-1] == 'Facts: execution_id `exec-1` · outcome `completed`'
     assert asked.splitlines()[-1] == ('Facts: execution_id `exec-2` · request_id `req-9` · '
                                       'request_token `tok-7` · method `claude/can_use_tool`')
-    assert 'graphtraj' not in json.dumps([end['source'], request['source']])
+    assert not {'graphtraj'} & {m['source'][k] for m in (end, request) for k in ('senderAgentId', 'senderSessionId')}

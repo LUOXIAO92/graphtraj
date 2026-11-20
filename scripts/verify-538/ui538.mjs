@@ -390,8 +390,12 @@ try {
         if (!best || t.length < (best.innerText ?? '').length) best = e;
       }
       if (!best) return false;
+      // 538 r1: up until the region also holds where the notice shows (the Think that mentions it), bounded
       let e = best;
-      for (let i = 0; i < 6 && e.parentElement; i++) { if ((e.parentElement.innerText ?? '').length > 6000) break; e = e.parentElement; }
+      for (let i = 0; i < 12 && e.parentElement; i++) {
+        if (/notice/i.test((e.innerText ?? '').replace(m, '')) || (e.parentElement.innerText ?? '').length > 20000) break;
+        e = e.parentElement;
+      }
       e.setAttribute('data-ui538-shot', 'notice-region');
       return true;
     }, cfg.noticeMarker);

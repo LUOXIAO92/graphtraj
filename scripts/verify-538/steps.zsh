@@ -115,12 +115,17 @@ PROMPT_TEXT() {  # $1 tool, $2 child runtime, $3 child model ('' = none). Marker
   # 538: the member answers in multi-line Markdown (heading, list, code block) both times.
   local margs="\"runtime\": \"$2\", "; [[ -n $3 ]] && margs+="\"model\": \"$3\", "
   local reply='Reply with exactly this Markdown and nothing else: a level-2 heading Result 538, a blank line, a two-item bullet list (alpha, beta), a blank line, and a fenced code block holding the line: echo 538'
-  print -r -- "Use the MCP tool $1. Do exactly these three steps and nothing else.
+  # 538 round 1 (after Main's B on f15f20fd): G's send right after create was refused with runtime-input-closed
+  # (graftling claude/execution.py:1270) while the create execution was still finishing, so step 2 waits for that
+  # execution to end first; and one rule says what to do when a notice comes before the turn ends (S's Think was torn
+  # between the two markers). B's recorded run used the f15f20fd prompt.
+  print -r -- "Use the MCP tool $1. Do exactly these four steps and nothing else.
 1. Call $1 with {\"action\": \"execute\", \"feature\": \"create\", \"arguments\": {${margs}\"name\": \"echo538\", \"instruction\": \"$reply\"}}. Use exactly these arguments; add no others and do not try other models.
-2. Call $1 with {\"action\": \"execute\", \"feature\": \"send\", \"arguments\": {\"agent\": <the agent id that step 1 returned>, \"message\": \"## Report 538\\n\\n- first item\\n- second item with \`code span\`\\n\\n\`\`\`text\\nline one\\nline two\\n\`\`\`\\n\\nReply in the same Markdown form as before.\"}}.
-3. Do not wait for the member. End your turn with exactly one line made of the two words SENT and 538 joined by a hyphen.
-If step 1 or step 2 fails, call nothing else and end your turn with exactly one line made of the two words FAILED and 538 joined by a hyphen.
-Whenever a notice says that this member ended or replied (also if it arrives before you end your turn), answer it with exactly one line made of the three words GOT, NOTICE and 538 joined by hyphens, and nothing else."
+2. Call $1 with {\"action\": \"execute\", \"feature\": \"wait\", \"arguments\": {\"agent\": <the agent id that step 1 returned>, \"timeout_seconds\": 180}}, so the member's first reply has ended before you send.
+3. Call $1 with {\"action\": \"execute\", \"feature\": \"send\", \"arguments\": {\"agent\": <the same agent id>, \"message\": \"## Report 538\\n\\n- first item\\n- second item with \`code span\`\\n\\n\`\`\`text\\nline one\\nline two\\n\`\`\`\\n\\nReply in the same Markdown form as before.\"}}.
+4. Do not wait for the member after step 3. End your turn with exactly one line made of the two words SENT and 538 joined by a hyphen.
+If step 1, 2 or 3 fails, call nothing else and end your turn with exactly one line made of the two words FAILED and 538 joined by a hyphen.
+Notice rule: each notice saying that this member ended or replied gets exactly one line made of the three words GOT, NOTICE and 538 joined by hyphens, and nothing else. If such a notice arrives before you have written the step 4 line, write only that notice line and end your turn; do not write the step 4 line after it."
 }
 
 [[ -d $H/graphtraj && -d $H/.graphtraj ]] || [[ -n ${VERIFY538_H:-} ]] || { print "STOP: $H is not the Harness root"; return 1; }

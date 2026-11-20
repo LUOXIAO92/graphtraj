@@ -1,0 +1,56 @@
+== rehearsal in /private/tmp/claude-501/reh535 (stub codex; real baseline and candidate commits)
+REHEARSAL PASS 00: isolation OK, codex exec answer names gpt-6-luna
+codex: /private/tmp/claude-501/reh535/stub/codex -> /private/tmp/claude-501/reh535/stub/codex | version: codex-cli 0.169.0 (stub)
+codex login: Logged in using ChatGPT (stub)
+codex exec rc=0 (142 = 300 s limit) | header model: gpt-6-luna | answer: CODEX-535-OK gpt-6-luna
+REHEARSAL PASS B0: baseline wheels + venv from 8ac35e31 and f67d147a
+REHEARSAL PASS T: one dialog (directory trust), no prompt, /exit
+REHEARSAL PASS Vb: project .codex written via active link, role resolves (no model), USER command + prompt
+production presets resolving to codex/gpt-6-luna: ['team.codex_member']
+roles file written: /private/tmp/claude-501/reh535/vproject/.graphtraj/roles.yml (role codex = production team.codex_member without instructions, system_prompt, developer_prompt, reports)
+CHECK 535 child role resolves: PASS (runtime codex, model gpt-6-luna, reasoning_effort None, role codex, roles ['codex'])
+REHEARSAL PASS B: exact 535 diff, candidate wheels + venv, send_host_event takes text
+GraphTraj product files changed 8ac35e3195f3735b9742a7beff3842333cb4e48a..HEAD: src/graphtraj/runtimes/codex/host_events.py, tests/codex_stdio_peer.py, tests/test_codex_main_root_notice_401.py, tests/test_current_host_events.py, tests/test_mcp_host_tools.py
+graftling files changed f67d147a222d7db214ecad14d24809debad999a4..87d83d68d55615c15f5ca3fd3f4ba200c0c27349: src/graftling/CHANGELOG.md src/graftling/PUBLIC_API.md src/graftling/codex/app_server.py tests/test_codex_host_event_text.py 
+GraphTraj a8ba3d01d465a1af30ddccf32a4e4e7809b2b099 Codex Main notices: the toolOutput is graftling.notice_text, not the event's JSON (535)
+graftling 87d83d68d55615c15f5ca3fd3f4ba200c0c27349 Codex host event: optional text, the tool output the Main reads (535)
+graftling 0.6.2 /private/tmp/claude-501/reh535/base/cand/venv/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL PASS V: same hooks.json as Vb (no new hook review), active -> cand
+REHEARSAL PASS Vr on the BASELINE push (escaped JSON): FAIL (the check can fail)
+  CHECK not an escaped JSON document: FAIL
+  CHECK no permissions/session_id/terminal_confirmed: PASS
+  CHECK names the child (n535 or agent-…): PASS
+  CHECK carries an execution id (32 hex): PASS
+  CHECK Markdown lines kept as lines: FAIL
+CHECK 535 notices: FAIL
+captured toolOutput (first line): [Graftling notice from agent-n535 · completed · execution eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee]
+REHEARSAL PASS Vr on the CANDIDATE push (notice text): PASS
+---- notice at line 2 (first 600 chars):
+[Graftling notice from agent-n535 · completed · execution eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee]
+
+## Reply from n535
+
+- one `agents`
+- two
+
+> quoted
+  CHECK not an escaped JSON document: PASS
+  CHECK no permissions/session_id/terminal_confirmed: PASS
+  CHECK names the child (n535 or agent-…): PASS
+  CHECK carries an execution id (32 hex): PASS
+  CHECK Markdown lines kept as lines: PASS
+records holding the display box or the sent message (information): none
+CHECK 535 notices: PASS
+REHEARSAL PASS G: TMPDIR outside the Harness printed; both limited runs exit=0
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-535-gt-20261121T001018 | graftling temp /private/tmp/claude-501/verify-535-gl-20261121T001018
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/535-codex-main-agents-message-display/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/reh535/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling suite imports /private/tmp/claude-501/reh535/base/cand/gl-src/src/graftling/__init__.py
+==> /private/tmp/claude-501/reh535/w/G-20261121T001018/graphtraj.txt <==
+19 passed, 6 skipped in 9.07s
+exit=0
+
+==> /private/tmp/claude-501/reh535/w/G-20261121T001018/graftling.txt <==
+7 passed in 0.26s
+exit=0
+== rehearsal: 9 passed, 0 failed

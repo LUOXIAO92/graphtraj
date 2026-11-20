@@ -4,7 +4,7 @@
 # project (/private/tmp/vproject-535) with wheels built from exact commits; production is never touched: no install
 # into .venv-runtime, no change to the Harness's .codex, ~/.codex, the Codex install or dotfiles.
 #   zsh <absolute path>/steps.zsh <step>
-# Order: 00 → B0 → Vb → [USER: real interactive codex, prompt, 2 BEFORE screenshots] → Vr
+# Order: 00 → B0 → T [USER: directory trust only] → Vb → [USER: real interactive codex, prompt, 2 BEFORE screenshots] → Vr
 #        → B → V → [USER: same, 2 AFTER screenshots] → Vr ;  G (full suites, background, after B) → GR (read only)
 # Baseline = GraphTraj $GTBASE (dev) + graftling $GLBASE (dev). Candidate = this Worktree's HEAD + commit $GLC of
 # the untracked clone $GLREPO (branch agent/535-codex-main-agents-message-display, based on graftling dev $GLBASE).
@@ -141,6 +141,17 @@ step_B0() {
   build base $WT $GTBASE $GLDEV $GLBASE
 }
 
+step_T() {
+  [[ -d $VPROJECT/.git ]] || { print "没有 $VPROJECT，先运行 00。"; return 1; }
+  [[ -e $VPROJECT/.codex ]] && print "note: $VPROJECT/.codex already exists (Vb ran before); the trust dialog may then be followed by a hook review: approve it."
+  say "USER（真实交互式 Codex，只做文件夹信任，不输入提示）"
+  print "1) 在普通 Terminal 运行（一行）:"
+  print -r -- "   cd $VPROJECT && codex -m $CODEX_MODEL"
+  print "2) 预期对话框（唯一一个，Codex 自己的）: 'Do you trust the contents of this directory?' → 选 Yes。其它任何框按 Esc 并把标题告诉 Main。"
+  print "   这个选择由 Codex 自己记录在用户的 Codex 配置里；本脚本不向那里写任何东西（只写 $VPROJECT/.codex）。"
+  print "3) 不输入任何提示，直接输入 /exit。"
+}
+
 step_B() {
   [[ -n $GLC ]] || { print "STOP: no candidate graftling commit yet (GLC empty): the Engineer has not delivered the candidate."; return 1; }
   local dirty=$(git -C $WT status --porcelain -- src tests plugins pyproject.toml)
@@ -167,7 +178,7 @@ step_V() {  # $1 = base (Vb) | cand (V)
   print "1) 在普通 Terminal 运行（一行，不加任何 -c 选项: 否则 Codex 不用共享后台服务，收不到通知）:"
   print -r -- "   cd $VPROJECT && codex -m $CODEX_MODEL"
   if [[ $1 == base ]]; then
-    print "2) 预期对话框（首次启动，Codex 自己的）: 先 'Do you trust the contents of this directory?' → 选 Yes；随后可能是 $VPROJECT/.codex/hooks.json 的 hook 审核 → approve。其它任何框按 Esc 并把标题告诉 Main。"
+    print "2) 预期对话框（最多一个，Codex 自己的）: $VPROJECT/.codex/hooks.json 的 hook 审核 → approve（或无）。文件夹信任已在 T 完成；若仍出现信任框 → Yes 并告诉 Main。其它任何框按 Esc 并把标题告诉 Main。"
   else
     print "2) 预期对话框: 无（Vb 时已信任文件夹与 hooks；hooks.json 与 Vb 相同）。若仍出现 hook 审核框 → approve，并把标题告诉 Main。其它任何框按 Esc 并报告标题。"
   fi
@@ -231,12 +242,13 @@ step_GR() {
 mkdir -p $W $BASE
 case ${1:-help} in
   00) print "[00] Main. 预检。对话框: 无。约 1 分钟（一次 codex exec）。"; logged $W/00.txt step_00 && next "zsh $THIS B0" ;;
-  B0) print "[B0] Main. 构建基线 wheel 与 venv（$BASE/base）。对话框: 无。约 1 分钟。"; logged $W/B0.txt step_B0 && next "zsh $THIS Vb" ;;
-  Vb) print "[Vb] Main 准备隔离项目（基线），然后 USER 在真实 codex 里操作一次（修改前截图）。对话框: Main 无；USER 见下方第 2 条。"; logged $W/Vb.txt step_V base ;;
+  B0) print "[B0] Main. 构建基线 wheel 与 venv（$BASE/base）。对话框: 无。约 1 分钟。"; logged $W/B0.txt step_B0 && next "zsh $THIS T    （USER 只做文件夹信任）" ;;
+  T)  print "[T] USER. 在真实 codex 里只信任隔离项目文件夹，然后 /exit。对话框: 1 个（文件夹信任 → Yes）。<1 分钟。"; logged $W/T.txt step_T && next "zsh $THIS Vb    （USER 完成 T 之后）" ;;
+  Vb) print "[Vb] Main 准备隔离项目（基线），然后 USER 在真实 codex 里操作一次（修改前截图）。对话框: Main 无；USER 最多 1 个（hooks.json 审核 → approve，或无）。"; logged $W/Vb.txt step_V base ;;
   B)  print "[B] Main. 构建候选 wheel 与 venv（$BASE/cand）。对话框: 无。约 1 分钟。"; logged $W/B.txt step_B && next "zsh $THIS V    （也可以先 zsh $THIS G）" ;;
   V)  print "[V] Main 准备隔离项目（候选），然后 USER 在真实 codex 里操作一次（修改后截图）。对话框: Main 无；USER 见下方第 2 条。"; logged $W/V.txt step_V cand ;;
   Vr) print "[Vr] Main. 只读 USER 那次会话的 rollout。对话框: 无。<10 秒。"; logged $W/Vr.txt step_Vr ;;
   G)  print "[G] Main. 两个全套测试（后台）。对话框: 无。立即返回。"; logged $W/G.txt step_G ;;
   GR) print "[GR] Main. 只读。对话框: 无。"; logged $W/GR.txt step_GR ;;
-  *)  print "usage: zsh $THIS 00|B0|Vb|Vr|B|V|G|GR   (order: 00 → B0 → Vb → USER → Vr → B → V → USER → Vr; G after B, then GR)"; next "zsh $THIS 00" ;;
+  *)  print "usage: zsh $THIS 00|B0|T|Vb|Vr|B|V|G|GR   (order: 00 → B0 → T (USER trust) → Vb → USER → Vr → B → V → USER → Vr; G after B, then GR)"; next "zsh $THIS 00" ;;
 esac

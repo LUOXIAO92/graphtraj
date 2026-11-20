@@ -1,0 +1,84 @@
+== rehearsal in /private/tmp/claude-501/reh535 (stub codex; real baseline and candidate commits)
+REHEARSAL PASS 00: isolation OK, codex exec answer names gpt-6-luna
+codex: /private/tmp/claude-501/reh535/stub/codex -> /private/tmp/claude-501/reh535/stub/codex | version: codex-cli 0.169.0 (stub)
+codex login: Logged in using ChatGPT (stub)
+codex exec rc=0 (142 = 300 s limit) | header model: gpt-6-luna | answer: CODEX-535-OK gpt-6-luna
+REHEARSAL PASS B0: baseline wheels + venv from 8ac35e31 and f67d147a
+REHEARSAL PASS T: one dialog (directory trust), no prompt, /exit
+REHEARSAL PASS Vb: project .codex via active link, ONE role claude (533's) resolves without a model, USER command + prompt (runtime claude), one dialog
+graphtraj project root: /private/tmp/claude-501/reh535/vproject | git top level: /private/tmp/claude-501/reh535/vproject | AGENTS.md/CLAUDE.md/CLAUDE.local.md at or above (Codex Main, Claude child): none
+roles file written: /private/tmp/claude-501/reh535/vproject/.graphtraj/roles.yml
+CHECK 535 child role resolves: PASS (runtime claude, model claude-opus-5-5, reasoning_effort high, role claude, roles ['claude'])
+hooks.json: {'PostToolUse': ['graphtraj.runtimes.codex.display_hook'], 'SessionStart': ['graphtraj.runtimes.codex.stop_hook'], 'Stop': ['graphtraj.runtimes.codex.display_hook']}
+REHEARSAL PASS Vb hooks.json: exactly SessionStart(stop_hook) + PostToolUse(display) + Stop(display); no checker, no SessionEnd; main-sessions cleared; fresh child name
+REHEARSAL PASS Vb: stale main-sessions cleared; fresh child name in the prompt
+REHEARSAL PASS B: exact 535 diff, candidate wheels + venv, send_host_event takes text
+GraphTraj product files changed 8ac35e3195f3735b9742a7beff3842333cb4e48a..HEAD: src/graphtraj/runtimes/codex/display_hook.py, src/graphtraj/runtimes/codex/host_events.py, tests/codex_stdio_peer.py, tests/test_codex_agent_display.py, tests/test_codex_main_root_notice_401.py, tests/test_current_host_events.py, tests/test_mcp_host_tools.py
+graftling files changed by 535 (dev fc081a3f..ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7): src/graftling/CHANGELOG.md src/graftling/PUBLIC_API.md src/graftling/codex/app_server.py tests/test_codex_host_event_text.py 
+GraphTraj 7fe5019e9ccf520b4231b2f56338a374e1de350b Codex Main notices as Codex's delegation output from the child: quoted notice_text, rendered (535)
+graftling ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7 Codex host event: delegation_from sends Codex's own delegation output, drawn as rendered Markdown (535)
+graftling 0.6.2 /private/tmp/claude-501/reh535/base/cand/venv/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL PASS V: same hooks.json as Vb (no new hook review), active -> cand, role PASS
+REHEARSAL PASS Vr picks the Main's rollout (not the newer decoy) and FAILs on the BASELINE push
+Main session 01a1f989-main-0000-0000-000000000535: rollout /private/tmp/claude-501/reh535/codex-home/sessions/2026/11/21/rollout-main-old.jsonl
+  CHECK not an escaped JSON document: FAIL
+  CHECK no permissions/session_id/terminal_confirmed: PASS
+  CHECK names the child (n5350132 or agent-…): PASS
+  CHECK carries an execution id (32 hex): PASS
+  CHECK Markdown lines kept as lines: FAIL
+CHECK 535 notices: FAIL
+REHEARSAL PASS Vr picks the Main's rollout (not the newer decoy) and PASSes on the CANDIDATE push
+REHEARSAL PASS Vr without a Main claim: FAIL
+---- notice at line 2 (first 600 chars):
+[Graftling notice from agent-n535 · completed · execution eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee]
+
+## Reply from n535
+
+- one `agents`
+- two
+
+> quoted
+  CHECK not an escaped JSON document: PASS
+  CHECK no permissions/session_id/terminal_confirmed: PASS
+  CHECK names the child (n5350132 or agent-…): PASS
+  CHECK carries an execution id (32 hex): PASS
+  CHECK Markdown lines kept as lines: PASS
+records holding the display box or the sent message (information): none
+CHECK 535 notices: PASS
+P.json: send_message_to_thread codex_app | thread 01a1f989-main-0000-0000-000000000535
+REHEARSAL PASS P: sends ONE turn/start to the Main thread with name send_message_to_thread, namespace codex_app, 542's exact wrapper (XML-escaped), prints USER lines and Pr
+P prints the USER lines, the PASS criterion and Pr
+REHEARSAL PASS Pr: reads the Main's rollout (not the decoy) from the probe on: the output and the model's reply
+Main 01a1f989-main-0000-0000-000000000535: rollout /private/tmp/claude-501/reh535/codex-home/sessions/2026/11/21/rollout-probe-main.jsonl (of 2 with that session id)
+---- line 2 response_item/function_call_output name=send_message_to_thread namespace=codex_app
+<codex_delegation>
+  <source_thread_id>n535probe</source_thread_id>
+  <input>[Graftling notice from n535probe · completed · execution 00000000000000000000000000000000]
+
+## Probe heading
+
+This is **bold** and `code`.
+
+- item one
+- item two
+
+&gt; quoted line
+
+Facts: execution_id `00000000000000000000000000000000` · outcome `completed`</input>
+</codex_delegation>
+---- line 3 response_item/message name=None namespace=None
+Noted the notice from n535probe.
+probe output in the Main rollout: YES
+REHEARSAL PASS G: TMPDIR outside the Harness printed; both limited runs exit=0
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-535-gt-20261121T013247 | graftling temp /private/tmp/claude-501/verify-535-gl-20261121T013247
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/535-codex-main-agents-message-display/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/reh535/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling suite imports /private/tmp/claude-501/reh535/base/cand/gl-src/src/graftling/__init__.py
+==> /private/tmp/claude-501/reh535/w/G-20261121T013247/graphtraj.txt <==
+19 passed, 6 skipped in 7.58s
+exit=0
+
+==> /private/tmp/claude-501/reh535/w/G-20261121T013247/graftling.txt <==
+9 passed in 0.27s
+exit=0
+== rehearsal: 14 passed, 0 failed

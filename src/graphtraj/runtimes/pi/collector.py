@@ -482,11 +482,12 @@ def collect_stdio() -> None:
     elif source != 'child':
         raise ValueError('Unknown Pi collection source.')
     configuration = load_project_configuration(cwd)
-    from graphtraj.interfaces.agents import attachment_private_paths, default_archive, swarm_root
+    from graftling import default_config
+    from graphtraj.interfaces.agents import attachment_private_paths, swarm_root
     from graftling.sessions import PiArchive, SessionArchive
 
     root = swarm_root(configuration.harness_root)
-    archive = SessionArchive(root, **default_archive(root))
+    archive = SessionArchive(root, **default_config(root, save_normalized_sessions=True))
     collector = PiArchive(archive, header, project=str(configuration.harness_root), source=source,
                           entries=entries, leaf_id=initial.get('leafId'), attachment_root=cwd,
                           extra_fields=graphtraj_fields(str(configuration.harness_root),

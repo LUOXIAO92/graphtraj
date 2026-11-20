@@ -1,0 +1,16 @@
+== [GR] Main. Read only. Newest G and Gt; FAILED/ERROR lines classed known (accepted G, 516) or NEW. Dialog: none. <10 s.
+known baseline: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/531-child-create-runner-record-walk/realhost/G-83e84fba-20261120T204653/suite.txt
+---- G /tmp/claude-501/534-out/G-2b12e896-20261120T222449
+pytest temp root: /private/tmp/claude-501/verify-534-G-20261120T222449
+candidate: 2b12e896b7959618d2acee15db4bc4df071358c1 | graftling 4a002129f8b97f32980afd59e5a1a64c428fe684
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file)
+...........                                                              [100%]
+11 passed in 5.75s
+exit=0
+(no FAILED/ERROR lines)
+---- Gt /tmp/claude-501/534-out/Gt-2b12e896-20261120T222433
+============================== 13 passed in 7.05s ==============================
+exit=0
+(no FAILED/ERROR lines)
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line in G or Gt.
+next: report /tmp/claude-501/534-out/GR.txt to the Leader

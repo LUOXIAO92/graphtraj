@@ -1,0 +1,23 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/534-venvs/venv-g-gl-4a002129/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/534-backup-detaches-sub-issue-on-reparent
+configfile: pyproject.toml
+plugins: anyio-4.10.0
+collecting ... collected 13 items
+
+tests/test_github_backup.py::test_backup_maps_task_42_to_a_new_remote_number_and_retries_idempotently PASSED [  7%]
+tests/test_github_backup.py::test_retry_after_lost_creation_response_adopts_the_marked_issue PASSED [ 15%]
+tests/test_github_backup.py::test_offline_backup_never_blocks_local_tasks_and_succeeds_after_recovery PASSED [ 23%]
+tests/test_github_backup.py::test_remote_edits_are_reported_and_only_overwritten_after_confirmation PASSED [ 30%]
+tests/test_github_backup.py::test_backup_publishes_only_task_fields_without_credentials_or_sessions PASSED [ 38%]
+tests/test_github_backup.py::test_sub_issues_follow_mappings_not_local_ids_and_repeat_without_writes PASSED [ 46%]
+tests/test_github_backup.py::test_other_remote_parent_is_reported_and_never_moved_or_imported PASSED [ 53%]
+tests/test_github_backup.py::test_task_without_local_parent_is_detached_from_its_mapped_remote_parent PASSED [ 61%]
+tests/test_github_backup.py::test_child_reparented_to_another_mapped_summary_is_moved_once PASSED [ 69%]
+tests/test_github_backup.py::test_task_without_local_parent_under_an_external_issue_is_only_reported PASSED [ 76%]
+tests/test_github_backup.py::test_progress_counts_only_active_children_and_marks_each_state PASSED [ 84%]
+tests/test_migration_mappings.py::test_adopted_mapping_is_local_authoritative_and_first_publish_requires_review PASSED [ 92%]
+tests/test_migration_mappings.py::test_import_rejects_conflict_or_invalid_url_before_writing_any_pair PASSED [100%]
+
+============================== 13 passed in 7.05s ==============================
+exit=0

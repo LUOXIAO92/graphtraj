@@ -1,0 +1,26 @@
+== [Gt] Main. Focused backup tests via G's venv, foreground. Dialog: none. ~1 min.
+uncommitted in src/tests/plugins: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-534-Gt-20261120T222429
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/534-backup-detaches-sub-issue-on-reparent/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/534-venvs/venv-g-gl-4a002129/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+candidate: 2b12e896b7959618d2acee15db4bc4df071358c1 | graftling wheel from git archive 4a002129f8b97f32980afd59e5a1a64c428fe684
+files: tests/test_github_backup.py tests/test_migration_mappings.py
+tests/test_github_backup.py::test_backup_maps_task_42_to_a_new_remote_number_and_retries_idempotently PASSED
+tests/test_github_backup.py::test_retry_after_lost_creation_response_adopts_the_marked_issue PASSED
+tests/test_github_backup.py::test_offline_backup_never_blocks_local_tasks_and_succeeds_after_recovery PASSED
+tests/test_github_backup.py::test_remote_edits_are_reported_and_only_overwritten_after_confirmation PASSED
+tests/test_github_backup.py::test_backup_publishes_only_task_fields_without_credentials_or_sessions PASSED
+tests/test_github_backup.py::test_sub_issues_follow_mappings_not_local_ids_and_repeat_without_writes PASSED
+tests/test_github_backup.py::test_other_remote_parent_is_reported_and_never_moved_or_imported PASSED
+tests/test_github_backup.py::test_task_without_local_parent_is_detached_from_its_mapped_remote_parent PASSED
+tests/test_github_backup.py::test_child_reparented_to_another_mapped_summary_is_moved_once PASSED
+tests/test_github_backup.py::test_task_without_local_parent_under_an_external_issue_is_only_reported PASSED
+tests/test_github_backup.py::test_progress_counts_only_active_children_and_marks_each_state PASSED
+
+============================== 13 passed in 7.05s ==============================
+exit=0
+(no FAILED/ERROR lines)
+Success: the test_github_backup tests listed PASSED (including the three 534 tests: detached, moved once,
+external only reported), 'N passed' with exit=0 and '(no FAILED/ERROR lines)'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/534-backup-detaches-sub-issue-on-reparent/scripts/verify-534/steps.zsh GR  (when G's suite.txt ends with exit=)

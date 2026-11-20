@@ -1,0 +1,15 @@
+== [G] Main. GraphTraj full suite of the Worktree HEAD (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. Run nothing else meanwhile.
+sysctl: sysctl fmt -1 1024 1: Operation not permitted
+load average: 
+quiet:2: operation not permitted: ps
+uncommitted in src/tests/plugins: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-534-G-20261120T222449
+reusing /tmp/claude-501/534-venvs/venv-g-gl-4a002129 (graftling 4a002129; this Worktree editable)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/534-backup-detaches-sub-issue-on-reparent/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/534-venvs/venv-g-gl-4a002129/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+candidate: 2b12e896b7959618d2acee15db4bc4df071358c1 | graftling wheel from git archive 4a002129f8b97f32980afd59e5a1a64c428fe684
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file)
+started in the background at 22:24:49; output: /tmp/claude-501/534-out/G-2b12e896-20261120T222449/suite.txt (last line 'exit=N' when it ends)
+Success: the graphtraj line under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/534-backup-detaches-sub-issue-on-reparent/src, 'graftling 0.6.2 ...', 'started in the background'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/534-backup-detaches-sub-issue-on-reparent/scripts/verify-534/steps.zsh Gt  (after G ends: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/534-backup-detaches-sub-issue-on-reparent/scripts/verify-534/steps.zsh GR)

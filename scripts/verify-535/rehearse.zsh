@@ -96,6 +96,33 @@ S Vr > $F/Vr-new.out 2>&1; check "Vr picks the Main's rollout (not the newer dec
 rm $F/vproject/.graphtraj/runner/main-sessions/continuity.jsonl
 S Vr > $F/Vr-none.out 2>&1; check "Vr without a Main claim: FAIL" grep -q 'FAIL: no codex:SessionStart Main claim' $F/Vr-none.out
 sed -n '/---- notice/,/CHECK 535 notices/p' $F/Vr-new.out
+# P / Pr (delegation-cell probe): stub transport (VERIFY535_PROBE_STUB), the Main from its continuity claim.
+print -r -- "{\"at\": $(( $(cat $F/w/Vcand.start) + 2 )), \"entry\": \"codex:SessionStart:startup\", \"runtime\": \"codex\", \"session\": \"$MAIN\", \"connection\": {\"codex_home\": \"$F/codex-home\"}}" \
+  > $F/vproject/.graphtraj/runner/main-sessions/continuity.jsonl
+VERIFY535_PROBE_STUB=1 S P > $F/P.out 2>&1
+check "P: sends ONE turn/start to the Main thread with name send_message_to_thread, namespace codex_app, 542's exact wrapper (XML-escaped), prints USER lines and Pr" \
+  $F/base/active/venv/bin/python -I -c 'import json, sys
+from xml.sax.saxutils import unescape
+p = json.load(open(sys.argv[1])); t = p["params"]["toolOutput"]; o = t["output"]
+head, rest = o.split("\n  <input>", 1); body = rest.rsplit("</input>\n</codex_delegation>", 1)[0]
+ok = (p["thread"] == sys.argv[2] and p["params"]["input"] == [] and t["name"] == "send_message_to_thread"
+      and t["namespace"] == "codex_app" and head == "<codex_delegation>\n  <source_thread_id>n535probe</source_thread_id>"
+      and o.endswith("</input>\n</codex_delegation>") and "&gt; quoted line" in body
+      and unescape(body).startswith("[Graftling notice from n535probe · completed · execution ")
+      and "## Probe heading" in body and "**bold**" in body and "`code`" in body and p["result"]["turn"]["id"])
+print("P.json:", t["name"], t["namespace"], "| thread", p["thread"]); sys.exit(0 if ok else 1)' $F/w/P.json $MAIN
+grep -q 'Reply only READY-535 and wait.' $F/P.out && grep -q 'Sent by Codex from task n535probe' $F/P.out && grep -q 'steps.zsh Pr' $F/P.out \
+  && print "P prints the USER lines, the PASS criterion and Pr" || { print "REHEARSAL FAIL P texts"; ((fail++)); }
+# The Main's rollout after the probe (the probe output, then a model reply), with a newer decoy rollout of the same cwd.
+$F/base/active/venv/bin/python -I -c 'import json, sys
+p = json.load(open(sys.argv[1])); t = p["params"]["toolOutput"]
+for path, sid in ((sys.argv[2], sys.argv[4]), (sys.argv[3], "decoy")):
+    rows = [{"type": "session_meta", "payload": {"id": sid, "cwd": sys.argv[5]}},
+            {"type": "response_item", "payload": {"type": "function_call_output", "name": t["name"], "namespace": t["namespace"], "output": t["output"]}},
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Noted the notice from n535probe."}]}}]
+    open(path, "w").write("".join(json.dumps(r) + "\n" for r in rows))' $F/w/P.json $R/rollout-probe-main.jsonl $R/rollout-probe-decoy.jsonl $MAIN $F/vproject
+S Pr > $F/Pr.out 2>&1; check "Pr: reads the Main's rollout (not the decoy) from the probe on: the output and the model's reply" sh -c "grep -q 'Main $MAIN: rollout .*rollout-probe-main.jsonl' $F/Pr.out && grep -q 'name=send_message_to_thread namespace=codex_app' $F/Pr.out && grep -q 'Noted the notice from n535probe.' $F/Pr.out && grep -q 'probe output in the Main rollout: YES' $F/Pr.out"
+sed -n '/^Main /,$p' $F/Pr.out | head -20
 # G's entry with real tests (GraphTraj tests using repository fixtures; graftling's tests of the change).
 VERIFY535_TESTS="tests/test_current_host_events.py tests/test_codex_main_root_notice_401.py tests/test_codex_agent_display.py" \
 VERIFY535_GLTESTS="tests/test_codex_host_event_text.py tests/test_notice_text.py" S G > $F/G.out 2>&1

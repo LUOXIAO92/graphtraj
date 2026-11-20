@@ -73,11 +73,22 @@ deps() {
   cp -Rp $RT/yaml $RT/_yaml(N) $RT/[Pp]y[Yy][Aa][Mm][Ll]-*.dist-info(N) $RT/websockets $RT/websockets-*.dist-info(N) \
     $RT/click $RT/click-*.dist-info(N) $SP/
 }
-wheel() {  # $1 repository, $2 commit, $3 subdirectory, $4 output directory
-  local src=$4/src-${2[1,10]}; rm -rf $src; mkdir -p $src $4
-  git -C $1 archive $2 $3 | tar -x -C $src
-  $CONDA -m pip wheel -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
-    -w $4 $src/$3 >/dev/null
+wheel() {  # $1 repository, $2 commit, $3 subdirectory, $4 output directory; log $4/wheel-<commit>.log
+  # 538 c1: each sub-step's exit status and output go to the log; on failure its tail is printed (Main's A at
+  # 45f45f6b stopped with 'a wheel did not build' and no visible cause: the archive was extracted, pip never built)
+  local src=$4/src-${2[1,10]} log=$4/wheel-${2[1,10]}.log ps
+  rm -rf $src; mkdir -p $src $4; : > $log
+  print -r -- "cwd $PWD | TMPDIR ${TMPDIR:-unset} | $(git --version) | python $CONDA" >> $log
+  print -r -- "+ git -C $1 archive $2 $3 | tar -x -C $src" >> $log
+  if git -C $1 archive $2 $3 2>>$log | tar -x -C $src 2>>$log; then ps=0; else ps="${pipestatus[*]}"; fi
+  print -r -- "archive|tar exit: $ps; files extracted: $(find $src -type f | wc -l | tr -d ' ')" >> $log
+  if [[ $ps != 0 ]]; then print -r -- "wheel: git archive | tar failed ($ps) for ${2[1,10]}; log $log:"; tail -15 $log | sed 's/^/  /'; return 1; fi
+  print -r -- "+ pip wheel $src/$3" >> $log
+  if ! $CONDA -m pip wheel --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
+      -w $4 $src/$3 >> $log 2>&1; then
+    print -r -- "wheel: pip wheel failed for ${2[1,10]} ($src/$3); log $log:"; tail -25 $log | sed 's/^/  /'; return 1
+  fi
+  print -r -- "wheel ok: $(grep -o 'filename=[^ ]*' $log | tail -1)" >> $log
 }
 need() {
   local found=($1/$~2(N))
@@ -142,12 +153,14 @@ build_phase() {  # $1 before|after
   mkdir -p $PB $OUT $DH
   local Wh=$PB/wheels
   if [[ ! -f $V/installed || $(<$V/installed) != "$GT $GL" ]]; then
-    mkdir -p $Wh; rm -f $Wh/graftling-*.whl(N) $Wh/graphtraj-*.whl(N)
-    wheel $GL_REPO $GL src/graftling $Wh && wheel $GT_REPO $GT . $Wh || { print "STOP: a wheel did not build"; return 1; }
+    # 538 c1: start over a failed or partial earlier attempt: this phase's wheels directory is rebuilt from scratch
+    rm -rf $Wh; mkdir -p $Wh
+    wheel $GL_REPO $GL src/graftling $Wh && wheel $GT_REPO $GT . $Wh || { print "STOP: a wheel did not build (logs: $Wh/wheel-*.log)"; return 1; }
     local gw hw; gw=$(need $Wh 'graftling-*.whl') && hw=$(need $Wh 'graphtraj-*.whl') || return 1
     [[ -e $V ]] && mv $V $V.$(date +%H%M%S)
-    $CONDA -m venv $V; deps $V
-    $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $gw $hw
+    $CONDA -m venv $V && deps $V || { print "STOP: the venv $V was not created"; return 1; }
+    $V/bin/python -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-deps $gw $hw > $Wh/install.log 2>&1 \
+      || { print "STOP: installing the wheels into $V failed; $Wh/install.log:"; tail -15 $Wh/install.log | sed 's/^/  /'; return 1; }
     print -r -- "$GT $GL" > $V/installed
   else print "venv $V already holds GraphTraj ${GT[1,10]} + graftling ${GL[1,10]}"; fi
   (cd $PB && clean $V/bin/python -I -c 'import importlib.metadata as m; print("venv: graftling", m.version("graftling"), "| graphtraj", m.version("graphtraj"))')
@@ -346,8 +359,9 @@ T)
   local TV=$PB/venv-tests
   if [[ ! -f $TV/installed || $(<$TV/installed) != "$GT $GL" ]]; then
     rm -rf $TV; $CONDA -m venv --system-site-packages $TV && deps $TV || return 1
-    $TV/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $(need $PB/wheels 'graftling-*.whl') || return 1
-    $TV/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT 2>&1 | grep -vi cache || true
+    { $TV/bin/python -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-deps $(need $PB/wheels 'graftling-*.whl') \
+      && $TV/bin/python -m pip install --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT; } > $PB/venv-tests-install.log 2>&1 \
+      || { print "STOP: the test venv install failed; $PB/venv-tests-install.log:"; tail -15 $PB/venv-tests-install.log | sed 's/^/  /'; rm -rf $TV; return 1; }
     print -r -- "$GT $GL" > $TV/installed
   fi
   local RUNTMP=$PYTEST_TMP/graphtraj-538-$(date +%Y%m%dT%H%M%S); mkdir -p $RUNTMP

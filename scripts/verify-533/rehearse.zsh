@@ -31,7 +31,24 @@ S 00 > $F/00.out 2>&1; check "00: version gate, isolation OK, answer check OK" s
 tail -3 $F/00.out
 S B > $F/B.out 2>&1; check "B: wheels + venv; candidate mod has ui.place and UserMessage; notice_text" sh -c "grep -q 'ui.place / UserMessage render: True True' $F/B.out && grep -q 'notice_text: True' $F/B.out && grep -q 'scratch venv pip check rc=0' $F/B.out"
 grep -E 'candidates:|product diff|graftling f67|^graftling |^graphtraj ' $F/B.out
-S V > $F/V.out 2>&1; check "V: written mod is 533's; USER command and prompt printed" sh -c "grep -q 'UserMessage render in the written mod: yes' $F/V.out && grep -q 'claude --allowedTools mcp__graphtraj__agents' $F/V.out && grep -q 'Task 533 display check' $F/V.out"
+# V resolves the child role through ~/.graphtraj/connections.yml; the rehearsal gives V a HOME with a minimal catalog
+# naming the same reference (the real one is the user's, unreadable here). The resolution itself runs for real.
+mkdir -p $F/home/.graphtraj
+cat > $F/home/.graphtraj/connections.yml <<'EOF'
+version: 1
+runtimes:
+  claude:
+    runtime: claude
+    providers:
+      anthropic:
+        models:
+          opus-5_5: {id: claude-opus-5-5, source: native}
+EOF
+HOME=$F/home S V > $F/V.out 2>&1; check "V: MCP enabled, child role resolves (no model launched), written mod is 533's, USER command and prompt printed" sh -c "grep -q 'CHECK 533 graphtraj MCP server enabled in project settings: PASS' $F/V.out && grep -q 'CHECK 533 child role resolves: PASS (runtime claude, model claude-opus-5-5' $F/V.out && grep -q 'UserMessage render in the written mod: yes' $F/V.out && grep -q 'claude --allowedTools mcp__graphtraj__agents' $F/V.out && grep -q 'Pass NO model' $F/V.out && ! grep -q haiku $F/V.out"
+grep -E 'CHECK 533|roles file written' $F/V.out
+# A broken connection reference STOPs V before the USER part.
+sed -i '' 's/opus-5_5:/other-model:/' $F/home/.graphtraj/connections.yml
+HOME=$F/home S V > $F/V-bad.out 2>&1; check "V with an unresolvable connection: STOP before the USER part" sh -c "grep -q 'CHECK 533 child role resolves: FAIL' $F/V-bad.out && grep -q 'STOP: the child role does not resolve' $F/V-bad.out && ! grep -q '粘贴下面整段提示' $F/V-bad.out"
 # Vr on the REAL path: GraphTraj's queue_notice (as notify_direct_parent queues a Main notice) -> the candidate
 # host's NativeCalls.notices claim (the push) -> the mod V wrote submits it (node, stubbed $) -> transcript record.
 PY=$F/base/venv/bin/python

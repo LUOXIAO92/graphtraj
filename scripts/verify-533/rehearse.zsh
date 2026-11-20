@@ -32,20 +32,46 @@ tail -3 $F/00.out
 S B > $F/B.out 2>&1; check "B: wheels + venv; candidate mod has ui.place and UserMessage; notice_text" sh -c "grep -q 'ui.place / UserMessage render: True True' $F/B.out && grep -q 'notice_text: True' $F/B.out && grep -q 'scratch venv pip check rc=0' $F/B.out"
 grep -E 'candidates:|product diff|graftling f67|^graftling |^graphtraj ' $F/B.out
 S V > $F/V.out 2>&1; check "V: written mod is 533's; USER command and prompt printed" sh -c "grep -q 'UserMessage render in the written mod: yes' $F/V.out && grep -q 'claude --allowedTools mcp__graphtraj__agents' $F/V.out && grep -q 'Task 533 display check' $F/V.out"
-# Vr against synthetic transcripts: the new notice text passes, the old JSON body fails.
+# Vr on the REAL path: GraphTraj's queue_notice (as notify_direct_parent queues a Main notice) -> the candidate
+# host's NativeCalls.notices claim (the push) -> the mod V wrote submits it (node, stubbed $) -> transcript record.
 PY=$F/base/venv/bin/python
-$PY -I - $F/projects/-x-vproject-533/new.jsonl new <<'PYEOF'
+MOD=$FH/tmp/vproject-533/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
+$PY -I - $F/claim-root $F/claimed.json <<'PYEOF'
 import json, sys
-from graftling import notice_text
-end = 'Session execution ended:\n' + json.dumps({'session': 's', 'execution_id': 'e1', 'outcome': 'completed', 'terminal_confirmed': True,
-       'session_id': 's', 'permissions': {'requested': 'auto'}, 'last_agent_message': '## Reply from n533\n\n- one `agents`\n- two\n\n> quoted'})
-old = '[Graftling notice from n533 · completed · execution e1]\n' + end
-text = notice_text({'alias': 'n533', 'event': 'completed', 'execution': 'e1', 'message': end}) if sys.argv[2] == 'new' else old
-rows = [{'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'name': 'mcp__graphtraj__agents', 'input': {'action': 'execute', 'feature': f}}]}} for f in ('create', 'send')]
-rows.append({'type': 'user', 'message': {'role': 'user', 'content': text}, 'origin': {'kind': 'plugin'}})
-open(sys.argv[1], 'w').write('\n'.join(json.dumps(r) for r in rows) + '\n')
+from pathlib import Path
+from uuid import uuid4
+from graphtraj.configuration.project_configuration import runner_directory
+from graphtraj.execution.main_continuity import queue_notice
+from graphtraj.runtimes.claude.host import NativeCalls
+root = Path(sys.argv[1]); (root / '.graphtraj').mkdir(parents=True)
+runner, session = runner_directory(root), str(uuid4())
+end = {'session': 's', 'execution_id': 'e1', 'outcome': 'completed', 'terminal_confirmed': True, 'session_id': 's',
+       'permissions': {'requested': 'auto'}, 'last_agent_message': '## Reply from n533\n\n- one `agents`\n- two\n\n> quoted'}
+queue_notice(runner, {'runtime': 'claude', 'session': session}, {'source': 'graphtraj', 'alias': 'n533', 'event': 'completed',
+             'message': 'Session execution ended:\n' + json.dumps(end), 'execution': 'e1'})
+claimed = NativeCalls(lambda *a: None, root, runner).notices({'operation': 'notices', 'session': session})
+Path(sys.argv[2]).write_text(json.dumps(claimed))
+print('claimed through the candidate host:', [sorted(n) for n in claimed['notices']])
 PYEOF
-S Vr > $F/Vr-new.out 2>&1; check "Vr on the new notice text: PASS" grep -q '^Vr533: PASS' $F/Vr-new.out
+node --input-type=module -e '
+import {readFileSync, writeFileSync} from "node:fs";
+const [mod, claimedFile, out] = process.argv.slice(1);
+const {register} = await import(mod);
+const handlers = new Map();
+register((name, matcher, fn) => { handlers.set(fn ? name + ":" + (matcher.tool ?? matcher.component) : name, fn ?? matcher); return {catch() {}}; });
+const claimed = readFileSync(claimedFile, "utf8"), timers = [], submitted = [];
+const $ = {session: {id: async () => "00000000-0000-4000-8000-000000000000", cwd: async () => "/p"}, command: {register: async () => {}},
+  env: {get: async () => "/x"}, clock: {setTimeout: (fn) => timers.push(fn)}, prompt: {submit: async (v) => submitted.push(v.text)},
+  process: {run: async (argv, o) => ({exitCode: 0, stderr: "", stdout: JSON.parse(o.stdin).operation === "notices" ? claimed : "{}"})},
+  ui: {log: async () => {}}};
+await handlers.get("session.start")($, {}, async () => {});
+await timers[0]();
+const rows = ["create", "send"].map((f) => ({type: "assistant", message: {content: [{type: "tool_use", name: "mcp__graphtraj__agents", input: {action: "execute", feature: f}}]}}));
+rows.push({type: "user", message: {role: "user", content: submitted[0]}});
+writeFileSync(out, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+console.log("mod submitted", submitted.length, "prompt(s)");
+' $MOD $F/claimed.json $F/projects/-x-vproject-533/new.jsonl
+S Vr > $F/Vr-new.out 2>&1; check "Vr on the notice from GraphTraj's real claim path and the written mod: PASS" grep -q '^Vr533: PASS' $F/Vr-new.out
 rm $F/projects/-x-vproject-533/new.jsonl
 $PY -I - $F/projects/-x-vproject-533/old.jsonl old <<'PYEOF'
 import json, sys
@@ -55,7 +81,7 @@ open(sys.argv[1], 'w').write('\n'.join(json.dumps(r) for r in rows) + '\n')
 PYEOF
 S Vr > $F/Vr-old.out 2>&1; check "Vr on the old JSON notice: FAIL (the check can fail)" grep -q '^Vr533: FAIL' $F/Vr-old.out
 # G's entry with real tests (GraphTraj tests using repository fixtures; graftling's new tests).
-VERIFY533_TESTS="tests/test_claude_host_context.py tests/test_notice_delivery_372.py" \
+VERIFY533_TESTS="tests/test_claude_host_context.py tests/test_notice_delivery_372.py tests/test_claude_main_notice_text_533.py" \
 VERIFY533_GLTESTS="tests/test_notice_text.py tests/test_claude_main_display.py" S G > $F/G.out 2>&1
 S GR > $F/GR.out 2>&1
 check "G: TMPDIR outside the Harness printed; both limited runs exit=0" sh -c "grep -q 'TMPDIR of the runs (outside the Harness)' $F/G.out && [ \$(grep -c '^exit=0' $F/w/G-*/graphtraj.txt $F/w/G-*/graftling.txt | awk -F: '{s+=\$2} END {print s}') -eq 2 ]"

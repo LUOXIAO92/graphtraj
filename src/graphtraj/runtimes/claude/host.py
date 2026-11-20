@@ -37,6 +37,20 @@ from graphtraj.runtimes.claude.mcp import SERVER, descriptors, serve
 ADDED_TOOLS = ('tasks',)
 
 
+def claim_main_notices(runner: Path, session: str) -> list[dict]:
+    """Claim this Claude Main's queued notices, each with the shared notice ``text`` the mod submits and draws.
+
+    Both hand-overs use it: the mod's push and ``main_notices`` on a result (533). The queue record is
+    unchanged; ``text`` is ``graftling.notice_text`` of its event, whose ``request_id`` names the request.
+    """
+    from graftling import notice_text
+    from graphtraj.execution.main_continuity import claim_notices
+
+    return [notice if isinstance(notice.get('text'), str) else
+            {**notice, 'text': notice_text({**notice['event'], 'request': notice['event'].get('request_id')})}
+            for notice in claim_notices(runner, 'claude', session)]
+
+
 class NativeCalls(NativeCallsBase):
     """Supply GraphTraj's tasks tool and durable Main notice queue to the native association."""
 
@@ -51,10 +65,10 @@ class NativeCalls(NativeCallsBase):
         ``requeue`` returns those whose prompt submission failed. Only the
         authenticated mod of this same Claude process reaches this.
         """
-        from graphtraj.execution.main_continuity import claim_notices, requeue_notices
+        from graphtraj.execution.main_continuity import requeue_notices
 
         return notice_operation(document, self.runner is not None,
-                                lambda session: claim_notices(self.runner, 'claude', session),
+                                lambda session: claim_main_notices(self.runner, session),
                                 lambda session, ids: requeue_notices(self.runner, 'claude', session, ids))
 
 
@@ -110,7 +124,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     executed call. An end the result itself shows (``wait``/``status``) was
     acknowledged by the backend, so it is not attached or pushed again.
     """
-    from graphtraj.execution.main_continuity import claim_notices, claimable, requeue_notices
+    from graphtraj.execution.main_continuity import claimable, requeue_notices
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.interfaces.gateway import handle_request as handle_task
@@ -140,7 +154,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
             if stop_requested():
                 return result
             try:
-                notices = claim_notices(runner, 'claude', session)
+                notices = claim_main_notices(runner, session)
             except Exception as error:
                 # Unclaimed notices are offered again; never fail the call.
                 return AgentsResult({**result.document, 'main_notices_error': str(error)}, failed=result.failed)

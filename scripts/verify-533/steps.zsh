@@ -6,8 +6,8 @@
 #   zsh <absolute path>/steps.zsh <step>
 # Order: 00 → B → V → [USER: real interactive claude in the isolated project, paste the prompt, 2 screenshots] → Vr
 #        G (full suites, background, any time after B; no Vc/V meanwhile) → GR (read only)
-# Candidates: GraphTraj = this Worktree's HEAD (533 changes no GraphTraj product file: B checks
-# `git diff $GTBASE HEAD -- src tests plugins pyproject.toml` is empty); graftling = commit $GLC of the clone
+# Candidates: GraphTraj = this Worktree's HEAD (533 changes exactly $GTFILES: B checks
+# `git diff --name-only $GTBASE HEAD -- src tests plugins pyproject.toml`); graftling = commit $GLC of the clone
 # $GLREPO (branch agent/533-claude-main-agents-message-display, based on graftling dev 4a002129 = v0.6.2).
 # Only rehearse.zsh sets VERIFY533_*. The defaults are the real paths.
 set -u
@@ -17,7 +17,8 @@ H=${VERIFY533_H:-/Users/luoxiao/workspace/you-are-a-product-architect-delivery}
 WT=${VERIFY533_WT:-$H/.graphtraj/core/worktrees/533-claude-main-agents-message-display}
 GLREPO=${VERIFY533_GLREPO:-$WT/.scratch/graftling}    # untracked clone (its git dir: $WT/.scratch/graftling-git)
 GLC=${VERIFY533_GLC:-f67d147a222d7db214ecad14d24809debad999a4}
-GTBASE=27029f96a92d001eb1e9da6e7dda25bfa34c1777       # dev head the Worktree branched from (532's adoption scripts)
+GTFILES=src/graphtraj/runtimes/claude/host.py,tests/test_claude_main_notice_text_533.py   # 533's GraphTraj product change
+GTBASE=27029f96a92d001eb1e9da6e7dda25bfa34c1777      # dev head the Worktree branched from (532's adoption scripts)
 BASE=${VERIFY533_BASE:-$H/tmp/533}                     # Main created it; scratch venvs and wheels
 W=${VERIFY533_W:-$H/.graphtraj/core/state/tasks/533-claude-main-agents-message-display/realhost/533}   # raw output
 RT=${VERIFY533_RT:-$H/.venv-runtime}                   # production: only read (click/yaml/websockets copied out)
@@ -123,8 +124,10 @@ step_B() {
   say "candidates: GraphTraj $(git -C $WT rev-parse HEAD) (Worktree HEAD) | graftling $GLC"
   local dirty=$(git -C $WT status --porcelain -- src tests plugins pyproject.toml)
   [[ -z $dirty ]] || { print "STOP: uncommitted GraphTraj product changes: $dirty"; return 1; }
-  local prod; prod=$(git -C $WT diff --stat $GTBASE HEAD -- src tests plugins pyproject.toml) || { print "STOP: cannot diff $GTBASE..HEAD"; return 1; }
-  print "GraphTraj product diff $GTBASE..HEAD (533 expects none): ${prod:-none}"
+  local prod; prod=$(git -C $WT diff --name-only $GTBASE HEAD -- src tests plugins pyproject.toml) || { print "STOP: cannot diff $GTBASE..HEAD"; return 1; }
+  print "GraphTraj product files changed $GTBASE..HEAD: ${(j:, :)${(f)prod}}"
+  [[ ${(j:,:)${(f)prod}} == $GTFILES ]] || { print "STOP: expected exactly $GTFILES"; return 1; }
+  print "CHECK 533 GraphTraj product diff is exactly the two 533 files: PASS"
   git -C $GLREPO cat-file -e $GLC^{commit} || { print "STOP: graftling $GLC is not in $GLREPO"; return 1; }
   print "graftling $GLC: $(git -C $GLREPO log -1 --format='%s | author %an <%ae>' $GLC)"
   rm -rf $N $GLSRC $GTSRC $VV; mkdir -p $N $GLSRC $GTSRC

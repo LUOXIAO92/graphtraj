@@ -1,0 +1,16 @@
+RUN IN: Main's Bash (reads only). Dialog: none.
+run: /tmp/claude-501/rehearse530/base/runs/T-20261120T201225
+pytest temp root: /private/tmp/claude-501/verify-530-T-20261120T201225
+candidate: 974cb8e95680ac607e420329517470aca9239629
+graftling 4a002129f8 vs 95cffda1ff; GraphTraj 974cb8e956 + graftling 4a002129f8
+REHEARSAL: graftling tests limited to tests/test_config_lock_git_ignored_530.py tests/test_runtime_dirs_git_ignored_526.py tests/test_claude_jsonl.py
+REHEARSAL: GraphTraj tests limited to tests/test_swarm_root_git_ignored_530.py tests/test_pi_generic_execution.py tests/test_managed_sessions.py (plain pytest)
+all done 20:14:46
+== graftling-4a002129f8.txt: 1 failed, 78 passed, 12 skipped in 0.86s | exit=1
+  FAILED tests/test_config_lock_git_ignored_530.py::test_first_config_write_lists_no_lock_but_still_the_user_files
+== graftling-95cffda1ff.txt: 79 passed, 12 skipped in 0.86s | exit=0
+== graphtraj-974cb8e956.txt: 1 failed, 45 passed, 2 skipped in 137.56s (0:02:17) | exit=1
+  FAILED tests/test_pi_generic_execution.py::test_graphtraj_member_launch_matches_base
+graftling failures on the fix that are not on 4a002129f8 (new failures):
+Expected on 4a002129f8: tests/test_config_lock_git_ignored_530.py fails (copied in from the fix); it passes on 95cffda1ff.
+Judge: no new graftling failure; GraphTraj failures only those 516 lists or adopt-528 GR accepted as flakes (Main compares).

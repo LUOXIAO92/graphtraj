@@ -1,0 +1,35 @@
+RUN IN: Main's Bash or a Terminal (this step only prints); then the USER's plain Terminal and browser.
+REHEARSAL: graftling-dsh assumed present in web530
+== [US] before build (graftling 4a002129f8, GraphTraj c917f5fcca): graftling alone (graftling-dsh agents-host row), the FIRST mcp__graftling__agents call on a brand-new data root, in the browser UI of web530. One model call.
+Dialogs: at most one native dialog, the macOS folder chooser in step 1b (choice: Open). If no native chooser
+appears, DSH's in-app browse dialog is used instead. Inside the page DSH may ask to approve the tool call: approve it once.
+
+1. In a plain Terminal (Terminal.app, not the Claude sandbox) where DEEPSEEK_API_KEY is set as usual
+   (check: echo ${DEEPSEEK_API_KEY:+set}), paste this one line:
+
+cd /tmp/claude-501/rehearse530/base/before/work-standalone && env DSH_HOME=/tmp/claude-501/rehearse530/base/dsh-home PATH=/opt/homebrew/bin:$PATH GRAFTLING_PYTHON=/tmp/claude-501/rehearse530/base/before/venv/bin/python GRAFTLING_DSH_CONFIG=/tmp/claude-501/rehearse530/base/before/dsh-host.json /opt/homebrew/bin/dsh --profile web530 --patch /tmp/claude-501/rehearse530/base/before/llm.patch.yml --port 0
+
+   It prints the served URL (http://127.0.0.1:<port>/...) and opens it in the default browser. If no browser opens,
+   open that printed URL yourself.
+1b. Select the workspace first: the page creates the Session in the workspace selected in the page, not in the
+   server's cwd. Click the composer's 'ワークスペースを選択' (or the sidebar workspace menu) -> 'ワークスペースを追加…'.
+   A folder chooser opens (native macOS chooser, else DSH's in-app browse dialog).
+   Native: press Cmd-Shift-G; in-app: edit the path field. Enter exactly:
+     /tmp/claude-501/rehearse530/base/before/work-standalone
+   and choose 開く/Open. Then select that workspace ('work-standalone') in the composer.
+2. In the page start a NEW conversation (workspace 'work-standalone') and paste this prompt exactly (also in /tmp/claude-501/rehearse530/base/prompt-US.txt):
+
+Call the MCP tool mcp__graftling__agents exactly once with {"action": "execute", "feature": "status", "arguments": {}}. Use no other tool. Then reply with one line: DONE-530-US followed by the exact name of the tool you called and ok or the exact error.
+
+3. Wait until the turn has finished and the reply line DONE-530-US is shown (a changes card, if any, appears under the
+   reply when the turn ends).
+4. Screenshot the area from the mcp__graftling__agents call card down to everything below the DONE-530-US reply line, so that any card
+   under the reply is visible; if a '…を編集しました' card is there, expand it so its file names are readable
+   (Cmd-Shift-4, drag). Save or move it to exactly:
+     /tmp/claude-501/rehearse530/base/screenshot-US.png
+5. Stop the server with Ctrl-C in that Terminal.
+
+Expected BEFORE: probably NO card. graftling alone writes no config.yml; a status call creates only
+graftling-data/live/dsh-host/control-*/ (a socket, which git does not list). The screenshot decides.
+The conclusion is only what the screenshot and step C show.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/530-graftling-root-files-in-dsh-changes/scripts/verify-530/steps.zsh C (Main's Bash)

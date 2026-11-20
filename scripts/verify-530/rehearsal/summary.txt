@@ -1,0 +1,16 @@
+VERIFY530_BASE=/tmp/claude-501/rehearse530/base entries at start: 0
+0 (plugin assumed, no model): rc=0
+UG (plugin assumed): rc=0
+US (plugin assumed): rc=0
+UG2 (plugin assumed): rc=0
+US2 (plugin assumed): rc=0
+C (before any data-root write): rc=0
+simulated GraphTraj first use (configured_archive, each build's venv) in both projects: done
+C (after simulated GraphTraj first use): rc=0
+C2 (after simulated GraphTraj first use): rc=0
+C (final script, same simulated state): rc=0
+T (tests limited by VERIFY530_TESTS_G/GT): rc=0
+T rerun after correction (err_return in the background chain; 530 test copied into the 4a002129 clone): rc=0
+TR (after the rehearsal chain ended): rc=1
+TR (correction: grep without matches no longer ends TR): rc=0
+0 rerun on the final script after the simulated first use (expected STOP: data root exists): rc=1

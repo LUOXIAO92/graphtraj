@@ -1,0 +1,21 @@
+RUN IN: Main's Bash (reads only).
+== [C] BEFORE: screenshots, DSH changes events, data-root files, git status. Dialog: none.
+screenshot-UG.png: MISSING (/tmp/claude-501/rehearse530/base/screenshot-UG.png)
+screenshot-US.png: MISSING (/tmp/claude-501/rehearse530/base/screenshot-US.png)
+DSH session files in /tmp/claude-501/rehearse530/base/dsh-home (excluding profiles/) whose text holds DONE-530-UG or DONE-530-US, and their
+workspace/changes events (the event carries only the turn; the listed files are seen only in the screenshot):
+  (none among uncompressed files)
+data root /tmp/claude-501/rehearse530/base/before/project/.graphtraj/swarm (born Nov 20 20:10:38 2026): files (birth | modify | type):
+  config.yml  Nov 20 20:10:38 2026 | Nov 20 20:10:38 2026 | Regular File
+  live/config.lock  Nov 20 20:10:38 2026 | Nov 20 20:10:38 2026 | Regular File
+data root /tmp/claude-501/rehearse530/base/before/work-standalone/graftling-data: does not exist
+git status in /tmp/claude-501/rehearse530/base/before/project: lines now 14, new since step 0:
+  ?? .graphtraj/swarm/config.yml
+  ?? .graphtraj/swarm/live/config.lock
+  lines under a graftling data root: 2
+git status in /tmp/claude-501/rehearse530/base/before/work-standalone: lines now 0, new since step 0:
+  lines under a graftling data root: 0
+Main reads the screenshots (Read tool) and records only what they show (card present or not, file names).
+Fix scope: apply the GraphTraj fix only if UG's screenshot shows the card with .graphtraj/swarm files; apply the
+graftling fix only if US (or UG without GraphTraj's rule) shows a graftling-data/live file. Then: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/530-graftling-root-files-in-dsh-changes/scripts/verify-530/steps.zsh 0 (AFTER is
+already prepared by step 0) and zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/530-graftling-root-files-in-dsh-changes/scripts/verify-530/steps.zsh UG2

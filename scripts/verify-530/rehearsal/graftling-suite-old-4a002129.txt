@@ -1,0 +1,62 @@
+........................................................................ [ 11%]
+........................................................................ [ 22%]
+...................................................................sssss [ 33%]
+sssssss................................................................. [ 44%]
+..................F.......ssssssss.........F............................ [ 56%]
+......................................................s................. [ 67%]
+........................................................................ [ 78%]
+........................................................................ [ 89%]
+..................................................................       [100%]
+=================================== FAILURES ===================================
+________ test_first_config_write_lists_no_lock_but_still_the_user_files ________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-119/test_first_config_write_lists_0')
+
+    def test_first_config_write_lists_no_lock_but_still_the_user_files(tmp_path: Path) -> None:
+        repo = tmp_path / 'project'
+        repo.mkdir()
+        git(repo, 'init', '-q')
+        root = repo / 'graftling-data'          # a caller-chosen root, not created beforehand
+        default_config(root, save_normalized_sessions=True)
+        (repo / 'user-edit.txt').write_text('mine\n')
+    
+        # As DSH does: a private index, add everything, list it.
+        env = {**os.environ, 'GIT_INDEX_FILE': str(tmp_path / 'private-index')}
+        git(repo, 'add', '--all', env=env)
+        listed = git(repo, 'ls-files', env=env).split()
+>       assert listed == ['graftling-data/config.yml', 'user-edit.txt']
+E       AssertionError: assert ['graftling-d...ser-edit.txt'] == ['graftling-d...ser-edit.txt']
+E         
+E         At index 1 diff: 'graftling-data/live/config.lock' != 'user-edit.txt'
+E         Left contains one more item: 'user-edit.txt'
+E         Use -v to get more diff
+
+/tmp/claude-501/g530-old/tests/test_config_lock_git_ignored_530.py:33: AssertionError
+_______________ test_dsh_child_launch_needs_no_graphtraj_setting _______________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-119/test_dsh_child_launch_needs_no0')
+dsh = {'executable': '/private/tmp/claude-501/pytest-of-luoxiao/pytest-119/test_dsh_child_launch_needs_no0/dsh/bin/dsh', 'model': 'deepseek-flash', 'sandbox': 'workspace-write'}
+
+    def test_dsh_child_launch_needs_no_graphtraj_setting(tmp_path: Path, dsh: dict) -> None:
+        """The MCP command, connection variable, package and plugin all come from agents."""
+        host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'dsh': dsh})
+        invoke, _, _ = claude_main(host, tmp_path)
+        agent = invoke('create', runtime='dsh', instruction='x')['agent']
+        invoke('wait', agent=agent, timeout_seconds=10)
+        [service] = FakeDshService.instances
+        environment = service.environment
+        assert not [name for name in environment if name.startswith('GRAPHTRAJ_')]
+        assert environment['DSH_AGENT_PACKAGE'] == str(Path(dsh['executable']).resolve().parent.parent / 'package.json')
+        assert environment['GRAFTLING_CONNECTION'].startswith(str(tmp_path / '.scratch'))
+        [plugin] = [row['insert'][0] for row in service.patches
+                    if 'insert' in row and row['insert'][0]['id'] == 'agents-mcp']
+>       assert Path(plugin['name']) == ROOT / 'src/graftling/dsh/plugin.mjs'
+E       AssertionError: assert PosixPath('/tmp/claude-501/g530-old/src/graftling/dsh/plugin.mjs') == (PosixPath('/private/tmp/claude-501/g530-old') / 'src/graftling/dsh/plugin.mjs')
+E        +  where PosixPath('/tmp/claude-501/g530-old/src/graftling/dsh/plugin.mjs') = Path('/tmp/claude-501/g530-old/src/graftling/dsh/plugin.mjs')
+
+/tmp/claude-501/g530-old/tests/test_dsh_standalone_child.py:322: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../../../../../tmp/claude-501/g530-old/tests/test_config_lock_git_ignored_530.py::test_first_config_write_lists_no_lock_but_still_the_user_files
+FAILED ../../../../../../../../tmp/claude-501/g530-old/tests/test_dsh_standalone_child.py::test_dsh_child_launch_needs_no_graphtraj_setting
+2 failed, 619 passed, 21 skipped in 204.40s (0:03:24)
+exit=1

@@ -1,0 +1,59 @@
+RUN IN: Main's Bash (if graftling-dsh is missing from web530, the USER adds it once in a plain Terminal; then rerun 0).
+== [0] preflight for BEFORE and AFTER. Dialog: none. Builds wheels and venvs (no network), two fresh git projects and two git standalone workspaces (no data roots), web530 with graftling-dsh, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/530-graftling-root-files-in-dsh-changes 974cb8e95680ac607e420329517470aca9239629 (branch agent/530-graftling-root-files-in-dsh-changes)
+BEFORE: graftling 4a002129f8 + GraphTraj c917f5fcca | AFTER: graftling 95cffda1ff + GraphTraj 974cb8e956
+isolated layout: BASE=/tmp/claude-501/rehearse530/base (before/, after/), DSH_HOME=/tmp/claude-501/rehearse530/base/dsh-home (never ~/.dsh), web profile web530
+graftling source /tmp/claude-501/rehearse530/base/graftling-src: 4a002129f8 graftling 0.6.2 (528) | 95cffda1ff Keep a new data root's config lock out of the caller's git work tree (530) (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>)
+== [before] graftling 4a002129f8 + GraphTraj c917f5fcca: venv /tmp/claude-501/rehearse530/base/before/venv, project /tmp/claude-501/rehearse530/base/before/project, standalone /tmp/claude-501/rehearse530/base/before/work-standalone
+venv: graftling 0.6.2 | live/ ignored before config.lock: False | graphtraj 0.1.0 | swarm .gitignore: False
+fresh: no data root yet at /tmp/claude-501/rehearse530/base/before/project/.graphtraj/swarm or /tmp/claude-501/rehearse530/base/before/work-standalone/graftling-data
+Create dev from 9e84ac05141cdc05e642fbe2f92d7884bd3ac57c? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+roles OK
+probe Task 1 ready
+git work trees: project true, standalone true
+fresh: no data root yet at /tmp/claude-501/rehearse530/base/before/project/.graphtraj/swarm or /tmp/claude-501/rehearse530/base/before/work-standalone/graftling-data
+git status --porcelain --untracked-files=all recorded: project 12 lines (/tmp/claude-501/rehearse530/base/before/status-before-project.txt), standalone 0 lines
+  project: ?? .graphtraj/.agent-worktrees/dev/
+  project: ?? .graphtraj/config.yml
+  project: ?? .graphtraj/probe-514/evidence.md
+  project: ?? .graphtraj/probe-514/register.yml
+  project: ?? .graphtraj/probe-514/state.yml
+  project: ?? .graphtraj/roles.yml
+  project: ?? .graphtraj/state/task-index.json
+  project: ?? .graphtraj/state/tasks/.lock
+== [after] graftling 95cffda1ff + GraphTraj 974cb8e956: venv /tmp/claude-501/rehearse530/base/after/venv, project /tmp/claude-501/rehearse530/base/after/project, standalone /tmp/claude-501/rehearse530/base/after/work-standalone
+venv: graftling 0.6.2 | live/ ignored before config.lock: True | graphtraj 0.1.0 | swarm .gitignore: True
+fresh: no data root yet at /tmp/claude-501/rehearse530/base/after/project/.graphtraj/swarm or /tmp/claude-501/rehearse530/base/after/work-standalone/graftling-data
+Create dev from c64e183bb214a0ff9439d22c2c1fe2f11ed0f263? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+roles OK
+probe Task 1 ready
+git work trees: project true, standalone true
+fresh: no data root yet at /tmp/claude-501/rehearse530/base/after/project/.graphtraj/swarm or /tmp/claude-501/rehearse530/base/after/work-standalone/graftling-data
+git status --porcelain --untracked-files=all recorded: project 12 lines (/tmp/claude-501/rehearse530/base/after/status-before-project.txt), standalone 0 lines
+  project: ?? .graphtraj/.agent-worktrees/dev/
+  project: ?? .graphtraj/config.yml
+  project: ?? .graphtraj/probe-514/evidence.md
+  project: ?? .graphtraj/probe-514/register.yml
+  project: ?? .graphtraj/probe-514/state.yml
+  project: ?? .graphtraj/roles.yml
+  project: ?? .graphtraj/state/task-index.json
+  project: ?? .graphtraj/state/tasks/.lock
+== isolated web profile web530 in /tmp/claude-501/rehearse530/base/dsh-home (fresh copy of the shipped web template on first run), then graftling-dsh
+profile web530: created (/tmp/claude-501/rehearse530/base/dsh-home/profiles/web530)
+REHEARSAL: graftling-dsh assumed present in web530
+REHEARSAL: graftling-dsh assumed present in web530
+graftling-dsh: in web530; web profile dependencies: []
+== composed web profile per case (dsh --dump-config; rows that matter)
+before US rows: llm-deepseek (expected agents-host llm-deepseek)
+before UG rows: llm-deepseek graphtraj-main (expected llm-deepseek graphtraj-main)
+after US rows: llm-deepseek (expected agents-host llm-deepseek)
+after UG rows: llm-deepseek graphtraj-main (expected llm-deepseek graphtraj-main)
+configured model (agent-default-model row):  provider: deepseek-official model: deepseek-flash 
+VERIFY530_NOMODEL: no model call (rehearsal)
+fresh: no data root yet at /tmp/claude-501/rehearse530/base/before/project/.graphtraj/swarm or /tmp/claude-501/rehearse530/base/before/work-standalone/graftling-data
+fresh: no data root yet at /tmp/claude-501/rehearse530/base/after/project/.graphtraj/swarm or /tmp/claude-501/rehearse530/base/after/work-standalone/graftling-data
+Ready when: both venv lines (BEFORE: 'live/ ignored … False', 'swarm .gitignore: False'; AFTER: both True), 'roles OK' and 'probe Task 1 ready' twice, all git work trees true, four 'fresh: no data root yet' lines at the end, graftling-dsh in web530, the expected rows, and one READY-530 line naming the model.
+next (USER, plain Terminal + browser): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/530-graftling-root-files-in-dsh-changes/scripts/verify-530/steps.zsh UG

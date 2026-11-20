@@ -1,0 +1,11 @@
+RUN IN: Main's Bash (if graftling-dsh is missing from web530, the USER adds it once in a plain Terminal; then rerun 0).
+== [0] preflight for BEFORE and AFTER. Dialog: none. Builds wheels and venvs (no network), two fresh git projects and two git standalone workspaces (no data roots), web530 with graftling-dsh, then one one-line dsh answer (at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; dsh 0.2.2-alpha.2 (/opt/homebrew/bin/dsh); node v26.5.0
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/530-graftling-root-files-in-dsh-changes 974cb8e95680ac607e420329517470aca9239629 (branch agent/530-graftling-root-files-in-dsh-changes)
+BEFORE: graftling 4a002129f8 + GraphTraj c917f5fcca | AFTER: graftling 95cffda1ff + GraphTraj 974cb8e956
+isolated layout: BASE=/tmp/claude-501/rehearse530/base (before/, after/), DSH_HOME=/tmp/claude-501/rehearse530/base/dsh-home (never ~/.dsh), web profile web530
+graftling source /tmp/claude-501/rehearse530/base/graftling-src: 4a002129f8 graftling 0.6.2 (528) | 95cffda1ff Keep a new data root's config lock out of the caller's git work tree (530) (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>)
+== [before] graftling 4a002129f8 + GraphTraj c917f5fcca: venv /tmp/claude-501/rehearse530/base/before/venv, project /tmp/claude-501/rehearse530/base/before/project, standalone /tmp/claude-501/rehearse530/base/before/work-standalone
+venv /tmp/claude-501/rehearse530/base/before/venv already holds GraphTraj c917f5fcca + graftling 4a002129f8
+venv: graftling 0.6.2 | live/ ignored before config.lock: False | graphtraj 0.1.0 | swarm .gitignore: False
+STOP: graftling data root already exists: /tmp/claude-501/rehearse530/base/before/project/.graphtraj/swarm (this build is not fresh; use a new BASE)

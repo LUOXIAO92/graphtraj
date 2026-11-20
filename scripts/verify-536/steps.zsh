@@ -26,6 +26,8 @@ VPROJECT=${VERIFY536_VPROJECT:-/private/tmp/vproject-536}
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 PI_PROVIDER=deepseek; PI_MODEL=deepseek-flash          # as scripts/verify-444 and verify-514
 CHILD=n536
+CLAUDE_MODEL=claude-opus-5-5                           # the child host (role 'claude': claude/anthropic/opus-5_5)
+ISO=$SD/../verify-common/claude_isolation.py
 N=$BASE/wheels
 
 next() { print -- "\n==> 下一步 / next（直接粘贴）: $*"; }
@@ -34,7 +36,16 @@ logged() { local file=$1; shift; "$@" 2>&1 | tee -a $file; return ${pipestatus[1
 clean() { env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} \
   LANG=${LANG:-en_US.UTF-8} ${DEEPSEEK_API_KEY:+DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY} "$@"; }
 redact() { if [[ -n ${DEEPSEEK_API_KEY:-} ]]; then sed "s|${DEEPSEEK_API_KEY}|[redacted]|g"; else cat; fi; }
-bound() { /usr/bin/perl -e 'alarm shift; exec @ARGV' "$@"; }
+claude_bin() { command -v claude || print -r -- $HOME/.local/bin/claude; }
+ask_model() {  # verify-533's check: one real claude -p answer (tag, model, login, no Harness AGENTS.md, no echo)
+  local C=$(claude_bin)
+  $CONDA -I $ISO settings $H $VPROJECT || return 1
+  $CONDA -I $ISO prompt 536-OK > $W/00-prompt.txt
+  (cd $VPROJECT && clean /usr/bin/perl -e 'alarm shift; exec @ARGV' 120 $C -p --model $CLAUDE_MODEL --output-format stream-json --verbose \
+      < $W/00-prompt.txt > $W/00-model.jsonl 2> $W/00-model.err)
+  print "claude -p rc=$? (142 = 120 s timeout)"
+  $CONDA -I $ISO check $W/00-model.jsonl 536-OK $H $VPROJECT $W/00-prompt.txt
+}
 site_of() { local s=($1/lib/python*/site-packages(N)); print -r -- ${s[1]}; }
 copy_deps() {  # production's click, yaml, websockets into venv $1 (read only; no PyPI on this host)
   local S=$(site_of $RT) D=$(site_of $1)
@@ -96,11 +107,16 @@ step_00() {
   say "Pi"; print "pi: $(command -v pi) | version: $(pi --version 2>&1 | head -1)"
   say "isolated project $VPROJECT: own git, own .graphtraj (setup by production's graphtraj, read only)"
   vproject_init $RT/bin/graphtraj || { print "STOP: isolation NOT OK"; return 1; }
-  say "pi --print one-line answer from the isolated project (no extension: it must not claim Main here)"
+  say "Main host: pi --print one-line answer from the isolated project (no extension: it must not claim Main here)"
   load_key || { print "STOP: DEEPSEEK_API_KEY is unset (verify-514 reads it from ~/.zshrc)"; return 1; }
-  (cd $VPROJECT && clean bound 120 pi --print --no-tools --provider $PI_PROVIDER --model $PI_MODEL \
-     'Reply with one line: READY-536 and your exact model name. Use no tool.' < /dev/null 2>&1 | redact | tail -2) || print "pi rc=$?"
-  print "Ready when: isolation OK and one READY-536 line naming the model."
+  (cd $VPROJECT && clean /usr/bin/perl -e 'alarm shift; exec @ARGV' 120 pi --print --no-tools --provider $PI_PROVIDER --model $PI_MODEL \
+     'Reply with one line: READY-536 followed by your exact model name. Use no tool.' < /dev/null > $W/00-pi.txt 2>&1)
+  print "pi --print rc=$? (142 = 120 s timeout)"; redact < $W/00-pi.txt | tail -3
+  grep -q '^READY-536 ' $W/00-pi.txt && print "CHECK 536 Pi answer line (READY-536 + model): PASS" \
+    || { print "STOP: no 'READY-536 <model>' answer from pi (above). If it is a key/login problem, tell the Leader."; return 1; }
+  say "child host: claude -p one-line answer from the isolated project (expect $CLAUDE_MODEL, logged in, no Harness AGENTS.md)"
+  print "claude: $(claude_bin) | version: $($(claude_bin) --version 2>&1 | head -1)"
+  ask_model || { print "STOP: answer check failed (above). If it is a login problem: USER runs 'claude' once in Terminal and logs in, then rerun 00."; return 1; }
 }
 
 build() {  # $1 name, $2 GraphTraj commit, $3 graftling commit -> $BASE/venv-$1

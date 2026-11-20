@@ -15,18 +15,31 @@ cat > $F/stub/pi <<'EOF'
 #!/bin/zsh
 case "$1" in
   --version) print "1.4.0 (stub pi)" ;;
-  --print) print "READY-536 deepseek-flash (stub)" ;;
+  --print) [[ -e ${0:A:h}/pi-fail ]] && { print "Error: no API key (stub)"; exit 1; }; print "READY-536 deepseek-flash" ;;
   *) print "stub pi: $*" ;;
 esac
 EOF
-chmod +x $F/stub/pi
+cat > $F/stub/claude <<'EOF'
+#!/bin/zsh
+case "$1" in
+  --version) print "2.1.325 (stub Claude Code)" ;;
+  -p) in=$(cat); tag=$(print -r -- "$in" | sed -n 's/.*Line 1: \([A-Z0-9-]*\) followed.*/\1/p')
+      print -r -- '{"type":"system","subtype":"init","plugins":[]}'
+      print -r -- "{\"type\":\"result\",\"is_error\":false,\"result\":\"${tag} claude-opus-5-5, logged in\\nFILES: NONE\",\"modelUsage\":{\"claude-opus-5-5\":{}}}" ;;
+  *) print "stub claude: $*" ;;
+esac
+EOF
+chmod +x $F/stub/pi $F/stub/claude
 S() { zsh $SD/steps.zsh "$@"; }
 SP() { PATH=$F/stub:$PATH zsh $SD/steps.zsh "$@"; }
 pass=0 fail=0
 check() { local name=$1; shift; if "$@"; then print "REHEARSAL PASS $name"; ((pass++)); else print "REHEARSAL FAIL $name"; ((fail++)); fi; }
 print "== rehearsal in $F (stub pi for 00/V0/V1; real commits)"
-SP 00 > $F/00.out 2>&1; check "00: isolation OK, pi answer, next command" sh -c "grep -q 'isolation: OK' $F/00.out && grep -q 'READY-536' $F/00.out && grep -q 'steps.zsh B' $F/00.out"
-tail -4 $F/00.out
+SP 00 > $F/00.out 2>&1; check "00: isolation OK, pi answer line, claude answer check, next command; no 'No such file'" sh -c "grep -q 'isolation: OK' $F/00.out && grep -q '^READY-536 deepseek-flash' $F/00.out && grep -q 'CHECK 536 Pi answer line (READY-536 + model): PASS' $F/00.out && grep -q 'answer check (expect clean): OK' $F/00.out && grep -q 'steps.zsh B' $F/00.out && ! grep -q 'No such file' $F/00.out"
+grep -E 'rc=|READY-536 |CHECK 536|answer check|isolation:' $F/00.out
+# A Pi without an answer STOPs 00 before the Claude check and the next command (marker file: 00 runs pi under env -i).
+touch $F/stub/pi-fail; SP 00 > $F/00-bad.out 2>&1; rm $F/stub/pi-fail; check "00 with no Pi answer: STOP, no next command" sh -c "grep -q 'STOP: no .READY-536 <model>. answer from pi' $F/00-bad.out && ! grep -q 'steps.zsh B' $F/00-bad.out && ! grep -q 'claude -p rc=' $F/00-bad.out"
+grep -E 'pi --print rc=|STOP' $F/00-bad.out
 S B > $F/B.out 2>&1; check "B: exact diff; baseline without, candidate with the notice renderer; pip check rc=0 twice" sh -c "grep -q 'CHECK 536 GraphTraj product diff is exactly the three 536 files: PASS' $F/B.out && grep -q 'baseline: notice renderer in the extension: 0' $F/B.out && grep -q 'candidate: notice renderer in the extension: [1-9]' $F/B.out && [ \$(grep -c 'venv pip check rc=0' $F/B.out) -eq 2 ]"
 grep -E 'CHECK|^baseline:|^candidate:|graftling candidate' $F/B.out
 # V resolves the child role through ~/.graphtraj/connections.yml; the rehearsal HOME has a minimal catalog naming the same reference.

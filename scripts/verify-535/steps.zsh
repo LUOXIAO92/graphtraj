@@ -29,7 +29,7 @@ VPROJECT=${VERIFY535_VPROJECT:-/private/tmp/vproject-535}
 CODEX_HOME_USED=${VERIFY535_CODEX_HOME:-${CODEX_HOME:-$HOME/.codex}}   # only read (Vr reads rollouts)
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 CODEX_MODEL=gpt-6-luna
-CHILD=n535
+CHILD=$(cat $W/child-name 2>/dev/null || print n535)   # step_V picks a fresh one per run; Vr reads it
 ACTIVE=$BASE/active                                    # link -> $BASE/base or $BASE/cand
 path=(/opt/homebrew/bin $HOME/.local/bin ${path:#$RT/bin})
 
@@ -177,6 +177,11 @@ step_V() {  # $1 = base (Vb) | cand (V)
   codex_files || { print "STOP: project .codex files not written (above)"; return 1; }
   say "child role: ONE role 'codex' copied from a production preset (runtime codex, model $CODEX_MODEL; production roles only read); resolved without launching a model"
   roles || { print "STOP: the child role does not resolve (above); Main reports it to the Leader"; return 1; }
+  say "stale Main state of the isolated project (only $VPROJECT/.graphtraj/runner/main-sessions): removed so no continuity redirects the notice"
+  local MS=$VPROJECT/.graphtraj/runner/main-sessions
+  if [[ -d $MS ]]; then print "removing $MS:"; find $MS -type f | sed 's/^/    /'; rm -rf $MS || return 1; else print "none: $MS absent"; fi
+  CHILD=n535$(date +%H%M); print -r -- $CHILD > $W/child-name
+  print "child name for this run (fresh, so send by name cannot hit an older child): $CHILD"
   date +%s > $W/V$1.start
   prompt_text > $W/V-prompt.txt
   local tag=$([[ $1 == base ]] && print BEFORE || print AFTER)
@@ -184,7 +189,7 @@ step_V() {  # $1 = base (Vb) | cand (V)
   print "1) 在普通 Terminal 运行（一行，不加任何 -c 选项: 否则 Codex 不用共享后台服务，收不到通知）:"
   print -r -- "   cd $VPROJECT && codex -m $CODEX_MODEL"
   if [[ $1 == base ]]; then
-    print "2) 预期对话框（最多一个，Codex 自己的）: $VPROJECT/.codex/hooks.json 的 hook 审核 → approve（或无）。文件夹信任已在 T 完成；若仍出现信任框 → Yes 并告诉 Main。其它任何框按 Esc 并把标题告诉 Main。"
+    print "2) 预期对话框（恰好一个，Codex 自己的）: $VPROJECT/.codex/hooks.json 的 hook 审核（hooks.json 已改变）→ approve。文件夹信任已在 T 完成；若仍出现信任框 → Yes 并告诉 Main。其它任何框按 Esc 并把标题告诉 Main。"
   else
     print "2) 预期对话框: 无（Vb 时已信任文件夹与 hooks；hooks.json 与 Vb 相同）。若仍出现 hook 审核框 → approve，并把标题告诉 Main。其它任何框按 Esc 并报告标题。"
   fi

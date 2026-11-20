@@ -72,6 +72,12 @@ S Vb > $F/Vb-noluna.out 2>&1; check "Vb without gpt-6-luna in the catalog: FAIL 
 grep -E 'CHECK 535|STOP' $F/Vb-noluna.out
 catalog with > $F/home/.graphtraj/connections.yml
 cp $F/vproject/.codex/hooks.json $F/hooks-vb.json
+# Correction round 1: hooks.json holds no Stop completion checker or SessionEnd, and the SessionStart claim ignores an
+# `exec` child (its session would otherwise become the current Main); stale main-sessions removed; fresh child name.
+print -r -- '{"type":"session_meta","payload":{"source":"exec"}}' > $F/child-rollout.jsonl
+CLAIM=$(print -r -- "{\"hook_event_name\":\"SessionStart\",\"source\":\"startup\",\"session_id\":\"x\",\"cwd\":\"$F/vproject\",\"transcript_path\":\"$F/child-rollout.jsonl\"}" \
+  | (cd $F/vproject && $F/base/active/venv/bin/python -I $SD/main_start535.py))
+check "Vb hooks: SessionStart claim + display only; an exec child's SessionStart is ignored; main-sessions cleared; fresh child name" sh -c "! grep -q 'stop_hook' $F/vproject/.codex/hooks.json && ! grep -q SessionEnd $F/vproject/.codex/hooks.json && grep -q main_start535.py $F/vproject/.codex/hooks.json && [ '$CLAIM' = '{}' ] && [ ! -e $F/vproject/.graphtraj/runner/main-sessions ] && grep -qE 'child name for this run .*: n535[0-9]{4}' $F/Vb.out && grep -q \"name \$(cat $F/w/child-name)\" $F/w/V-prompt.txt"
 S B > $F/B.out 2>&1; check "B: exact 535 diff, candidate wheels + venv, send_host_event takes text" sh -c "grep -q 'CHECK 535 GraphTraj product diff is exactly the 535 files: PASS' $F/B.out && grep -q 'venv pip check rc=0' $F/B.out && grep -q 'candidate send_host_event takes text: True' $F/B.out"
 grep -E '^GraphTraj |^graftling |files changed' $F/B.out
 S V > $F/V.out 2>&1; check "V: same hooks.json as Vb (no new hook review), active -> cand" sh -c "cmp -s $F/hooks-vb.json $F/vproject/.codex/hooks.json && grep -q 'active -> $F/base/cand' $F/V.out && grep -q 'CHECK 535 child role resolves: PASS' $F/V.out"

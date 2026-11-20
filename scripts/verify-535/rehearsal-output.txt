@@ -27,17 +27,18 @@ CHECK 535 child role resolves: PASS (runtime codex, model gpt-6-luna, reasoning_
 REHEARSAL PASS Vb without gpt-6-luna in the catalog: FAIL with the reason, STOP before the USER part
 CHECK 535 child role resolves: FAIL (ValueError: the catalog has no codex model with id or key gpt-6-luna)
 STOP: the child role does not resolve (above); Main reports it to the Leader
+REHEARSAL PASS Vb hooks: SessionStart claim + display only; an exec child's SessionStart is ignored; main-sessions cleared; fresh child name
 REHEARSAL PASS B: exact 535 diff, candidate wheels + venv, send_host_event takes text
 GraphTraj product files changed 8ac35e3195f3735b9742a7beff3842333cb4e48a..HEAD: src/graphtraj/runtimes/codex/host_events.py, tests/codex_stdio_peer.py, tests/test_codex_main_root_notice_401.py, tests/test_current_host_events.py, tests/test_mcp_host_tools.py
 graftling files changed f67d147a222d7db214ecad14d24809debad999a4..87d83d68d55615c15f5ca3fd3f4ba200c0c27349: src/graftling/CHANGELOG.md src/graftling/PUBLIC_API.md src/graftling/codex/app_server.py tests/test_codex_host_event_text.py 
-GraphTraj acde1fe6e236c348c1879192fe1bc9367c4d1646 verify-535: B and V for the candidate (graftling 87d83d68), rehearsal from an empty directory (535)
+GraphTraj 4618696aaae675731f384b67babe3c680032dfff verify-535: the child role takes gpt-6-luna from the user's catalog onto the production astra engineer preset (535)
 graftling 87d83d68d55615c15f5ca3fd3f4ba200c0c27349 Codex host event: optional text, the tool output the Main reads (535)
 graftling 0.6.2 /private/tmp/claude-501/reh535/base/cand/venv/lib/python3.13/site-packages/graftling/__init__.py
 REHEARSAL PASS V: same hooks.json as Vb (no new hook review), active -> cand
 REHEARSAL PASS Vr on the BASELINE push (escaped JSON): FAIL (the check can fail)
   CHECK not an escaped JSON document: FAIL
   CHECK no permissions/session_id/terminal_confirmed: PASS
-  CHECK names the child (n535 or agent-…): PASS
+  CHECK names the child (n5350034 or agent-…): PASS
   CHECK carries an execution id (32 hex): PASS
   CHECK Markdown lines kept as lines: FAIL
 CHECK 535 notices: FAIL
@@ -54,21 +55,21 @@ REHEARSAL PASS Vr on the CANDIDATE push (notice text): PASS
 > quoted
   CHECK not an escaped JSON document: PASS
   CHECK no permissions/session_id/terminal_confirmed: PASS
-  CHECK names the child (n535 or agent-…): PASS
+  CHECK names the child (n5350034 or agent-…): PASS
   CHECK carries an execution id (32 hex): PASS
   CHECK Markdown lines kept as lines: PASS
 records holding the display box or the sent message (information): none
 CHECK 535 notices: PASS
 REHEARSAL PASS G: TMPDIR outside the Harness printed; both limited runs exit=0
-TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-535-gt-20261121T001533 | graftling temp /private/tmp/claude-501/verify-535-gl-20261121T001533
+TMPDIR of the runs (outside the Harness): /private/tmp/claude-501 | graphtraj temp /private/tmp/claude-501/verify-535-gt-20261121T003443 | graftling temp /private/tmp/claude-501/verify-535-gl-20261121T003443
 graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/535-codex-main-agents-message-display/src/graphtraj/__init__.py
 graftling 0.6.2 /private/tmp/claude-501/reh535/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
 graftling suite imports /private/tmp/claude-501/reh535/base/cand/gl-src/src/graftling/__init__.py
-==> /private/tmp/claude-501/reh535/w/G-20261121T001533/graphtraj.txt <==
-19 passed, 6 skipped in 8.01s
+==> /private/tmp/claude-501/reh535/w/G-20261121T003443/graphtraj.txt <==
+19 passed, 6 skipped in 8.49s
 exit=0
 
-==> /private/tmp/claude-501/reh535/w/G-20261121T001533/graftling.txt <==
-7 passed in 0.26s
+==> /private/tmp/claude-501/reh535/w/G-20261121T003443/graftling.txt <==
+7 passed in 0.25s
 exit=0
-== rehearsal: 10 passed, 0 failed
+== rehearsal: 11 passed, 0 failed

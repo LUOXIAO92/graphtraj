@@ -3,7 +3,7 @@
 Baseline = GraphTraj `8ac35e31` (dev) + graftling `f67d147a` (dev, 533's `notice_text`). Candidate = this Worktree's
 HEAD (535 changes exactly `src/graphtraj/runtimes/codex/display_hook.py`, `src/graphtraj/runtimes/codex/host_events.py`,
 `tests/codex_stdio_peer.py`, `tests/test_codex_agent_display.py`, `tests/test_codex_main_root_notice_401.py`, `tests/test_current_host_events.py`, `tests/test_mcp_host_tools.py`; B
-checks that against 8ac35e31) + graftling `87d83d68` (`GLC`) of the untracked clone `.scratch/graftling` (git dir
+checks that against 8ac35e31) + graftling `ec91db5e` (`GLC`, on dev fc081a3f; `send_host_event` text + `delegation_from`: the notice goes as Codex's delegation output, drawn as "Sent by Codex from task <alias>" over the quoted, rendered notice_text; Vr unwraps it) of the untracked clone `.scratch/graftling` (git dir
 `.scratch/graftling-git`, branch `agent/535-codex-main-agents-message-display`, bundle
 `.scratch/graftling-535.bundle`).
 

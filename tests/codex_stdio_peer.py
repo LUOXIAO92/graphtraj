@@ -280,10 +280,16 @@ for line in incoming():
         active[thread_id] = turn_id
         if 'toolOutput' in params:
             assert params['input'] == []
-            assert params['toolOutput']['name'] == 'graftling'
             prompt = params['toolOutput']['output']
-            # GraphTraj's Main notices are graftling.notice_text (535); graftling's own host sends JSON.
-            assert prompt.startswith('[Graftling notice from ') or json.loads(prompt)['source'] in {'graphtraj', 'agents'}
+            # GraphTraj's Main notices are Codex delegation outputs holding graftling.notice_text (535);
+            # graftling's own host sends JSON named graftling.
+            if params['toolOutput']['name'] == 'send_message_to_thread':
+                assert params['toolOutput']['namespace'] == 'codex_app'
+                assert prompt.startswith('<codex_delegation>\n  <source_thread_id>')
+                assert '<input>&gt; [Graftling notice from ' in prompt
+            else:
+                assert params['toolOutput']['name'] == 'graftling'
+                assert json.loads(prompt)['source'] in {'graphtraj', 'agents'}
             if os.environ.get('PEER_HOST_EVENTS'):
                 with open(os.environ['PEER_HOST_EVENTS'], 'a') as stream:
                     stream.write(prompt + '\n')

@@ -1514,13 +1514,19 @@ def _assert_native_budget_stop(
         params = message.get("params", {})
         if message.get("method") != "turn/start" or "toolOutput" not in params:
             continue
-        # 535: the Main reads graftling.notice_text of the event: title line, then the message.
+        # 535: Codex's delegation output from the alias, holding the quoted graftling.notice_text.
+        from xml.sax.saxutils import unescape
+
         output = params["toolOutput"]["output"]
-        if output.startswith(f"[Graftling notice from {alias} · ") and stop["message"].strip() in output:
+        body = unescape(output.split("<input>", 1)[-1].rsplit("</input>", 1)[0])
+        text = "\n".join(line[2:] if line.startswith("> ") else line.lstrip(">") for line in body.split("\n"))
+        if text.startswith(f"[Graftling notice from {alias} · ") and stop["message"].strip() in text:
             assert params["input"] == []
-            assert params["toolOutput"]["name"] == "graftling"
+            assert params["toolOutput"]["name"] == "send_message_to_thread"
+            assert params["toolOutput"]["namespace"] == "codex_app"
+            assert output.startswith(f"<codex_delegation>\n  <source_thread_id>{alias}</source_thread_id>")
             assert params["threadId"] == thread_id
-            assert output.split("\n", 1)[0].startswith(
+            assert text.split("\n", 1)[0].startswith(
                 f"[Graftling notice from {alias} · execution-budget-exceeded")
             received.append(message)
     assert len(received) == 1

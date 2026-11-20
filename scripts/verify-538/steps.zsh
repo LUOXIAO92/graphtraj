@@ -130,13 +130,17 @@ PROMPT_TEXT() {  # $1 tool, $2 child runtime, $3 child model ('' = none). Marker
   # (graftling claude/execution.py:1270) while the create execution was still finishing, so step 2 waits for that
   # execution to end first; and one rule says what to do when a notice comes before the turn ends (S's Think was torn
   # between the two markers). B's recorded run used the f15f20fd prompt.
-  print -r -- "Use the MCP tool $1. Do exactly these four steps and nothing else.
+  # 538 c3: on b9f35bc4 G's create-end notice arrived during the wait and the model answered it and ended without the
+  # send; notices now never interrupt steps 1-4, and an in-turn notice is answered only after the SENT line (step 5).
+  print -r -- "Use the MCP tool $1. Do exactly these five steps and nothing else.
 1. Call $1 with {\"action\": \"execute\", \"feature\": \"create\", \"arguments\": {${margs}\"name\": \"echo538\", \"instruction\": \"$reply\"}}. Use exactly these arguments; add no others and do not try other models.
 2. Call $1 with {\"action\": \"execute\", \"feature\": \"wait\", \"arguments\": {\"agent\": <the agent id that step 1 returned>, \"timeout_seconds\": 180}}, so the member's first reply has ended before you send.
 3. Call $1 with {\"action\": \"execute\", \"feature\": \"send\", \"arguments\": {\"agent\": <the same agent id>, \"message\": \"## Report 538\\n\\n- first item\\n- second item with \`code span\`\\n\\n\`\`\`text\\nline one\\nline two\\n\`\`\`\\n\\nReply with a level-2 heading Reply 538, a two-item bullet list (gamma, delta) and a fenced code block holding the line: echo reply.\"}}.
-4. Do not wait for the member after step 3. End your turn with exactly one line made of the two words SENT and 538 joined by a hyphen.
+4. Do not wait for the member after step 3. Write exactly one line made of the two words SENT and 538 joined by a hyphen.
+5. If one or more notices about this member arrived at any time before you wrote the step 4 line, write now exactly one more line made of the three words GOT, NOTICE and 538 joined by hyphens. Then end your turn.
+Notices may arrive at any time, also during steps 1 to 3. They never stop or change steps 1 to 5: always do all of steps 1 to 4 in order, and answer notices only in step 5.
 If step 1, 2 or 3 fails, call nothing else and end your turn with exactly one line made of the two words FAILED and 538 joined by a hyphen.
-Notice rule: each notice saying that this member ended or replied gets exactly one line made of the three words GOT, NOTICE and 538 joined by hyphens, and nothing else. If such a notice arrives before you have written the step 4 line, write only that notice line and end your turn; do not write the step 4 line after it."
+After your turn has ended, each later notice saying that this member ended or replied gets exactly one line made of the three words GOT, NOTICE and 538 joined by hyphens, and nothing else."
 }
 
 [[ -d $H/graphtraj && -d $H/.graphtraj ]] || [[ -n ${VERIFY538_H:-} ]] || { print "STOP: $H is not the Harness root"; return 1; }
@@ -400,6 +404,7 @@ C)
   mkdir -p $D
   for ph in before after; do for run in run1 run2; do for c in G S; do
     [[ -d $BASE/$ph/runs/$run/$c ]] || continue
+    rm -f $D/$ph-$run-$c-*(N)   # 538 c3: no file of an earlier run of this set survives next to the new one
     for f in $BASE/$ph/runs/$run/$c/*.(png|txt|json|log)(N); do
       [[ ${f:t} == server.log ]] && continue
       if [[ $f == *.png ]]; then cp -p $f $D/$ph-$run-$c-${f:t}; else sed 's/token=[^ &"]*/token=[redacted]/g' $f | redact > $D/$ph-$run-$c-${f:t}; fi

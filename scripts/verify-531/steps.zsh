@@ -41,8 +41,9 @@ STEP=${1:-}
 PYTEST_TMP=${TMPDIR:-/tmp}
 KNOWN528=$H/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/G-8267f9e5-20261119T235550/suite.txt
 KNOWN516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
-FOCUSED=(tests/test_claude_resource_grants_531.py)
-GUARANTEES=(${(f)"$(cd $WT && print -l tests/*459*.py(N) tests/*495*.py(N) tests/*496*.py(N) tests/*498*.py(N) tests/*501*.py(N))"})
+FOCUSED=(tests/test_claude_resource_grants_531.py tests/test_claude_runtime.py tests/test_member_history_grants.py)
+# 459/495/496/498 (tool-process records and stops) by file name; 501 (Worldline validation) in test_delivery_worldline.py
+GUARANTEES=(${(f)"$(cd $WT && print -l tests/*459*.py(N) tests/*495*.py(N) tests/*496*.py(N) tests/*498*.py(N) tests/test_delivery_worldline.py(N))"})
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 
 say() { print -r -- "== $*"; }
@@ -252,6 +253,21 @@ Gt)
   print -r -- $R > $OUT/Gt-latest
   print "Success: 'N passed' with exit=0 and '(no FAILED/ERROR lines)'."
   print -r -- "next: zsh $THIS GR  (when G's suite.txt ends with exit=)"
+  ;;
+O)
+  say "[O] Main or Engineer. The new 531 test against BEFORE $BEFORE_COMMIT (must FAIL there). Dialog: none. ~1 min."
+  check_tmp || return 1
+  local S=$T/old-src V=$T/venv-old
+  rm -rf $S $V; mkdir -p $S; git -C $WT archive $BEFORE_COMMIT | tar -x -C $S || return 1
+  cp $WT/tests/test_claude_resource_grants_531.py $S/tests/ || return 1   # only the new test file is added
+  $CONDA -m venv --system-site-packages $V || return 1
+  local D=$($V/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')
+  cp -Rp $RT/graftling $RT/graftling-*.dist-info(N) $D/ && copy_deps $V || return 1
+  $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $S 2>&1 | grep -vi cache
+  (cd $S && grep -n 'pythonpath' pyproject.toml; $V/bin/python -I -c 'import graphtraj.runtimes.claude.adapter as a; print("pytest imports (pyproject pythonpath = src of this tree):", a.__file__)')
+  (cd $S && TMPDIR=$PYTEST_TMP $V/bin/python -m pytest -p no:cacheprovider -q -rfE tests/test_claude_resource_grants_531.py 2>&1 | tail -8)
+  print "Success: the adapter path under $S/src, and 'FAILED ... test_unprotected_grants_read_no_session_record[...]'"
+  print "(3 failures: history_reads == [root], not []); test_protected_grant_still_needs_an_associated_history passes."
   ;;
 GR)
   say "[GR] Main. Read only. Newest G and Gt; FAILED/ERROR lines classed known (528 accepted G, 516) or NEW. <10 s."

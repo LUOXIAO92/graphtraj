@@ -40,7 +40,7 @@ def display(event: dict, state_directory: Path) -> dict:
     return shown
 
 
-def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str, str]], Callable[[], None]]:
+def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str]], Callable[[], None]]:
     """Read retained ordinary receipts addressed to this Codex Session's host.
 
     Also returns how to record, once they are shown, how far each addressed
@@ -75,7 +75,7 @@ def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str,
         through[addressee] = max(through.get(addressee, 0.0), record['at'])
         identity = record.get('identity', {})
         facts.append((f"receipt:{notice.get('alias')}:{identity.get('execution_id')}",
-                      str(notice.get('alias')), f'Codex session {session}', str(notice.get('message'))))
+                      f"{notice.get('alias')} · {notice.get('event') or 'completed'}", str(notice.get('message'))))
 
     def settle() -> None:
         """Record that the receipts read here were shown, per addressed Main."""
@@ -85,7 +85,7 @@ def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str,
     return facts, settle
 
 
-def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
+def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str]]:
     """Return the request and reply facts of one successful agents call."""
     if (event.get('hook_event_name') != 'PostToolUse'
             or event.get('tool_name') not in {'mcp__graphtraj__agents', 'mcp__graftling__agents', 'mcp__agents__agents'}):
@@ -104,8 +104,8 @@ def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
     if (not isinstance(record, dict)
             or not all(isinstance(value, str) and value for value in (agent, session, call_id))):
         return []
-    caller = f'Codex session {session}'
-    child = f"{record.get('name') or agent} [{agent}]"
+    # Who and what only (533's words); ids stay in the records and the tool result.
+    child = str(record.get('name') or agent)
     facts = []
     arguments = request.get('arguments', {})
     if (request.get('feature') in {'create', 'send', 'resume'}
@@ -113,16 +113,16 @@ def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str, str]]:
             and record.get('resumed') is not False and isinstance(arguments, dict)):
         body = arguments.get('instruction', arguments.get('message'))
         if isinstance(body, str) and body:
-            facts.append((f'send:{call_id}', caller, child, body))
+            facts.append((f'send:{call_id}', f'agents → {child}', body))
     reply = record.get('last_result')
     if isinstance(reply, dict) and reply.get('id'):
         body = reply.get('last_message')
         if isinstance(body, str) and body:
-            facts.append((f"reply:{agent}:{reply['id']}", child, caller, body))
+            facts.append((f"reply:{agent}:{reply['id']}", f'{child} · replied', body))
     return facts
 
 
-def _show(facts: list[tuple[str, str, str, str]], session: str, state_directory: Path) -> dict:
+def _show(facts: list[tuple[str, str, str]], session: str, state_directory: Path) -> dict:
     """Render facts not yet shown in this Session, once each."""
     # Native Session scope prevents another Session's matching IDs suppressing
     # its own display. This cache is optional UI state, not control authority.
@@ -130,16 +130,16 @@ def _show(facts: list[tuple[str, str, str, str]], session: str, state_directory:
     with exclusive_lock(path.with_suffix('.lock')):
         seen = set(yaml.safe_load(path.read_text()) or []) if path.exists() else set()
         boxes = []
-        for identity, sender, recipient, body in facts:
+        for identity, header, body in facts:
             if identity in seen:
                 continue
-            boxes.append(f'╭─ agents/MCP · {sender} → {recipient}\n'
-                         + '\n'.join('│ ' + line for line in body.splitlines()) + '\n╰─')
+            # One header line, then the body verbatim, so its Markdown stays intact (535).
+            boxes.append(f'{header}\n\n{body}')
             seen.add(identity)
         if not boxes:
             return {}
         write_yaml_durably(path, sorted(seen))
-    return {'systemMessage': '\n'.join(boxes)}
+    return {'systemMessage': '\n\n'.join(boxes)}
 
 
 def main() -> None:

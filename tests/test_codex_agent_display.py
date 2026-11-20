@@ -39,8 +39,9 @@ def test_display_is_ui_only_and_deduplicated_across_hook_processes(tmp_path: Pat
     shown = invoke(source, tmp_path)
     assert set(shown) == {'systemMessage'}
     text = shown['systemMessage']
-    assert 'Codex session native-session → reader [agent-child]' in text
-    assert 'reader [agent-child] → Codex session native-session' in text
+    # 535: who and the content only (533's words); the body verbatim so its Markdown is intact; no box, no
+    # per-line prefix, no session or agent id in this UI-only text.
+    assert text == 'agents → reader\n\nRemember red.\n\nreader · replied\n\nRemembered red.'
     assert 'Remember red.' in text and 'Remembered red.' in text
     assert source == original
     assert invoke(source, tmp_path) == {}
@@ -90,8 +91,8 @@ def test_retained_ordinary_receipt_is_shown_once_at_the_next_hook(tmp_path: Path
 
     shown = invoke(stop, tmp_path / 'display')
     assert set(shown) == {'systemMessage'}
-    assert 'research@x1 → Codex session main-session' in shown['systemMessage']
-    assert 'Session execution ended' in shown['systemMessage']
+    assert shown['systemMessage'].startswith('research@x1 · completed\n\nSession execution ended')
+    assert '│' not in shown['systemMessage'] and 'Codex session' not in shown['systemMessage']
     assert invoke(stop, tmp_path / 'display') == {}
     assert invoke({**stop, 'session_id': 'other-main'}, tmp_path / 'display') == {}
 

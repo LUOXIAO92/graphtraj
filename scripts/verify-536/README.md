@@ -10,7 +10,7 @@ Main runs `zsh <abs path>/steps.zsh <step>`; every step prints the next command 
 
 | Step | Who | Dialog | What |
 |---|---|---|---|
-| 00 | Main | none | zsh, `pi --version`, isolated `/private/tmp/vproject-536` (own git, graphtraj setup by production's graphtraj, read only), one `pi --print` answer (deepseek/deepseek-flash as verify-444/514; no extension, so it claims no Main) |
+| 00 | Main | none | zsh, `pi --version`, isolated `/private/tmp/vproject-536` (own git, graphtraj setup by production's graphtraj, read only), each host answers one line: Main host `pi --print` (deepseek/deepseek-flash as verify-444/514; no extension, so it claims no Main; STOP without a `READY-536 <model>` line) and child host `claude -p` (claude-opus-5-5, verify-533's ask_model with `verify-common/claude_isolation.py` prompt/check: model, login, no Harness AGENTS.md); both bounded to 120 s, output under the realhost folder |
 | B | Main | none | wheels from `git archive` of the exact commits into `<Harness>/tmp/536/wheels/{baseline,candidate}`; venvs `<Harness>/tmp/536/venv-{baseline,candidate}`; prints whether each Pi extension has the notice renderer |
 | V0 | Main, then USER | USER: none expected (a Pi folder/extension trust prompt: choose its affirmative option and report the title) | BEFORE on BASELINE: writes ONE child role `claude` (connection claude/anthropic/opus-5_5, effort high, permission_mode auto — production's opus_coding_team.engineer; `../verify-533/roles533.py`) and resolves it without a model; prints the USER `pi --session-dir … --extension …` command and the prompt (create with runtime + name, one Markdown send); USER takes two screenshots |
 | V1 | Main, then USER | as V0 | the same AFTER on CANDIDATE |

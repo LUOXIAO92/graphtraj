@@ -1,0 +1,3 @@
+pytest temp root: /private/tmp/claude-501/verify-554-cand-20261121T213832
+cand: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate at 6bfbb3a40cf267607e3f634ff90d26e90132ec8d | graftling 6794ce02b6210ec88837437affb8d7b525612804
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground

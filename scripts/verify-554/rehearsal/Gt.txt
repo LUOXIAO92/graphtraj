@@ -1,0 +1,16 @@
+Dialog: none
+== [Gt] Main. Focused tests via the candidate venv, foreground. Dialog: none. ~1-2 min.
+uncommitted in src/tests/plugins/manuals: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-554-cand-20261121T213759
+reusing /tmp/claude-501/v554/t/venv-cand (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate editable; graftling 6794ce02 wheel)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/v554/t/venv-cand/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+cand: 6bfbb3a40cf267607e3f634ff90d26e90132ec8d | graftling wheel from git archive 6794ce02b6210ec88837437affb8d7b525612804
+files: tests/test_github_backup.py tests/test_gateway.py tests/test_wheel_installation.py
+.................................................................        [100%]
+65 passed in 29.66s
+exit=0
+(no FAILED/ERROR lines)
+Success: 'N passed' with exit=0 and '(no FAILED/ERROR lines)'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/scripts/verify-554/steps.zsh G   (background ~25 min; then, after it ends: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/scripts/verify-554/steps.zsh GR)

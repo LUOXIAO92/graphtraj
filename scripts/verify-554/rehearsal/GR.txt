@@ -1,0 +1,22 @@
+Dialog: none
+== [GR] Main. Read only. Newest G and Gt; FAILED/ERROR lines classed known (516) or NEW. Dialog: none. <10 s.
+---- /tmp/claude-501/v554/out/G-6bfbb3a4-20261121T213833
+pytest temp root: /private/tmp/claude-501/verify-554-cand-20261121T213832
+cand: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate at 6bfbb3a40cf267607e3f634ff90d26e90132ec8d | graftling 6794ce02b6210ec88837437affb8d7b525612804
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground
+.................                                                        [100%]
+17 passed in 11.38s
+exit=0
+---- candidate G classification
+(no FAILED/ERROR lines)
+---- Gt /tmp/claude-501/v554/out/Gt-6bfbb3a4-20261121T213759
+65 passed in 29.66s
+exit=0
+(no FAILED/ERROR lines)
+---- prior evidence: accepted 547 full suite on dev (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/547-backup-cross-repository-sub-issues/realhost/GR.txt)
+3623 passed, 48 skipped
+exit=0
+3617 passed, 48 skipped
+exit=0
+Success: G 'exit=0' or only 'known (516)' lines; no 'NEW' line in G or Gt.
+next: report /tmp/claude-501/v554/out/GR.txt to the Leader

@@ -1,79 +1,261 @@
 
-=============== $ zsh steps.zsh A0 ===============
+=============== $ zsh steps.zsh 00 ===============
 
-### [A0] candidate installation (dialog: none): GraphTraj a866fb41ed0ef6ee84fd29873340057423ad6a1c + graftling 68f89c8a49c7d87515ec5d1941685d802e5393cb (branch agent/551-task-free-children-reach-tasks-methods of /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/.graftling-551.git, base 6794ce02b6210ec88837437affb8d7b525612804)
-graftling 68f89c8a49c7d87515ec5d1941685d802e5393cb descends from dev 6794ce02b6210ec88837437affb8d7b525612804
-graftling commits since dev: 68f89c8 Pi and DSH children: tools and disallowed_tools in their native terms (551);05e52af Refuse Codex tool filters for servers the captured settings lack (551);d995850 Pi and DSH children reach the host's extra tools beside agents (551);7e145ee Children keep the host's tools unless create or a preset chooses them (551);1db68a2 Test: graftling never imports, runs, declares or requires GraphTraj (551);8380121 Serve host tools beside agents to independent children (551);
-GraphTraj commits since dev f754d3a9: 11
-candidate venv: graphtraj 0.1.0 from /private/tmp/claude-501/reh551l-222337/base/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py | graftling 0.6.2 from /private/tmp/claude-501/reh551l-222337/base/venv-after/lib/python3.13/site-packages/graftling/__init__.py
-manuals in the candidate: /private/tmp/claude-501/reh551l-222337/base/venv-after/share/graphtraj/manuals
+### [00] preflight (dialog: none). Each host prompt at most 120 s.
+script: zsh 5.9 running /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh | git version 2.50.1 (Apple Git-155)
+claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
+in-use installation (BEFORE): graphtraj 0.1.0 | graftling 0.6.2 at /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime
+Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods at f8c39a95 | BASE /private/tmp/claude-501/reh551q-231658/base
+DEEPSEEK_API_KEY: set
+Pi sandbox env /private/tmp/claude-501/reh551q-231658/no-pi-sandbox.env missing: the Pi role uses PATH for srt
 
-### dependency direction (required result 4): graftling's wheel alone in a clean venv, GraphTraj NOT installed
-graftling wheel Requires-Dist: ['PyYAML<7,>=6', 'websockets<17,>=15']
-graphtraj installed in this venv: False
-graftling modules imported: 72 | failed: none | graphtraj modules loaded: []
-CHECK 551 dependency direction: PASS
-DEEPSEEK_API_KEY: unset
-Pi sandbox env /private/tmp/claude-501/reh551l-222337/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+### one-line prompts; each host's model is judged from its OWN record (the reply is only a self-report)
+claude: actual model ['claude-sonnet-5-5'] (from stream-json system/init model) | login source (init apiKeySource): none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login
+claude: reply (self-report, not judged): READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
+READY-551 claude: PASS (expected claude-sonnet-5-5)
+codex: actual model ['gpt-6-luna'] provider ['openai'] (from codex exec header 'model:' line)
+codex: reply (self-report, not judged): READY-551 stub-codex (REHEARSAL STUB, no model)
+READY-551 codex: PASS (expected gpt-6-luna)
+pi: actual model ['deepseek-flash'] provider ['deepseek'] (from pi --mode json events (model/modelId/provider keys))
+pi: reply (self-report, not judged): {"type": "message_end", "message": {"role": "assistant", "provider": "deepseek", "model": "deepseek-flash", "content": [{"type": "text", "text": "READY-551 stub-pi"}]}}
+READY-551 pi: PASS (expected deepseek/deepseek-flash)
+dsh: actual model NOT RECORDED BY DSH (checked: dsh --json events; DSH session log /private/tmp/claude-501/reh551q-231658/dsh-sessions/*/session-00000000-0000-4000-8000-000000000551/* (0 file(s)) (model/modelId/provider keys))
+dsh: model selected explicitly: deepseek-flash (from `dsh --profile headless --dump-config`, entry agent-default-model; no --model argv)
+dsh: reply (self-report, not judged): {"type": "final", "sessionId": "session-00000000-0000-4000-8000-000000000551", "reason": "completed", "text": "READY-551 stub-dsh (REHEARSAL STUB)"}
+READY-551 dsh: PASS (documented limit: DSH records no model; judged from its resolved config) (expected deepseek-flash; answered: True)
+raw host outputs: /private/tmp/claude-501/reh551q-231658/base/runs/ready/{claude.jsonl,codex.txt,pi.jsonl,dsh.jsonl,dsh-config.yml,dsh-session/}
 
-### isolated project /private/tmp/claude-501/reh551l-222337/base/project-after with graphtraj 0.1.0 graftling 0.6.2 from /private/tmp/claude-501/reh551l-222337/base/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py
+### isolated project /private/tmp/claude-501/reh551q-231658/base/project-before with graphtraj 0.1.0 graftling 0.6.2 from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/graphtraj/__init__.py
 GraphTraj project setup complete.
-claude host configuration written: /private/tmp/claude-501/reh551l-222337/base/project-after/.mcp.json (servers: graphtraj)
+claude host configuration written: /private/tmp/claude-501/reh551q-231658/base/project-before/.mcp.json (servers: graphtraj)
 Claude isolation settings: written
 
 ### child roles (inline, no connection catalog), resolved by the Task-free driver without a model, each with
-workspace /private/tmp/claude-501/reh551l-222337/base/project-after/ws-551 (every child, all four Runtimes alike: the Pi driver refuses a Worktree containing the
+workspace /private/tmp/claude-501/reh551q-231658/base/project-before/ws-551 (every child, all four Runtimes alike: the Pi driver refuses a Worktree containing the
 project's .graphtraj/state, an existing isolation guard)
-roles file written: /private/tmp/claude-501/reh551l-222337/base/project-after/.graphtraj/roles.yml
-CHECK 551 role claude: PASS {'configuration': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low'} cwd /private/tmp/claude-501/reh551l-222337/base/project-after/ws-551 | tool/MCP/permission request fields: {"permission_mode": "auto", "permission_mode_source": "default"}
-CHECK 551 role codex: FAIL (AgentsError: Cannot verify Codex permission controls: '/private/tmp/claude-501/reh551l-222337/bin/codex exec --help' exited with status 1: ValueError: '-m' is not in list)
-CHECK 551 role pi: FAIL (AgentsError: The configured api_key_env is missing or empty.)
-CHECK 551 role dsh: FAIL (AgentsError: The configured api_key_env is missing or empty.)
-CHECK 551 role claude_ask: PASS {'configuration': 'claude_ask', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low'} cwd /private/tmp/claude-501/reh551l-222337/base/project-after/ws-551 | tool/MCP/permission request fields: {"permission_mode": "default", "permission_mode_source": "role"}
+roles file written: /private/tmp/claude-501/reh551q-231658/base/project-before/.graphtraj/roles.yml
+CHECK 551 role claude: PASS {'configuration': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low'} cwd /private/tmp/claude-501/reh551q-231658/base/project-before/ws-551 | tool/MCP/permission request fields: {"permission_mode": "auto", "permission_mode_source": "default"}
+CHECK 551 role codex: FAIL (AgentsError: Cannot verify Codex permission controls: '/private/tmp/claude-501/reh551q-231658/bin/codex exec --help' exited with status 1: ValueError: '-m' is not in list)
+CHECK 551 role pi: FAIL (AgentsError: Pi requires srt on pi.sandbox_path; no fallback.)
+CHECK 551 role dsh: FAIL (AgentsError: DSH 0.2.0-rc.2 or later is required (installed unknown).)
+CHECK 551 role claude_ask: PASS {'configuration': 'claude_ask', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low'} cwd /private/tmp/claude-501/reh551q-231658/base/project-before/ws-551 | tool/MCP/permission request fields: {"permission_mode": "default", "permission_mode_source": "role"}
 
-### probe Tasks: tasks discover + describe concept-clarification through /private/tmp/claude-501/reh551l-222337/base/venv-after/bin/graphtraj-mcp (no host, no model)
+### probe Tasks: tasks discover + describe concept-clarification through /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/bin/graphtraj-mcp (no host, no model)
 tasks discover: 36 features; concept-clarification listed: True
-tasks describe concept-clarification: manual_ref /private/tmp/claude-501/reh551l-222337/base/venv-after/share/graphtraj/manuals/concept-clarification/guide.md
-manual first heading: '# Concept Clarification' (saved to /private/tmp/claude-501/reh551l-222337/base/heading-after.txt)
+tasks describe concept-clarification: manual_ref /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification/guide.md
+manual first heading: '# Concept Clarification' (saved to /private/tmp/claude-501/reh551q-231658/base/heading-before.txt)
 CHECK 551 tasks probe: PASS
 
-### Claude parent gate in /private/tmp/claude-501/reh551l-222337/base/project-after
+### Claude parent gate in /private/tmp/claude-501/reh551q-231658/base/project-before
+parent model (init): claude-sonnet-5-5 | login source (init apiKeySource): none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login | answer (self-report): READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
+parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+parent init plugin_warnings: []
+parent init plugins: [{"name": "graphtraj-claude-host", "path": "./.claude/skills/graphtraj-claude-host"}] | graphtraj-claude-host loaded: True
+CHECK 551 Claude parent gate: PASS
+READY when: 'READY-551 <host>: PASS' x4 (actual model from each host's record: claude claude-sonnet-5-5, codex gpt-6-luna, pi deepseek/deepseek-flash, dsh deepseek-flash), 'CHECK 551 role <role>: PASS' x5 (claude, codex, pi, dsh, claude_ask), 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'.
+
+NOT READY: roles
+(exit 1)
+
+=============== $ zsh steps.zsh B claude ===============
+DEEPSEEK_API_KEY: set
+Pi sandbox env /private/tmp/claude-501/reh551q-231658/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+
+### Claude parent gate again (no paid child run unless it passes)
 parent model (init): claude-sonnet-5-5 | login source (init apiKeySource): none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login | answer (self-report): READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
 parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
 parent init plugin_warnings: []
 parent init plugins: [{"name": "graphtraj-claude-host", "path": "./.claude/skills/graphtraj-claude-host"}] | graphtraj-claude-host loaded: True
 CHECK 551 Claude parent gate: PASS
 
-NOT READY: DEEPSEEK_API_KEY roles
+### [B claude] Claude Main (claude-sonnet-5-5, claude -p in /private/tmp/claude-501/reh551q-231658/base/project-before) creates one Task-free claude child and waits (dialog: none). At most 25 min.
+create arguments besides runtime/name/instruction: {"workspace": "/private/tmp/claude-501/reh551q-231658/base/project-before/ws-551"} (workspace ws-551 for every child, all Runtimes alike)
+host versions: unknown
+project records copied: 3 files under /private/tmp/claude-501/reh551q-231658/base/runs/B-claude-20261121T231701-75012/records
+[claude] parent create result: [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]
+[claude] child final message (via the parent's wait/result):
+    TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+    MCP-551: graphtraj: agents
+    TASKS-551: absent
+    DESCRIBE-551: skipped
+    READ-551: skipped
+    WEB-551: absent
+[claude] self-report TOOLS-551: TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+[claude] self-report MCP-551: MCP-551: graphtraj: agents
+[claude] self-report TASKS-551: TASKS-551: absent
+[claude] self-report DESCRIBE-551: DESCRIBE-551: skipped
+[claude] self-report READ-551: READ-551: skipped
+[claude] self-report WEB-551: WEB-551: absent
+[claude] RECORD init (session.yml, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[]
+[claude] RECORD init (trace.jsonl, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[('graphtraj', 'connected')]
+[claude] RECORD launch flags (session.yml): {'--restricted': True, '--tools': 'Bash,Read,Write,Edit,Glob,Grep'}
+[claude] RECORD tools field (session.yml, trace.jsonl): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[claude] RECORD tool calls by name: {'Read': 1}
+[claude] RECORD tasks calls: none
+[claude] RECORD manual guide.md reads: ['Read {"file_path": "/stub/share/graphtraj/manuals/concept-clarification/guide.md"}']
+[claude] RECORD a tool result holds the manual heading '# Concept Clarification': NO
+[claude] RECORD TOOLSET (Claude init tools): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[claude] RECORD child MCP server name for agents/tasks (tool lists and calls): mcp__graphtraj__agents
+[claude] RECORD execution outcome (agents control record): completed
+CHECK 551 claude child run: COMPLETE
+evidence: /private/tmp/claude-501/reh551q-231658/base/runs/B-claude-20261121T231701-75012 (parent.jsonl, parent.err, records/, summary.txt)
+Read per Runtime: 'RECORD init' / 'RECORD launch flags' (what the child really got, from its own records),
+'self-report TOOLS-551/MCP-551' (the model's own list), 'RECORD tasks calls' and 'RECORD manual guide.md reads',
+'a tool result holds the manual heading: YES/NO'. A missing tasks tool shows TASKS-551: absent and no tasks call.
+COMPLETE: every child was created and ended with a final message
+
+==> next (paste as is): Leader: read /private/tmp/claude-501/reh551q-231658/base/runs/B-*/summary.txt
+(exit 0)
+
+=============== $ zsh steps.zsh A0 ===============
+
+### [A0] candidate installation (dialog: none): GraphTraj f8c39a95f9c0edd39b6ab6443b995a23925e466d + graftling f195b69e6a24a704e45bb74bbaa717f635b37cf9 (branch agent/551-task-free-children-reach-tasks-methods of /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/.graftling-551.git, base 6794ce02b6210ec88837437affb8d7b525612804)
+graftling f195b69e6a24a704e45bb74bbaa717f635b37cf9 descends from dev 6794ce02b6210ec88837437affb8d7b525612804
+graftling commits since dev: f195b69 A consumer names its children's MCP server on every Runtime (551);68f89c8 Pi and DSH children: tools and disallowed_tools in their native terms (551);05e52af Refuse Codex tool filters for servers the captured settings lack (551);d995850 Pi and DSH children reach the host's extra tools beside agents (551);7e145ee Children keep the host's tools unless create or a preset chooses them (551);1db68a2 Test: graftling never imports, runs, declares or requires GraphTraj (551);8380121 Serve host tools beside agents to independent children (551);
+GraphTraj commits since dev f754d3a9: 15
+candidate venv: graphtraj 0.1.0 from /private/tmp/claude-501/reh551q-231658/base/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py | graftling 0.6.2 from /private/tmp/claude-501/reh551q-231658/base/venv-after/lib/python3.13/site-packages/graftling/__init__.py
+manuals in the candidate: /private/tmp/claude-501/reh551q-231658/base/venv-after/share/graphtraj/manuals
+
+### dependency direction (required result 4): graftling's wheel alone in a clean venv, GraphTraj NOT installed
+graftling wheel Requires-Dist: ['PyYAML<7,>=6', 'websockets<17,>=15']
+graphtraj installed in this venv: False
+graftling modules imported: 72 | failed: none | graphtraj modules loaded: []
+CHECK 551 dependency direction: PASS
+DEEPSEEK_API_KEY: set
+Pi sandbox env /private/tmp/claude-501/reh551q-231658/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+
+### isolated project /private/tmp/claude-501/reh551q-231658/base/project-after with graphtraj 0.1.0 graftling 0.6.2 from /private/tmp/claude-501/reh551q-231658/base/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py
+GraphTraj project setup complete.
+claude host configuration written: /private/tmp/claude-501/reh551q-231658/base/project-after/.mcp.json (servers: graphtraj)
+Claude isolation settings: written
+
+### child roles (inline, no connection catalog), resolved by the Task-free driver without a model, each with
+workspace /private/tmp/claude-501/reh551q-231658/base/project-after/ws-551 (every child, all four Runtimes alike: the Pi driver refuses a Worktree containing the
+project's .graphtraj/state, an existing isolation guard)
+roles file written: /private/tmp/claude-501/reh551q-231658/base/project-after/.graphtraj/roles.yml
+CHECK 551 role claude: PASS {'configuration': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low'} cwd /private/tmp/claude-501/reh551q-231658/base/project-after/ws-551 | tool/MCP/permission request fields: {"permission_mode": "auto", "permission_mode_source": "default"}
+CHECK 551 role codex: FAIL (AgentsError: Cannot verify Codex permission controls: '/private/tmp/claude-501/reh551q-231658/bin/codex exec --help' exited with status 1: ValueError: '-m' is not in list)
+CHECK 551 role pi: FAIL (AgentsError: Pi requires srt on pi.sandbox_path; no fallback.)
+CHECK 551 role dsh: FAIL (AgentsError: DSH 0.2.0-rc.2 or later is required (installed unknown).)
+CHECK 551 role claude_ask: PASS {'configuration': 'claude_ask', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low'} cwd /private/tmp/claude-501/reh551q-231658/base/project-after/ws-551 | tool/MCP/permission request fields: {"permission_mode": "default", "permission_mode_source": "role"}
+
+### probe Tasks: tasks discover + describe concept-clarification through /private/tmp/claude-501/reh551q-231658/base/venv-after/bin/graphtraj-mcp (no host, no model)
+tasks discover: 36 features; concept-clarification listed: True
+tasks describe concept-clarification: manual_ref /private/tmp/claude-501/reh551q-231658/base/venv-after/share/graphtraj/manuals/concept-clarification/guide.md
+manual first heading: '# Concept Clarification' (saved to /private/tmp/claude-501/reh551q-231658/base/heading-after.txt)
+CHECK 551 tasks probe: PASS
+
+### Claude parent gate in /private/tmp/claude-501/reh551q-231658/base/project-after
+parent model (init): claude-sonnet-5-5 | login source (init apiKeySource): none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login | answer (self-report): READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
+parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+parent init plugin_warnings: []
+parent init plugins: [{"name": "graphtraj-claude-host", "path": "./.claude/skills/graphtraj-claude-host"}] | graphtraj-claude-host loaded: True
+CHECK 551 Claude parent gate: PASS
+
+NOT READY: roles
 (exit 1)
 
-=============== $ zsh steps.zsh U after ===============
+=============== $ zsh steps.zsh A claude ===============
+DEEPSEEK_API_KEY: set
+Pi sandbox env /private/tmp/claude-501/reh551q-231658/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+host versions for this step: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
 
-### [U] USER, required once for each new project path (/private/tmp/claude-501/reh551l-222337/base/project-after). Plain macOS Terminal:
-  cd /private/tmp/claude-501/reh551l-222337/base/project-after && claude
-Dialog 1: 'Do you trust the files in this folder?' naming that project: choose 'Yes, proceed'.
-If Claude then shows an MCP server dialog for 'graphtraj' (this project's .mcp.json): choose to use it.
-Then type /exit. Send no message.
+### Claude parent gate again in /private/tmp/claude-501/reh551q-231658/base/project-after (no paid child run unless it passes)
+parent model (init): claude-sonnet-5-5 | login source (init apiKeySource): none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login | answer (self-report): READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
+parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+parent init plugin_warnings: []
+parent init plugins: [{"name": "graphtraj-claude-host", "path": "./.claude/skills/graphtraj-claude-host"}] | graphtraj-claude-host loaded: True
+CHECK 551 Claude parent gate: PASS
 
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh A0
+### [A-plain claude] Claude Main (claude-sonnet-5-5, claude -p in /private/tmp/claude-501/reh551q-231658/base/project-after) creates one Task-free claude child and waits (dialog: none). At most 25 min.
+create arguments besides runtime/name/instruction: {"workspace": "/private/tmp/claude-501/reh551q-231658/base/project-after/ws-551"} (workspace ws-551 for every child, all Runtimes alike)
+host versions: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
+project records copied: 3 files under /private/tmp/claude-501/reh551q-231658/base/runs/A-plain-claude-20261121T231712-75316/records
+[claude] parent create result: [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]
+[claude] child final message (via the parent's wait/result):
+    TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+    MCP-551: graphtraj: agents
+    TASKS-551: absent
+    DESCRIBE-551: skipped
+    READ-551: skipped
+    WEB-551: absent
+[claude] self-report TOOLS-551: TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+[claude] self-report MCP-551: MCP-551: graphtraj: agents
+[claude] self-report TASKS-551: TASKS-551: absent
+[claude] self-report DESCRIBE-551: DESCRIBE-551: skipped
+[claude] self-report READ-551: READ-551: skipped
+[claude] self-report WEB-551: WEB-551: absent
+[claude] RECORD init (session.yml, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[]
+[claude] RECORD init (trace.jsonl, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[('graphtraj', 'connected')]
+[claude] RECORD launch flags (session.yml): {'--restricted': True, '--tools': 'Bash,Read,Write,Edit,Glob,Grep'}
+[claude] RECORD tools field (session.yml, trace.jsonl): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[claude] RECORD tool calls by name: {'Read': 1}
+[claude] RECORD tasks calls: none
+[claude] RECORD manual guide.md reads: ['Read {"file_path": "/stub/share/graphtraj/manuals/concept-clarification/guide.md"}']
+[claude] RECORD a tool result holds the manual heading '# Concept Clarification': NO
+[claude] RECORD TOOLSET (Claude init tools): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[claude] RECORD child MCP server name for agents/tasks (tool lists and calls): mcp__graphtraj__agents
+[claude] RECORD execution outcome (agents control record): completed
+CHECK 551 claude child run: COMPLETE
+evidence: /private/tmp/claude-501/reh551q-231658/base/runs/A-plain-claude-20261121T231712-75316 (parent.jsonl, parent.err, records/, summary.txt)
+
+### [A-deny claude] Claude Main (claude-sonnet-5-5, claude -p in /private/tmp/claude-501/reh551q-231658/base/project-after) creates one Task-free claude child and waits (dialog: none). At most 25 min.
+create arguments besides runtime/name/instruction: {"workspace": "/private/tmp/claude-501/reh551q-231658/base/project-after/ws-551", "disallowed_tools": ["WebSearch"]} (workspace ws-551 for every child, all Runtimes alike)
+host versions: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
+project records copied: 3 files under /private/tmp/claude-501/reh551q-231658/base/runs/A-deny-claude-20261121T231712-75316/records
+[claude] parent create result: [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]
+[claude] child final message (via the parent's wait/result):
+    TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+    MCP-551: graphtraj: agents
+    TASKS-551: absent
+    DESCRIBE-551: skipped
+    READ-551: skipped
+    WEB-551: absent
+[claude] self-report TOOLS-551: TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+[claude] self-report MCP-551: MCP-551: graphtraj: agents
+[claude] self-report TASKS-551: TASKS-551: absent
+[claude] self-report DESCRIBE-551: DESCRIBE-551: skipped
+[claude] self-report READ-551: READ-551: skipped
+[claude] self-report WEB-551: WEB-551: absent
+[claude] RECORD init (session.yml, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[]
+[claude] RECORD init (trace.jsonl, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[('graphtraj', 'connected')]
+[claude] RECORD launch flags (session.yml): {'--restricted': True, '--tools': 'Bash,Read,Write,Edit,Glob,Grep'}
+[claude] RECORD tools field (session.yml, trace.jsonl): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[claude] RECORD tool calls by name: {'Read': 1}
+[claude] RECORD tasks calls: none
+[claude] RECORD manual guide.md reads: ['Read {"file_path": "/stub/share/graphtraj/manuals/concept-clarification/guide.md"}']
+[claude] RECORD a tool result holds the manual heading '# Concept Clarification': NO
+[claude] RECORD TOOLSET (Claude init tools): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[claude] RECORD child MCP server name for agents/tasks (tool lists and calls): mcp__graphtraj__agents
+[claude] RECORD execution outcome (agents control record): completed
+CHECK 551 claude child run: COMPLETE
+evidence: /private/tmp/claude-501/reh551q-231658/base/runs/A-deny-claude-20261121T231712-75316 (parent.jsonl, parent.err, records/, summary.txt)
+
+### A results
+A claude plain {no tool arguments}: OK | DSH dsh STUB-551 | /private/tmp/claude-501/reh551q-231658/base/runs/A-plain-claude-20261121T231712-75316/summary.txt
+A claude deny {"disallowed_tools": ["WebSearch"]}: OK (WebSearch absent from the record's tool list) | DSH dsh STUB-551 | /private/tmp/claude-501/reh551q-231658/base/runs/A-deny-claude-20261121T231712-75316/summary.txt
+COMPLETE
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh AU claude deny   (USER: the beyond-host request answered by you; then AC claude)
 (exit 0)
 
 =============== (rehearsal: the stub child's WebFetch asks the parent; the parent relays deny) ===============
 
 =============== $ zsh steps.zsh AU claude deny ===============
 Claude child role claude_ask: resolved permission_mode default (expected default)
+host versions for this step: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
 
-### [AU claude] USER, in THIS terminal: an interactive Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/reh551l-222337/base/project-after.
+### [AU claude] USER, in THIS terminal: an interactive Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/reh551q-231658/base/project-after.
 Dialog: none of Claude Code itself is expected (project trusted in U; the parent's agents calls are pre-allowed).
 What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: deny
-That request is the child's beyond-host ask: Claude Code's can_use_tool for WebFetch (child permission mode default), retained for the parent.
+That request is the child's beyond-host ask: Claude Code's can_use_tool for WebSearch (child permission mode default), retained for the parent.
 If no REQUEST-551 appears, type nothing; AC will report NO REQUEST honestly.
 When Claude has printed END-CHILD, type /exit.
 {"type": "system", "subtype": "init", "model": "claude-sonnet-5-5", "tools": ["mcp__graphtraj__agents"], "mcp_servers": [{"name": "graphtraj", "status": "connected"}], "plugin_warnings": [], "plugins": [{"name": "graphtraj-claude-host", "path": "./.claude/skills/graphtraj-claude-host"}]}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c1", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "create", "arguments": {}}}]}}
 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c1", "content": [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]}]}}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c3", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "requests", "arguments": {"agent": "agent-stub-claude"}}}]}}
-{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c3", "content": [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebFetch\", \"text\": \"can_use_tool WebFetch (STUB)\"}]}"}]}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c3", "content": [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebSearch\", \"text\": \"can_use_tool WebSearch (STUB)\"}]}"}]}]}}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c4", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "reply", "arguments": {"agent": "agent-stub-claude", "request_token": "r1", "response": {"decision": "deny"}}}}]}}
 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c4", "content": [{"type": "text", "text": "{\"reply_status\": \"submitted\"}"}]}]}}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c2", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "wait", "arguments": {}}}]}}
@@ -84,9 +266,9 @@ When Claude has printed END-CHILD, type /exit.
 (exit 0)
 
 =============== $ zsh steps.zsh AC claude ===============
-parent transcript (read only, by its session id): /private/tmp/claude-501/reh551l-222337/claude-projects/stub-project/3852007b-ee31-4ffa-9a0a-a80f7c2cd7f2.jsonl
-project records copied: 2 files under /private/tmp/claude-501/reh551l-222337/base/runs/AU-claude-deny-20261121T222351-67480/records
-AU CLASS: REQUEST reached the user: [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebFetch\", \"text\": \"can_use_tool WebFetch (STUB)\"}]}"}] -> answered ['{"agent": "agent-stub-claude", "request_token": "r1", "response": {"decision": "deny"}}'] -> outcome: refused: "The parent denied this tool use (STUB)"
+parent transcript (read only, by its session id): /private/tmp/claude-501/reh551q-231658/claude-projects/stub-project/d75f1031-60db-41ee-9191-6a157180eee2.jsonl
+project records copied: 3 files under /private/tmp/claude-501/reh551q-231658/base/runs/AU-claude-deny-20261121T231712-75424/records
+AU CLASS: REQUEST reached the user: [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebSearch\", \"text\": \"can_use_tool WebSearch (STUB)\"}]}"}] -> answered ['{"agent": "agent-stub-claude", "request_token": "r1", "response": {"decision": "deny"}}'] -> outcome: refused: "The parent denied this tool use (STUB)"
 [claude] parent create result: [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]
 [claude] child final message (via the parent's wait/result):
     TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
@@ -102,73 +284,90 @@ AU CLASS: REQUEST reached the user: [{"type": "text", "text": "{\"requests\": [{
 [claude] self-report READ-551: READ-551: skipped
 [claude] self-report WEB-551: WEB-551: absent
 [claude] parent called agents requests: {"action": "execute", "feature": "requests", "arguments": {"agent": "agent-stub-claude"}}
-[claude] requests result: [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebFetch\", \"text\": \"can_use_tool WebFetch (STUB)\"}]}"}]
+[claude] requests result: [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebSearch\", \"text\": \"can_use_tool WebSearch (STUB)\"}]}"}]
 [claude] parent called agents reply: {"action": "execute", "feature": "reply", "arguments": {"agent": "agent-stub-claude", "request_token": "r1", "response": {"decision": "deny"}}}
 [claude] RECORD init (session.yml, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[]
 [claude] RECORD init (trace.jsonl, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[('graphtraj', 'connected')]
 [claude] RECORD launch flags (session.yml): {'--restricted': True, '--tools': 'Bash,Read,Write,Edit,Glob,Grep'}
 [claude] RECORD tools field (session.yml, trace.jsonl): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
-[claude] RECORD tool calls by name: {'Read': 1, 'WebFetch': 1}
+[claude] RECORD tool calls by name: {'Read': 1, 'WebSearch': 1}
 [claude] RECORD tasks calls: none
 [claude] RECORD manual guide.md reads: ['Read {"file_path": "/stub/share/graphtraj/manuals/concept-clarification/guide.md"}']
 [claude] RECORD a tool result holds the manual heading '# Concept Clarification': NO
+[claude] RECORD TOOLSET (Claude init tools): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[claude] RECORD child MCP server name for agents/tasks (tool lists and calls): mcp__graphtraj__agents
+[claude] RECORD execution outcome (agents control record): completed
 CHECK 551 claude child run: COMPLETE
+host versions: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
 the step told the user to answer: deny | parent REQUEST/REPLY lines:
 beyond-host evidence: YES (the request reached the user and the answer was relayed)
 
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh AU claude allow   (the other answer), then AC claude; or G
 (exit 0)
 
-=============== (rehearsal: the stub child's WebFetch runs without any request) ===============
+=============== $ zsh steps.zsh AU pi deny ===============
+DEEPSEEK_API_KEY: set
+Pi sandbox env /private/tmp/claude-501/reh551q-231658/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+Pi beyond-host tool: grep (not in the host Pi's defaultTools)
+host versions for this step: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
 
-=============== $ zsh steps.zsh AU claude allow ===============
-Claude child role claude_ask: resolved permission_mode default (expected default)
-
-### [AU claude] USER, in THIS terminal: an interactive Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/reh551l-222337/base/project-after.
+### [AU pi] USER, in THIS terminal: an interactive Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/reh551q-231658/base/project-after.
 Dialog: none of Claude Code itself is expected (project trusted in U; the parent's agents calls are pre-allowed).
-What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: allow
-That request is the child's beyond-host ask: Claude Code's can_use_tool for WebFetch (child permission mode default), retained for the parent.
+What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: deny
+That request is the child's beyond-host ask: Pi's confirm dialog 'agents: allow a tool beyond the host settings' for grep, retained for the parent.
 If no REQUEST-551 appears, type nothing; AC will report NO REQUEST honestly.
 When Claude has printed END-CHILD, type /exit.
 {"type": "system", "subtype": "init", "model": "claude-sonnet-5-5", "tools": ["mcp__graphtraj__agents"], "mcp_servers": [{"name": "graphtraj", "status": "connected"}], "plugin_warnings": [], "plugins": [{"name": "graphtraj-claude-host", "path": "./.claude/skills/graphtraj-claude-host"}]}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c1", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "create", "arguments": {}}}]}}
-{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c1", "content": [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c1", "content": [{"type": "text", "text": "{\"agent\": \"agent-stub-pi\", \"state\": \"running\"}"}]}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c3", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "requests", "arguments": {"agent": "agent-stub-pi"}}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c3", "content": [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebSearch\", \"text\": \"can_use_tool WebSearch (STUB)\"}]}"}]}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c4", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "reply", "arguments": {"agent": "agent-stub-pi", "request_token": "r1", "response": {"decision": "deny"}}}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c4", "content": [{"type": "text", "text": "{\"reply_status\": \"submitted\"}"}]}]}}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c2", "name": "mcp__graphtraj__agents", "input": {"action": "execute", "feature": "wait", "arguments": {}}}]}}
-{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c2", "content": [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"ended\", \"last_message\": \"TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\\nMCP-551: graphtraj: agents\\nTASKS-551: absent\\nDESCRIBE-551: skipped\\nREAD-551: skipped\\nWEB-551: absent\"}"}]}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c2", "content": [{"type": "text", "text": "{\"agent\": \"agent-stub-pi\", \"state\": \"ended\", \"last_message\": \"TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\\nMCP-551: graphtraj: agents\\nTASKS-551: absent\\nDESCRIBE-551: skipped\\nREAD-551: skipped\\nWEB-551: absent\"}"}]}]}}
 {"type": "result", "result": "BEGIN-CHILD\nTOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\nMCP-551: graphtraj: agents\nTASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent\nEND-CHILD"}
 
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh AC claude
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh AC pi
 (exit 0)
 
-=============== $ zsh steps.zsh AC claude ===============
-parent transcript (read only, by its session id): /private/tmp/claude-501/reh551l-222337/claude-projects/stub-project/e9d7ce47-f577-4da9-a17d-6c58d731e3a8.jsonl
-project records copied: 2 files under /private/tmp/claude-501/reh551l-222337/base/runs/AU-claude-allow-20261121T222352-67551/records
-AU CLASS: NO REQUEST: the child's WebFetch ran without a request (permission mode default); outcome: ran: "Example Domain (STUB)"
-[claude] parent create result: [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]
-[claude] child final message (via the parent's wait/result):
+=============== $ zsh steps.zsh AC pi ===============
+parent transcript (read only, by its session id): /private/tmp/claude-501/reh551q-231658/claude-projects/stub-project/df6c6c0f-3ea3-4946-9db7-207c15696e57.jsonl
+project records copied: 4 files under /private/tmp/claude-501/reh551q-231658/base/runs/AU-pi-deny-20261121T231712-75497/records
+AU CLASS: REQUEST reached the user: [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebSearch\", \"text\": \"can_use_tool WebSearch (STUB)\"}]}"}] -> answered ['{"agent": "agent-stub-pi", "request_token": "r1", "response": {"decision": "deny"}}'] -> outcome: the child did not call grep
+[pi] parent create result: [{"type": "text", "text": "{\"agent\": \"agent-stub-pi\", \"state\": \"running\"}"}]
+[pi] child final message (via the parent's wait/result):
     TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
     MCP-551: graphtraj: agents
     TASKS-551: absent
     DESCRIBE-551: skipped
     READ-551: skipped
     WEB-551: absent
-[claude] self-report TOOLS-551: TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
-[claude] self-report MCP-551: MCP-551: graphtraj: agents
-[claude] self-report TASKS-551: TASKS-551: absent
-[claude] self-report DESCRIBE-551: DESCRIBE-551: skipped
-[claude] self-report READ-551: READ-551: skipped
-[claude] self-report WEB-551: WEB-551: absent
-[claude] RECORD init (session.yml, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[]
-[claude] RECORD init (trace.jsonl, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[('graphtraj', 'connected')]
-[claude] RECORD launch flags (session.yml): {'--restricted': True, '--tools': 'Bash,Read,Write,Edit,Glob,Grep'}
-[claude] RECORD tools field (session.yml, trace.jsonl): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
-[claude] RECORD tool calls by name: {'Read': 1, 'WebFetch': 1}
-[claude] RECORD tasks calls: none
-[claude] RECORD manual guide.md reads: ['Read {"file_path": "/stub/share/graphtraj/manuals/concept-clarification/guide.md"}']
-[claude] RECORD a tool result holds the manual heading '# Concept Clarification': NO
-CHECK 551 claude child run: COMPLETE
-the step told the user to answer: allow | parent REQUEST/REPLY lines:
-beyond-host evidence: NO (see AU CLASS above; not counted)
+[pi] self-report TOOLS-551: TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+[pi] self-report MCP-551: MCP-551: graphtraj: agents
+[pi] self-report TASKS-551: TASKS-551: absent
+[pi] self-report DESCRIBE-551: DESCRIBE-551: skipped
+[pi] self-report READ-551: READ-551: skipped
+[pi] self-report WEB-551: WEB-551: absent
+[pi] parent called agents requests: {"action": "execute", "feature": "requests", "arguments": {"agent": "agent-stub-pi"}}
+[pi] requests result: [{"type": "text", "text": "{\"requests\": [{\"request_token\": \"r1\", \"tool\": \"WebSearch\", \"text\": \"can_use_tool WebSearch (STUB)\"}]}"}]
+[pi] parent called agents reply: {"action": "execute", "feature": "reply", "arguments": {"agent": "agent-stub-pi", "request_token": "r1", "response": {"decision": "deny"}}}
+[pi] RECORD init (session.yml, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[]
+[pi] RECORD init (trace.jsonl, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[('graphtraj', 'connected')]
+[pi] RECORD launch flags (pi-process.json): no tool/MCP flag (Runtime defaults)
+[pi] RECORD launch flags (session.yml): {'--restricted': True, '--tools': 'Bash,Read,Write,Edit,Glob,Grep'}
+[pi] RECORD tools field (session.yml, trace.jsonl): Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents
+[pi] RECORD tool calls by name: {'Read': 1, 'WebSearch': 1}
+[pi] RECORD tasks calls: none
+[pi] RECORD manual guide.md reads: ['Read {"file_path": "/stub/share/graphtraj/manuals/concept-clarification/guide.md"}']
+[pi] RECORD a tool result holds the manual heading '# Concept Clarification': NO
+[pi] RECORD TOOLSET (Pi launch argv (pi-process.json); none = the host defaultTools): none
+[pi] RECORD child MCP server name for agents/tasks (tool lists and calls): mcp__graphtraj__agents
+[pi] RECORD execution outcome (agents control record): completed
+CHECK 551 pi child run: COMPLETE
+host versions: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
+the step told the user to answer: deny | parent REQUEST/REPLY lines:
+beyond-host evidence: YES (the request reached the user and the answer was relayed)
 
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh AU claude deny   (the other answer), then AC claude; or G
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh AU pi allow   (the other answer), then AC pi; or G
 (exit 0)

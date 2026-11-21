@@ -483,8 +483,11 @@ What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow
 That request is the child's beyond-host ask: $([[ $rt == claude ]] && print "Claude Code's can_use_tool for WebSearch (child permission mode $mode)" || print "Pi's confirm dialog 'agents: allow a tool beyond the host settings' for $tool"), retained for the parent.
 If no REQUEST-551 appears, type nothing; AC will report NO REQUEST honestly.
 When Claude has printed END-CHILD, type /exit."
+  # --mcp-config and --allowedTools are variadic: the rule list is one argument and `--` ends the options,
+  # so the prompt is never read as their value (Main's AU run 1 on f8c39a95).
   (cd $p && clean claude --model $PARENT_MODEL --session-id $S \
-     --mcp-config $p/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__agents "$(<$D/parent-prompt.txt)") || print "claude exit $?"
+     --mcp-config $p/.mcp.json --strict-mcp-config --allowedTools 'mcp__graphtraj__agents' \
+     -- "$(<$D/parent-prompt.txt)") || print "claude exit $?"
   next "zsh $THIS AC $rt"
 }
 step_AC() {  # read only: the newest AU run of $ARG

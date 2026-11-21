@@ -27,6 +27,26 @@ def trust() -> dict:
     return {'plugin_warnings': [], 'plugins': [{'name': 'graphtraj-claude-host', 'path': './.claude/skills/graphtraj-claude-host'}]}
 
 
+# Claude Code's variadic options: each takes every following argument up to the next option or `--`.
+VARIADIC = {'--allowedTools', '--allowed-tools', '--disallowedTools', '--disallowed-tools', '--mcp-config',
+            '--tools', '--add-dir', '--betas', '--plugin-dir'}
+
+
+def variadic_swallow(argv: list[str]) -> str | None:
+    """The warning Claude Code prints when a prompt-like argument lands in a variadic option's values, else None."""
+    flag = None
+    for item in argv:
+        if item == '--':
+            return None                      # options ended: what follows is the prompt
+        if item.startswith('-'):
+            flag = item.split('=', 1)[0] if item.split('=', 1)[0] in VARIADIC and '=' not in item else None
+            continue
+        if flag is not None and (any(c.isspace() for c in item) or len(item) > 200):
+            return (f'⚠ "{item[:40]}…" was read as a value of {flag}, not as a prompt · put a prompt '
+                    f'before {flag} or after -- (STUB551 rejects this argv)')
+    return None
+
+
 def main() -> int:
     host, argv = sys.argv[1], sys.argv[2:]
     if '--version' in argv:  # Claude's in the real format, so the driver's version check runs as on the host
@@ -53,6 +73,10 @@ def main() -> int:
                       {'type': 'final', 'sessionId': sid, 'reason': 'completed', 'text': 'READY-551 stub-dsh (REHEARSAL STUB)'}):
             emit(value)
         return 0
+    refused = variadic_swallow(argv)
+    if refused:  # as Claude Code 2.1.326 does (Main's 00 run 1 and AU run 1): the prompt became an option value
+        print(refused, file=sys.stderr)
+        return 2
     # Interactive AU passes the prompt as an argument and leaves stdin open: never wait on it then.
     text = '' if sys.stdin.isatty() or 'probe-551-' in ' '.join(argv) else sys.stdin.read()
     prompt = text or ' '.join(argv)

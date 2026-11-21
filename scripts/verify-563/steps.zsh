@@ -197,7 +197,7 @@ G)
   local V RUNTMP; g_common G || return 1
   local R=$OUT/G-$(git -C $WT rev-parse --short HEAD)-$(date +%Y%m%dT%H%M%S); mkdir -p $R
   { print -r -- "pytest temp root: $RUNTMP"; print -r -- "candidate: $(git -C $WT rev-parse HEAD) | graftling $GCOMMIT"; } > $R/run.txt
-  local extra=(${=${VERIFY563_PYTEST_ARGS:-}})
+  local extra=(${(Q)${(z)${VERIFY563_PYTEST_ARGS:-}}})   # shell words, so a quoted -k expression stays one arg
   (( $#extra )) && print -r -- "REHEARSAL: extra pytest args after -- -rA: $extra (same shard entry; whole suite collected)" | tee -a $R/run.txt
   # `&!` disowns the run and all output is redirected; nohup is not used (without a console it exits 127:
   # "can't detach from console").

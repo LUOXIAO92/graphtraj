@@ -2,6 +2,7 @@
 
   python -I drv546.py main <project> <out> <claude> <model>     one headless Main run (stream-json, timed lines)
   python -I drv546.py ready <dir> <out> <claude> <model>        one-line READY answer with init model and login
+  python -I drv546.py gate <project> <out> <claude> <model> <label>    verify-519 plugin gate (no tool use)
   python -I drv546.py probe <project> <out> <claude> <model> <label>   agents tool loaded + status call not refused
   python -I drv546.py summary <project> <out>                   the observable from <out>/main.jsonl + agent record
 Standard library only. The agent record is the product's own (<project>/.graphtraj/**/control/agents/<id>.json).
@@ -30,9 +31,32 @@ PROMPT = """You are checking the agents tool. Do exactly these steps, nothing el
 """
 
 
-def flags(model: str) -> list[str]:
+def flags(model: str, project: str) -> list[str]:
+    """B/A/P/gate flags (as verify-519 main_run): only the project's graphtraj server, only its agents tool allowed."""
     return ['-p', '--model', model, '--output-format', 'stream-json', '--verbose',
-            '--setting-sources', 'project,local', '--allowedTools', 'mcp__graphtraj__agents']
+            '--mcp-config', str(Path(project) / '.mcp.json'), '--strict-mcp-config',
+            '--allowedTools', 'mcp__graphtraj__agents']
+
+
+def gate_of(path: Path, label: str) -> bool:
+    """verify-519's plugin gate on a stream's init record; prints one line."""
+    init = next((r for _, r in records(path) if r.get('type') == 'system' and r.get('subtype') == 'init'), {})
+    servers = [(s.get('name'), s.get('status')) for s in init.get('mcp_servers') or [] if isinstance(s, dict)]
+    warnings = json.dumps(init.get('plugin_warnings', []))
+    tools = [t for t in init.get('tools') or [] if str(t).startswith('mcp__')]
+    plugins = [p.get('name') if isinstance(p, dict) else p for p in init.get('plugins') or []]
+    ok = ([n for n, _ in servers] == ['graphtraj'] and 'untrusted' not in warnings
+          and 'mcp__graphtraj__agents' in tools and any('graphtraj-claude-host' in str(p) for p in plugins))
+    print(f"plugin gate {label}: {'PASS' if ok else 'NOT PASSED'} | init model: {init.get('model')} | "
+          f"mcp_servers: {servers} | mcp tools: {tools} | plugins: {plugins} | plugin_warnings: {warnings[:300]}")
+    return ok
+
+
+def gate(project: str, out: str, claude: str, model: str, label: str) -> int:
+    """One no-tool answer with B/A's flags; the plugin gate on its init record."""
+    path = Path(out) / f'gate-{label}.jsonl'
+    rc = run_timed([claude, *flags(model, project)], project, 'Reply with one line: READY-546-GATE. Use no tool.', path)
+    return 0 if gate_of(path, label) and rc == 0 else 1
 
 
 def run_timed(argv: list[str], cwd: str, stdin: str, out: Path) -> int:
@@ -79,7 +103,8 @@ Do not call describe first. Then answer with exactly one line: PROBE-546 DONE.
 def probe(project: str, out: str, claude: str, model: str, label: str) -> int:
     """With B/A's exact flags: the agents tool is loaded and a status call is not refused for authority."""
     path = Path(out) / f'probe-{label}.jsonl'
-    rc = run_timed([claude, *flags(model)], project, PROBE, path)
+    rc = run_timed([claude, *flags(model, project)], project, PROBE, path)
+    gated = gate_of(path, label)
     init, results, calls = {}, [], {}
     for _, r in records(path):
         if r.get('type') == 'system' and r.get('subtype') == 'init':
@@ -101,13 +126,13 @@ def probe(project: str, out: str, claude: str, model: str, label: str) -> int:
           f"mcp servers: {servers} | mcp__graphtraj__agents in init tools: {loaded} | "
           f"call: {results[0][0] if results else None} | error: {results[0][1] if results else None} | "
           f"result: {first[:300]!r} | exit {rc}")
-    return 0 if ok else 1
+    return 0 if ok and gated else 1
 
 
 def main_run(project: str, out: str, claude: str, model: str) -> int:
     path = Path(out) / 'main.jsonl'
     (Path(out) / 'prompt.txt').write_text(PROMPT)
-    rc = run_timed([claude, *flags(model)], project, PROMPT, path)
+    rc = run_timed([claude, *flags(model, project)], project, PROMPT, path)
     print(f'Main exit {rc}; stream {path}')
     return summary(project, out)
 
@@ -194,6 +219,8 @@ if __name__ == '__main__':
         sys.exit(main_run(*a[1:]))
     if a[:1] == ['ready'] and len(a) == 5:
         sys.exit(ready(*a[1:]))
+    if a[:1] == ['gate'] and len(a) == 6:
+        sys.exit(gate(*a[1:]))
     if a[:1] == ['probe'] and len(a) == 6:
         sys.exit(probe(*a[1:]))
     if a[:1] == ['summary'] and len(a) == 3:

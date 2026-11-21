@@ -2,11 +2,13 @@
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 546: a send right after create is refused with runtime-input-closed while the child's execution is finishing.
 #   zsh scripts/verify-546/steps.zsh <STEP>        (Main's Bash, from this Task's Worktree)
-# Order: 00 -> B (repeat until VERDICT REPRODUCED, at most 5) -> A (as many runs) -> G -> GR (until both exit=) -> C
+# Order: 00 -> Tu before -> Tu after -> P -> B (until VERDICT REPRODUCED, at most 5) -> A (as many runs) -> G -> GR
+#        (until both exit=) -> C.  Main runs full suites one at a time: G when Main's queue allows, not earlier.
 #   00  versions; BEFORE (GraphTraj f754d3a9 + graftling 6794ce0) and AFTER (this Worktree HEAD + graftling
 #       candidate) venvs from git archive, isolated projects (graphtraj setup + claude host configuration);
-#       READY-546-CLAUDE; in BOTH projects a headless Main with B/A's flags loads the agents tool and an agents status
-#       call (no agent) is not refused for authority.
+#       READY-546-CLAUDE; verify-519's plugin gate per project, information only (NOT PASSED expected before Tu).
+#   Tu  USER <before|after>: trust that project folder once through Claude Code's own dialog, then /exit.
+#   P   per project: plugin gate + one agents status call (no agent) with B/A's flags, not refused; STOPs on failure.
 #   B   BEFORE: one headless Claude Main (Main kind Claude Code; child Runtime claude) runs create -> send at once (up
 #       to 5 sends) -> wait; prints each agents call with times, the child's record (each input receipt and its gap to
 #       the execution's recorded end) and VERDICT 546.
@@ -16,8 +18,8 @@
 #       (git archive of the candidate). New pytest temp root under TMPDIR, outside the Harness (printed).
 #   GR  read only: newest G; exit lines and every FAILED/ERROR line classed known (516; graftling pi/DSH flake) or NEW.
 #   C   copies the runs, probes and the newest G to <Worktree>/.state/realhost/.
-# No step raises a native dialog (headless claude -p, --allowedTools mcp__graphtraj__agents, MCP server approved in
-# the isolated project's own .claude/settings.local.json as verify-533 did).
+# Only Tu raises a dialog (one each). Headless runs (gate, P, B, A) use claude -p --mcp-config <project>/.mcp.json
+# --strict-mcp-config --allowedTools mcp__graphtraj__agents (as verify-519); B and A STOP unless the gate passes.
 # Layout: projects under BASE=/private/tmp/send-546/<before|after>/project, runs under BASE/<phase>/runs; venvs and
 # suite outputs under T=<Harness>/tmp/546. Never written: ~/.claude, dotfiles, the Harness outside tmp/546 (and C's
 # copy), .venv-runtime (read only: click, yaml, websockets copied out). VERIFY546_* overrides are for the rehearsal.
@@ -96,16 +98,12 @@ print(sys.argv[1], "venv:", m.version("graftling"), graftling.__file__, "| graph
   [[ -f $P/.graphtraj/config.yml ]] || (cd $P && print y | clean $V/bin/graphtraj setup | tail -1) || return 1
   (cd $P && clean $V/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $CLAUDE --write >/dev/null) \
     || { print "STOP: $1 claude host configuration failed"; return 1; }
-  # The host configuration writes .mcp.json and .claude/settings.local.json (env only); it does not approve the
-  # .mcp.json server, so -p would not load it. As verify-533: approve it in this isolated project's own file.
+  # Headless runs use --mcp-config <project>/.mcp.json --strict-mcp-config (as verify-519): no .mcp.json approval
+  # is needed and no other MCP server (user connectors) loads. The hook plugin loads only in a trusted folder (Tu).
   $CONDA -I -c 'import json, sys, pathlib
-p = pathlib.Path(sys.argv[1]); s = json.loads(p.read_text()) if p.exists() else {}
-s["enabledMcpjsonServers"] = sorted(set(s.get("enabledMcpjsonServers") or []) | {"graphtraj"})
-p.write_text(json.dumps(s, indent=2) + "\n")
-m = json.loads(pathlib.Path(sys.argv[2]).read_text())["mcpServers"]["graphtraj"]
-print(sys.argv[3], "project", sys.argv[4] + ": .mcp.json graphtraj ->", " ".join([m["command"]] + m["args"][:3]),
-      "| approval: enabledMcpjsonServers", s["enabledMcpjsonServers"], "in", p)' \
-    $P/.claude/settings.local.json $P/.mcp.json $1 $P || return 1
+m = json.loads(pathlib.Path(sys.argv[1]).read_text())["mcpServers"]
+print(sys.argv[2], "project", sys.argv[3] + ": .mcp.json servers", sorted(m), "| graphtraj ->",
+      " ".join([m["graphtraj"]["command"]] + m["graphtraj"]["args"][:3]))' $P/.mcp.json $1 $P || return 1
 }
 
 step_00() {
@@ -120,12 +118,37 @@ step_00() {
   say "READY-546-CLAUDE (dialog: none)"
   (cd $BASE/before/project && clean $CONDA -I $SD/drv546.py ready $BASE/before/project $BASE/ready $CLAUDE $MODEL) \
     || { print "STOP: Claude is not ready"; return 1; }
-  say "agents tool in each project with B/A's flags; one agents status call without agent (dialog: none)"
+  say "plugin gate per project with B/A's flags (information only; dialog: none). NOT PASSED is expected before Tu:"
+  print "Claude Code loads the project's graphtraj-claude-host plugin only in a trusted folder."
+  local ph rc=0
+  for ph in before after; do
+    (cd $BASE/$ph/project && clean $CONDA -I $SD/drv546.py gate $BASE/$ph/project $BASE/ready $CLAUDE $MODEL $ph) || rc=1
+  done
+  if (( rc )); then next "zsh $THIS Tu before   (USER, plain Terminal; then: zsh $THIS Tu after; then: zsh $THIS P)"
+  else next "zsh $THIS P   (both gates already pass; Tu not needed)"; fi
+}
+
+step_Tu() {  # $1 before|after
+  [[ ${1:-} == (before|after) ]] || { print "usage: zsh $THIS Tu <before|after>"; return 2; }
+  local P=$BASE/$1/project
+  [[ -f $P/.mcp.json ]] || { print "STOP: run 00 first"; return 1; }
+  say "Tu $1: USER in a plain macOS Terminal (Main cannot answer dialogs). Dialog: one."
+  print -r -- "Paste:
+  cd $P && $CLAUDE
+Claude Code shows 'Do you trust the files in this folder?' naming $P -> choose 'Yes, proceed'.
+Then type /exit (send no message). Should an MCP server approval for 'graphtraj' appear, approve it for this
+project. Any other dialog: press Esc and tell Main its title. No dotfile is edited by this script."
+  if [[ $1 == before ]]; then next "zsh $THIS Tu after   (USER)"; else next "zsh $THIS P   (Main)"; fi
+}
+
+step_P() {
+  say "P: plugin gate + one agents status call (no agent) per project, B/A's flags (dialog: none)"
+  mkdir -p $BASE/ready
   local ph rc=0
   for ph in before after; do
     (cd $BASE/$ph/project && clean $CONDA -I $SD/drv546.py probe $BASE/$ph/project $BASE/ready $CLAUDE $MODEL $ph) || rc=1
   done
-  (( rc == 0 )) || { print "STOP: a CHECK 546 AGENTS line is FAIL (stream: $BASE/ready/probe-<phase>.jsonl); report it to the Leader"; return 1; }
+  (( rc == 0 )) || { print "STOP: a plugin gate or CHECK 546 AGENTS line failed (streams $BASE/ready/probe-<phase>.jsonl). If 'untrusted' shows: zsh $THIS Tu <phase>"; return 1; }
   next "zsh $THIS B"
 }
 
@@ -133,6 +156,9 @@ run_phase() {  # $1 before|after
   local done_runs=($BASE/$1/runs/run-*(N/)); local P=$BASE/$1/project n=$(( ${#done_runs} + 1 ))
   [[ -f $T/venv-$1/installed ]] || { print "STOP: run 00 first"; return 1; }
   local O=$BASE/$1/runs/run-$n; mkdir -p $O
+  say "$1 run $n: plugin gate first (dialog: none)"
+  clean $CONDA -I $SD/drv546.py gate $P $O $CLAUDE $MODEL $1 \
+    || { rm -rf $O; print "STOP: plugin gate not passed for $1; nothing was run. Trust the folder: zsh $THIS Tu $1, then zsh $THIS P"; return 1; }
   say "$1 run $n: Claude Main ($MODEL) in $P: create -> send at once -> wait (dialog: none; up to ~5 min)"
   clean $CONDA -I $SD/drv546.py main $P $O $CLAUDE $MODEL | tee $O/summary.txt
 }
@@ -147,7 +173,7 @@ step_A() {
   run_phase after || return 1
   local nb=($BASE/before/runs/run-*(N/)) na=($BASE/after/runs/run-*(N/))
   if (( ${#na} < ${#nb} )); then next "zsh $THIS A   (run ${#na} of ${#nb}; as many runs as B took)"
-  else next "zsh $THIS G"; fi
+  else next "zsh $THIS G   (when Main's full-suite queue allows; one full suite at a time)"; fi
 }
 
 step_G() {
@@ -244,10 +270,12 @@ step_C() {
 
 case $STEP in
   00) step_00 ;;
+  Tu) step_Tu ${2:-} ;;
+  P) step_P ;;
   B) step_B ;;
   A) step_A ;;
   G) step_G ;;
   GR) step_GR ;;
   C) step_C ;;
-  *) print "usage: zsh $THIS <00|B|A|G|GR|C>"; return 2 ;;
+  *) print "usage: zsh $THIS <00|Tu before|Tu after|P|B|A|G|GR|C>"; return 2 ;;
 esac

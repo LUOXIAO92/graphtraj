@@ -92,12 +92,19 @@ def main() -> int:
         return 0
     runtime = re.search(r'"runtime": "([a-z]+)"', prompt).group(1)
     # A's refusal cases, FABRICATED here in the shape agents create returns them (rehearses the verdicts only).
-    named = next((marker for marker in ('nosuchtool551', 'mcp__nosuchserver551__x', 'tool-nosuch551') if marker in prompt), '')
+    # STUB551_PI_EXTENSIONS: the host Pi loads extensions, so nosuchtool551 is kept and reported, not refused.
+    pi_extensions = bool(os.environ.get('STUB551_PI_EXTENSIONS'))
+    if pi_extensions:
+        prompt_for_refusal = prompt.replace('nosuchtool551', '')
+    else:
+        prompt_for_refusal = prompt
+    named = next((marker for marker in ('nosuchtool551', 'mcp__nosuchserver551__x', 'tool-nosuch551')
+                  if marker in prompt_for_refusal), '')
     refusal = next((code for marker, code in (('nosuchtool551', 'unavailable'), ('mcp__nosuchserver551__x', 'unavailable'),
                                               ('tool-nosuch551', 'unavailable'), ('mcp__undefined551__x', 'unavailable'),
                                               ('"tool-plugin-market"', 'authorization-required'),
                                               ('"tools": ["web_search"]', 'authorization-required'))
-                    if marker in prompt), None)
+                    if marker in prompt_for_refusal), None)
     if refusal is not None:
         emit({'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
               'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()})
@@ -174,7 +181,9 @@ def main() -> int:
     control.write_text(json.dumps({'agent': agent, 'executions': [
         {'outcome': 'failed', 'error': {'code': 'RUNTIME_CONNECTION_CLOSED', 'message': 'DSH Session connection failed. (STUB)'}}
         if failed else {'outcome': 'completed', **({'process': {'tool_check': {'tools_not_offered': ['NoSuchTool551']}}}
-                                                   if 'NoSuchTool551' in prompt else {})}]}, indent=1))
+                                                   if 'NoSuchTool551' in prompt else
+                                                   {'process': {'tool_check': {'unverified': ['nosuchtool551']}}}
+                                                   if pi_extensions and 'nosuchtool551' in prompt else {})}]}, indent=1))
     final = ('TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\nMCP-551: graphtraj: agents\n'
              'TASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent')
     if runtime == 'pi':

@@ -20,6 +20,7 @@ local h; for h in claude codex pi dsh; do
 [ -f $R/au-request ] && export STUB551_AU_REQUEST=1
 [ -f $R/tasks-request ] && export STUB551_TASKS_REQUEST=1
 [ -f $R/pi-drops-mcp ] && export STUB551_PI_DROPS_MCP=1
+[ -f $R/pi-extensions ] && export STUB551_PI_EXTENSIONS=1
 export STUB551_PROJECTS=$R/claude-projects
 exec $HOME/miniconda3/bin/python3.13 -I $SD/stub551.py $h \"\$@\"" > $R/bin/$h; chmod +x $R/bin/$h
 done
@@ -40,6 +41,8 @@ local s; for s in $steps; do
 =============== (rehearsal: the stub child's WebFetch asks the parent; the parent relays deny) ==============="; continue ;;
     tasks-request) touch $R/tasks-request; print -r -- "
 =============== (rehearsal: the stub child's tasks call ALSO raises a request: the FAIL path) ==============="; continue ;;
+    pi-extensions) touch $R/pi-extensions; print -r -- "
+=============== (rehearsal: the host Pi loads extensions: nosuchtool551 is kept and reported, not refused) ==============="; continue ;;
     pi-drops-mcp) touch $R/pi-drops-mcp; print -r -- "
 =============== (rehearsal: the stub Pi child's --tools drops the owner's MCP entries: the FAIL path) ==============="; continue ;;
     au-norequest) rm -f $R/au-request; print -r -- "

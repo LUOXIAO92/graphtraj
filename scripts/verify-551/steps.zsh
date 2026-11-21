@@ -445,7 +445,7 @@ NOT COMPLETE: ${FAILS[*]}"; return 1; fi
 # undefined-mcp case: "MCP servers ['undefined551'] are not in the captured Codex settings ...").
 ax_cases() {
   print -l -- 'claude|"tools": ["Read", "NoSuchTool551"]|report:NoSuchTool551' \
-              'pi|"tools": ["read", "nosuchtool551"]|refuse:nosuchtool551' \
+              'pi|"tools": ["read", "nosuchtool551"]|either:nosuchtool551' \
               'codex|"disallowed_tools": ["mcp__nosuchserver551__x"]|refuse:nosuchserver551' \
               'dsh|"tools": ["tool-nosuch551"]|refuse:tool-nosuch551'
 }
@@ -463,7 +463,14 @@ step_AX() {
     kind=${expect%%:*}; entry=${expect#*:}
     probe after $rt AX "$args" ${${kind:#report}:+yes}
     created=$(grep -m1 'parent create result' $D/summary.txt)
-    if [[ $kind == refuse ]]; then
+    check=$(grep -m1 'RECORD tool_check' $D/summary.txt)
+    if [[ $kind == either ]]; then
+      # Pi: refused when provably unknown (host loads no extension); else created and reported as the child's
+      # status tool_check 'unverified' (Main's real AX pi: the host loads extensions).
+      if [[ $created == *unavailable* && $created == *$entry* ]]; then verdict="OK (refused: create refused unavailable naming $entry)"
+      elif [[ $check == *$entry* ]]; then verdict="OK (reported: child created; status tool_check names $entry: ${check#*: })"
+      else verdict="NOT OK (neither refused naming $entry nor reported in status tool_check; tool_check: ${check:-none} | create: ${created[1,120]})"; fi
+    elif [[ $kind == refuse ]]; then
       [[ $created == *unavailable* && $created == *$entry* ]] && verdict="OK (create refused unavailable naming $entry)" \
         || verdict="NOT OK (expected create refused unavailable naming $entry; got: ${created[1,200]})"
     else

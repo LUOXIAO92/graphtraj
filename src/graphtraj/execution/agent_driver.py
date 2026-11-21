@@ -79,6 +79,18 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
         raise AgentsError('unavailable', f'Setting a child\'s tools is not available for {runtime!r} yet.')
 
 
+def report_unverified_tools(run: Run) -> None:
+    """Tell the parent which create tool entries the Pi child's Runtime could not check before start (551).
+
+    Pi resolves extension tools only at start, so with host extensions loaded an unknown name cannot be
+    refused at create (graftling.pi.driver.check_tool_names). It is not ignored either: it becomes the
+    child's ``tool_check`` (``unverified``), which agents ``status`` reports, as Claude's unapplied entries do.
+    """
+    unverified = (run.settings.get('adapter_request') or {}).get('unverified_tools')
+    if unverified:
+        run.events.process(tool_check={'unverified': list(unverified)})
+
+
 def _git_common_directory(cwd: Path) -> Path:
     """Return the Git common directory of ``cwd``, or ``cwd/.git`` outside Git."""
     try:
@@ -325,6 +337,8 @@ class AdapterDriver:
         if run.runtime == 'pi':
             from graftling import read_config
             from graftling.sessions import SessionArchive
+
+            report_unverified_tools(run)
 
             root = run.directory.parent.parent
             choices = read_config(root)

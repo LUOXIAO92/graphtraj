@@ -64,6 +64,25 @@ def test_pi_child_tools_reach_its_launch_request(tmp_path: Path) -> None:
     assert refused.value.code == 'unavailable' and 'nosuchtool' in refused.value.message
 
 
+def test_pi_unverified_entries_reach_the_parent_status(tmp_path: Path) -> None:
+    """Main's AX pi: with host extensions an unknown name is kept, then reported as the child's tool_check."""
+    from graftling import AgentControl
+    from graphtraj.execution.agent_driver import report_unverified_tools
+
+    facts: list[dict] = []
+    events = SimpleNamespace(process=lambda **fact: facts.append(fact))
+    report_unverified_tools(SimpleNamespace(settings={'adapter_request': {'unverified_tools': ['nosuchtool551']}},
+                                            events=events))
+    report_unverified_tools(SimpleNamespace(settings={'adapter_request': {'tools': ['read']}}, events=events))
+    assert facts == [{'tool_check': {'unverified': ['nosuchtool551']}}]
+    # The same fact is what agents status shows (graftling AgentControl's record document).
+    control = AgentControl(tmp_path / 'swarm', {})
+    record = {'agent': 'agent-x', 'name': 'x', 'runtime': 'pi', 'parent': None, 'creator': {}, 'host': 'h',
+              'session': None, 'retired_at': None, 'selection': {}, 'executions': [
+                  {'id': 'e1', 'state': 'running', 'requests': [], 'process': facts[0]}]}
+    assert control._document(record)['tool_check'] == {'unverified': ['nosuchtool551']}
+
+
 def dsh_install(tmp_path: Path) -> str:
     """A DSH install root whose web-app bundle declares a preset with two tool rows, one disabled."""
     import json

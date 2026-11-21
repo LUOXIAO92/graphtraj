@@ -1,0 +1,1 @@
+files: tests/test_codex_agents_card_544.py tests/test_codex_agent_display.py tests/test_agents_native_codex.py tests/test_mcp_host_tools.py tests/test_agents_mcp_bridge.py tests/test_current_host_events.py tests/test_codex_main_root_notice_401.py tests/test_agents_native_claude.py tests/test_stop_instruction.py

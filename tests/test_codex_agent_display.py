@@ -32,26 +32,15 @@ def event() -> dict:
     }
 
 
-def test_display_is_ui_only_and_deduplicated_across_hook_processes(tmp_path: Path) -> None:
-    """One send and reply render once; later polls cannot replay the same reply."""
+def test_sent_message_and_reply_are_left_to_the_tool_card(tmp_path: Path) -> None:
+    """544: the agents card shows the send and the reply, so the hook adds no copy of either."""
     source = event()
     original = copy.deepcopy(source)
-    shown = invoke(source, tmp_path)
-    assert set(shown) == {'systemMessage'}
-    text = shown['systemMessage']
-    # 535: who and the content only (533's words); the body verbatim so its Markdown is intact; no box, no
-    # per-line prefix, no session or agent id in this UI-only text.
-    assert text == 'agents → reader\n\nRemember red.\n\nreader · replied\n\nRemembered red.'
-    assert 'Remember red.' in text and 'Remembered red.' in text
+    assert invoke(source, tmp_path) == {}
     assert source == original
-    assert invoke(source, tmp_path) == {}
-    source['tool_use_id'] = 'poll-2'
-    source['tool_input'] = {'action': 'execute', 'feature': 'status', 'arguments': {'agent': 'agent-child'}}
-    source['tool_response']['structuredContent']['action'] = 'status'
-    assert invoke(source, tmp_path) == {}
-    assert all('Remember' not in path.read_text() for path in tmp_path.glob('*.yml'))
-    source['session_id'] = 'another-native-session'
-    assert 'Remembered red.' in invoke(source, tmp_path)['systemMessage']
+    for name in ('mcp__graftling__agents', 'mcp__agents__agents'):
+        assert invoke({**source, 'tool_name': name, 'session_id': name}, tmp_path) == {}
+    assert not list(tmp_path.iterdir())
 
 
 @pytest.mark.parametrize('kind', ['failure', 'discovery', 'stop', 'other-tool', 'empty-reply'])

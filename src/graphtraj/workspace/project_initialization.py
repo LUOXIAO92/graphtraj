@@ -15,11 +15,13 @@ from graphtraj.runtimes.codex.codex_project import (
     CodexProjectFiles,
 )
 from graphtraj.workspace.project_files import (
+    GRAPHTRAJ_IGNORE,
     ProjectFiles,
     WorkspaceProjectError,
 )
 from graphtraj.workspace.git_repository import GitRepositoryError, GitTreeEntry, SourceRepository
 from graphtraj.configuration.project_configuration import (
+    CONFIG_DIRECTORY,
     ProjectConfiguration,
     ProjectConfigurationError,
     configuration_exists,
@@ -412,6 +414,7 @@ class ProjectSetupPlan:
             materialized=materialized,
         )
         self._preflight_exclude_registration(actions, conflicts)
+        self._preflight_graphtraj_ignore(actions, conflicts)
 
         _raise_conflicts(conflicts)
         return ProjectSetupPreview(tuple(actions))
@@ -510,6 +513,36 @@ class ProjectSetupPlan:
                 )
                 actions.append(PlannedSetupAction(disposition, description))
 
+    @property
+    def _graphtraj_ignore_directory(self) -> Optional[Path]:
+        """GraphTraj's directory when it lies inside the Source Repository."""
+
+        if self.configuration.project_root.resolve() != self.harness_root.resolve():
+            return None
+        return self.harness_root / CONFIG_DIRECTORY
+
+    def _preflight_graphtraj_ignore(
+        self,
+        actions: List[PlannedSetupAction],
+        conflicts: List[str],
+    ) -> None:
+        directory = self._graphtraj_ignore_directory
+        if directory is None:
+            return
+        description = self.project_files.graphtraj_ignore_action(directory)
+        entry = _filesystem_entry(directory / ".gitignore")
+        if entry is None:
+            actions.append(PlannedSetupAction("REGISTER", description))
+        elif entry.kind == "file" and entry.content == GRAPHTRAJ_IGNORE.encode():
+            actions.append(PlannedSetupAction("ALREADY CONFIGURED", description))
+        else:
+            # Never overwrite a file GraphTraj did not write in this form.
+            _append_conflict(
+                conflicts,
+                "GraphTraj ignore registration is blocked at {0}: it holds other "
+                "content. Remove it and rerun setup.".format(directory / ".gitignore"),
+            )
+
     def apply(self) -> ProjectSetupResult:
         """Apply setup and return completed actions, without prompting.
 
@@ -593,6 +626,13 @@ class ProjectSetupPlan:
                 common_git_directory=self.repository.common_directory,
                 on_action_complete=mark_completed,
             )
+            ignore_directory = self._graphtraj_ignore_directory
+            if ignore_directory is not None and (
+                self.project_files.graphtraj_ignore_action(ignore_directory) in pending
+            ):
+                self.project_files.write_graphtraj_ignore(
+                    ignore_directory, mark_completed
+                )
         except (
             CodexProjectError,
             WorkspaceProjectError,

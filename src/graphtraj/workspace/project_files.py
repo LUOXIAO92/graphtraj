@@ -8,6 +8,21 @@ from pathlib import Path
 from typing import Callable, Optional
 
 
+# When the Harness Project Root is itself the Source Repository, .graphtraj/
+# sits inside the repository. Everything in it is GraphTraj's (or its swarm's)
+# private record except the two files the operator edits, which stay visible.
+GRAPHTRAJ_IGNORE = """\
+# Written by graphtraj setup: GraphTraj's private runtime files stay out of Git.
+/*
+!/config.yml
+!/roles.yml
+!/core/
+/core/*
+!/core/config.yml
+!/core/roles.yml
+"""
+
+
 class WorkspaceProjectError(Exception):
     """Workspace link or ignore resources could not be installed."""
 
@@ -36,6 +51,30 @@ class ProjectFiles:
         return "Ignore Worktree views in {0}".format(
             common_git_directory / "info" / "exclude"
         )
+
+    @staticmethod
+    def graphtraj_ignore_action(graphtraj_directory: Path) -> str:
+        """Describe the ignore file that keeps GraphTraj's own records out of Git."""
+
+        return "Ignore GraphTraj runtime files in {0}".format(
+            graphtraj_directory / ".gitignore"
+        )
+
+    @staticmethod
+    def write_graphtraj_ignore(
+        graphtraj_directory: Path,
+        on_action_complete: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Write the self-contained ignore file inside GraphTraj's own directory."""
+
+        graphtraj_directory.mkdir(parents=True, exist_ok=True)
+        (graphtraj_directory / ".gitignore").write_text(
+            GRAPHTRAJ_IGNORE, encoding="utf-8"
+        )
+        if on_action_complete is not None:
+            on_action_complete(
+                ProjectFiles.graphtraj_ignore_action(graphtraj_directory)
+            )
 
     @classmethod
     def load(cls) -> "ProjectFiles":

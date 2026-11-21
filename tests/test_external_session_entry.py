@@ -168,6 +168,32 @@ def test_dsh_start_resume_child_and_stale_context(project: Path, monkeypatch: py
         caller_alias(discover_runner_directory(project))
 
 
+def test_pi_and_dsh_agents_children_never_continue_main(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Pi or DSH Runtime the agents tool started carries graftling's GRAFTLING_MEMBER_RUN (540).
+
+    Its native header reads like a root and no Runner member owns it, yet its
+    entry never associates Main nor continues it; a real root still does.
+    """
+    from graphtraj.execution.main_continuity import claims
+
+    runner = discover_runner_directory(project)
+    assert native('pi', pi_session(project, monkeypatch, 'pi-main', [])) == {'source': 'main'}
+    monkeypatch.setenv('GRAFTLING_MEMBER_RUN', '58c9791461b54a149d5f290b05e9f675')
+    assert native('pi', pi_session(project, monkeypatch, 'pi-agents-child', [])) == {'source': 'child'}
+    for name in ('GRAFTLING_NATIVE_RUNTIME', 'GRAFTLING_NATIVE_SESSION', 'GRAFTLING_NATIVE_SESSION_FILE'):
+        monkeypatch.delenv(name)
+    dsh_session(monkeypatch, 'dsh-agents-child')
+    header = {'version': 4, 'id': 'dsh-agents-child', 'isSeeded': False}
+    assert native('dsh', {'event': 'agent/created', 'source': 'startup', 'header': header}) == {'source': 'child'}
+    assert not session_binding(project, 'pi', 'pi-agents-child').exists()
+    assert not session_binding(project, 'dsh', 'dsh-agents-child').exists()
+    monkeypatch.delenv('GRAFTLING_MEMBER_RUN')
+    dsh_session(monkeypatch, 'dsh-main')
+    assert native('dsh', {'event': 'agent/created', 'source': 'startup',
+                          'header': {**header, 'id': 'dsh-main'}}) == {'source': 'main'}
+    assert [(item['runtime'], item['session']) for item in claims(runner)] == [('pi', 'pi-main'), ('dsh', 'dsh-main')]
+
+
 def test_pi_adapter_owns_checker_result_without_main_tool_calls(
     project: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

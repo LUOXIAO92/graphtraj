@@ -2,32 +2,80 @@
 =============== $ zsh steps.zsh 00 ===============
 
 ### versions (dialog: none)
-zsh 5.9 | git version 2.50.1 (Apple Git-155) | claude: /private/tmp/claude-501/t546/rehearsal-3/bin/claude | 0.0.0 (stub 546) | model claude-sonnet-5-5
-BEFORE: GraphTraj f754d3a9 + graftling 6794ce0 | AFTER: GraphTraj 10ff24bf17ba951b2d886186cd2d8ff3cb8e01b7 + graftling 7b349f088c2afbefa569ac0ee0a7f1841f9cc997 (git dir /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/.scratch/graftling-git)
-projects: /private/tmp/claude-501/t546/rehearsal-3/base/{before,after}/project | venvs and suites: /private/tmp/claude-501/t546/rehearsal-3/t
+zsh 5.9 | git version 2.50.1 (Apple Git-155) | claude: /private/tmp/claude-501/t546/rehearsal-4/bin/claude | 0.0.0 (stub 546) | model claude-sonnet-5-5
+BEFORE: GraphTraj f754d3a9 + graftling 6794ce0 | AFTER: GraphTraj 070b40a5d981d4ce71542d3f690c284bfc2ed8a6 + graftling 7b349f088c2afbefa569ac0ee0a7f1841f9cc997 (git dir /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/.scratch/graftling-git)
+projects: /private/tmp/claude-501/t546/rehearsal-4/base/{before,after}/project | venvs and suites: /private/tmp/claude-501/t546/rehearsal-4/t
 
 ### builds (dialog: none)
-before venv: 0.6.2 /private/tmp/claude-501/t546/rehearsal-3/t/venv-before/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /private/tmp/claude-501/t546/rehearsal-3/t/venv-before/lib/python3.13/site-packages/graphtraj/__init__.py | 546 fallback in graftling: False
+before venv: 0.6.2 /private/tmp/claude-501/t546/rehearsal-4/t/venv-before/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /private/tmp/claude-501/t546/rehearsal-4/t/venv-before/lib/python3.13/site-packages/graphtraj/__init__.py | 546 fallback in graftling: False
 GraphTraj project setup complete.
-before project /private/tmp/claude-501/t546/rehearsal-3/base/before/project: .mcp.json graphtraj -> /private/tmp/claude-501/t546/rehearsal-3/t/venv-before/bin/python -m graphtraj.runtimes.claude.host serve | approval: enabledMcpjsonServers ['graphtraj'] in /private/tmp/claude-501/t546/rehearsal-3/base/before/project/.claude/settings.local.json
-after venv: 0.6.2 /private/tmp/claude-501/t546/rehearsal-3/t/venv-after/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /private/tmp/claude-501/t546/rehearsal-3/t/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py | 546 fallback in graftling: True
+before project /private/tmp/claude-501/t546/rehearsal-4/base/before/project: .mcp.json servers ['graphtraj'] | graphtraj -> /private/tmp/claude-501/t546/rehearsal-4/t/venv-before/bin/python -m graphtraj.runtimes.claude.host serve
+after venv: 0.6.2 /private/tmp/claude-501/t546/rehearsal-4/t/venv-after/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /private/tmp/claude-501/t546/rehearsal-4/t/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py | 546 fallback in graftling: True
 GraphTraj project setup complete.
-after project /private/tmp/claude-501/t546/rehearsal-3/base/after/project: .mcp.json graphtraj -> /private/tmp/claude-501/t546/rehearsal-3/t/venv-after/bin/python -m graphtraj.runtimes.claude.host serve | approval: enabledMcpjsonServers ['graphtraj'] in /private/tmp/claude-501/t546/rehearsal-3/base/after/project/.claude/settings.local.json
+after project /private/tmp/claude-501/t546/rehearsal-4/base/after/project: .mcp.json servers ['graphtraj'] | graphtraj -> /private/tmp/claude-501/t546/rehearsal-4/t/venv-after/bin/python -m graphtraj.runtimes.claude.host serve
 
 ### READY-546-CLAUDE (dialog: none)
 CHECK 546 READY-546-CLAUDE: PASS | init model: claude-sonnet-5-5 | auth source (init apiKeySource): stub | answer: 'READY-546-CLAUDE' | exit 0
 
-### agents tool in each project with B/A's flags; one agents status call without agent (dialog: none)
-CHECK 546 AGENTS before: PASS | init model: claude-sonnet-5-5 | mcp servers: {'graphtraj': 'stub'} | mcp__graphtraj__agents in init tools: True | call: {'action': 'execute', 'feature': 'status', 'arguments': {}} | error: False | result: 'action: status / result: / agents: []  # stub, invented' | exit 0
-CHECK 546 AGENTS after: PASS | init model: claude-sonnet-5-5 | mcp servers: {'graphtraj': 'stub'} | mcp__graphtraj__agents in init tools: True | call: {'action': 'execute', 'feature': 'status', 'arguments': {}} | error: False | result: 'action: status / result: / agents: []  # stub, invented' | exit 0
+### plugin gate per project with B/A's flags (information only; dialog: none). NOT PASSED is expected before Tu:
+Claude Code loads the project's graphtraj-claude-host plugin only in a trusted folder.
+plugin gate before: NOT PASSED | init model: claude-sonnet-5-5 | mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents'] | plugins: ['cc-plugin-builtin-stub'] | plugin_warnings: [{"type": "project-scope-suppressed-untrusted", "message": "1 project-scope directory under ./.claude/skills/ was skipped because this workspace was not trusted (stub text)"}]
+plugin gate after: NOT PASSED | init model: claude-sonnet-5-5 | mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents'] | plugins: ['cc-plugin-builtin-stub'] | plugin_warnings: [{"type": "project-scope-suppressed-untrusted", "message": "1 project-scope directory under ./.claude/skills/ was skipped because this workspace was not trusted (stub text)"}]
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh Tu before   (USER, plain Terminal; then: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh Tu after; then: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh P)
+(exit 0)
+
+=============== $ zsh steps.zsh B ===============
+
+### before run 1: plugin gate first (dialog: none)
+plugin gate before: NOT PASSED | init model: claude-sonnet-5-5 | mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents'] | plugins: ['cc-plugin-builtin-stub'] | plugin_warnings: [{"type": "project-scope-suppressed-untrusted", "message": "1 project-scope directory under ./.claude/skills/ was skipped because this workspace was not trusted (stub text)"}]
+STOP: plugin gate not passed for before; nothing was run. Trust the folder: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh Tu before, then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh P
+(exit 1)
+
+=============== $ zsh steps.zsh Tu before ===============
+
+### Tu before: USER in a plain macOS Terminal (Main cannot answer dialogs). Dialog: one.
+Paste:
+  cd /private/tmp/claude-501/t546/rehearsal-4/base/before/project && /private/tmp/claude-501/t546/rehearsal-4/bin/claude
+Claude Code shows 'Do you trust the files in this folder?' naming /private/tmp/claude-501/t546/rehearsal-4/base/before/project -> choose 'Yes, proceed'.
+Then type /exit (send no message). Should an MCP server approval for 'graphtraj' appear, approve it for this
+project. Any other dialog: press Esc and tell Main its title. No dotfile is edited by this script.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh Tu after   (USER)
+(exit 0)
+
+=============== $ zsh steps.zsh Tu after ===============
+
+### Tu after: USER in a plain macOS Terminal (Main cannot answer dialogs). Dialog: one.
+Paste:
+  cd /private/tmp/claude-501/t546/rehearsal-4/base/after/project && /private/tmp/claude-501/t546/rehearsal-4/bin/claude
+Claude Code shows 'Do you trust the files in this folder?' naming /private/tmp/claude-501/t546/rehearsal-4/base/after/project -> choose 'Yes, proceed'.
+Then type /exit (send no message). Should an MCP server approval for 'graphtraj' appear, approve it for this
+project. Any other dialog: press Esc and tell Main its title. No dotfile is edited by this script.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh P   (Main)
+(exit 0)
+
+=============== rehearsal: simulated USER 'Yes, proceed' (touch <project>/.stub-trusted) ===============
+
+=============== $ zsh steps.zsh P ===============
+
+### P: plugin gate + one agents status call (no agent) per project, B/A's flags (dialog: none)
+plugin gate before: PASS | init model: claude-sonnet-5-5 | mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents'] | plugins: ['cc-plugin-builtin-stub', 'graphtraj-claude-host'] | plugin_warnings: []
+CHECK 546 AGENTS before: PASS | init model: claude-sonnet-5-5 | mcp servers: {'graphtraj': 'connected'} | mcp__graphtraj__agents in init tools: True | call: {'action': 'execute', 'feature': 'status', 'arguments': {}} | error: False | result: 'action: status / result: / agents: []  # stub, invented' | exit 0
+plugin gate after: PASS | init model: claude-sonnet-5-5 | mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents'] | plugins: ['cc-plugin-builtin-stub', 'graphtraj-claude-host'] | plugin_warnings: []
+CHECK 546 AGENTS after: PASS | init model: claude-sonnet-5-5 | mcp servers: {'graphtraj': 'connected'} | mcp__graphtraj__agents in init tools: True | call: {'action': 'execute', 'feature': 'status', 'arguments': {}} | error: False | result: 'action: status / result: / agents: []  # stub, invented' | exit 0
 
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh B
 (exit 0)
 
 =============== $ zsh steps.zsh B ===============
 
-### before run 1: Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/t546/rehearsal-3/base/before/project: create -> send at once -> wait (dialog: none; up to ~5 min)
-Main exit 0; stream /private/tmp/claude-501/t546/rehearsal-3/base/before/runs/run-1/main.jsonl
+### before run 1: plugin gate first (dialog: none)
+plugin gate before: PASS | init model: claude-sonnet-5-5 | mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents'] | plugins: ['cc-plugin-builtin-stub', 'graphtraj-claude-host'] | plugin_warnings: []
+
+### before run 1: Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/t546/rehearsal-4/base/before/project: create -> send at once -> wait (dialog: none; up to ~5 min)
+Main exit 0; stream /private/tmp/claude-501/t546/rehearsal-4/base/before/runs/run-1/main.jsonl
 Main init model: claude-sonnet-5-5 | auth source: stub | agents tool in init tools: True
 child agent: None
 VERDICT 546: NOT-HIT (no send landed in the closing window; run again)
@@ -37,56 +85,27 @@ VERDICT 546: NOT-HIT (no send landed in the closing window; run again)
 
 =============== $ zsh steps.zsh A ===============
 
-### after run 1: Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/t546/rehearsal-3/base/after/project: create -> send at once -> wait (dialog: none; up to ~5 min)
-Main exit 0; stream /private/tmp/claude-501/t546/rehearsal-3/base/after/runs/run-1/main.jsonl
+### after run 1: plugin gate first (dialog: none)
+plugin gate after: PASS | init model: claude-sonnet-5-5 | mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents'] | plugins: ['cc-plugin-builtin-stub', 'graphtraj-claude-host'] | plugin_warnings: []
+
+### after run 1: Claude Main (claude-sonnet-5-5) in /private/tmp/claude-501/t546/rehearsal-4/base/after/project: create -> send at once -> wait (dialog: none; up to ~5 min)
+Main exit 0; stream /private/tmp/claude-501/t546/rehearsal-4/base/after/runs/run-1/main.jsonl
 Main init model: claude-sonnet-5-5 | auth source: stub | agents tool in init tools: True
 child agent: None
 VERDICT 546: NOT-HIT (no send landed in the closing window; run again)
 
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh G
-(exit 0)
-
-=============== $ zsh steps.zsh G ===============
-
-### G: GraphTraj full suite (6 shards, --timeout 1500, -rA) then graftling full suite, background (dialog: none; ~30 min; run nothing else meanwhile)
-pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
-uncommitted in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed src/tests: none
-pytest temp root (new; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-546-G-20261121T215455
-GraphTraj suite imports: graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/src/graphtraj/__init__.py | graftling /private/tmp/claude-501/t546/rehearsal-3/t/venv-g-7b349f088c2a/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
-graftling suite imports: graftling /private/tmp/claude-501/t546/rehearsal-3/t/src-gl-7b349f088c2a/src/graftling/__init__.py
-REHEARSAL: GraphTraj tests limited to tests/test_agents_configuration_recorded.py, graftling to tests/test_agent_control.py tests/test_claude_send_closing_546.py tests/test_dsh_standalone_child.py (plain pytest, same venvs, temp root and exit lines)
-started in the background at 21:55:07: /private/tmp/claude-501/t546/rehearsal-3/t/G-10ff24bf-20261121T215507/gt.txt then /private/tmp/claude-501/t546/rehearsal-3/t/G-10ff24bf-20261121T215507/gl.txt (each ends with a line 'exit=N')
-
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh GR   (repeat until both show exit=)
-(exit 0)
-
-=============== $ zsh steps.zsh GR ===============
-
-### GR: read only; newest G (dialog: none)
-pytest temp root: /private/tmp/claude-501/verify-546-G-20261121T215455
-GraphTraj 10ff24bf17ba951b2d886186cd2d8ff3cb8e01b7 (tree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed) | graftling 7b349f088c2afbefa569ac0ee0a7f1841f9cc997 (tree /private/tmp/claude-501/t546/rehearsal-3/t/src-gl-7b349f088c2a)
-REHEARSAL: GraphTraj tests limited to tests/test_agents_configuration_recorded.py, graftling to tests/test_agent_control.py tests/test_claude_send_closing_546.py tests/test_dsh_standalone_child.py (plain pytest, same venvs, temp root and exit lines)
----- gt (/private/tmp/claude-501/t546/rehearsal-3/t/G-10ff24bf-20261121T215507/gt.txt)
-exit=0
-4 passed in 2.89s
----- gl (/private/tmp/claude-501/t546/rehearsal-3/t/G-10ff24bf-20261121T215507/gl.txt)
-exit=0
-91 passed in 18.79s
----- classification (GraphTraj gt.txt + shards, graftling gl.txt)
-(no FAILED/ERROR lines)
-
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh C   (pass: exit=0, or only 'known' lines; any NEW line blocks)
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh G   (when Main's full-suite queue allows; one full suite at a time)
 (exit 0)
 
 =============== $ zsh steps.zsh C ===============
 
-### copy to /private/tmp/claude-501/t546/rehearsal-3/realhost (dialog: none)
-copied: after/runs/run-1/summary.txt before/runs/run-1/summary.txt ready/probe-after.jsonl ready/probe-before.jsonl G/gl.txt G/gt.txt G/run.txt 
+### copy to /private/tmp/claude-501/t546/rehearsal-4/realhost (dialog: none)
+copied: after/runs/run-1/summary.txt before/runs/run-1/summary.txt ready/probe-after.jsonl ready/probe-before.jsonl 
    2 VERDICT 546: NOT-HIT (no send landed in the closing window; run again)
 
-==> next (paste as is): Leader: read /private/tmp/claude-501/t546/rehearsal-3/realhost/{before,after}/runs/run-*/summary.txt, /private/tmp/claude-501/t546/rehearsal-3/realhost/ready/ and /private/tmp/claude-501/t546/rehearsal-3/realhost/G/
+==> next (paste as is): Leader: read /private/tmp/claude-501/t546/rehearsal-4/realhost/{before,after}/runs/run-*/summary.txt, /private/tmp/claude-501/t546/rehearsal-4/realhost/ready/ and /private/tmp/claude-501/t546/rehearsal-4/realhost/G/
 (exit 0)
 
 =============== rehearsal files ===============
-before project settings.local.json: {"env":{"GRAFTLING_CLAUDE_HOST_PYTHON":"/private/tmp/claude-501/t546/rehearsal-3/t/venv-before/bin/python","GRAFTLING_CLAUDE_HOST_CONFIG":"/private/tmp/claude-501/t546/rehearsal-3/base/before/project/.graphtraj/claude-host/config.json"},"enabledMcpjsonServers":["graphtraj"]}
-realhost copy: after/runs/run-1/main.argv.json after/runs/run-1/main.err after/runs/run-1/main.jsonl after/runs/run-1/prompt.txt after/runs/run-1/summary.txt before/runs/run-1/main.argv.json before/runs/run-1/main.err before/runs/run-1/main.jsonl before/runs/run-1/prompt.txt before/runs/run-1/summary.txt G/gl.txt G/gt.txt G/run.txt ready/probe-after.argv.json ready/probe-after.err ready/probe-after.jsonl ready/probe-before.argv.json ready/probe-before.err ready/probe-before.jsonl ready/ready.argv.json ready/ready.err ready/ready.jsonl 
+B/A argv: { "cwd": "/private/tmp/claude-501/t546/rehearsal-4/base/before/project", "argv": [  "/private/tmp/claude-501/t546/rehearsal-4/bin/claude",  "-p",  "--model",  "claude-sonnet-5-5",  "--output-format",  "stream-json",  "--verbose",  "--mcp-config",  "/private/tmp/claude-501/t546/rehearsal-4/base/before/project/.mcp.json",  "--strict-mcp-config",  "--allowedTools",  "mcp__graphtraj__agents" ]}
+realhost copy: after/runs/run-1/gate-after.argv.json after/runs/run-1/gate-after.err after/runs/run-1/gate-after.jsonl after/runs/run-1/main.argv.json after/runs/run-1/main.err after/runs/run-1/main.jsonl after/runs/run-1/prompt.txt after/runs/run-1/summary.txt before/runs/run-1/gate-before.argv.json before/runs/run-1/gate-before.err before/runs/run-1/gate-before.jsonl before/runs/run-1/main.argv.json before/runs/run-1/main.err before/runs/run-1/main.jsonl before/runs/run-1/prompt.txt before/runs/run-1/summary.txt ready/gate-after.argv.json ready/gate-after.err ready/gate-after.jsonl ready/gate-before.argv.json ready/gate-before.err ready/gate-before.jsonl ready/probe-after.argv.json ready/probe-after.err ready/probe-after.jsonl ready/probe-before.argv.json ready/probe-before.err ready/probe-before.jsonl ready/ready.argv.json ready/ready.err ready/ready.jsonl 

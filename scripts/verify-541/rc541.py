@@ -5,11 +5,14 @@ usage: python -I rc541.py <codex sessions dir> <project> <U start epoch>
 The Main is the session of the last codex:SessionStart claim in
 <project>/.graphtraj/runner/main-sessions/continuity.jsonl written at or after the U stamp.
 PASS needs all of:
-  - the Stop hook bound that Main (main-sessions/finalize_<sha256("codex:"+session)>/session.yml exists),
+  - the SessionStart hook bound that Main (main-sessions/finalize_<sha256("codex:"+session)>/session.yml
+    exists; it is written at SessionStart, not by Stop. That Stop ran is shown by the USER's screenshot),
   - no checker was ever bound for it (no checks/* entry: GraphTraj binds a checker right after the
     native fork and before any model request) and no pending-* fork attempt remains,
   - the project's task graph is still empty (tasks/ has no Task),
-  - the Main rollout (session_meta id = that session) has at least one user turn.
+  - the Main rollout (session_meta id = that session) has at least one user turn: an event_msg
+    item_completed whose item.type is UserMessage (Codex 0.171.0) or an event_msg user_message (older
+    Codex). response_item message role user is not counted: it also carries injected context.
 Also printed for information: other rollouts of the project since the stamp (a checker fork is ephemeral
 and may write none, so the binding records are the proof), and rollout lines naming the completion check.
 """
@@ -61,7 +64,7 @@ def main(sessions: Path, project: Path, since: float) -> int:
     tasks = project / '.graphtraj/state/tasks'
     task_dirs = sorted(p.name for p in tasks.iterdir()) if tasks.is_dir() else []
     for name, passed, detail in (
-        ('Stop hook bound the Main', bound, str(directory / 'session.yml')),
+        ('SessionStart hook bound the Main', bound, str(directory / 'session.yml')),
         ('no checker bound (no native fork)', not checks, checks or 'checks/: none'),
         ('no pending fork attempt', not pending, pending or 'none'),
         ('task graph still empty', not task_dirs, task_dirs or f'{tasks}: no Task'),
@@ -82,7 +85,10 @@ def main(sessions: Path, project: Path, since: float) -> int:
         except ValueError:
             continue
         payload = record.get('payload') or {}
-        if record.get('type') == 'event_msg' and payload.get('type') == 'user_message':
+        item = payload.get('item') if isinstance(payload.get('item'), dict) else {}
+        if record.get('type') == 'event_msg' and (
+                payload.get('type') == 'user_message'                                       # older Codex
+                or (payload.get('type') == 'item_completed' and item.get('type') == 'UserMessage')):  # 0.171.0
             users += 1
         if any(text in line for text in ('Completion Check', 'Reviewer Usage', 'Hook stopped')):
             named.append(number)

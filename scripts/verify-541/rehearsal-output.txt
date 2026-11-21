@@ -6,51 +6,51 @@ usage: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.grapht
 ======== rehearsal: 00 preflight (stub codex; real build and setup) (expect rc=0)
 
 ### versions (dialog: none)
-zsh 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh) | Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task at 0d2d52d032f74ff35094f924d7f5740f0146d784 | codex: /private/tmp/claude-501/541/rehearsal-214932/stub/codex -> /private/tmp/claude-501/541/rehearsal-214932/stub/codex | codex-cli 0.169.0 (stub)
+zsh 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh) | Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task at 6fc036b1f97addc913eb8285f279bd263876745f | codex: /private/tmp/claude-501/541/rehearsal-c1-220449/stub/codex -> /private/tmp/claude-501/541/rehearsal-c1-220449/stub/codex | codex-cli 0.169.0 (stub)
 pytest temp: TMPDIR=/private/tmp/claude-501 (outside the Harness)
 
-### candidate venv /private/tmp/claude-501/541/rehearsal-214932/base/venv-cand: Worktree HEAD + graftling 6794ce02b6210ec88837437affb8d7b525612804 (scratch; .venv-runtime only read)
-44a8c9fd184eb079762da6ba56407bd7fb5f12af03cdf258432144601ca8ab49  graftling-0.6.2-py3-none-any.whl
-a0a04d1cc04403ceb41df705ef8e397d41341199192bd673cf6483847cbeb462  graphtraj-0.1.0-py3-none-any.whl
-graphtraj /private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/lib/python3.13/site-packages/graphtraj/__init__.py
-graftling 0.6.2 /private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/lib/python3.13/site-packages/graftling/__init__.py
+### candidate venv /private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand: Worktree HEAD + graftling 6794ce02b6210ec88837437affb8d7b525612804 (scratch; .venv-runtime only read)
+20d074867b9cca0ec787096020de075832a4c5f3caffa61a6dde0c1fdf0a92c2  graftling-0.6.2-py3-none-any.whl
+314ed9937a6121503eabf4ad3ca6e91da00e2c73d0cf9ccabee69835c8627127  graphtraj-0.1.0-py3-none-any.whl
+graphtraj /private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/lib/python3.13/site-packages/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/lib/python3.13/site-packages/graftling/__init__.py
 
-### isolated project /private/tmp/claude-501/541/rehearsal-214932/vproject (own git, own .graphtraj by the candidate's graphtraj setup; no Task)
-Create dev from 12f20897719534167e6f45bc5f0c59a455783b0b? [y/N]: Created Integration Worktree on dev.
+### isolated project /private/tmp/claude-501/541/rehearsal-c1-220449/vproject (own git, own .graphtraj by the candidate's graphtraj setup; no Task)
+Create dev from 8acea3669e0e4a4a65f4c1a73d1ef802d0f6a70e? [y/N]: Created Integration Worktree on dev.
 GraphTraj project setup complete.
-graphtraj project root: /private/tmp/claude-501/541/rehearsal-214932/vproject | git top level: /private/tmp/claude-501/541/rehearsal-214932/vproject | AGENTS.md/CLAUDE.md at or above: none | local Tasks: none
+graphtraj project root: /private/tmp/claude-501/541/rehearsal-c1-220449/vproject | git top level: /private/tmp/claude-501/541/rehearsal-c1-220449/vproject | AGENTS.md/CLAUDE.md at or above: none | local Tasks: none
 isolation and empty task graph: OK
 
 ### codex exec one-line answer from the project (expect model gpt-6-luna, logged in; limit 300 s; dialog: none)
 codex login: Logged in using ChatGPT (stub)
 codex exec rc=0 (142 = 300 s limit) | header model: gpt-6-luna | answer: CODEX-541-OK gpt-6-luna
 
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh T    (USER: folder trust only; skip T if Codex already trusts /private/tmp/claude-501/541/rehearsal-214932/vproject)
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/00.txt; rc=0)
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh T    (USER: folder trust only; skip T if Codex already trusts /private/tmp/claude-501/541/rehearsal-c1-220449/vproject)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/00.txt; rc=0)
 ==== 00 preflight (stub codex; real build and setup): PASS (rc=0)
 
 ======== rehearsal: T prints the USER folder-trust instructions (expect rc=0)
 
 ### USER (real interactive Codex; folder trust only, no prompt)
-1) In a plain Terminal (one line):   cd /private/tmp/claude-501/541/rehearsal-214932/vproject && codex -m gpt-6-luna
+1) In a plain Terminal (one line):   cd /private/tmp/claude-501/541/rehearsal-c1-220449/vproject && codex -m gpt-6-luna
 2) Expected dialog (exactly one, Codex's own): 'Do you trust the contents of this directory?' -> Yes.
    Any other dialog: Esc, and tell Main its title. Codex records the choice itself; this script writes nothing there.
 3) Type no prompt; enter /exit.
 
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh U    (after the USER finished T)
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/T.txt; rc=0)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/T.txt; rc=0)
 ==== T prints the USER folder-trust instructions: PASS (rc=0)
 
 ======== rehearsal: R before the USER turn refuses (no U stamp) (expect rc=1)
 no U stamp: run U first
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/R.txt; rc=1)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/R.txt; rc=1)
 ==== R before the USER turn refuses (no U stamp): PASS (rc=1)
 
 ======== rehearsal: U Main part: project hooks from the candidate, then the USER instructions (expect rc=0)
-graphtraj project root: /private/tmp/claude-501/541/rehearsal-214932/vproject | git top level: /private/tmp/claude-501/541/rehearsal-214932/vproject | AGENTS.md/CLAUDE.md at or above: none | local Tasks: none
+graphtraj project root: /private/tmp/claude-501/541/rehearsal-c1-220449/vproject | git top level: /private/tmp/claude-501/541/rehearsal-c1-220449/vproject | AGENTS.md/CLAUDE.md at or above: none | local Tasks: none
 isolation and empty task graph: OK
 
-### project's own .codex/hooks.json = the product's finalize.hook() material on /private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/bin/python (dialog: none)
+### project's own .codex/hooks.json = the product's finalize.hook() material on /private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/bin/python (dialog: none)
     {
       "hooks": {
         "SessionStart": [
@@ -58,7 +58,7 @@ isolation and empty task graph: OK
             "hooks": [
               {
                 "type": "command",
-                "command": "/private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
+                "command": "/private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
                 "statusMessage": "GraphTraj: associating Main session"
               }
             ]
@@ -69,7 +69,7 @@ isolation and empty task graph: OK
             "hooks": [
               {
                 "type": "command",
-                "command": "/private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
+                "command": "/private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
                 "statusMessage": "GraphTraj: checking task completion"
               }
             ]
@@ -80,7 +80,7 @@ isolation and empty task graph: OK
             "hooks": [
               {
                 "type": "command",
-                "command": "/private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
+                "command": "/private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
                 "statusMessage": "GraphTraj: retaining Main session"
               }
             ]
@@ -90,16 +90,16 @@ isolation and empty task graph: OK
     }
 
 ### USER (real interactive Codex) — one turn, one screenshot
-1) In a plain Terminal (one line, no -c options):   cd /private/tmp/claude-501/541/rehearsal-214932/vproject && codex -m gpt-6-luna
-2) Expected dialog (exactly one, Codex's own): review of the hooks in /private/tmp/claude-501/541/rehearsal-214932/vproject/.codex/hooks.json -> approve.
+1) In a plain Terminal (one line, no -c options):   cd /private/tmp/claude-501/541/rehearsal-c1-220449/vproject && codex -m gpt-6-luna
+2) Expected dialog (exactly one, Codex's own): review of the hooks in /private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.codex/hooks.json -> approve.
    If no dialog appears, the same hooks were approved before: fine. Any other dialog: Esc, tell Main its title.
 3) Type this prompt and press Enter:   Reply with exactly one line: HELLO-541. Use no tool.
 4) When the turn ends, screenshot the whole turn end. PASS = a 'Completion Check · completed' message saying the
    project has no local Task and no checker ran; NO 'Reviewer Usage' line; NO red 'Hook stopped' or error.
-   Save it as /private/tmp/claude-501/541/rehearsal-214932/w/after-541.png, then enter /exit.
+   Save it as /private/tmp/claude-501/541/rehearsal-c1-220449/w/after-541.png, then enter /exit.
 
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh R    (after the USER's screenshot and /exit)
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/U.txt; rc=0)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/U.txt; rc=0)
 ==== U Main part: project hooks from the candidate, then the USER instructions: PASS (rc=0)
 hooks.json written by U:
 {
@@ -109,7 +109,7 @@ hooks.json written by U:
         "hooks": [
           {
             "type": "command",
-            "command": "/private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
+            "command": "/private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
             "statusMessage": "GraphTraj: associating Main session"
           }
         ]
@@ -120,7 +120,7 @@ hooks.json written by U:
         "hooks": [
           {
             "type": "command",
-            "command": "/private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
+            "command": "/private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
             "statusMessage": "GraphTraj: checking task completion"
           }
         ]
@@ -131,7 +131,7 @@ hooks.json written by U:
         "hooks": [
           {
             "type": "command",
-            "command": "/private/tmp/claude-501/541/rehearsal-214932/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
+            "command": "/private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-cand/bin/python -m graphtraj.runtimes.codex.stop_hook",
             "statusMessage": "GraphTraj: retaining Main session"
           }
         ]
@@ -142,42 +142,74 @@ hooks.json written by U:
 
 ======== rehearsal: R without the USER turn: no Main claim (expect rc=1)
 
-### session records since 1795265388 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-214932/codex-home/sessions; dialog: none)
-codex:SessionStart claims since 1795265388.0: none
+### session records since 1795266307 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions; dialog: none)
+codex:SessionStart claims since 1795266307.0: none
 FAIL: no Main claim since the U stamp; the USER part of U comes first
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/R.txt; rc=1)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/R.txt; rc=1)
 ==== R without the USER turn: no Main claim: PASS (rc=1)
 
 ======== rehearsal: R on synthetic records: bound Main, no checker (expect rc=0)
 
-### session records since 1795265388 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-214932/codex-home/sessions; dialog: none)
-codex:SessionStart claims since 1795265388.0: ['rehearsal-main']
-CHECK Stop hook bound the Main: PASS (/private/tmp/claude-501/541/rehearsal-214932/vproject/.graphtraj/runner/main-sessions/finalize_5ed2e2da870cfc77e5ada5e3a3a3041a88a41018ca97b0beed958d1d3d837dc8/session.yml)
+### session records since 1795266307 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions; dialog: none)
+codex:SessionStart claims since 1795266307.0: ['rehearsal-main']
+CHECK SessionStart hook bound the Main: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/runner/main-sessions/finalize_5ed2e2da870cfc77e5ada5e3a3a3041a88a41018ca97b0beed958d1d3d837dc8/session.yml)
 CHECK no checker bound (no native fork): PASS (checks/: none)
 CHECK no pending fork attempt: PASS (none)
-CHECK task graph still empty: PASS (/private/tmp/claude-501/541/rehearsal-214932/vproject/.graphtraj/state/tasks: no Task)
-CHECK Main rollout has a user turn: PASS (/private/tmp/claude-501/541/rehearsal-214932/codex-home/sessions/2026/11/21/rollout-rehearsal-main.jsonl, user turns 1)
+CHECK task graph still empty: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/state/tasks: no Task)
+CHECK Main rollout has a user turn: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions/2026/11/21/rollout-rehearsal-main.jsonl, user turns 1)
 (info) Main rollout lines naming the completion check: none
 (info) other rollouts of the project since the stamp: none
 CHECK 541 session records: PASS
 
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh G    (if not yet run; then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh GR)
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/R.txt; rc=0)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/R.txt; rc=0)
 ==== R on synthetic records: bound Main, no checker: PASS (rc=0)
 
-======== rehearsal: R on synthetic records with a bound checker: FAIL (expect rc=1)
+======== rehearsal: R on a Codex 0.171.0 rollout (item_completed UserMessage, no user_message): PASS (expect rc=0)
 
-### session records since 1795265388 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-214932/codex-home/sessions; dialog: none)
-codex:SessionStart claims since 1795265388.0: ['rehearsal-main']
-CHECK Stop hook bound the Main: PASS (/private/tmp/claude-501/541/rehearsal-214932/vproject/.graphtraj/runner/main-sessions/finalize_5ed2e2da870cfc77e5ada5e3a3a3041a88a41018ca97b0beed958d1d3d837dc8/session.yml)
-CHECK no checker bound (no native fork): FAIL (['checks/rehearsal-checker'])
+### session records since 1795266307 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions; dialog: none)
+codex:SessionStart claims since 1795266307.0: ['rehearsal-main']
+CHECK SessionStart hook bound the Main: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/runner/main-sessions/finalize_5ed2e2da870cfc77e5ada5e3a3a3041a88a41018ca97b0beed958d1d3d837dc8/session.yml)
+CHECK no checker bound (no native fork): PASS (checks/: none)
 CHECK no pending fork attempt: PASS (none)
-CHECK task graph still empty: PASS (/private/tmp/claude-501/541/rehearsal-214932/vproject/.graphtraj/state/tasks: no Task)
-CHECK Main rollout has a user turn: PASS (/private/tmp/claude-501/541/rehearsal-214932/codex-home/sessions/2026/11/21/rollout-rehearsal-main.jsonl, user turns 1)
+CHECK task graph still empty: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/state/tasks: no Task)
+CHECK Main rollout has a user turn: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions/2026/11/21/rollout-rehearsal-main.jsonl, user turns 1)
+(info) Main rollout lines naming the completion check: none
+(info) other rollouts of the project since the stamp: none
+CHECK 541 session records: PASS
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh G    (if not yet run; then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh GR)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/R.txt; rc=0)
+==== R on a Codex 0.171.0 rollout (item_completed UserMessage, no user_message): PASS: PASS (rc=0)
+
+======== rehearsal: R on a rollout with only injected role-user context: no user turn, FAIL (expect rc=1)
+
+### session records since 1795266307 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions; dialog: none)
+codex:SessionStart claims since 1795266307.0: ['rehearsal-main']
+CHECK SessionStart hook bound the Main: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/runner/main-sessions/finalize_5ed2e2da870cfc77e5ada5e3a3a3041a88a41018ca97b0beed958d1d3d837dc8/session.yml)
+CHECK no checker bound (no native fork): PASS (checks/: none)
+CHECK no pending fork attempt: PASS (none)
+CHECK task graph still empty: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/state/tasks: no Task)
+CHECK Main rollout has a user turn: FAIL (/private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions/2026/11/21/rollout-rehearsal-main.jsonl, user turns 0)
 (info) Main rollout lines naming the completion check: none
 (info) other rollouts of the project since the stamp: none
 CHECK 541 session records: FAIL
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/R.txt; rc=1)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/R.txt; rc=1)
+==== R on a rollout with only injected role-user context: no user turn, FAIL: PASS (rc=1)
+
+======== rehearsal: R on synthetic records with a bound checker: FAIL (expect rc=1)
+
+### session records since 1795266307 (read only; rollouts under /private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions; dialog: none)
+codex:SessionStart claims since 1795266307.0: ['rehearsal-main']
+CHECK SessionStart hook bound the Main: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/runner/main-sessions/finalize_5ed2e2da870cfc77e5ada5e3a3a3041a88a41018ca97b0beed958d1d3d837dc8/session.yml)
+CHECK no checker bound (no native fork): FAIL (['checks/rehearsal-checker'])
+CHECK no pending fork attempt: PASS (none)
+CHECK task graph still empty: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/vproject/.graphtraj/state/tasks: no Task)
+CHECK Main rollout has a user turn: PASS (/private/tmp/claude-501/541/rehearsal-c1-220449/codex-home/sessions/2026/11/21/rollout-rehearsal-main.jsonl, user turns 1)
+(info) Main rollout lines naming the completion check: none
+(info) other rollouts of the project since the stamp: none
+CHECK 541 session records: FAIL
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/R.txt; rc=1)
 ==== R on synthetic records with a bound checker: FAIL: PASS (rc=1)
 
 ======== rehearsal: G rehearsal: real tests through G's entry (expect rc=0)
@@ -185,36 +217,36 @@ CHECK 541 session records: FAIL
 ### GraphTraj suite of the Worktree HEAD against graftling 6794ce02b6210ec88837437affb8d7b525612804 (dialog: none)
 pytest temp: TMPDIR=/private/tmp/claude-501 (outside the Harness)
 step_G:3: operation not permitted: ps
-pytest temp root (TMPDIR of the run, outside the Harness): /private/tmp/claude-501/verify-541-G-20261121T214955
-candidate: 0d2d52d032f74ff35094f924d7f5740f0146d784 | graftling 6794ce02b6210ec88837437affb8d7b525612804
+pytest temp root (TMPDIR of the run, outside the Harness): /private/tmp/claude-501/verify-541-G-20261121T220517
+candidate: 6fc036b1f97addc913eb8285f279bd263876745f | graftling 6794ce02b6210ec88837437affb8d7b525612804
 graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/src/graphtraj/__init__.py
-graftling 0.6.2 /private/tmp/claude-501/541/rehearsal-214932/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
 REHEARSAL: tests limited to tests/test_main_finalize.py::test_project_without_tasks_ends_without_a_checker tests/test_external_session_entry.py::test_dsh_check_without_tasks_needs_no_checker tests/test_main_finalize.py::test_main_end_decision (plain pytest, foreground; same venv, temp root, exit line)
 
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh GR    (when /private/tmp/claude-501/541/rehearsal-214932/w/G-0d2d52d0-20261121T214955/suite.txt ends with exit=)
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/G.txt; rc=0)
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/scripts/verify-541/steps.zsh GR    (when /private/tmp/claude-501/541/rehearsal-c1-220449/w/G-6fc036b1-20261121T220517/suite.txt ends with exit=)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/G.txt; rc=0)
 ==== G rehearsal: real tests through G's entry: PASS (rc=0)
 G suite output:
 ........                                                                 [100%]
-8 passed in 5.50s
+8 passed in 5.24s
 exit=0
 
 ======== rehearsal: GR classifies the rehearsal G (expect rc=0)
 
-### G /private/tmp/claude-501/541/rehearsal-214932/w/G-0d2d52d0-20261121T214955 (read only; dialog: none)
-pytest temp root (TMPDIR of the run, outside the Harness): /private/tmp/claude-501/verify-541-G-20261121T214955
-candidate: 0d2d52d032f74ff35094f924d7f5740f0146d784 | graftling 6794ce02b6210ec88837437affb8d7b525612804
+### G /private/tmp/claude-501/541/rehearsal-c1-220449/w/G-6fc036b1-20261121T220517 (read only; dialog: none)
+pytest temp root (TMPDIR of the run, outside the Harness): /private/tmp/claude-501/verify-541-G-20261121T220517
+candidate: 6fc036b1f97addc913eb8285f279bd263876745f | graftling 6794ce02b6210ec88837437affb8d7b525612804
 graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/541-finish-check-reviewer-without-task/src/graphtraj/__init__.py
-graftling 0.6.2 /private/tmp/claude-501/541/rehearsal-214932/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/541/rehearsal-c1-220449/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
 REHEARSAL: tests limited to tests/test_main_finalize.py::test_project_without_tasks_ends_without_a_checker tests/test_external_session_entry.py::test_dsh_check_without_tasks_needs_no_checker tests/test_main_finalize.py::test_main_end_decision (plain pytest, foreground; same venv, temp root, exit line)
 ........                                                                 [100%]
-8 passed in 5.50s
+8 passed in 5.24s
 exit=0
-baseline: /private/tmp/claude-501/541/rehearsal-214932/H/.graphtraj/core/state/tasks/547-backup-cross-repository-sub-issues/realhost/G-22946e4c-20261121T155123/suite.txt () | 516 list: /private/tmp/claude-501/541/rehearsal-214932/H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
+baseline: /private/tmp/claude-501/541/rehearsal-c1-220449/H/.graphtraj/core/state/tasks/547-backup-cross-repository-sub-issues/realhost/G-22946e4c-20261121T155123/suite.txt () | 516 list: /private/tmp/claude-501/541/rehearsal-c1-220449/H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
 (no FAILED/ERROR lines)
 Success: 'exit=0', or only 'known' lines; no 'NEW' line.
-(output kept in /private/tmp/claude-501/541/rehearsal-214932/w/GR.txt; rc=0)
+(output kept in /private/tmp/claude-501/541/rehearsal-c1-220449/w/GR.txt; rc=0)
 ==== GR classifies the rehearsal G: PASS (rc=0)
 ==== G rehearsal tests: PASS (exit=0)
 
-REHEARSAL SUMMARY: 11 passed, 0 failed (directory /private/tmp/claude-501/541/rehearsal-214932)
+REHEARSAL SUMMARY: 13 passed, 0 failed (directory /private/tmp/claude-501/541/rehearsal-c1-220449)

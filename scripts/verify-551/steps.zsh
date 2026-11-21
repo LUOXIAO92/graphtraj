@@ -17,7 +17,7 @@
 #   A0  candidate: wheels of GraphTraj $GT (this Worktree HEAD) + graftling $GL (551 branch of <Worktree>/.graftling-551.git)
 #       into BASE/venv-after; dependency direction (graftling wheel alone in a clean venv: no GraphTraj requirement,
 #       GraphTraj absent, every graftling module imports); project-after (needs its own U after), roles, tasks, gate.
-#   A   per Runtime, headless (dialog: none): plain, one manual deny (claude WebFetch, codex web_search, pi bash,
+#   A   per Runtime, headless (dialog: none): plain, one manual deny (claude WebSearch, codex web_search, pi bash,
 #       dsh tool-web); Codex beyond web_search and an undefined MCP deny; DSH beyond tool-plugin-market.
 #   AU  USER: `AU <claude|pi> <deny|allow>`: an interactive Claude Main parent shows the child's beyond-host request
 #       and asks you; you type deny/allow and it answers through agents reply. AC <claude|pi> summarizes (read only).
@@ -136,18 +136,21 @@ sys.exit(0 if ok else (3 if untrusted or not host else 1))' $G/gate.jsonl
   print -r -- "gate stderr: $(head -c 400 $G/gate.err)"
   return $rc
 }
-child_instruction() {  # $1 optional extra step (AU's beyond-host Pi tool)
-  print -r -- "${1:+Before anything else: $1
+child_instruction() {  # $1 runtime, $2 optional extra step (AU's beyond-host Pi tool)
+  # Codex has no file-reading tool (Main's A run: 'READ-551: No file-reading tool is available'): it reads with its shell.
+  local how='with your file-reading tool (not a shell)'
+  [[ ${1:-} == codex ]] && how='with your shell (Codex has no separate file-reading tool), printing only its first line that starts with #'
+  print -r -- "${2:+Before anything else: $2
 }"'This is a scripted probe. Do not edit or create any file. Answer in English.
 1. Without calling any tool, write one line "TOOLS-551: " followed by the exact names of every tool you can call, comma-separated, exactly as they were given to you.
 2. Write one line "MCP-551: " followed by each MCP server you can use and its tools, or NONE.
 3. If you have a GraphTraj tool named tasks (it may carry a prefix, such as mcp__graphtraj__tasks), call it with {"action": "discover"} and then with {"action": "describe", "feature": "concept-clarification"}. Write one line "TASKS-551: " followed by ok, or absent, or the exact error. Write one line "DESCRIBE-551: " followed by the manual_ref it returned, or the exact error.
-4. If you got a manual_ref, read that file with your file-reading tool (not a shell) and write one line "READ-551: " followed by its first line that starts with #, or the exact error or refusal text. Otherwise write "READ-551: skipped".
-5. Fetch https://example.com with your web tool (not a shell). Write one line "WEB-551: " followed by the page title, or the exact error or refusal text, or absent if you have no web tool.
+4. If you got a manual_ref, read that file '"$how"' and write one line "READ-551: " followed by its first line that starts with #, or the exact error or refusal text. Otherwise write "READ-551: skipped".
+5. Search or fetch https://example.com with your web tool (web search or web fetch; not a shell). Write one line "WEB-551: " followed by the tool you used and the page title, or the exact error or refusal text, or absent if you have no web tool.
 Use no other tool. End your turn after these six lines.'
 }
 parent_prompt() {  # $1 runtime, $2 extra create arguments as JSON members ("" none), $3 'user' = ask the user, $4 extra child step
-  local child=$($CONDA -I -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$(child_instruction ${4:-})")
+  local child=$($CONDA -I -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$(child_instruction $1 "${4:-}")")
   local answer='answer it with the reply feature choosing deny (see describe reply), and wait again.'
   [[ ${3:-} == user ]] && answer='then ask me, the user, exactly: "REQUEST-551: allow or deny?" and wait for my answer. Answer the request with the reply feature (see describe reply) choosing exactly what I said, print one line REPLY-551 followed by the reply you sent, and wait again. Never decide it yourself.'
   print -r -- "This is a scripted probe. Use only the MCP tool mcp__graphtraj__agents.
@@ -185,7 +188,8 @@ create arguments besides runtime/name/instruction: {$args} (workspace ws-551 for
      < $D/parent-prompt.txt > $D/parent.jsonl 2> $D/parent.err) || print "claude (parent) rc=$?"
   cp $p/.graphtraj/claude-host/host.log $D/host.log 2>/dev/null || true
   collect $p $rt
-  clean $(inst $1)/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-$1.txt 2>/dev/null || print -- -)" | redact | tee $D/summary.txt
+  clean $(inst $1)/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-$1.txt 2>/dev/null || print -- -)" ${5:+--expect-refusal} \
+    | redact | tee $D/summary.txt
   local rc=$?
   print -r -- "evidence: $D (parent.jsonl, parent.err, records/, summary.txt)"
   return $rc
@@ -341,15 +345,45 @@ NOT READY: ${FAILS[*]}"; return 1; fi
 
 # A's headless probes per Runtime: plain, one manual deny, and (Codex, DSH) the beyond-host requests that have no
 # dialog. 'expect' = the create refusal code that is the correct outcome, or '-' for a created child.
+# Fields: case | create tool arguments | expect | deny check on the summary's 'RECORD TOOLSET' line.
+# The inherited Claude tools have WebSearch but no WebFetch (Main's A run), so Claude's deny is WebSearch.
+# Codex web_search is the code-mode tool web__run in the rollout's additional_tools.
 a_cases() {
   case $1 in
-    claude) print -l -- 'plain||-' 'deny|"disallowed_tools": ["WebFetch"]|-' ;;
-    codex)  print -l -- 'plain||-' 'deny|"disallowed_tools": ["web_search"]|-' \
-                        'beyond|"tools": ["web_search"]|authorization-required-or-off' \
-                        'undefined-mcp|"disallowed_tools": ["mcp__undefined551__x"]|unavailable' ;;
-    pi)     print -l -- 'plain||-' 'deny|"disallowed_tools": ["bash"]|-' ;;
-    dsh)    print -l -- 'plain||-' 'deny|"disallowed_tools": ["tool-web"]|-' \
-                        'beyond|"tools": ["tool-fs", "tool-plugin-market"]|authorization-required' ;;
+    claude) print -l -- 'plain||-|' 'deny|"disallowed_tools": ["WebSearch"]|-|absent:WebSearch' ;;
+    codex)  print -l -- 'plain||-|' 'deny|"disallowed_tools": ["web_search"]|-|absent:web__run' \
+                        'beyond|"tools": ["web_search"]|authorization-required-or-off|' \
+                        'undefined-mcp|"disallowed_tools": ["mcp__undefined551__x"]|unavailable|' ;;
+    pi)     print -l -- 'plain||-|' 'deny|"disallowed_tools": ["bash"]|-|has:--exclude-tools bash' ;;
+    dsh)    print -l -- 'plain||-|' 'deny|"disallowed_tools": ["tool-web"]|-|has:tool-web=disabled' \
+                        'beyond|"tools": ["tool-fs", "tool-plugin-market"]|authorization-required|' ;;
+  esac
+}
+deny_check() {  # $1 check spec, $2 summary: the tool list from the child's own record proves the deny
+  [[ -z $1 ]] && return 0
+  local toolset=$(grep -m1 'RECORD TOOLSET' $2)
+  [[ -n $toolset && $toolset != *'NOT IN RECORDS'* ]] || { print -r -- "no tool list in the child's records"; return 1; }
+  case $1 in
+    absent:*) [[ ", ${toolset#*: }," != *", ${1#absent:},"* ]] && print -r -- "${1#absent:} absent from the record's tool list" \
+                || { print -r -- "${1#absent:} STILL IN the record's tool list"; return 1; } ;;
+    has:*) [[ $toolset == *"${1#has:}"* ]] && print -r -- "record shows ${1#has:}" || { print -r -- "record lacks ${1#has:}"; return 1; } ;;
+  esac
+}
+a_verdict() {  # $1 expect, $2 deny check, $3 probe rc; uses $D/summary.txt; prints the verdict
+  local s=$D/summary.txt
+  # The create's own refusal code, only from the parent's create result line.
+  local code=$(grep -m1 'parent create result' $s | grep -o -m1 -E 'authorization-required|unavailable' || true)
+  local created=0; grep -q -E 'CHECK 551 [a-z]+ child run: COMPLETE$' $s && created=1
+  local check
+  case $1 in
+    -) if (( $3 != 0 )); then print -r -- "NOT COMPLETE ($(grep -m1 'RECORD execution outcome' $s | sed 's/.*): //'))"
+       elif check=$(deny_check "$2" $s); then print -r -- "OK${2:+ ($check)}"
+       else print -r -- "DENY NOT SHOWN ($check)"; fi ;;
+    authorization-required-or-off)
+       if [[ $code == authorization-required ]]; then print "OK (refused authorization-required)"
+       elif (( created )); then print "CHILD CREATED: the host had web search on, so tools [web_search] is not beyond it; read WEB-551 and RECORD TOOLSET"
+       else print -r -- "UNEXPECTED (${code:-no create code})"; fi ;;
+    *) [[ $code == $1 ]] && print -r -- "OK (refused $1)" || print -r -- "UNEXPECTED (expected $1, got ${code:-a created child})" ;;
   esac
 }
 step_A() {
@@ -364,21 +398,25 @@ step_A() {
                  || print -r -- "NOT READY: parent gate failed (above)"
     return 1
   fi
-  local rt line name args expect FAILS=() RESULTS=()
+  # Declared once, outside the loops: zsh prints an existing local that is declared again.
+  local rt line name args expect check verdict refusal rc FAILS=() RESULTS=() fields
   for rt in $list; do
     for line in ${(f)"$(a_cases $rt)"}; do
-      name=${line%%|*}; args=${${line#*|}%|*}; expect=${line##*|}
-      probe after $rt A-$name "$args"; local rc=$?
-      local created=$(grep -c 'CHECK 551 .* child run: COMPLETE' $D/summary.txt) code=$(grep -o -m1 -E 'authorization-required|unavailable' $D/summary.txt || true)
-      local verdict
-      case $expect in
-        -) (( rc == 0 )) && verdict=OK || verdict="NOT COMPLETE" ;;
-        authorization-required-or-off) [[ $code == authorization-required ]] && verdict="OK (refused authorization-required)" \
-             || { (( created )) && verdict="CHILD CREATED: read WEB-551/RECORD init whether web search stayed off" || verdict="UNEXPECTED (${code:-no code})"; } ;;
-        *) [[ $code == $expect ]] && verdict="OK (refused $expect)" || verdict="UNEXPECTED (expected $expect, got ${code:-a created child})" ;;
-      esac
+      fields=("${(@s:|:)line}"); name=$fields[1]; args=$fields[2]; expect=$fields[3]; check=$fields[4]
+      refusal=; [[ $expect == - ]] || refusal=yes
+      probe after $rt A-$name "$args" $refusal; rc=$?
+      verdict=$(a_verdict $expect "$check" $rc)
+      if [[ $rt == dsh && $name == plain && $verdict != OK* ]]; then
+        # Main's A run: DSH plain ended RUNTIME_CONNECTION_CLOSED after its turn completed; re-run once, keep both.
+        RESULTS+=("A $rt $name {no tool arguments} (first run): $verdict | $D/summary.txt")
+        print -r -- "DSH plain did not complete ($verdict); re-running it once"
+        probe after $rt A-$name-rerun "$args"; rc=$?
+        verdict=$(a_verdict $expect "$check" $rc)
+        name="$name (re-run)"
+      fi
+      [[ $rt == codex && $name == deny ]] && verdict+=" | note: judged by the tool list only; the child may still reach web pages through other host MCP tools (e.g. mcp__playwright), which this deny does not name"
       RESULTS+=("A $rt $name {${args:-no tool arguments}}: $verdict | $D/summary.txt")
-      [[ $verdict == (OK*|CHILD*) ]] || FAILS+=(A-$rt-$name)
+      [[ $verdict == (OK*|CHILD*) ]] || FAILS+=(A-$rt-${name%% *})
     done
   done
   say "A results"
@@ -390,14 +428,15 @@ NOT COMPLETE: ${FAILS[*]}"; return 1; fi
 }
 
 # AU: the beyond-host request reaches the USER. An interactive Claude Main parent creates the child; the child's
-# request (Claude: WebFetch, not pre-allowed -> can_use_tool; Pi: a built-in the host's defaultTools lacks ->
+# request (Claude: WebSearch, not pre-allowed -> can_use_tool; Pi: a built-in the host's defaultTools lacks ->
 # Pi's confirm dialog) is retained for the parent, which shows it and asks you; it relays your answer via agents reply.
 step_AU() {
   local rt=${ARG:-} answer=${3:-deny}
   [[ $rt == (claude|pi) && $answer == (allow|deny) ]] || { print "usage: AU <claude|pi> <deny|allow>"; return 2; }
-  local p=$(project after) extra="" args="\"workspace\": \"$(project after)/ws-551\"" tool=WebFetch mode=-
+  # Claude: WebSearch (the inherited host tools have no WebFetch, Main's A run).
+  local p=$(project after) extra="" args="\"workspace\": \"$(project after)/ws-551\"" tool=WebSearch mode=-
   if [[ $rt == claude ]]; then
-    # Auto mode's classifier may decide WebFetch itself; role claude_ask runs the child in Claude's default mode.
+    # Auto mode's classifier may decide WebSearch itself; role claude_ask runs the child in Claude's default mode.
     args+=", \"configuration\": \"claude_ask\""
     mode=$(cd $p && clean $BASE/venv-after/bin/python -I -c 'import sys
 from pathlib import Path
@@ -429,7 +468,7 @@ print(next((t for t in ("grep", "find", "ls") if t not in host), ""))')
   say "[AU $rt] USER, in THIS terminal: an interactive Claude Main ($PARENT_MODEL) in $p.
 Dialog: none of Claude Code itself is expected (project trusted in U; the parent's agents calls are pre-allowed).
 What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: $answer
-That request is the child's beyond-host ask: $([[ $rt == claude ]] && print "Claude Code's can_use_tool for WebFetch (child permission mode $mode)" || print "Pi's confirm dialog 'agents: allow a tool beyond the host settings' for $tool"), retained for the parent.
+That request is the child's beyond-host ask: $([[ $rt == claude ]] && print "Claude Code's can_use_tool for WebSearch (child permission mode $mode)" || print "Pi's confirm dialog 'agents: allow a tool beyond the host settings' for $tool"), retained for the parent.
 If no REQUEST-551 appears, type nothing; AC will report NO REQUEST honestly.
 When Claude has printed END-CHILD, type /exit."
   (cd $p && clean claude --model $PARENT_MODEL --session-id $S \

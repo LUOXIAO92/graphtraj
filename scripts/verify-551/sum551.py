@@ -1,6 +1,7 @@
 """Task 551: summarize one B/A probe run from its own files (standard library only).
 
   python -I sum551.py <step dir> <runtime> <manual heading or -> [<AU beyond-host tool> <child permission mode>]
+                      [--expect-refusal]   (A's refused-create cases: the CHECK line says so)
 
 <step dir> holds parent.jsonl (the Claude Main parent's stream-json) and records/ (the project's agents records
 and every Runtime file copied since the step's marker). Prints, for the child of <runtime>:
@@ -21,6 +22,12 @@ from pathlib import Path
 SELF = ('TOOLS-551', 'MCP-551', 'TASKS-551', 'DESCRIBE-551', 'READ-551', 'WEB-551')
 try:  # the installation's python has PyYAML (session.yml native_init); without it YAML files are skipped
     import yaml
+
+    class TaggedLoader(yaml.SafeLoader):
+        """Reads DSH patches: a `!!js` expression (or any other tag) becomes its text."""
+
+    TaggedLoader.add_multi_constructor('', lambda loader, tag, node: f'{tag} {loader.construct_scalar(node)}'
+                                       if isinstance(node, yaml.ScalarNode) else None)
 except ImportError:
     yaml = None
 TOOL_KEYS = ('name', 'tool_name', 'toolName', 'tool')
@@ -36,12 +43,17 @@ def records(path: Path):
         if file.suffix in ('.yml', '.yaml'):
             if yaml is not None:
                 try:
-                    yield file, yaml.safe_load(text)
+                    yield file, yaml.load(text, Loader=TaggedLoader)
                 except yaml.YAMLError:
                     pass
             continue
-        if file.suffix == '.json' and not text.lstrip().startswith(('{', '[')):
-            continue
+        if file.suffix == '.json':
+            try:  # a whole (possibly indented) JSON document, such as the agents control record
+                yield file, json.loads(text)
+                continue
+            except ValueError:
+                if not text.lstrip().startswith(('{', '[')):
+                    continue
         for line in text.splitlines() if not text.lstrip().startswith('[') else [text]:
             try:
                 yield file, json.loads(line)
@@ -63,6 +75,9 @@ def walk(value):
 def call_name(node: dict) -> str | None:
     """The tool name of a tool-call shaped mapping (Claude tool_use, Codex function_call/mcp, Pi toolCall, DSH)."""
     kind = str(node.get('type', ''))
+    if kind == 'tool/call' and isinstance(node.get('data'), dict):  # DSH session.v4: {"type": "tool/call", "data": {...}}
+        name = node['data'].get('name')
+        return name if isinstance(name, str) else None
     if kind in ('tool_use', 'function_call', 'toolCall', 'tool_call', 'mcp_tool_call', 'custom_tool_call'):
         for key in TOOL_KEYS:
             if isinstance(node.get(key), str):
@@ -72,6 +87,8 @@ def call_name(node: dict) -> str | None:
 
 
 def call_input(node: dict) -> object:
+    if node.get('type') == 'tool/call' and isinstance(node.get('data'), dict):
+        node = node['data']
     for key in ('input', 'arguments', 'args', 'params'):
         if key in node:
             value = node[key]
@@ -165,10 +182,18 @@ def au_class(step: Path, tool: str, mode: str) -> None:
               f"outcome: {outcome}")
 
 
+# Codex code mode: the `exec` tool's description declares each nested tool as `name(args: ...)`, and a call is
+# `tools.<name>({...})` inside the exec script (Task 544's probe rollout; Main's A-plain codex rollout).
+CODEX_DECLARED = re.compile(r'(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)\(args')
+CODEX_CALL = re.compile(r'tools\.([A-Za-z_][A-Za-z0-9_]*)\(\s*(\{.*?\})?\s*\)', re.S)
+
+
 def main() -> int:
-    step, runtime, heading = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-    if len(sys.argv) == 6:
-        au_class(step, sys.argv[4], sys.argv[5])
+    args = [item for item in sys.argv[1:] if item != '--expect-refusal']
+    expect_refusal = '--expect-refusal' in sys.argv
+    step, runtime, heading = Path(args[0]), args[1], args[2]
+    if len(args) == 5:
+        au_class(step, args[3], args[4])
     created, final, requests = parent_view(step / 'parent.jsonl', runtime)
     print(f"[{runtime}] parent create result: {created}")
     final_text = final.encode().decode('unicode_escape', errors='replace') if '\\n' in final else final
@@ -184,10 +209,25 @@ def main() -> int:
     tool_fields: dict[str, set] = {}     # Runtime-written 'tools' lists/settings, by value -> files
     dsh_rows: dict[str, set] = {}        # DSH agent-preset tool rows (id -> disabled) in a launch patch
     web: dict[str, set] = {}             # Codex web_search settings
+    codex_declared: set = set()          # Codex code-mode tools declared in additional_tools
+    outcomes: list = []                  # the agents control record's execution outcome(s)
     for file, value in records(step / 'records'):
         if isinstance(value, list) and file.suffix in ('.yml', '.yaml'):
             value = {'patch': value}
+        if 'control/agents' in str(file) and isinstance(value, dict) and isinstance(value.get('executions'), list):
+            for execution in value['executions']:
+                error = execution.get('error') or {}
+                outcomes.append(f"{execution.get('outcome')}{' ' + str(error.get('code')) + ': ' + str(error.get('message')) if error else ''}")
         for node in walk(value):
+            if node.get('type') == 'additional_tools':
+                codex_declared |= set(CODEX_DECLARED.findall(json.dumps(node.get('tools')).replace('\\n', '\n')))
+            if node.get('type') == 'custom_tool_call' and node.get('name') == 'exec' and isinstance(node.get('input'), str):
+                for nested, raw in CODEX_CALL.findall(node['input']):
+                    label = f'exec->{nested}'
+                    calls[label] = calls.get(label, 0) + 1
+                    if 'tasks' in nested:
+                        tasks_calls.append(f'{label} {raw[:200]}')
+                    # (an exec script naming guide.md is counted once below, as a call of `exec`)
             tools = node.get('tools')
             if isinstance(tools, list) and tools and all(isinstance(t, (str, dict)) for t in tools):
                 names = [t if isinstance(t, str) else str(t.get('name') or t.get('type') or sorted(t)) for t in tools]
@@ -221,7 +261,8 @@ def main() -> int:
                     tasks_calls.append(f"{name} {json.dumps(arguments)[:200]}")
                 if 'guide.md' in json.dumps(arguments):
                     manual_reads.append(f"{name} {json.dumps(arguments)[:300]}")
-            if heading != '-' and node.get('type') in ('tool_result', 'function_call_output', 'toolResult') \
+            if heading != '-' and (node.get('type') in ('tool_result', 'function_call_output', 'custom_tool_call_output',
+                                                        'toolResult', 'tool/result') or node.get('role') == 'toolResult') \
                     and heading in json.dumps(node, ensure_ascii=False):
                 heading_seen.append(file.name)
     seen = set()
@@ -255,15 +296,34 @@ def main() -> int:
     print(f"[{runtime}] RECORD manual guide.md reads: {manual_reads or 'none'}")
     print(f"[{runtime}] RECORD a tool result holds the manual heading {heading!r}: "
           f"{'YES (' + ', '.join(sorted(set(heading_seen))) + ')' if heading_seen else 'NO'}")
+    # One tool list per Runtime from a record that Runtime writes (A's deny verdicts read this line).
+    if runtime == 'claude':
+        first = next((tools for _n, _m, tools, _s in inits if tools), None)
+        toolset = ('Claude init tools', first)
+    elif runtime == 'codex':
+        toolset = ('Codex rollout additional_tools, code-mode declarations', sorted(codex_declared) or None)
+    elif runtime == 'pi':
+        argv = next((argv for _n, argv in launches if '--mode' in argv), None)
+        chosen = [f'{argv[i]} {argv[i + 1]}' for i in range(len(argv) - 1)
+                  if argv[i] in ('--tools', '--exclude-tools')] if argv else None
+        toolset = ('Pi launch argv (pi-process.json); none = the host defaultTools', chosen if argv else None)
+    else:
+        toolset = ('DSH launch-patch agent-preset tool rows', sorted(dsh_rows) or None)
+    print(f"[{runtime}] RECORD TOOLSET ({toolset[0]}): "
+          f"{', '.join(toolset[1]) if toolset[1] else ('none' if toolset[1] == [] else 'NOT IN RECORDS')}")
+    outcome = outcomes[-1] if outcomes else None
+    print(f"[{runtime}] RECORD execution outcome (agents control record): {outcome or 'none'}")
+    failed = outcome is not None and not outcome.startswith('completed')
     missing = [what for what, ok in (('a created child (agent-... in the create result)',
                                       re.search(r'agent-[0-9A-Za-z]', created) is not None),
-                                     ('a child final message', bool(final_text.strip()))) if not ok]
-    print(f"CHECK 551 {runtime} child run: {'COMPLETE' if not missing else 'NOT COMPLETE (no ' + ', no '.join(missing) + ')'}")
+                                     ('a child final message', bool(final_text.strip()) and not failed)) if not ok]
+    tail = ' (expected: create refused)' if expect_refusal and missing else ''
+    print(f"CHECK 551 {runtime} child run: {'COMPLETE' if not missing else 'NOT COMPLETE (no ' + ', no '.join(missing) + ')'}{tail}")
     return 1 if missing else 0
 
 
 if __name__ == '__main__':
-    if len(sys.argv) not in (4, 6):
+    if len([a for a in sys.argv if a != '--expect-refusal']) not in (4, 6):
         print(__doc__)
         sys.exit(2)
     sys.exit(main())

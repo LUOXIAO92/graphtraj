@@ -100,24 +100,52 @@ def main() -> int:
                                                       'content': 'File is outside the allowed directories (STUB)'}]}},
         ):
             handle.write(json.dumps(value) + '\n')
-        # AU (the parent asks the user): the child's WebFetch, refused after a request (STUB551_AU_REQUEST, set by
+        # AU (the parent asks the user): the child's WebSearch, refused after a request (STUB551_AU_REQUEST, set by
         # the rehearsal wrapper while its marker exists) or run without any request (auto-mode-like).
         user_mode = 'allow or deny?' in prompt
         asked = bool(os.environ.get('STUB551_AU_REQUEST'))
         if user_mode:
             handle.write(json.dumps({'type': 'assistant', 'message': {'content': [
-                {'type': 'tool_use', 'id': 't2', 'name': 'WebFetch', 'input': {'url': 'https://example.com'}}]}}) + '\n')
+                {'type': 'tool_use', 'id': 't2', 'name': 'WebSearch', 'input': {'query': 'example.com'}}]}}) + '\n')
             handle.write(json.dumps({'type': 'user', 'message': {'content': [
                 {'type': 'tool_result', 'tool_use_id': 't2', 'is_error': asked,
                  'content': 'The parent denied this tool use (STUB)' if asked else 'Example Domain (STUB)'}]}}) + '\n')
+    # Per-Runtime record shapes A's verdicts read (FABRICATED, shaped like Main's real A records).
+    denied = (re.findall(r'"disallowed_tools": \[([^\]]*)\]', prompt) or [''])[0]
+    folder = record.parent
+    if runtime == 'codex':  # rollout: additional_tools declares code-mode tools; a tasks call through exec
+        declared = ['exec_command(args: {})', 'view_image(args: {})'] + ([] if 'web_search' in denied else ['web__run(args: {})'])
+        (folder / 'rollout-stub.jsonl').write_text(''.join(json.dumps(value) + '\n' for value in (
+            {'type': 'response_item', 'payload': {'type': 'additional_tools', 'tools': [
+                {'type': 'namespace', 'name': 'functions', 'tools': [{'name': 'exec', 'description': '\n'.join(declared)}]}]}},
+            {'type': 'response_item', 'payload': {'type': 'custom_tool_call', 'name': 'exec', 'call_id': 'x1',
+                                                  'input': 'const r = await tools.mcp__graphtraj__tasks({action:"discover"});'}})))
+    if runtime == 'pi':  # pi-process.json: the launch argv
+        (folder / 'pi-process.json').write_text(json.dumps({'argv': ['pi', '--mode', 'rpc', '--model', 'stub'] + (
+            ['--exclude-tools', 'bash'] if 'bash' in denied else [])}))
+    if runtime == 'dsh':  # the launch patch's agent-preset rows
+        (folder / 'cordis.patch.yml').write_text(
+            "- id: preset-standard\n  config:\n    plugins:\n      - {id: tool-fs, name: x}\n"
+            f"      - {{id: tool-web, name: x{', disabled: true' if 'tool-web' in denied else ''}}}\n"
+            "      - {id: tool-bash, name: x, disabled: !!js \"process.platform === 'win32'\"}\n")
+    # The agents control record: the first plain DSH child fails as in Main's A run, later ones complete.
+    flag = Path.cwd() / '.graphtraj/stub-dsh-plain-failed'
+    failed = runtime == 'dsh' and not denied and not flag.exists()
+    if failed:
+        flag.write_text('1')
+    control = Path.cwd() / '.graphtraj/swarm/control/agents' / f'{agent}.json'
+    control.parent.mkdir(parents=True, exist_ok=True)
+    control.write_text(json.dumps({'agent': agent, 'executions': [
+        {'outcome': 'failed', 'error': {'code': 'RUNTIME_CONNECTION_CLOSED', 'message': 'DSH Session connection failed. (STUB)'}}
+        if failed else {'outcome': 'completed'}]}, indent=1))
     final = ('TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\nMCP-551: graphtraj: agents\n'
              'TASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent')
     lines = [{'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
               'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()}]
     steps = [('c1', 'create', {}, {'agent': agent, 'state': 'running'})]
     if user_mode and asked:
-        steps += [('c3', 'requests', {'agent': agent}, {'requests': [{'request_token': 'r1', 'tool': 'WebFetch',
-                                                                      'text': 'can_use_tool WebFetch (STUB)'}]}),
+        steps += [('c3', 'requests', {'agent': agent}, {'requests': [{'request_token': 'r1', 'tool': 'WebSearch',
+                                                                      'text': 'can_use_tool WebSearch (STUB)'}]}),
                   ('c4', 'reply', {'agent': agent, 'request_token': 'r1', 'response': {'decision': 'deny'}},
                    {'reply_status': 'submitted'})]
     steps += [('c2', 'wait', {}, {'agent': agent, 'state': 'ended', 'last_message': final})]

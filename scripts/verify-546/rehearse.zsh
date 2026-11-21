@@ -34,6 +34,15 @@ print -r -- "
 touch $R/base/before/project/.stub-trusted $R/base/after/project/.stub-trusted
 run P
 run B
+print -r -- "
+=============== rehearsal: INVALID path: before project's roles.yml reset to 'roles: {}' (as after graphtraj setup) ==============="
+print -r -- 'roles: {}' > $R/base/before/project/.graphtraj/roles.yml
+run P
+run B
+print -r -- "
+=============== rehearsal: 00 again rewrites the role (idempotent build), then B and A ==============="
+run 00
+run B
 run A
 run C
 print -r -- "

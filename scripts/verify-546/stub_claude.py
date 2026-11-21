@@ -5,7 +5,9 @@ plugin_warnings. Untrusted cwd (no file .stub-trusted, which the rehearsal's sim
 plugins and the 'project-scope-suppressed-untrusted' warning, and an agents call returns authority-denied, as Main
 saw on 00 at 22:02. Trusted: plugin graphtraj-claude-host, no warning, the agents call succeeds.
 READY prompt -> 'READY-546-CLAUDE'. Gate prompt -> 'READY-546-GATE'. PROBE-546 -> one invented agents status call.
-Any other prompt (B/A's Main) -> no agents call, so B/A print NOT-HIT.
+Any other prompt (B/A's Main): reads the cwd project's .graphtraj/roles.yml; no role -> create returns the product's
+real invalid-config error JSON (INVALID path); a role -> invented create success, one send (submitted), wait (valid
+path; no agent record exists, so the verdict is NOT-HIT).
 """
 import json
 import os
@@ -50,4 +52,30 @@ elif 'READY-546-CLAUDE' in prompt:
 elif 'READY-546-GATE' in prompt:
     emit({'type': 'result', 'result': 'READY-546-GATE'})
 else:
-    emit({'type': 'result', 'result': 'stub: no agents call'})
+    # B/A's Main. Without a role in .graphtraj/roles.yml: create fails with the product's real error JSON (as Main saw
+    # at 22:12) and the Main stops. With one: an invented create success, then one invented send (submitted).
+    import yaml
+    roles = (yaml.safe_load(open('.graphtraj/roles.yml')) or {}).get('roles') or {}
+
+    def tool(n, args, result, error=False):
+        emit({'type': 'assistant', 'message': {'content': [
+            {'type': 'tool_use', 'id': f'stub-{n}', 'name': 'mcp__graphtraj__agents',
+             'input': {'action': 'execute', **args}}]}})
+        emit({'type': 'user', 'message': {'content': [
+            {'type': 'tool_result', 'tool_use_id': f'stub-{n}', 'is_error': error,
+             'content': [{'type': 'text', 'text': json.dumps(result)}]}]}})
+
+    create = {'feature': 'create', 'arguments': {'runtime': 'claude', 'name': 'probe546',
+                                                 'instruction': 'Reply with exactly the word: first'}}
+    if not roles:
+        tool(1, create, {'error': {'code': 'invalid-config', 'message': "Configure one role named 'claude' or "
+                                   "exactly one role using it; found none."}}, error=True)
+        emit({'type': 'result', 'result': 'SEND: none (create failed)'})
+    else:
+        tool(1, create, {'action': 'create', 'result': {'agent': 'agent-stub546', 'execution': 'exec-stub-1',
+                                                        'state': 'active'}})
+        tool(2, {'feature': 'send', 'arguments': {'agent': 'agent-stub546', 'message': 'Reply with exactly the word: second'}},
+             {'action': 'send', 'result': {'execution': 'exec-stub-1', 'delivery': {'delivery': 'submitted'}}})
+        tool(3, {'feature': 'wait', 'arguments': {'agent': 'agent-stub546', 'timeout_seconds': 120}},
+             {'action': 'wait', 'result': {'state': 'standby', 'timed_out': False}})
+        emit({'type': 'result', 'result': 'SEND 1: submitted'})

@@ -9,7 +9,9 @@ Codex 0.171.0 calls MCP tools in code mode: response_item custom_tool_call 'exec
 tools.mcp__graphtraj__agents(...), event_msg item_completed item.type McpToolCall (the full CallToolResult), then
 response_item custom_tool_call_output (what the model got from the script). Direct function_call(_output) is also read.
 Per agents create/send/resume McpToolCall:
-  CHECK content lacks the message body (instruction/message argument) and its last line is `→ <child> [agent-…]`;
+  (only action 'execute' calls: describe/discover of create are ignored)
+  CHECK content lacks the message body (instruction/message argument);
+  CHECK content is exactly one text block of one line `→ <child> [agent-…]` (no reply, no '← replied');
   CHECK structuredContent is present and complete (a dict with 'agent' and 'result').
   SIZE (bytes, UTF-8, compact JSON as JSON.stringify writes it): (a) the actual CallToolResult; (b) the same object
   with content text = yaml.safe_dump(structuredContent, sort_keys=False, allow_unicode=True), i.e. what the baseline
@@ -148,8 +150,8 @@ def main(sessions: Path, project: Path, child: str, since: float) -> int:
               f"line {entry['exec'].get('line')}, calls mcp__graphtraj__agents: {'mcp__graphtraj__agents' in entry['exec'].get('input', '')})")
         text = _text(result)
         print('  content: ' + json.dumps(text[:400], ensure_ascii=False))
-        if feature not in SENDS:
-            continue
+        if given.get('action') != 'execute' or feature not in SENDS:
+            continue  # discover/describe (e.g. describe create) and other features are not sends
         sends += 1
         inner = given.get('arguments') if isinstance(given.get('arguments'), dict) else {}
         body = str(inner.get('instruction', inner.get('message')) or '')
@@ -157,7 +159,8 @@ def main(sessions: Path, project: Path, child: str, since: float) -> int:
         checks = [
             ('content lacks the message body', bool(body.strip()) and body.strip() not in text
              and not any(line.strip() in text for line in lines)),
-            (f'content last line is "→ {child} [agent-…]"', bool(recipient.fullmatch(text.split('\n')[-1]))),
+            (f'content is exactly one line "→ {child} [agent-…]"', bool(recipient.fullmatch(text))
+             and len(result.get('content') or []) == 1),
             ('structuredContent present and complete (agent, result)', isinstance(result.get('structuredContent'), dict)
              and {'agent', 'result'} <= set(result['structuredContent'])),
         ]

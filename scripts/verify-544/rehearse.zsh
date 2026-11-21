@@ -88,7 +88,7 @@ grep -E 'CHECK 535|isolation|child name' $F/V.out
 CHILD=$(cat $F/w/child-name); MAIN=01a1f989-main-0000-0000-000000000544
 mkdir -p $F/vproject/.graphtraj/runner/main-sessions
 print -r -- "{\"at\": $(( $(cat $F/w/V.start) + 1 )), \"entry\": \"codex:SessionStart:startup\", \"runtime\": \"codex\", \"session\": \"$MAIN\"}" > $F/vproject/.graphtraj/runner/main-sessions/continuity.jsonl
-vrollout() {  # $1 file, $2 = card|body|hook
+vrollout() {  # $1 file, $2 = card|body|reply|hook  (every rollout also holds a describe-create call first: ignored)
   (cd $F && $F/base/active/venv/bin/python -I -c 'import json, sys
 from contextlib import nullcontext
 from types import SimpleNamespace
@@ -104,12 +104,19 @@ arguments = {"action": "execute", "feature": "create", "arguments": given}
 result = mcp._tool_call_response(1, {"name": "agents", "arguments": arguments, "_meta": {"threadId": main}})["result"]
 if mode == "body":
     result["content"][0]["text"] = body + "\n" + result["content"][0]["text"]
+elif mode == "reply":
+    result["content"][0]["text"] = "## Earlier reply\n← " + child + " replied\n" + result["content"][0]["text"]
 elif mode == "hook":
     result["content"][0]["text"] = yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
 script = "const r = await tools.mcp__graphtraj__agents(" + json.dumps(arguments) + ");\ntext(JSON.stringify(r));\n"
 out = [{"type": "input_text", "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"},
        {"type": "input_text", "text": json.dumps(result, ensure_ascii=False, separators=(",", ":"))}]
+described = {"content": [{"type": "text", "text": "feature: create\ninput_schema: {}\n"}], "structuredContent": {"feature": "create", "input_schema": {}}, "isError": False}
+describe = {"action": "describe", "feature": "create"}
 rows = [{"type": "session_meta", "payload": {"id": main, "cwd": cwd}},
+        {"type": "response_item", "payload": {"type": "custom_tool_call", "status": "completed", "call_id": "c0", "name": "exec", "input": "text(JSON.stringify(await tools.mcp__graphtraj__agents(" + json.dumps(describe) + ")));"}},
+        {"type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "McpToolCall", "id": "exec-0", "server": "graphtraj", "tool": "agents", "arguments": describe, "status": "completed", "result": described}}},
+        {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "c0", "output": [{"type": "input_text", "text": json.dumps(described)}]}},
         {"type": "response_item", "payload": {"type": "custom_tool_call", "status": "completed", "call_id": "c1", "name": "exec", "input": script}},
         {"type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "McpToolCall", "id": "exec-1", "server": "graphtraj", "tool": "agents", "arguments": arguments, "status": "completed", "result": result}}},
         {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "c1", "output": out}}]
@@ -118,13 +125,15 @@ if mode == "hook":
 open(path, "w").write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))' $CHILD $1 $2 $MAIN $F/vproject)
 }
 vrollout $R/rollout-main-card.jsonl card
-S Vr > $F/Vr-card.out 2>&1; check "Vr (code mode): the candidate's real Codex card -> PASS (no body, recipient last, structuredContent complete, no hook copy, sizes a/b/c printed)" sh -c "grep -q 'CHECK 544 rollout: PASS' $F/Vr-card.out && grep -q 'DERIVED, not observed' $F/Vr-card.out && grep -q 'calls mcp__graphtraj__agents: True' $F/Vr-card.out"
+S Vr > $F/Vr-card.out 2>&1; check "Vr (code mode): describe-create ignored + the candidate's real create card -> PASS (exactly the recipient line, structuredContent complete, no hook copy, sizes a/b/c printed)" sh -c "grep -q 'CHECK 544 rollout: PASS' $F/Vr-card.out && grep -q 'calls found: 1: PASS' $F/Vr-card.out && grep -q 'graphtraj.agents describe create' $F/Vr-card.out && grep -q 'DERIVED, not observed' $F/Vr-card.out && grep -q 'calls mcp__graphtraj__agents: True' $F/Vr-card.out"
 sed -n '/^Main session/,$p' $F/Vr-card.out
 vrollout $R/rollout-main-card.jsonl body
 S Vr > $F/Vr-body.out 2>&1; check "Vr (code mode): content holding the message body -> FAIL" sh -c "grep -q 'CHECK content lacks the message body: FAIL' $F/Vr-body.out && grep -q 'CHECK 544 rollout: FAIL' $F/Vr-body.out"
+vrollout $R/rollout-main-card.jsonl reply
+S Vr > $F/Vr-reply.out 2>&1; check "Vr (code mode): an earlier reply + '← replied' above the recipient -> FAIL" sh -c "grep -q 'CHECK content is exactly one line .*: FAIL' $F/Vr-reply.out && grep -q 'CHECK 544 rollout: FAIL' $F/Vr-reply.out"
 vrollout $R/rollout-main-card.jsonl hook
 S Vr > $F/Vr-hook.out 2>&1; check "Vr (code mode): YAML content + 535 hook copy -> FAIL" sh -c "grep -q 'no 535 hook copy.*FAIL' $F/Vr-hook.out && grep -q 'CHECK 544 rollout: FAIL' $F/Vr-hook.out"
-grep CHECK $F/Vr-body.out $F/Vr-hook.out
+grep CHECK $F/Vr-body.out $F/Vr-reply.out $F/Vr-hook.out
 # Parser self-test on the REAL probe rollout (read only; sizes only, no verdict).
 PROBE=$REALH/.graphtraj/core/state/tasks/544-codex-sent-message-collapsible-card/realhost/main-raw/probe-rollout.jsonl
 /Users/luoxiao/miniconda3/bin/python3.13 -I $F/wt/scripts/verify-544/vr544.py --selftest $PROBE > $F/Vs.out 2>&1

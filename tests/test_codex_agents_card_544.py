@@ -34,11 +34,10 @@ def same_document(result: dict, document: dict) -> bool:
     return json.dumps(result['structuredContent'], sort_keys=False) == json.dumps(document, sort_keys=False)
 
 
-def test_codex_send_card_holds_the_reply_and_ends_with_the_recipient(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_codex_send_card_is_only_the_recipient_even_with_an_earlier_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    """last_result is the reply to an earlier message; under this send it would read as a reply to it."""
     result = call(monkeypatch, DOCUMENT, {'threadId': 'codex-main'})
-    text = result['content'][0]['text']
-    assert text == '## Reply\n\n- one\n- two\n← reader replied\n→ reader [agent-7f3a]'
-    assert 'Second message' not in text and 'Markdown' not in text
+    assert result['content'] == [{'type': 'text', 'text': '→ reader [agent-7f3a]'}]
     assert same_document(result, DOCUMENT) and result['isError'] is False
 
 

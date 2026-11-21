@@ -63,6 +63,18 @@ It ran from an empty directory under `$TMPDIR`. Harness `tmp/552/` is not writab
 - **Probes.** Canaries are added in BASE/logs and BASE/u/research. Codex gets every attempt as its own mandatory shell command.
 - **Rehearsal stubs now model the rules instead of always refusing.** The `codex sandbox` stub applies the scratch roots minus `deny` entries. With the old profile it reads the canary (negative control, rc=0); with the new one it refuses. The `sandbox-exec` stub evaluates the profile's rules for cat/ls, last match deciding. Real Seatbelt is still proved only by Main.
 
+## Correction 2 (DSH only, after Main's `P dsh` on 3356b581)
+
+- **What Main's run showed:** every deny held, and every re-allow was ignored. The re-allows were `(allow file-read* …)` after `(deny file-read-data file-read-xattr …)`.
+- **Inferred from that run, not from Apple documentation:** a rule naming the specific operation is not overridden by a later rule using the `file-read*` wildcard.
+- **Fix:** each re-allow now names exactly the deny's operations (`file-read-data file-read-xattr`), in the same layer order.
+- **New gate line:** the real `dsh --version` must succeed under the new profile, with the run's exact environment (DSH_HOME, DSH_AGENTS_HOME).
+- **Diagnosis lines (not a gate)**, printing rc, signal and the stderr tail:
+  - `dsh --version` and `dsh --profile headless --patch <run patch> --dump-config`, under the new profile and under the exact 0c054918 profile;
+  - if the 0c054918 profile fails, a bisection that drops one of its deny subpaths at a time and reports the first whose removal lets dsh start, as an INFERRED cause.
+- **Stub changes:** the stub `sandbox-exec` now applies this precedence. Applied to Main's real 3356b581 profile, it reproduces the refusal of the own ws (`rehearsal/negative-control-3356b581-profile.txt`).
+- **Bisection self-test:** a stub dsh that aborts when `project/runs` is denied by `file-read*` (`rehearsal/bisection-selftest.txt`).
+
 ## Seatbelt
 
 `sandbox-exec: sandbox_apply: Operation not permitted` is printed by macOS `/usr/bin/sandbox-exec` (its own `sandbox-exec:` prefix) when it runs inside another Seatbelt sandbox, as in the Engineer's Claude Code Bash. Main's 00 is the proof that Codex's shell Seatbelt and dsh's outer profile work on Main's host. If either is refused there too, the probes FAIL and that agent is blocked (STOP to the Leader). The isolation is never weakened.

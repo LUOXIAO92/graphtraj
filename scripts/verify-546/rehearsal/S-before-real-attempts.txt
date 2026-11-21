@@ -1,0 +1,28 @@
+# Step S on a scratch copy of Main's real attempts (cp -Rp /private/tmp/send-546/before/attempts -> /tmp/claude-501/t546/scopy/before/attempts; no stub; the copied agent-record.json files are read)
+$ VERIFY546_BASE=/tmp/claude-501/t546/scopy VERIFY546_T=/tmp/claude-501/t546/scopy/t zsh scripts/verify-546/steps.zsh S before
+
+### S before: re-summarize /tmp/claude-501/t546/scopy/before/attempts/run-* from main.jsonl + agent-record.json (copied, else live) (dialog: none)
+  run-1: VERDICT 546: NOT-HIT (send after the end: it started a new send execution)
+  run-2: VERDICT 546: REPRODUCED: send refused with runtime-input-closed while the execution was finishing
+      input 2026-11-21T22:17:36.896+09:00 delivery=rejected error=runtime-input-closed next=- | 0.290s before this execution's recorded end
+  run-3: VERDICT 546: REPRODUCED: send refused with runtime-input-closed while the execution was finishing
+      input 2026-11-21T22:17:51.789+09:00 delivery=rejected error=runtime-input-closed next=- | 0.337s before this execution's recorded end
+  run-4: VERDICT 546: REPRODUCED: send refused with runtime-input-closed while the execution was finishing
+      input 2026-11-21T22:18:06.557+09:00 delivery=rejected error=runtime-input-closed next=- | 0.358s before this execution's recorded end
+  run-5: VERDICT 546: NOT-HIT (send after the end: it started a new send execution)
+B summary: valid 5, REPRODUCED 3 (run-2, run-3, run-4), NOT-HIT 2, other 0, summary failures 0
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/scripts/verify-546/steps.zsh A
+(exit 0)
+
+# full summary of run-2 (scratch copy)
+Main init model: claude-sonnet-5-5 | auth source: none | agents tool in init tools: True
+child agent: agent-5d08a9fd41394d3e917373e677337f6a
+  create called 2026-11-21T22:17:34.376+09:00 returned 2026-11-21T22:17:35.288+09:00 | error code: - | delivery: - | execution: 0b9a9a57efbc492eaa57c11b90f6653a
+  send   called 2026-11-21T22:17:36.759+09:00 returned 2026-11-21T22:17:37.042+09:00 | error code: runtime-input-closed | delivery: - | execution: -
+    result text: {"action": "send", "error": {"code": "runtime-input-closed", "message": "Claude finished accepting input for this execution."}}
+  wait   called 2026-11-21T22:17:38.691+09:00 returned 2026-11-21T22:17:38.971+09:00 | error code: - | delivery: - | execution: 0b9a9a57efbc492eaa57c11b90f6653a
+agent record: /tmp/claude-501/t546/scopy/before/attempts/run-2/agent-record.json
+  execution 0b9a9a57efbc492eaa57c11b90f6653a op=create started 2026-11-21T22:17:34.575+09:00 ended 2026-11-21T22:17:37.186+09:00 outcome=completed last_message='first'
+    input 2026-11-21T22:17:36.896+09:00 delivery=rejected error=runtime-input-closed next=- | 0.290s before this execution's recorded end
+VERDICT 546: REPRODUCED: send refused with runtime-input-closed while the execution was finishing

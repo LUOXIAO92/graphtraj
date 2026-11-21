@@ -1,0 +1,11 @@
+shard-0.log: errors=0 | 2 passed, 629 deselected in 10.89s
+shard-1.log: errors=0 | 4 passed, 635 deselected in 10.58s
+shard-2.log: errors=0 | 2 passed, 558 deselected in 1.47s
+shard-3.log: errors=0 | 2 passed, 726 deselected in 13.50s
+shard-4.log: errors=0 | 1 passed, 533 deselected in 6.58s
+shard-5.log: errors=0 | 1 passed, 600 deselected in 16.02s
+
+earlier attempt (same -k with only the migration file): shards 0,2-5 exit 5 = nothing selected (no collection error) -> exit=1; first attempt with nohup: 'nohup: can't detach from console: Inappropriate ioctl for device', exit=127
+
+notice_text, graftling 1aa6f007 venv: importable
+notice_text, graftling 4a002129 (v0.6.2) venv: ImportError: cannot import name 'notice_text' from 'graftling' (/tmp/claude-501/v563/venv-g-gl-4a002129/lib/python3.13/site-packages/graftling/__init__.py)

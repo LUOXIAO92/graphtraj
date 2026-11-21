@@ -185,7 +185,11 @@ def main() -> int:
     print(f"[{runtime}] RECORD manual guide.md reads: {manual_reads or 'none'}")
     print(f"[{runtime}] RECORD a tool result holds the manual heading {heading!r}: "
           f"{'YES (' + ', '.join(sorted(set(heading_seen))) + ')' if heading_seen else 'NO'}")
-    return 0
+    missing = [what for what, ok in (('a created child (agent-... in the create result)',
+                                      re.search(r'agent-[0-9A-Za-z]', created) is not None),
+                                     ('a child final message', bool(final_text.strip()))) if not ok]
+    print(f"CHECK 551 {runtime} child run: {'COMPLETE' if not missing else 'NOT COMPLETE (no ' + ', no '.join(missing) + ')'}")
+    return 1 if missing else 0
 
 
 if __name__ == '__main__':

@@ -76,10 +76,13 @@ build_project() {  # $1 label: isolated project with the installation of that la
     || { print "STOP: claude host configuration failed"; return 1; }
   clean $b/python -I $SD/../verify-common/claude_isolation.py settings $H $p >/dev/null 2>&1 \
     && print "Claude isolation settings: written" || print "Claude isolation settings: not written (project is outside the Harness; harmless)"
-  say "child roles (inline, no connection catalog), resolved by the Task-free driver without a model"
-  (cd $p && clean $b/python -I $SD/prep551.py roles $p) | redact || print "NOTE: a role did not resolve (above); B for that Runtime will show the same refusal"
+  mkdir -p $p/ws-551
+  say "child roles (inline, no connection catalog), resolved by the Task-free driver without a model, each with
+workspace $p/ws-551 (every child, all four Runtimes alike: the Pi driver refuses a Worktree containing the
+project's .graphtraj/state, an existing isolation guard)"
+  (cd $p && clean $b/python -I $SD/prep551.py roles $p $p/ws-551) | redact || FAILS+=(roles)
   say "probe Tasks: tasks discover + describe concept-clarification through $b/graphtraj-mcp (no host, no model)"
-  (cd $p && clean $b/python -I $SD/prep551.py tasks $p $b/graphtraj-mcp $BASE/heading-$1.txt) || { print "STOP: probe Tasks not ready"; return 1; }
+  (cd $p && clean $b/python -I $SD/prep551.py tasks $p $b/graphtraj-mcp $BASE/heading-$1.txt) || { FAILS+=(tasks-probe); return 1; }
 }
 gate() {  # $1 label: one one-line claude -p Main with the project's .mcp.json; its init must list graphtraj + agents
   local p=$(project $1) G=$OUT/gate-$1; mkdir -p $G
@@ -94,7 +97,9 @@ for l in open(sys.argv[1], errors="replace"):
 init = next((l for l in lines if l.get("subtype") == "init"), {}); res = next((l for l in lines if l.get("type") == "result"), {})
 servers = [(s.get("name"), s.get("status")) for s in init.get("mcp_servers", [])]
 tools = [t for t in init.get("tools", []) if t.startswith("mcp__")]
-print("parent model:", init.get("model"), "| login source (init apiKeySource):", init.get("apiKeySource"), "| answer:", str(res.get("result", ""))[:100].replace("\n", " "))
+source = str(init.get("apiKeySource"))
+login = "none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login" if source == "none" else source + " = API key source"
+print("parent model (init):", init.get("model"), "| login source (init apiKeySource):", login, "| answer (self-report):", str(res.get("result", ""))[:100].replace("\n", " "))
 print("parent init mcp_servers:", servers, "| mcp tools:", tools)
 ok = ("graphtraj", "connected") in servers and "mcp__graphtraj__agents" in tools
 print("CHECK 551 Claude parent gate:", "PASS" if ok else "NOT PASSED")
@@ -135,9 +140,11 @@ collect() {  # $1 project: project records changed since the marker, then the Co
 probe() {  # $1 label, $2 runtime, $3 tag, $4 extra create arguments ("" for none)
   local p=$(project $1) rt=$2
   D=$OUT/$3-$rt-$(date +%Y%m%dT%H%M%S)-$$; mkdir -p $D; touch $D/marker
-  print -r -- "label $1 | installation $(inst $1) | runtime $rt | extra create arguments: ${4:-none}" > $D/run.txt
-  say "[$3 $rt] Claude Main ($PARENT_MODEL, claude -p in $p) creates one Task-free $rt child and waits (dialog: none). At most 25 min."
-  parent_prompt $rt "$4" > $D/parent-prompt.txt
+  local args="\"workspace\": \"$p/ws-551\"${4:+, $4}"
+  print -r -- "label $1 | installation $(inst $1) | runtime $rt | create arguments besides runtime/name/instruction: $args" > $D/run.txt
+  say "[$3 $rt] Claude Main ($PARENT_MODEL, claude -p in $p) creates one Task-free $rt child and waits (dialog: none). At most 25 min.
+create arguments besides runtime/name/instruction: {$args} (workspace ws-551 for every child, all Runtimes alike)"
+  parent_prompt $rt "$args" > $D/parent-prompt.txt
   local S=$(uuidgen | tr A-Z a-z); print -r -- $S > $D/parent-session.txt
   (cd $p && clean $BOUND 1500 claude -p --model $PARENT_MODEL --output-format stream-json --verbose \
      --mcp-config $p/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__agents --session-id $S \
@@ -145,7 +152,9 @@ probe() {  # $1 label, $2 runtime, $3 tag, $4 extra create arguments ("" for non
   cp $p/.graphtraj/claude-host/host.log $D/host.log 2>/dev/null || true
   collect $p $rt
   clean $(inst $1)/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-$1.txt 2>/dev/null || print -- -)" | redact | tee $D/summary.txt
+  local rc=$?
   print -r -- "evidence: $D (parent.jsonl, parent.err, records/, summary.txt)"
+  return $rc
 }
 rt_list() { if [[ $1 == all ]]; then print claude codex pi dsh; elif [[ $1 == (claude|codex|pi|dsh) ]]; then print $1; else return 1; fi; }
 
@@ -159,21 +168,29 @@ step_00() {
   print -r -- "claude $(claude --version 2>&1 | head -1) | codex $(codex --version 2>&1 | tail -1) | pi $(pi --version 2>&1 | tail -1) | dsh $(dsh --version 2>&1 | tail -1)"
   print -r -- "in-use installation (BEFORE): $(cd $BASE && $RT/bin/python -I -c 'import importlib.metadata as m; print("graphtraj", m.version("graphtraj"), "| graftling", m.version("graftling"))') at $RT"
   print -r -- "Worktree $WT at $(git -C $WT rev-parse --short HEAD) | BASE $BASE"
-  load_key || print "NOTE: DEEPSEEK_API_KEY unset; pi and dsh cannot answer"
+  local FAILS=()
+  load_key || { print "NOTE: DEEPSEEK_API_KEY unset; pi and dsh cannot answer"; FAILS+=(DEEPSEEK_API_KEY); }
   pi_sandbox
-  say "one-line prompts (model and login)"
-  local ASK='Reply with one line: READY-551 and your exact model name. Use no tool.'
-  (cd $BASE && clean $BOUND 120 claude -p --model $PARENT_MODEL --strict-mcp-config --mcp-config '{"mcpServers":{}}' $ASK < /dev/null 2>&1 | tail -1) || print "claude rc=$?"
-  (cd $BASE && clean $BOUND 120 codex exec --skip-git-repo-check -m $CODEX_MODEL $ASK < /dev/null 2>&1 | tail -2) || print "codex rc=$?"
-  (cd $BASE && clean $BOUND 120 pi --print --no-tools --no-session --provider $PI_PROVIDER --model $PI_MODEL $ASK < /dev/null 2>&1 | redact | tail -2) || print "pi rc=$?"
-  (cd $BASE && clean $BOUND 120 dsh --profile headless --permission-mode read-only $ASK < /dev/null 2>&1 | redact | tail -2) || print "dsh rc=$?"
-  build_project before || return 1
+  say "one-line prompts; each host's model is judged from its OWN record (the reply is only a self-report)"
+  local ASK='Reply with one line: READY-551 and your exact model name. Use no tool.' R=$OUT/ready; mkdir -p $R
+  # Claude: prompt on stdin (--mcp-config is variadic and would swallow a positional prompt).
+  (cd $BASE && clean $BOUND 120 claude -p --model $PARENT_MODEL --output-format stream-json --verbose --strict-mcp-config \
+     --mcp-config '{"mcpServers":{}}' <<< $ASK > $R/claude.jsonl 2> $R/claude.err) || print "claude rc=$?"
+  clean $CONDA -I $SD/ready551.py claude $R/claude.jsonl $PARENT_MODEL || FAILS+=(READY-claude)
+  (cd $BASE && clean $BOUND 120 codex exec --skip-git-repo-check -m $CODEX_MODEL $ASK < /dev/null > $R/codex.txt 2>&1) || print "codex rc=$?"
+  clean $CONDA -I $SD/ready551.py codex $R/codex.txt $CODEX_MODEL || FAILS+=(READY-codex)
+  (cd $BASE && clean $BOUND 120 pi --mode json --no-tools --no-session --provider $PI_PROVIDER --model $PI_MODEL $ASK < /dev/null 2>&1 | redact > $R/pi.jsonl) || print "pi rc=$?"
+  clean $CONDA -I $SD/ready551.py pi $R/pi.jsonl $PI_MODEL $PI_PROVIDER || FAILS+=(READY-pi)
+  (cd $BASE && clean $BOUND 120 dsh --profile headless --permission-mode read-only --json $ASK < /dev/null 2>&1 | redact > $R/dsh.jsonl) || print "dsh rc=$?"
+  clean $CONDA -I $SD/ready551.py dsh $R/dsh.jsonl $PI_MODEL || FAILS+=(READY-dsh)
+  print -r -- "raw host outputs: $R/{claude.jsonl,codex.txt,pi.jsonl,dsh.jsonl}"
+  build_project before || FAILS+=(build)
   say "Claude parent gate in $(project before)"
-  if ! gate before; then
-    print "STOP: the Claude parent does not see the graphtraj server with agents. If gate stderr or the answer names folder trust or login: zsh $THIS U"
-    return 1
-  fi
-  print "READY when: four READY-551 lines (claude $PARENT_MODEL, codex $CODEX_MODEL, pi and dsh $PI_MODEL), 'CHECK 551 role <rt>: PASS' x4, 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'."
+  gate before || { FAILS+=(gate); print "If gate stderr or the answer names folder trust or login: zsh $THIS U"; }
+  print "READY when: 'READY-551 <host>: PASS' x4 (actual model from each host's record: claude $PARENT_MODEL, codex $CODEX_MODEL, pi $PI_PROVIDER/$PI_MODEL, dsh $PI_MODEL), 'CHECK 551 role <rt>: PASS' x4, 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'."
+  if (( $#FAILS )); then print -r -- "
+NOT READY: ${FAILS[*]}"; return 1; fi
+  print "READY: all checks passed"
   next "zsh $THIS B all"
 }
 
@@ -189,11 +206,14 @@ step_B() {
   [[ -f $BASE/heading-before.txt ]] || { print "STOP: run 00 first"; return 1; }
   load_key || print "NOTE: DEEPSEEK_API_KEY unset; the pi and dsh children cannot reach their model"
   pi_sandbox
-  local rt
-  for rt in $list; do probe before $rt B ""; done
+  local rt FAILS=()
+  for rt in $list; do probe before $rt B "" || FAILS+=(B-$rt); done
   print "Read per Runtime: 'RECORD init' / 'RECORD launch flags' (what the child really got, from its own records),
 'self-report TOOLS-551/MCP-551' (the model's own list), 'RECORD tasks calls' and 'RECORD manual guide.md reads',
 'a tool result holds the manual heading: YES/NO'. A missing tasks tool shows TASKS-551: absent and no tasks call."
+  if (( $#FAILS )); then print -r -- "
+NOT COMPLETE: ${FAILS[*]} (no created child or no child final message; see that Runtime's summary above)"; return 1; fi
+  print "COMPLETE: every child was created and ended with a final message"
   next "Leader: read $OUT/B-*/summary.txt"
 }
 

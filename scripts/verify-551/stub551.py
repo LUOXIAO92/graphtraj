@@ -21,8 +21,17 @@ def main() -> int:
     if '--version' in argv:
         print(f'{host} STUB-551')
         return 0
-    if host != 'claude':
-        print(f'READY-551 stub-{host} (REHEARSAL STUB, no model)')
+    if host == 'codex':  # the human header codex exec prints, then the reply
+        print('--------\nworkdir: /stub\nmodel: ' + argv[argv.index('-m') + 1] + '\nprovider: openai\n--------')
+        print('READY-551 stub-codex (REHEARSAL STUB, no model)')
+        return 0
+    if host == 'pi':  # one --mode json assistant message with Pi's provider/model fields
+        model = argv[argv.index('--model') + 1]
+        emit({'type': 'message_end', 'message': {'role': 'assistant', 'provider': argv[argv.index('--provider') + 1],
+                                                 'model': model, 'content': [{'type': 'text', 'text': 'READY-551 stub-pi'}]}})
+        return 0
+    if host == 'dsh':
+        emit({'type': 'turn', 'model': 'deepseek-flash', 'text': 'READY-551 stub-dsh (REHEARSAL STUB)'})
         return 0
     text = sys.stdin.read() if not sys.stdin.isatty() else ''
     prompt = text or ' '.join(argv)
@@ -31,7 +40,7 @@ def main() -> int:
         if '--output-format' not in argv:
             print(f'READY-551 {model} (REHEARSAL STUB)')
             return 0
-        emit({'type': 'system', 'subtype': 'init', 'model': model, 'apiKeySource': 'none (stub)',
+        emit({'type': 'system', 'subtype': 'init', 'model': model, 'apiKeySource': 'none',
               'tools': ['Read', 'mcp__graphtraj__agents', 'mcp__graphtraj__tasks'],
               'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}]})
         emit({'type': 'result', 'result': f'READY-551 {model} (REHEARSAL STUB)'})

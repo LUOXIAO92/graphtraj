@@ -1,7 +1,8 @@
 """Task 551 preparation, run by the installation under test's python (no model is launched).
 
-  python -I prep551.py roles <project>              write the four child roles, resolve each through the Task-free
-                                                    driver's own prepare (AdapterDriver.prepare), print what launches
+  python -I prep551.py roles <project> <workspace>  write the four child roles, resolve each through the Task-free
+                                                    driver's own prepare (AdapterDriver.prepare) with the child
+                                                    workspace B passes in create, print what launches
   python -I prep551.py tasks <project> <mcp> <out>  tasks discover + describe concept-clarification through the
                                                     installation's stdio graphtraj-mcp (no host, no model); writes the
                                                     manual's first heading line to <out>
@@ -30,7 +31,7 @@ if os.environ.get('V551_PI_PATH'):
 METHOD = 'concept-clarification'
 
 
-def roles(project: Path) -> int:
+def roles(project: Path, workspace: Path) -> int:
     import yaml
     from graftling import Caller
 
@@ -44,7 +45,9 @@ def roles(project: Path) -> int:
     failed = 0
     for runtime in ROLES:
         try:
-            prepared = AdapterDriver(project, project).prepare(runtime, Caller('verify-551', None, 'probe-551', 'claude'))
+            # The same workspace B gives every child in its create arguments.
+            prepared = AdapterDriver(project, project).prepare(runtime, Caller('verify-551', None, 'probe-551', 'claude'),
+                                                               workspace=workspace)
         except Exception as error:  # noqa: BLE001 - printed, the step decides
             print(f'CHECK 551 role {runtime}: FAIL ({type(error).__name__}: {error})')
             failed += 1
@@ -52,7 +55,7 @@ def roles(project: Path) -> int:
         request = prepared['adapter_request']
         shown = {key: request[key] for key in sorted(request)
                  if any(word in key for word in ('tool', 'mcp', 'sandbox', 'permission', 'approval', 'network'))}
-        print(f'CHECK 551 role {runtime}: PASS {prepared["applied"]} | tool/MCP/permission request fields: '
+        print(f'CHECK 551 role {runtime}: PASS {prepared["applied"]} cwd {prepared["cwd"]} | tool/MCP/permission request fields: '
               f'{json.dumps(shown, default=str)[:900]}')
     return 1 if failed else 0
 
@@ -90,8 +93,8 @@ def tasks(project: Path, server: str, out: Path) -> int:
 
 
 if __name__ == '__main__':
-    if len(sys.argv) >= 3 and sys.argv[1] == 'roles':
-        sys.exit(roles(Path(sys.argv[2]).resolve()))
+    if len(sys.argv) == 4 and sys.argv[1] == 'roles':
+        sys.exit(roles(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve()))
     if len(sys.argv) == 5 and sys.argv[1] == 'tasks':
         sys.exit(tasks(Path(sys.argv[2]).resolve(), sys.argv[3], Path(sys.argv[4])))
     print(__doc__)

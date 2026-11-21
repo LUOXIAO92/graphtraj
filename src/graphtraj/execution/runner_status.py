@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterator, Mapping, Sequence, Tuple
 import yaml
 
 from graphtraj.workspace.git_repository import GitRepositoryError, SourceRepository
-from graphtraj.execution.runner_models import RunnerError, StatusResponse
+from graphtraj.execution.runner_models import MEMBER_RUN_ENV, RunnerError, StatusResponse
 from graphtraj.execution.runner_connection import current_parent_connection, session_operation
 from graphtraj.execution.runner_heartbeat import any_ownership_held, ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_process import process_ancestors
@@ -192,6 +192,18 @@ def process_caller_alias(runner_directory: Path, pid: int) -> str | None:
         if alias is not None:
             return alias
     return None
+
+
+def launched_by_agents() -> bool:
+    """Return whether this process runs under a Runtime graftling launched.
+
+    graftling starts every child Runtime, an ``agents`` child or a Task member,
+    with its own ``GRAFTLING_MEMBER_RUN``; a Main the user started has none. Such
+    a process never associates or continues Main, even when its native source
+    reads like a root (a Codex child is ``codex exec``), 540. The variable can
+    only withhold Main, never grant any authority.
+    """
+    return MEMBER_RUN_ENV in os.environ
 
 
 def _live_session_owners(runner_directory: Path) -> Dict[int, str]:

@@ -15,7 +15,7 @@ from graphtraj.execution.main_finalize import (
     bind_session, bind_checker, check_prompt, no_task_result, parse_check_result, session_binding,
 )
 from graphtraj.execution.runner_io import write_yaml_durably
-from graphtraj.execution.runner_status import process_caller_alias
+from graphtraj.execution.runner_status import launched_by_agents, process_caller_alias
 from graphtraj.workspace.runner_project import discover_runner_directory
 
 
@@ -84,6 +84,8 @@ def pi_event(event: dict, cwd: Path) -> dict:
     runner = discover_runner_directory(cwd)
     if process_caller_alias(runner, os.getpid()) is not None:
         return {'source': 'member'}
+    if launched_by_agents():
+        return {'source': 'child'}
     connection = current_connection()
     if event.get('event') != 'session_start':
         if connection is None:
@@ -126,6 +128,8 @@ def dsh_event(event: dict, cwd: Path) -> dict:
 
     if process_caller_alias(discover_runner_directory(cwd), os.getpid()) is not None:
         return {'source': 'member'}
+    if launched_by_agents():
+        return {'source': 'child'}
     connection = current_connection()
     if event.get('event') != 'agent/created':
         from graphtraj.runtimes.dsh.session_entry import caller_identity

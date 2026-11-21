@@ -19,7 +19,7 @@ from graphtraj.runtimes.codex.session_entry import (
 
 def native_event(event: dict, project_root: Path | None = None) -> dict:
     """Associate native events with the configured Harness, preserving host identity."""
-    from graphtraj.execution.runner_status import process_caller_alias
+    from graphtraj.execution.runner_status import launched_by_agents, process_caller_alias
     from graphtraj.workspace.runner_project import discover_runner_directory, discover_project_root
 
     name = event.get('hook_event_name')
@@ -36,6 +36,8 @@ def native_event(event: dict, project_root: Path | None = None) -> dict:
     managed = process_caller_alias(runner, os.getpid())
     if managed is not None:
         return skipped(f'process ownership resolved to managed Agent {managed}.')
+    if launched_by_agents():
+        return skipped('this Codex runs as a child the agents tool started.')
     if not event.get('transcript_path'):
         # Ephemeral root forks have no transcript. Their hook session ID is the
         # root thread ID; verify it natively and require our creation binding

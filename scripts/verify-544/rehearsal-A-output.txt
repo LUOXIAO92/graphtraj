@@ -1,0 +1,32 @@
+== rehearsal in /private/tmp/claude-501/reh544a-1795264673 (stub codex)
+REHEARSAL PASS 00: isolation OK, codex exec answer names gpt-6-luna, next = T
+[00] Main. 预检。对话框: 无。约 1 分钟（一次 codex exec）。成功可见: 'isolation: OK' 与 'answer: CODEX-544-OK gpt-6-luna'。
+codex: /private/tmp/claude-501/reh544a-1795264673/stub/codex -> /private/tmp/claude-501/reh544a-1795264673/stub/codex | version: codex-cli 0.171.0 (stub)
+isolation: OK
+codex login: Logged in using ChatGPT (stub)
+codex exec rc=0 (142 = 300 s limit) | header model: gpt-6-luna | answer: CODEX-544-OK gpt-6-luna
+REHEARSAL PASS T: one dialog (folder trust), /exit, next = P
+REHEARSAL PASS P: config.toml has ONLY the probe server, real probe544.py self-test PASS, USER command, the 543 prompt, screenshot paths, next = Pr
+wrote /private/tmp/claude-501/reh544a-1795264673/vproject/.codex/config.toml:
+    [mcp_servers.probe]
+    command = "/Users/luoxiao/miniconda3/bin/python3.13"
+    args = ["-I", "/private/tmp/claude-501/reh544a-1795264673/base/probe544.py"]
+    default_tools_approval_mode = "approve"
+
+### probe server answers initialize + tools/call (one local JSON-RPC exchange, no model)
+probe text tail: ['status: sent', 'from: main', '→ member-x [probe-id]'] | structuredContent: {'ok': True, 'marker': 'PROBE-SC-544'}
+CHECK probe server self-test: PASS
+REHEARSAL PASS Pr: picks the project's rollout (not the newer other-cwd one); structuredContent -> PASS
+rollout: /private/tmp/claude-501/reh544a-1795264673/codex-home/sessions/2026/11/21/rollout-a-probe.jsonl (of 1 candidates)
+---- line 2 function_call name=mcp__probe__send_note namespace=None
+{"to":"member-x","message":"l1\nl2"}
+---- line 3 function_call_output (what the model received):
+{"ok": true, "marker": "PROBE-SC-544"}
+---- line 4 assistant reply:
+The tool returned {"ok": true, "marker": "PROBE-SC-544"}
+CHECK model input carries PROBE-SC-544 (structuredContent): PASS
+CHECK model input lacks PROBE-BODY-544 (content body): PASS
+model reply mentions PROBE-SC-544: True | mentions PROBE-BODY-544: False (information)
+CHECK 544 probe model input: PASS
+REHEARSAL PASS Pr: content body in the model input -> FAIL
+== rehearsal: 5 passed, 0 failed

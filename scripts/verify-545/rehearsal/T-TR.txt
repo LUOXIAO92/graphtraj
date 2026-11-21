@@ -1,0 +1,29 @@
+# rehearsal T then TR from an empty directory (/tmp/claude-501/545/empty2, 0 entries), 2026-11-21 21:47:16
+# env: VERIFY545_BASE=/tmp/claude-501/545/base VERIFY545_ASSUME_PLUGIN=1 VERIFY545_TESTS='tests/test_dsh_main_notice_display_538.py tests/test_pi_dsh_main_continuity.py tests/test_dsh_runtime.py' TMPDIR=/tmp/claude-501 (outside the Harness)
+
+== [T] full GraphTraj suite of the AFTER build (Worktree HEAD + graftling 6443e9e0f5), 6 shards, --timeout 1500, -rA, in the background (~25 min). Dialog: none. pytest TMPDIR=/tmp/claude-501 (outside the Harness).
+AFTER build: venv: graftling 0.6.2 | graphtraj 0.1.0 send target: GraphTraj tool.mjs 'next-turn', true | graftling communication.mjs 'next-turn', true 
+uncommitted in src/tests/plugins: none
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/545-dsh-in-turn-notice-invisible/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/545/base/after/venv-tests/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+pytest temp root (outside the Harness): /tmp/claude-501/graphtraj-545-20261121T214758
+candidate: fa9c8015a32753477f25927c21a938f72e42b466 | graftling 6443e9e0f540cfaf99bb51ec3ca975dd19204369
+REHEARSAL: tests limited to tests/test_dsh_main_notice_display_538.py tests/test_pi_dsh_main_continuity.py tests/test_dsh_runtime.py (plain pytest, same venv, temp root and exit file)
+started in the background at 21:47:58; output: /tmp/claude-501/545/base/after/suite-fa9c8015-20261121T214758/suite.txt (last line 'exit=N' when it ends)
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/545-dsh-in-turn-notice-invisible/scripts/verify-545/steps.zsh TR    (when /tmp/claude-501/545/base/after/suite-fa9c8015-20261121T214758/suite.txt ends with exit=)
+exit=0
+
+## TR (same empty directory, 21:48:16)
+== [TR] read only: the newest T result; FAILED/ERROR lines listed for comparison with dev (516's list does not block). Dialog: none.
+pytest temp root (outside the Harness): /tmp/claude-501/graphtraj-545-20261121T214758
+candidate: fa9c8015a32753477f25927c21a938f72e42b466 | graftling 6443e9e0f540cfaf99bb51ec3ca975dd19204369
+REHEARSAL: tests limited to tests/test_dsh_main_notice_display_538.py tests/test_pi_dsh_main_continuity.py tests/test_dsh_runtime.py (plain pytest, same venv, temp root and exit file)
+...........................................................              [100%]
+59 passed in 11.82s
+exit=0
+(no FAILED/ERROR lines)
+Success: exit=0, or only 'known (516)' lines; any 'NEW' line goes to the Leader.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/545-dsh-in-turn-notice-invisible/scripts/verify-545/steps.zsh C
+exit=0

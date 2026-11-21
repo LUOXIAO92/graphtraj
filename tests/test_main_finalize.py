@@ -206,10 +206,32 @@ for line in sys.stdin:
 
 @pytest.fixture
 def host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """Bind a native-peer Main in a project with one local Task to check."""
+    return bound_host(tmp_path, monkeypatch, task=True)
+
+
+@pytest.fixture
+def taskless_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """Bind a native-peer Main in a project whose task graph is empty."""
+    return bound_host(tmp_path, monkeypatch, task=False)
+
+
+def register_goal_task(root: Path) -> None:
+    """Register one local Task through the shared task-graph entry."""
+    from graphtraj.configuration.project_configuration import load_project_configuration
+    from graphtraj.graph.task_graph import register_task
+    from test_task_graph import _task
+
+    register_task(load_project_configuration(root).state, root, _task('236', 'goal'))
+
+
+def bound_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, task: bool) -> tuple[Path, Path]:
     """Bind an actual native-peer connection through the shared local tool."""
     configuration = tmp_path / '.graphtraj/config.yml'
     configuration.parent.mkdir()
     configuration.write_text(default_configuration_content(tmp_path, tmp_path))
+    if task:
+        register_goal_task(tmp_path)
     peer = tmp_path / 'peer.py'
     peer.write_text(PEER)
     (tmp_path / 'options.json').write_text('{}')
@@ -317,6 +339,33 @@ def test_main_end_decision(
     ]
 
 
+def test_project_without_tasks_ends_without_a_checker(taskless_host: tuple[Path, Path]) -> None:
+    """An empty task graph needs no checker: a brief release, no model, no usage line."""
+    root, binding = taskless_host
+    result = stop(binding)
+
+    assert set(result) == {'systemMessage'}
+    lines = result['systemMessage'].splitlines()
+    assert lines[0] == 'Completion Check · completed'
+    assert not any(line.startswith('Reviewer Usage') for line in lines)
+    assert 'thread/fork' not in wire(root) and 'turn/start' not in wire(root)
+    assert not list(binding.parent.glob('checks/*'))
+
+    # An explicit user pause still outranks any result.
+    goal = 'https://tracker.test/goal/236'
+    reply = bind(root)({'action':'execute', 'feature':'bind_main_finalize',
+                        'arguments':{'summary_issue':goal, 'paused':True}})
+    assert not reply.failed, reply.document
+    assert stop(binding) == {}
+
+    # Once the project has a local Task, the same Main is checked as before.
+    bind(root)({'action':'execute', 'feature':'bind_main_finalize',
+                'arguments':{'summary_issue':goal, 'paused':False}})
+    register_goal_task(root)
+    assert 'Reviewer Usage · This Check · ' in stop(binding)['systemMessage']
+    assert wire(root).count('thread/fork') == 1
+
+
 @pytest.mark.parametrize('event', [
     {'session_id':'ordinary-child'}, {'session_id':'checker'},
     {'hook_event_name':'SubagentStop'}, {'hook_event_name':'Interrupt'},
@@ -397,6 +446,7 @@ def test_other_adapter_uses_opaque_host_event(
     configuration = tmp_path / '.graphtraj/config.yml'
     configuration.parent.mkdir()
     configuration.write_text(default_configuration_content(tmp_path, tmp_path))
+    register_goal_task(tmp_path)
     calls = []
 
     class OtherAdapter:

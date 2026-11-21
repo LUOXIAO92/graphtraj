@@ -75,6 +75,14 @@ It ran from an empty directory under `$TMPDIR`. Harness `tmp/552/` is not writab
 - **Stub changes:** the stub `sandbox-exec` now applies this precedence. Applied to Main's real 3356b581 profile, it reproduces the refusal of the own ws (`rehearsal/negative-control-3356b581-profile.txt`).
 - **Bisection self-test:** a stub dsh that aborts when `project/runs` is denied by `file-read*` (`rehearsal/bisection-selftest.txt`).
 
+## Correction 3 (DSH only, after Main's `P dsh` on ff4ed8bd)
+
+- **Moved:** dsh reads its `--patch` file at run time (`dsh-app-boot` `loadOverlayPatches`). That file now lives in `BASE/dsh/<run>/dsh-patch.yml`, which the run's profile already re-allows. An identical copy stays in `logs/<run>/dsh-patch.yml` for the audit folder (`S-dsh-patch.yml`) and for C.
+- **Not moved:** the other per-run inputs are not read from BASE/logs by dsh or its children. The relay is in BASE/bin, the task comes on stdin, and `dsh.sb` is read by `sandbox-exec` before the profile applies.
+- **Profile unchanged:** the profile text is identical to ff4ed8bd.
+- **Gate additions:** reading the run's patch must succeed, and `dsh --profile headless --patch <that patch> --dump-config` must succeed, both with the run's env. On failure the diagnosis line `... --dump-config under the new form` prints the stderr tail.
+- **Negative control:** `rehearsal/negative-control-ff4ed8bd-patch-in-logs.txt`. The stub `sandbox-exec` now also checks dsh's `--patch` file against the profile.
+
 ## Seatbelt
 
 `sandbox-exec: sandbox_apply: Operation not permitted` is printed by macOS `/usr/bin/sandbox-exec` (its own `sandbox-exec:` prefix) when it runs inside another Seatbelt sandbox, as in the Engineer's Claude Code Bash. Main's 00 is the proof that Codex's shell Seatbelt and dsh's outer profile work on Main's host. If either is refused there too, the probes FAIL and that agent is blocked (STOP to the Leader). The isolation is never weakened.

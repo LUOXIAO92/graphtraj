@@ -1,0 +1,227 @@
+$ zsh scripts/verify-561/steps.zsh 00
+
+### versions (dialog: none)
+zsh 5.9 | git version 2.50.1 (Apple Git-155) | driver python: Python 3.13.11 (/Users/luoxiao/miniconda3/bin/python3.13) | node v26.5.0
+dsh 0.2.2-rc.5 (/opt/homebrew/bin/dsh -> /opt/homebrew/lib/node_modules/@deepseek-ai/dsh/lib/bin.js)
+installed cordis: 4.1.0
+TMPDIR=/private/tmp/claude/gl561-tmp (pytest's temp root in T/TB; must be outside /Users/luoxiao/workspace/you-are-a-product-architect-delivery) | BASE <REH>/base
+candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/561-graftling-dsh-agentmessages-inject-for-new-dsh/.scratch/561/graftling @ 04d5b00c75989d33e9aa16dd1c3364bb3cbfa607 (agent/561-graftling-dsh-agentmessages-inject-for-new-dsh)
+candidate author: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+baseline:  6794ce02b6210ec88837437affb8d7b525612804 (Merge branch 'agent/538-dsh-graphtraj-notice-block-display' into dev)
+baseline is an ancestor of the candidate: yes
+
+### the installed DSH answers one line from an isolated project, scratch DSH_HOME (dialog: none; at most 120 s)
+VERIFY561_NOMODEL: no model call (rehearsal)
+
+### candidate copy BASE/src and venv BASE/venv (dialog: none)
+websockets: copied read only from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+graftling 0.6.2 from /private<REH>/base/src/src/graftling/__init__.py
+websockets 16.1.1 | PyYAML 6.0.3
+agentMessages static inject in this copy: 1
+
+### baseline copy BASE/base-src and venv BASE/base-venv (dialog: none)
+websockets: copied read only from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+graftling 0.6.2 from /private<REH>/base/base-src/src/graftling/__init__.py
+websockets 16.1.1 | PyYAML 6.0.3
+agentMessages static inject in this copy: 0
+
+READY when: a READY-561-DSH line naming the model and login, dsh 0.2.2-rc.5 (or newer), two 'graftling 0.6.2 from'
+lines (BASE/src and BASE/base-src), static inject 1 (candidate) and 0 (baseline), the noreply candidate author.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/561-graftling-dsh-agentmessages-inject-for-new-dsh/scripts/verify-561/steps.zsh R
+(exit 0)
+$ zsh scripts/verify-561/steps.zsh R
+
+### [baseline 6794ce02b6] real entry: installed dsh web + graftling plugin.mjs, agentMessages/receive (dialog: none; no browser is opened: --no-open)
+[baseline] graftling 0.6.2 from /private<REH>/base/base-src/src/graftling/__init__.py
+[baseline] plugin /private<REH>/base/base-src/src/graftling/dsh/plugin.mjs
+[baseline] dsh /opt/homebrew/bin/dsh -> /opt/homebrew/lib/node_modules/@deepseek-ai/dsh/lib/bin.js
+[baseline] installed DSH package @deepseek-ai/dsh 0.2.2-rc.5
+[baseline] OBSERVABLE: STOP (RUNTIME_START_FAILED DSH exited before authentication (pid=78563, exit=1).)
+[baseline]   dsh: dsh: startup failed: 2 required plugins did not activate
+
+[baseline]   dsh: Failed plugins (1):
+
+[baseline]   dsh:   webserver (required)
+
+[baseline]   dsh:     Package: @deepseek-ai/dsh-host-webserver
+
+[baseline]   dsh:     Error: listen EPERM: operation not permitted 127.0.0.1
+
+[baseline]   dsh:         at Server.setupListenHandle [as _listen2] (node:net:2145:21)
+
+[baseline]   dsh:         at listenInCluster (node:net:2224:12)
+
+[baseline]   dsh:         at node:net:2448:7
+
+[baseline]   dsh:         at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+[baseline]   dsh: Plugins waiting for services (5):
+
+[baseline]   dsh:   Plugin                  Missing services
+
+[baseline]   dsh:   web-runtime (required)  webServer
+
+[baseline]   dsh:   open-in-app             webServer
+
+[baseline]   dsh:   directory-picker        webServer
+
+[baseline]   dsh:   harness-dev-context     webApp
+
+[baseline]   dsh:   client-hmr              webServer
+
+[baseline]   dsh: Full diagnostics: <REH>/base/runs/baseline/dsh-home/logs/startup-2026-11-21T14-27-32.056Z-46a7ee90-cbd8-4ba8-8370-dd8bd1b346a5.log
+
+
+### [baseline] graftling's native relay fixture (installCommunication on a root context without inject; dialog: none)
+[baseline] fixture exit 1: Error: cannot get property "sessionQuery" without inject
+[baseline]   at Proxy.deliver (file:///private<REH>/base/base-src/src/graftling/dsh/communication.mjs:27:42)
+[baseline]   at Proxy.receive (file:///private<REH>/base/base-src/src/graftling/dsh/communication.mjs:18:29)
+
+### [baseline] graftling's plugin.mjs as a cordis plugin, Gateway invoke (probe561.mjs, no listener; dialog: none)
+[baseline] cordis 4.1.0 | plugin <REH>/base/base-src/src/graftling/dsh/plugin.mjs
+[baseline] agentMessages.receive result: {"accepted":true,"duplicate":false}
+[baseline] OBSERVABLE: DELIVERED (next-step inbox holds 1)
+
+### [candidate 04d5b00c75] real entry: installed dsh web + graftling plugin.mjs, agentMessages/receive (dialog: none; no browser is opened: --no-open)
+[candidate] graftling 0.6.2 from /private<REH>/base/src/src/graftling/__init__.py
+[candidate] plugin /private<REH>/base/src/src/graftling/dsh/plugin.mjs
+[candidate] dsh /opt/homebrew/bin/dsh -> /opt/homebrew/lib/node_modules/@deepseek-ai/dsh/lib/bin.js
+[candidate] installed DSH package @deepseek-ai/dsh 0.2.2-rc.5
+[candidate] OBSERVABLE: STOP (RUNTIME_START_FAILED DSH exited before authentication (pid=78583, exit=1).)
+[candidate]   dsh: dsh: startup failed: 2 required plugins did not activate
+
+[candidate]   dsh: Failed plugins (1):
+
+[candidate]   dsh:   webserver (required)
+
+[candidate]   dsh:     Package: @deepseek-ai/dsh-host-webserver
+
+[candidate]   dsh:     Error: listen EPERM: operation not permitted 127.0.0.1
+
+[candidate]   dsh:         at Server.setupListenHandle [as _listen2] (node:net:2145:21)
+
+[candidate]   dsh:         at listenInCluster (node:net:2224:12)
+
+[candidate]   dsh:         at node:net:2448:7
+
+[candidate]   dsh:         at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+
+[candidate]   dsh: Plugins waiting for services (5):
+
+[candidate]   dsh:   Plugin                  Missing services
+
+[candidate]   dsh:   web-runtime (required)  webServer
+
+[candidate]   dsh:   open-in-app             webServer
+
+[candidate]   dsh:   directory-picker        webServer
+
+[candidate]   dsh:   harness-dev-context     webApp
+
+[candidate]   dsh:   client-hmr              webServer
+
+[candidate]   dsh: Full diagnostics: <REH>/base/runs/candidate/dsh-home/logs/startup-2026-11-21T14-27-34.722Z-3a28cbfe-63bc-4b50-8bd4-e2557c685e59.log
+
+
+### [candidate] graftling's native relay fixture (installCommunication on a root context without inject; dialog: none)
+[candidate] fixture exit 0
+
+### [candidate] graftling's plugin.mjs as a cordis plugin, Gateway invoke (probe561.mjs, no listener; dialog: none)
+[candidate] cordis 4.1.0 | plugin <REH>/base/src/src/graftling/dsh/plugin.mjs
+[candidate] agentMessages.receive result: {"accepted":true,"duplicate":false}
+[candidate] OBSERVABLE: DELIVERED (next-step inbox holds 1)
+
+### summary
+baseline: real entry OBSERVABLE: STOP  | fixture FAIL (cannot get property "sessionQuery" without inject) | plugin path OBSERVABLE: DELIVERED 
+candidate: real entry OBSERVABLE: STOP  | fixture PASS | plugin path OBSERVABLE: DELIVERED 
+Expected: candidate DELIVERED on all three; baseline fixture FAIL (cannot get property "sessionQuery" without inject).
+Baseline on the real entry and plugin path: DELIVERED is expected too (plugin.mjs injects sessionQuery and agents), i.e. the
+reported error did not reach a real DSH Session through graftling's plugin; NOT DELIVERED there would mean it does.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/561-graftling-dsh-agentmessages-inject-for-new-dsh/scripts/verify-561/steps.zsh T
+(exit 0)
+$ zsh scripts/verify-561/steps.zsh T tests/test_dsh_live.py
+
+### graftling pytest on the candidate (dialog: none)
+candidate 04d5b00c75989d33e9aa16dd1c3364bb3cbfa607 in <REH>/base/src | TMPDIR=/private/tmp/claude/gl561-tmp | args: tests/test_dsh_live.py
+.....                                                                    [100%]
+5 passed in 0.58s
+(candidate pytest exit 0)
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/561-graftling-dsh-agentmessages-inject-for-new-dsh/scripts/verify-561/steps.zsh TB tests/test_dsh_live.py
+$ zsh scripts/verify-561/steps.zsh TB
+
+### graftling pytest on the baseline (dialog: none)
+baseline 6794ce02b6210ec88837437affb8d7b525612804 in <REH>/base/base-src | TMPDIR=/private/tmp/claude/gl561-tmp | args: tests/test_dsh_live.py
+..F.                                                                     [100%]
+=================================== FAILURES ===================================
+_________ test_installed_native_relay_without_duplicate_model_content __________
+
+    def test_installed_native_relay_without_duplicate_model_content() -> None:
+        """Native registration and Session projection; not official UI acceptance."""
+        node, dsh = shutil.which('node'), shutil.which('dsh')
+        if node is None or dsh is None:
+            pytest.skip('Installed DSH and Node are required.')
+        if (reason := unsupported_dsh()) is not None:
+            pytest.skip(reason)
+        root = Path(__file__).resolve().parents[1]
+        result = subprocess.run([
+            node, str(root / 'tests/fixtures/dsh_communication.mjs'), str(Path(dsh).resolve()),
+            str(root / 'src/graftling/dsh/communication.mjs'),
+        ], capture_output=True, text=True, timeout=10)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: node:internal/modules/run_main:107
+E             triggerUncaughtException(
+E             ^
+E         
+E         Error: cannot get property "sessionQuery" without inject
+E             at Proxy.deliver (file:///private<REH>/base/base-src/src/graftling/dsh/communication.mjs:27:42)
+E             at Object.apply (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:122:36)
+E             at Proxy.receive (file:///private<REH>/base/base-src/src/graftling/dsh/communication.mjs:18:29)
+E             at Object.apply (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:122:36)
+E             at Proxy.invokePrepared (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js:952:25)
+E             at Object.apply (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:122:36)
+E             at Proxy.invoke (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js:947:15)
+E             at async Promise.all (index 0)
+E             at async file:///private<REH>/base/base-src/tests/fixtures/dsh_communication.mjs:41:1
+E         
+E         Node.js v26.5.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/opt/homebrew/bin/node', '/private<REH>/base/base-src/tests/fixtures/...///private<REH>/base/base-src/tests/fixtures/dsh_communication.mjs:41:1\n\nNode.js v26.5.0\n').returncode
+
+tests/test_dsh_live.py:76: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
+1 failed, 3 passed in 0.66s
+(baseline pytest exit 1)
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/561-graftling-dsh-agentmessages-inject-for-new-dsh/scripts/verify-561/steps.zsh C
+$ zsh scripts/verify-561/steps.zsh C
+
+### compare candidate and baseline failures (read only; dialog: none)
+candidate args: tests/test_dsh_live.py | baseline args: tests/test_dsh_live.py
+candidate summary: 5 passed in 0.58s
+baseline summary:  1 failed, 3 passed in 0.66s
+failing in candidate: 0 | in baseline: 1 | in both: 0
+NEW (candidate only): 0
+baseline only: 1
+tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
+
+### copy logs to <REH>/dest (dialog: none)
+total 104
+-rw-r--r--  1 luoxiao  wheel    41 11月 21 23:27 BASELINE
+-rw-r--r--  1 luoxiao  wheel    41 11月 21 23:27 CANDIDATE
+-rw-r--r--  1 luoxiao  wheel  1217 11月 21 23:27 F-baseline.out
+-rw-r--r--  1 luoxiao  wheel   838 11月 21 23:27 F-candidate.out
+-rw-r--r--  1 luoxiao  wheel   243 11月 21 23:27 P-baseline.out
+-rw-r--r--  1 luoxiao  wheel   241 11月 21 23:27 P-candidate.out
+-rw-r--r--  1 luoxiao  wheel  1642 11月 21 23:27 R-baseline.out
+-rw-r--r--  1 luoxiao  wheel  1655 11月 21 23:27 R-candidate.out
+-rw-r--r--  1 luoxiao  wheel    23 11月 21 23:27 T.args
+-rw-r--r--  1 luoxiao  wheel     0 11月 21 23:27 T.failing
+-rw-r--r--  1 luoxiao  wheel    98 11月 21 23:27 T.out
+-rw-r--r--  1 luoxiao  wheel    23 11月 21 23:27 TB.args
+-rw-r--r--  1 luoxiao  wheel    84 11月 21 23:27 TB.failing
+-rw-r--r--  1 luoxiao  wheel  2974 11月 21 23:27 TB.out

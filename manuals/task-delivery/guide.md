@@ -139,6 +139,9 @@ A failed integration or necessary check does not complete the Task or unlock its
 successors. Finish when the accepted scope is integrated or authorized progress is
 blocked; report exact results and remaining obstacles.
 
+Optional Issue backup copies local Tasks one way to a remote platform; the local
+Task stays authoritative. See [Back up Tasks to Issues](references/command-inputs.md#back-up-tasks-to-issues).
+
 ## Main completion checking
 
 Use the selected Runtime's session-entry integration to recognize the external

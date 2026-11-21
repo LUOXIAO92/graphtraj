@@ -1,0 +1,71 @@
+== [R] rehearsal, no host and no model: host-shaped fixtures from the latest S results through the same counter. Dialog: none.
+evidence: /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/R-20261121T165152
+fixtures: /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/R-20261121T165152/fixtures
+== fixture-codex-rollout: 6 tool results in 1 path(s)
+  codex-rollout.jsonl:2 call c0: mcp__graphtraj__agents {"action": "discover"}
+    model: agents.wait.description=1 (once); agents.create.description=1 (once)
+  codex-rollout.jsonl:4 call c1: mcp__graphtraj__agents {"action": "describe", "feature": "wait"}
+    model: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  codex-rollout.jsonl:6 call c2: mcp__graphtraj__agents {"action": "describe", "feature": "wait", "schema": true}
+    model: agents.wait.input_schema=1 (once)
+  codex-rollout.jsonl:8 call c3: mcp__graphtraj__tasks {"action": "discover"}
+    model: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  codex-rollout.jsonl:10 call c4: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery"}
+    model: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  codex-rollout.jsonl:12 call c5: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    model: no marker (text starts '{"input_schema": {"type": "object", "properties": {}, "additionalProperties": fa')
+== fixture-pi-session: 6 tool results in 1 path(s)
+  pi-session.jsonl:2 call t0: mcp__graphtraj__agents {"action": "discover"}
+    model: agents.wait.description=1 (once); agents.create.description=1 (once)
+  pi-session.jsonl:4 call t1: mcp__graphtraj__agents {"action": "describe", "feature": "wait"}
+    model: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  pi-session.jsonl:6 call t2: mcp__graphtraj__agents {"action": "describe", "feature": "wait", "schema": true}
+    model: agents.wait.input_schema=1 (once)
+  pi-session.jsonl:8 call t3: mcp__graphtraj__tasks {"action": "discover"}
+    model: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  pi-session.jsonl:10 call t4: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery"}
+    model: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  pi-session.jsonl:12 call t5: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    model: no marker (text starts 'input_schema:\n  type: object\n  properties: {}\n  additionalProperties: false\n')
+== fixture-doubled-defect-shape: 6 tool results in 1 path(s)
+  doubled.jsonl:2 call c0: mcp__graphtraj__agents {"action": "discover"}
+    model: agents.wait.description=2 (TWICE); agents.create.description=2 (TWICE)  [not one JSON/YAML document (ScannerError)]
+  doubled.jsonl:4 call c1: mcp__graphtraj__agents {"action": "describe", "feature": "wait"}
+    model: agents.wait.description=2 (TWICE); agents.wait.input_schema=2 (TWICE)  [not one JSON/YAML document (ScannerError)]
+  doubled.jsonl:6 call c2: mcp__graphtraj__agents {"action": "describe", "feature": "wait", "schema": true}
+    model: agents.wait.input_schema=2 (TWICE)  [not one JSON/YAML document (ScannerError)]
+  doubled.jsonl:8 call c3: mcp__graphtraj__tasks {"action": "discover"}
+    model: tasks.task-delivery.description=2 (TWICE); tasks.parent_status.description=2 (TWICE)  [not one JSON/YAML document (ScannerError)]
+  doubled.jsonl:10 call c4: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery"}
+    model: tasks.task-delivery.description=2 (TWICE); tasks.task-delivery.manual_ref=2 (TWICE)  [not one JSON/YAML document (ScannerError)]
+  doubled.jsonl:12 call c5: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    model: no marker (text starts 'input_schema:\n  type: object\n  properties: {}\n  additionalProperties: false\n\n{"i')  [not one JSON/YAML document (ScannerError): REPEATED?]
+== fixture-codex-exec-json: 13 tool results in 1 path(s)
+  exec.jsonl:1 call item_0: agents {"action": "discover"}
+    exec item result.content: agents.wait.description=1 (once); agents.create.description=1 (once)
+  exec.jsonl:1 call item_0: agents {"action": "discover"}
+    structured_content: agents.wait.description=1 (once); agents.create.description=1 (once)
+  exec.jsonl:2 call item_1: agents {"action": "describe", "feature": "wait"}
+    exec item result.content: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  exec.jsonl:2 call item_1: agents {"action": "describe", "feature": "wait"}
+    structured_content: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  exec.jsonl:3 call item_2: agents {"action": "describe", "feature": "wait", "schema": true}
+    exec item result.content: agents.wait.input_schema=1 (once)
+  exec.jsonl:3 call item_2: agents {"action": "describe", "feature": "wait", "schema": true}
+    structured_content: agents.wait.input_schema=1 (once)
+  exec.jsonl:4 call item_3: tasks {"action": "discover"}
+    exec item result.content: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  exec.jsonl:4 call item_3: tasks {"action": "discover"}
+    structured_content: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  exec.jsonl:5 call item_4: tasks {"action": "describe", "feature": "task-delivery"}
+    exec item result.content: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  exec.jsonl:5 call item_4: tasks {"action": "describe", "feature": "task-delivery"}
+    structured_content: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  exec.jsonl:6 call item_5: tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    exec item result.content: no marker (text starts 'input_schema:\n  type: object\n  properties: {}\n  additionalProperties: false\n')
+  exec.jsonl:6 call item_5: tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    structured_content: no marker (text starts '{"input_schema": {"type": "object", "properties": {}, "additionalProperties": fa')
+  exec.jsonl:7 call final: (the model reply, not a tool result)
+    final message (model reply): no marker (text starts 'DONE-549 ok ok ok ok ok ok')
+== fixture-codex-human /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/R-20261121T165152/fixtures/human.stderr.txt: mcp lines 12; DONE-549 lines 1; no field marker printed
+PASS when: codex-rollout and pi fixtures say once for every field, the doubled fixture says TWICE, the exec-json fixture shows once in result.content AND once in structured_content per call (two copies in one event), the human fixture prints no field marker.

@@ -76,3 +76,33 @@ def test_claude_child_serves_mcp_graphtraj_tools_and_loads_no_other_server(
         with pytest.raises(Exception):
             turn._sdk_message({'request_id': '2', 'request': {'server_name': 'graftling', 'message': {
                 'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}}})
+
+
+@pytest.mark.parametrize('denied', [None, 'tasks', 'mcp__graphtraj__tasks'])
+def test_claude_child_calls_tasks_without_asking_unless_disallowed(
+    tmp_path: Path, claude_environment: None, denied: str | None,
+) -> None:
+    """mcp__graphtraj__tasks is allowed with no parent request (551); WebSearch still asks; a disallow removes it."""
+    result_project(tmp_path)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'unused')
+        if denied is not None:
+            turn.request['disallowed_tools'] = [denied]
+        turn.configure_independent(archive=None, agents_callback=lambda request: AgentsResult({}),
+                                   extra_tools=task_free_tools(tmp_path, CHILD))
+        turn.session = 'session'
+        replies: queue.Queue = queue.Queue()
+        turn._reply = lambda identity, response: replies.put((identity, response))
+        turn.parent_notice = lambda message, details: {'delivery': 'retained'}
+        for identity, tool in (('one', 'mcp__graphtraj__tasks'), ('two', 'WebSearch')):
+            turn._control_event({'type': 'control_request', 'request_id': identity, 'request': {
+                'subtype': 'can_use_tool', 'tool_name': tool, 'input': {'action': 'discover'},
+                'tool_use_id': identity}})
+        asked = sorted(item['params']['tool_name'] for item in turn.pending.values())
+        if denied is None:
+            assert turn.exempt_tools == ['mcp__graphtraj__tasks']
+            assert replies.get(timeout=5) == ('one', {'behavior': 'allow', 'updatedInput': {'action': 'discover'}})
+            assert asked == ['WebSearch']
+        else:
+            assert turn.exempt_tools == [] and 'tasks' not in turn.extra_tools
+            assert asked == ['WebSearch', 'mcp__graphtraj__tasks']

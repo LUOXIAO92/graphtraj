@@ -1,0 +1,34 @@
+# old vs new, 2026-11-21 21:44:17
+
+## GraphTraj candidate tests (tests/test_dsh_main_notice_display_538.py tests/test_pi_dsh_main_continuity.py) on OLD f754d3a9 (git archive -> $TMPDIR/545/old-src, candidate test files copied in; venv-old = conda + deps + graftling 6794ce0 wheel + old tree editable; pyproject pythonpath=src -> old src)
+        # 545: next-turn, so a notice that reaches a running turn opens its own turn (and block) afterwards
+>       assert all(item['queue'] == 'next-turn' and item['wake'] is True for item in shown['sent'])
+/private/tmp/claude-501/545/old-src/tests/test_dsh_main_notice_display_538.py:67: AssertionError
+      assert.equal(delivered[0].queue, 'next-turn');   // 545: its own turn, also when one is running
+E       AssertionError: node:internal/modules/run_main:107
+E         AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+E         + 'next-step'
+E         - 'next-turn'
+E           actual: 'next-step',
+E           expected: 'next-turn',
+E        +  where 1 = CompletedProcess(args=['/opt/homebrew/bin/node', '--input-type=module', '-e', "\nimport assert from 'node:assert/stric... actual: 'next-step',\n  expected: 'next-turn',\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v26.5.0\n").returncode
+/private/tmp/claude-501/545/old-src/tests/test_pi_dsh_main_continuity.py:228: AssertionError
+FAILED tests/test_dsh_main_notice_display_538.py::test_dsh_main_gets_one_relay_per_notice_from_the_member
+FAILED tests/test_pi_dsh_main_continuity.py::test_host_integration_delivers_then_acknowledges[dsh]
+2 failed, 7 passed in 5.02s
+
+## same tests on NEW (Worktree 77169aed + uncommitted src/tests change; venv-new = graftling 6443e9e0 wheel + Worktree editable)
+.........                                                                [100%]
+9 passed in 7.49s
+
+## graftling fixture tests/fixtures/dsh_communication.mjs (new, 6443e9e0) with the installed DSH (/opt/homebrew/lib/node_modules/@deepseek-ai/dsh/lib/bin.js)
+### OLD communication.mjs (6794ce0, git archive)
++ actual - expected
+  actual: 'next-step',
+exit=1
+### NEW communication.mjs (6443e9e0, git archive)
+exit=0
+
+## graftling clone 6443e9e0: tests/test_dsh_live.py tests/test_pi_dsh_notice_holding.py (venv-gl = conda + deps + clone editable)
+.............................................................            [100%]
+61 passed in 56.07s

@@ -999,6 +999,38 @@ def test_codex_entries_continue_main_but_compaction_does_not(host: tuple[Path, P
     assert claims(runner)[-1]['previous'] == {'runtime': 'codex', 'session': 'second-main'}
 
 
+def test_agents_launched_codex_child_never_continues_main(
+    host: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A child the agents tool started is `codex exec` (source exec) running the project's hooks (540).
+
+    graftling starts every child Runtime with its own GRAFTLING_MEMBER_RUN; such a
+    process is skipped before any Main association, at start and at end, while a
+    user-started exec Main still claims and a later real start still replaces it.
+    """
+    from graphtraj.execution.main_continuity import claims
+    from graphtraj.execution.main_finalize import session_binding
+
+    root, binding = host
+    binding.unlink()
+    runner = root / '.graphtraj/runner'
+    options = root / 'options.json'
+    options.write_text(json.dumps({**json.loads(options.read_text()), 'read_id_from_request': True}))
+    rollout(root, session='main-session')
+    assert native_hook(root, 'SessionStart', source='startup')['systemMessage']
+    rollout(root, source='exec', session='agents-child')
+    monkeypatch.setenv('GRAFTLING_MEMBER_RUN', '58c9791461b54a149d5f290b05e9f675')
+    for event, source in (('SessionStart', 'startup'), ('SessionStart', 'resume'), ('SessionEnd', None)):
+        assert native_hook(root, event, source=source) == {}
+    assert not session_binding(root, 'codex', 'agents-child').exists()
+    assert [item['session'] for item in claims(runner)] == ['main-session']
+    monkeypatch.delenv('GRAFTLING_MEMBER_RUN')
+    rollout(root, source='exec', session='exec-main')
+    assert native_hook(root, 'SessionStart', source='startup')['systemMessage']
+    assert [(item['session'], (item['previous'] or {}).get('session')) for item in claims(runner)] == [
+        ('main-session', None), ('exec-main', 'main-session')]
+
+
 def test_native_start_selects_harness_for_external_cwd(
     host: tuple[Path, Path], tmp_path_factory: pytest.TempPathFactory,
 ) -> None:

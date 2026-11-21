@@ -376,7 +376,7 @@ def hold_control():
         os.close(descriptor)
 
 
-@pytest.mark.parametrize('case', ['elsewhere', 'bound-child', 'live-occupant', 'bad-config'])
+@pytest.mark.parametrize('case', ['elsewhere', 'bound-child', 'agents-child', 'live-occupant', 'bad-config'])
 def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Path, case: str, hold_control) -> None:
     """A refused start completes the handshake and every agents and tasks call names why; no Main is bound."""
     import subprocess
@@ -402,7 +402,9 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
                 'done = subprocess.run([sys.executable, "-m", "graphtraj.runtimes.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
                 'sys.stdout.write(done.stdout); sys.stderr.write(done.stderr)\n')
-    env = _source_env(**({'GRAFTLING_CONNECTION': 'bound'} if case == 'bound-child' else {}))
+    # A Claude child the agents tool started carries only graftling's per-execution marker (540).
+    env = _source_env(**({'GRAFTLING_CONNECTION': 'bound'} if case == 'bound-child' else
+                         {'GRAFTLING_MEMBER_RUN': '58c9791461b54a149d5f290b05e9f675'} if case == 'agents-child' else {}))
     finished = subprocess.run([sys.executable, '-c', launcher, str(config)],
                               cwd=elsewhere if case == 'elsewhere' else project,
                               input=''.join(json.dumps(message) + '\n' for message in messages),
@@ -421,6 +423,7 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
                                                    f'configured for {project.resolve()}',
                                                    f'Start or resume Claude Code from {project.resolve()}']),
                 'bound-child': ('authority-denied', ['bound child']),
+                'agents-child': ('authority-denied', ['bound child']),
                 'live-occupant': ('host-busy', [str(channel), 'another agents host', 'Claude Code pid 4242',
                                                 'Close that Claude Code session']),
                 'bad-config': ('host-unavailable', [str(config), 'Expected root, cwd, claude and channel_file'])}

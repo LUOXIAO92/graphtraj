@@ -21,7 +21,7 @@
   "--append-system-prompt",
   "<instruction with HIDDEN, see design.md / design-552.md>",
   "--resume",
-  "76c524a4-6422-4cbb-9cb8-da889be3469c"
+  "80604dda-c508-47e0-b83b-0d219d990a72"
  ],
  "cwd": "/private/tmp/claude-501/reh552/base/u/dsh-S2-r1"
 }

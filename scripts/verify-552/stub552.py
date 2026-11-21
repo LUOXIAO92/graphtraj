@@ -56,7 +56,7 @@ def session(sid):
 
 
 def probe_targets(prompt):
-    paths = re.findall(r'(?:Read the file|List the directory) (\S+?)\.?$', prompt, re.M)
+    paths = re.findall(r'(?:Read the file|List the directory|on its own: cat|on its own: ls) (\S+?)\.?$', prompt, re.M)
     return paths
 
 
@@ -156,15 +156,31 @@ def codex(args):
         print('Logged in (stub)')
         return 0
     if args[:1] == ['sandbox']:
+        # Stub model of Codex 0.171's lowering of the s552 profile (not the real Seatbelt): readable = entries with
+        # read/write, platform dirs, and, because of `:minimal`, the scratch roots /private/tmp and /private/var/tmp
+        # (seatbelt_scratch.rs) minus every `deny` entry (and its subtree).
         cmd = args[args.index('--') + 1:]
-        ws = opt(args, '-C')
-        inside = all(not a.startswith('/') or a.startswith(ws) or a.startswith('/bin/') or a.startswith('/usr/bin/curl')
-                     for a in cmd[1:])
+        perms = ' '.join(args[i + 1] for i, a in enumerate(args) if a == '-c' and args[i + 1].startswith('permissions='))
+        entries = re.findall(r'"([^"]+)"="(read|write|deny)"', perms)
+        under = lambda p, root: p == root or p.startswith(root.rstrip('/') + '/')
+        denied = lambda p: any(under(p, e) for e, m in entries if m == 'deny')
+        explicit = lambda p, modes: any(under(p, e) for e, m in entries if m in modes)
+        scratch = lambda p: ('":minimal"' in perms) and any(under(p, s) for s in ('/private/tmp', '/private/var/tmp'))
+        readable = lambda p: explicit(p, ('read', 'write')) or (scratch(p) and not denied(p)) or \
+            any(under(p, s) for s in ('/bin', '/usr', '/etc', '/private/etc'))
+        writable = lambda p: explicit(p, ('write',)) or (scratch(p) and not denied(p))
         if 'curl' in cmd[0]:
             print('curl: (6) Could not resolve host: example.com (stub)', file=sys.stderr)
             return 6
-        if not inside or cmd[0] == '/bin/ls':
-            print(f'{cmd[0]}: {cmd[-1]}: Operation not permitted (stub)', file=sys.stderr)
+        text = ' '.join(cmd[1:])
+        paths = [os.path.realpath(t.strip(';&')) for t in re.findall(r'(/[^\s;&>]+)', text)]
+        target = re.search(r'>\s*(/\S+)', text)
+        if target and not writable(os.path.realpath(target.group(1))):
+            print(f'sh: {target.group(1)}: Operation not permitted (stub)', file=sys.stderr)
+            return 1
+        bad = [p for p in paths if not readable(p) and not (target and p == os.path.realpath(target.group(1)))]
+        if bad:
+            print(f'{cmd[0]}: {bad[0]}: Operation not permitted (stub)', file=sys.stderr)
             return 1
         return subprocess.run(cmd).returncode
     resume = args[1] == 'resume'
@@ -249,8 +265,23 @@ def dsh(args):
 
 
 def sandbox_exec(args):
-    """`sandbox-exec -f <profile> cmd...`: the profile is NOT applied (stub); the command runs as is."""
-    return subprocess.run(args[2:]).returncode
+    """`sandbox-exec -f <profile> cmd...`: NOT Seatbelt. For /bin/cat and /bin/ls only, the stub evaluates the
+    profile's (deny|allow file-read*/file-read-data ... (subpath ...)) rules in order, the last match deciding
+    (the SBPL rule this design assumes; Main's 00 dsh-sandbox check proves it for real). Every other command
+    (dsh, node, pwd) runs unconfined."""
+    prof, cmd = Path(args[1]).read_text(), args[2:]
+    if Path(cmd[0]).name in ('cat', 'ls'):
+        rules = [(m.group(1), re.findall(r'\(subpath "([^"]+)"\)', m.group(2)))
+                 for m in re.finditer(r'^\((deny|allow) file-read[^\s(]*[^(]*(.*)\)$', prof, re.M)]
+        for p in cmd[1:]:
+            rp, verdict = os.path.realpath(p), 'allow'
+            for action, subs in rules:
+                if any(rp == s or rp.startswith(s.rstrip('/') + '/') for s in subs):
+                    verdict = action
+            if verdict == 'deny':
+                print(f'{Path(cmd[0]).name}: {p}: Operation not permitted (stub)', file=sys.stderr)
+                return 1
+    return subprocess.run(cmd).returncode
 
 
 if __name__ == '__main__':

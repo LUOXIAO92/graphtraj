@@ -1,6 +1,6 @@
 S-dsh-patch.yml
-S-dsh-session-store/stub/session-85959019-0f27-4a5d-bf98-df934717c6e8/session.v4.jsonl
-S-dsh-session-store/stub/session-85959019-0f27-4a5d-bf98-df934717c6e8/session.v4.jsonl.zstd
+S-dsh-session-store/stub/session-74607ea8-8e8b-4545-97e0-3e9f6e12b9a4/session.v4.jsonl
+S-dsh-session-store/stub/session-74607ea8-8e8b-4545-97e0-3e9f6e12b9a4/session.v4.jsonl.zstd
 S-dsh.sb
 S-final-files/glossary.md
 S-final-files/sap-draft.md

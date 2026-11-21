@@ -31,6 +31,8 @@ wait_for() {  # $1 glob under base, $2 count
 }
 run
 run 00
+run P
+run P codex dsh   # correction: re-probe only codex and dsh
 run F
 wait_for 'u/research/S?.md' 4
 run W

@@ -1,5 +1,5 @@
-{"type": "system", "subtype": "init", "session_id": "39cf800d-7e62-464f-896c-92defde26207", "model": "claude-sonnet-5-5", "tools": ["Read", "Glob", "Grep"], "apiKeySource": "stub", "cwd": "/private/tmp/claude-501/reh552/base/audit/dsh-S2-r1"}
+{"type": "system", "subtype": "init", "session_id": "18f039d8-797c-4ffc-ab5d-20531dbedf14", "model": "claude-sonnet-5-5", "tools": ["Read", "Glob", "Grep"], "apiKeySource": "stub", "cwd": "/private/tmp/claude-501/reh552/base/audit/dsh-S2-r1"}
 {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "toolu_stub_1", "name": "Read", "input": {"file_path": "/private/tmp/claude-501/reh552/base/audit/dsh-S2-r1/S-turn-01-S.err"}}]}}
 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_stub_1", "is_error": false, "content": ""}]}}
 {"type": "assistant", "message": {"content": [{"type": "text", "text": "AUDIT: CLEAN\n(1) none found (stub)\n(2) none found (stub)\n(3) none found (stub)\n(4) none found (stub)\n(5) none found (stub)"}]}}
-{"type": "result", "subtype": "success", "is_error": false, "result": "AUDIT: CLEAN\n(1) none found (stub)\n(2) none found (stub)\n(3) none found (stub)\n(4) none found (stub)\n(5) none found (stub)", "session_id": "39cf800d-7e62-464f-896c-92defde26207", "usage": {}}
+{"type": "result", "subtype": "success", "is_error": false, "result": "AUDIT: CLEAN\n(1) none found (stub)\n(2) none found (stub)\n(3) none found (stub)\n(4) none found (stub)\n(5) none found (stub)", "session_id": "18f039d8-797c-4ffc-ab5d-20531dbedf14", "usage": {}}

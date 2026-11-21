@@ -169,8 +169,10 @@ def main() -> int:
               'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()}]
     steps = [('c1', 'create', {}, {'agent': agent, 'state': 'running'})]
     if user_mode and asked:
-        steps += [('c3', 'requests', {'agent': agent}, {'requests': [{'request_token': 'r1', 'tool': 'WebSearch',
-                                                                      'text': 'can_use_tool WebSearch (STUB)'}]}),
+        pending = [{'request_token': 'r1', 'tool': 'WebSearch', 'text': 'can_use_tool WebSearch (STUB)'}]
+        if os.environ.get('STUB551_TASKS_REQUEST'):  # the old behaviour 551 removes: a tasks call asked too
+            pending.append({'request_token': 'r0', 'tool': 'mcp__graphtraj__tasks', 'text': 'review of tasks (STUB)'})
+        steps += [('c3', 'requests', {'agent': agent}, {'requests': pending}),
                   ('c4', 'reply', {'agent': agent, 'request_token': 'r1', 'response': {'decision': 'deny'}},
                    {'reply_status': 'submitted'})]
     steps += [('c2', 'wait', {}, {'agent': agent, 'state': 'ended', 'last_message': final})]

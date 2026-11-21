@@ -482,6 +482,8 @@ Dialog: none of Claude Code itself is expected (project trusted in U; the parent
 What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: $answer
 That request is the child's beyond-host ask: $([[ $rt == claude ]] && print "Claude Code's can_use_tool for WebSearch (child permission mode $mode)" || print "Pi's confirm dialog 'agents: allow a tool beyond the host settings' for $tool"), retained for the parent.
 If no REQUEST-551 appears, type nothing; AC will report NO REQUEST honestly.
+The child's tasks calls raise NO request (user decision 551: tasks is allowed like agents unless disallowed);
+if a REQUEST-551 names a tasks tool, answer it as asked anyway: AC counts it as a FAIL.
 When Claude has printed END-CHILD, type /exit."
   # --mcp-config and --allowedTools are variadic: the rule list is one argument and `--` ends the options,
   # so the prompt is never read as their value (Main's AU run 1 on f8c39a95).
@@ -508,6 +510,8 @@ step_AC() {  # read only: the newest AU run of $ARG
   grep -q '^AU CLASS: REQUEST reached the user' $D/summary.txt \
     && print "beyond-host evidence: YES (the request reached the user and the answer was relayed)" \
     || print "beyond-host evidence: NO (see AU CLASS above; not counted)"
+  grep -q '^AU tasks calls raised requests: 0 ' $D/summary.txt \
+    || { print "NOT COMPLETE: a tasks call raised a request (user decision 551: tasks needs none; see above)"; return 1; }
   next "zsh $THIS AU $rt $([[ ${run[2]} == deny ]] && print allow || print deny)   (the other answer), then AC $rt; or G"
 }
 

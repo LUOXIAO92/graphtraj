@@ -18,6 +18,7 @@ local h; for h in claude codex pi dsh; do
   print -r -- "#!/bin/sh
 [ -f $R/untrusted ] && export STUB551_UNTRUSTED=1
 [ -f $R/au-request ] && export STUB551_AU_REQUEST=1
+[ -f $R/tasks-request ] && export STUB551_TASKS_REQUEST=1
 export STUB551_PROJECTS=$R/claude-projects
 exec $HOME/miniconda3/bin/python3.13 -I $SD/stub551.py $h \"\$@\"" > $R/bin/$h; chmod +x $R/bin/$h
 done
@@ -36,6 +37,8 @@ local s; for s in $steps; do
 =============== (rehearsal: the user trusted the folder in U) ==============="; continue ;;
     au-request) touch $R/au-request; print -r -- "
 =============== (rehearsal: the stub child's WebFetch asks the parent; the parent relays deny) ==============="; continue ;;
+    tasks-request) touch $R/tasks-request; print -r -- "
+=============== (rehearsal: the stub child's tasks call ALSO raises a request: the FAIL path) ==============="; continue ;;
     au-norequest) rm -f $R/au-request; print -r -- "
 =============== (rehearsal: the stub child's WebFetch runs without any request) ==============="; continue ;;
     waitG) local g i; for i in {1..600}; do g=$(cat $R/base/runs/G-latest 2>/dev/null)

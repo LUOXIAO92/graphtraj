@@ -157,7 +157,7 @@ def au_class(step: Path, tool: str, mode: str) -> None:
                 if feature == 'reply':
                     replies.append(json.dumps(arguments.get('arguments', arguments))[:300])
             if node.get('type') == 'tool_result' and pending.get(str(node.get('tool_use_id'))) == 'requests':
-                requests.append(json.dumps(node.get('content'))[:400])
+                requests.append(json.dumps(node.get('content'))[:4000])
     calls, outcomes = set(), []
     for _file, value in records(step / 'records'):
         for node in walk(value):
@@ -171,6 +171,12 @@ def au_class(step: Path, tool: str, mode: str) -> None:
             if claude or pi:
                 outcomes.append(('refused' if node.get('is_error') or node.get('isError') else 'ran',
                                  json.dumps(node.get('content'))[:200]))
+    # User decision (551): a child's tasks calls are allowed outright, so none of the requests may be for tasks.
+    requested = re.findall(r'"tool"\s*:\s*"([^"]+)"', ' '.join(json.loads(r) if r.startswith('"') else r
+                                                             for r in requests).replace('\\"', '"'))
+    tasks_requests = [name for name in requested if name.endswith('tasks')]
+    print(f"AU tasks calls raised requests: {len(tasks_requests)} (expected 0) "
+          f"{'PASS' if not tasks_requests else 'FAIL ' + str(tasks_requests)} | requested tools: {requested or 'none'}")
     outcome = '; '.join(f'{state}: {text}' for state, text in outcomes) or f'the child did not call {tool}'
     if replies:
         print(f"AU CLASS: REQUEST reached the user: {requests[0] if requests else '(requests result not in the transcript)'}"

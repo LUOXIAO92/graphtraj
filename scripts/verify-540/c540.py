@@ -1,6 +1,6 @@
 """Task 540 C: read-only collection after the USER's interactive Codex run (BEFORE or AFTER).
 
-usage: python -I c540.py <project> <codex sessions dir> <child name> <V start epoch> <copy dir>
+usage: python -I c540.py <project> <codex sessions dir> <child name> <V start epoch> <copy dir> [<probe jsonl>]
 
 Reads, never writes, the project and the Codex sessions; copies into <copy dir> only:
   continuity.jsonl             the project's runner/main-sessions/continuity.jsonl
@@ -12,6 +12,9 @@ Observables:
   3. the Main (the record's creator.session): its rollout under <codex sessions dir> (session_meta id), and whether
      it holds a pushed notice (response_item function_call_output named graftling or send_message_to_thread)
      naming the child; CHECK at least one.
+  4. AFTER only, <probe jsonl> (probe540.py, a second SessionStart hook V adds): CHECK the child's SessionStart
+     hook fired with GRAFTLING_MEMBER_RUN in its environment and the Main's fired without it. This tells a skipped
+     child hook apart from a hook that never fired or a marker that did not reach the hook.
 Verdict line: 'REPRODUCED' (child claimed Main and Main got no notice: the defect), 'FIXED' (all three CHECKs
 PASS), else 'OTHER'. Exit 0 always when the files were readable (the verdict is judged by Main and the Leader).
 """
@@ -48,7 +51,7 @@ def rollout(sessions: Path, session: str) -> Path | None:
     return None
 
 
-def main(project: Path, sessions: Path, child: str, since: float, out: Path) -> int:
+def main(project: Path, sessions: Path, child: str, since: float, out: Path, probe: Path | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     summary: dict = {'project': str(project), 'child': child, 'since': since}
     continuity = next((p for p in (project / '.graphtraj/core/runner/main-sessions/continuity.jsonl',
@@ -110,7 +113,21 @@ def main(project: Path, sessions: Path, child: str, since: float, out: Path) -> 
                     notices.append({'line': number, 'name': payload.get('name'), 'text': text[:600]})
         for notice in notices:
             print(f'  notice at line {notice["line"]} ({notice["name"]}): {notice["text"][:300]!r}')
-    checks = [('continuity holds no claim by the child session', not child_claims),
+    checks = []
+    if probe is not None and probe.is_file():  # AFTER only (V adds probe540.py as a second SessionStart hook)
+        shutil.copy2(probe, out / probe.name)
+        fired = [json.loads(line) for line in probe.read_text(encoding='utf-8').splitlines() if line.strip()]
+        fired = [item for item in fired if float(item.get('at', 0)) >= since]
+        print(f'probe {probe} (copied): SessionStart hooks fired after start: '
+              f'{[(item.get("session_id"), item.get("source"), item.get("marker")) for item in fired]}')
+        summary['probe'] = fired
+        checks += [('the child SessionStart hook fired and saw GRAFTLING_MEMBER_RUN',
+                    any(item.get('session_id') == child_session and item.get('marker') for item in fired)),
+                   ('the Main SessionStart hook fired without GRAFTLING_MEMBER_RUN',
+                    any(item.get('session_id') == main_session and not item.get('marker') for item in fired))]
+    elif probe is not None:
+        print(f'probe {probe}: absent (expected only after V)')
+    checks += [('continuity holds no claim by the child session', not child_claims),
               ('child control record has no notification_error', not errors),
               ('Main rollout holds the child completion notice', bool(notices))]
     for label, passed in checks:
@@ -126,7 +143,8 @@ def main(project: Path, sessions: Path, child: str, since: float, out: Path) -> 
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 6:
+    if len(sys.argv) not in (6, 7):
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(Path(sys.argv[1]).resolve(), Path(sys.argv[2]), sys.argv[3], float(sys.argv[4]), Path(sys.argv[5])))
+    sys.exit(main(Path(sys.argv[1]).resolve(), Path(sys.argv[2]), sys.argv[3], float(sys.argv[4]), Path(sys.argv[5]),
+                  Path(sys.argv[6]) if len(sys.argv) == 7 else None))

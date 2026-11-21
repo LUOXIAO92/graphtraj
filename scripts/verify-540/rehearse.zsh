@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Rehearsal of steps.zsh from an empty directory: fake Harness root, stub `codex`, real builds from the real BEFORE
-# (and, when VERIFY540_GTC is given, AFTER) commits, the real child-role resolution, and the REAL hook command that
+# and AFTER commits pinned in steps.zsh, the real child-role resolution, and the REAL hook commands that
 # Vb/V write into .codex/hooks.json, fired as Codex fires it: once for the Main's rollout (source cli) and once for
 # a child's rollout (source exec) whose environment carries GRAFTLING_MEMBER_RUN, as graftling's Codex child owner
 # sets it. Without a live Codex app-server the hook cannot finish a Main claim (it verifies the thread natively), so
@@ -8,7 +8,7 @@
 # the missing app-server), AFTER it is skipped ({}) before any native contact. continuity.jsonl, the child control
 # record and the Main's notice record are stand-ins written here in the shape of 535's real evidence.
 # Never touches production, ~/.codex or the Codex install.
-#   zsh rehearse.zsh <empty or absent directory>      (VERIFY540_GTC=<commit> VERIFY540_GTFILES=<files> for AFTER)
+#   zsh rehearse.zsh <empty or absent directory>      (VERIFY540_BEFORE_ONLY=1 stops after the BEFORE half)
 set -u
 SD=${0:A:h}
 F=${1:?usage: zsh rehearse.zsh <empty directory>}; F=${F:A}
@@ -49,13 +49,15 @@ R=$F/codex-home/sessions/2026/11/21
 fire() {
   local rollout=$R/rollout-$1.jsonl
   print -r -- "{\"type\": \"session_meta\", \"payload\": {\"id\": \"$1\", \"source\": \"$2\", \"cwd\": \"$F/vproject\"}}" > $rollout
-  local cmd=$($F/base/active/venv/bin/python -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["hooks"]["SessionStart"][0]["hooks"][0]["command"])' $F/vproject/.codex/hooks.json)
-  local event="{\"hook_event_name\": \"SessionStart\", \"source\": \"startup\", \"cwd\": \"$F/vproject\", \"session_id\": \"$1\", \"transcript_path\": \"$rollout\"}"
-  if [[ $3 == child ]]; then
-    (cd $F/vproject && print -r -- $event | env CODEX_HOME=$F/codex-home GRAFTLING_MEMBER_RUN=58c9791461b54a149d5f290b05e9f675 ${=cmd})
-  else
-    (cd $F/vproject && print -r -- $event | env CODEX_HOME=$F/codex-home ${=cmd})
-  fi
+  local cmd event="{\"hook_event_name\": \"SessionStart\", \"source\": \"startup\", \"cwd\": \"$F/vproject\", \"session_id\": \"$1\", \"transcript_path\": \"$rollout\"}"
+  for cmd in ${(f)"$($F/base/active/venv/bin/python -I -c 'import json, sys; [print(x["command"]) for x in json.load(open(sys.argv[1]))["hooks"]["SessionStart"][0]["hooks"]]' $F/vproject/.codex/hooks.json)"}; do
+    if [[ $3 == child ]]; then
+      (cd $F/vproject && print -r -- $event | env CODEX_HOME=$F/codex-home GRAFTLING_MEMBER_RUN=58c9791461b54a149d5f290b05e9f675 ${(z)cmd})
+    else
+      # A user-started Main has no marker, even when this rehearsal runs inside an Agent that carries one.
+      (cd $F/vproject && print -r -- $event | env -u GRAFTLING_MEMBER_RUN CODEX_HOME=$F/codex-home ${(z)cmd})
+    fi
+  done
 }
 # Stand-in for the agents control record of the child (the shape of 535's real record) and, for AFTER, the Main's
 # pushed notice record. $1 main session, $2 child session, $3 notification, $4 'notice' to append the notice.
@@ -79,7 +81,7 @@ if notice == "notice":
     $1 $2 $3 $child $F/vproject/.graphtraj/swarm/control/agents/agent-540rehearsal.json $R/rollout-$1.jsonl ${4:-none} \
     $F/vproject/.graphtraj/runner/main-sessions/continuity.jsonl $start
 }
-print "== rehearsal in $F (stub codex; real BEFORE commits${VERIFY540_GTC:+ and AFTER $VERIFY540_GTC})"
+print "== rehearsal in $F (stub codex; real BEFORE and AFTER commits pinned in steps.zsh)"
 S 00 > $F/00.out 2>&1; check "00: isolation OK, codex exec answer names gpt-6-luna" sh -c "grep -q 'isolation: OK' $F/00.out && grep -q 'header model: gpt-6-luna | answer: CODEX-540-OK gpt-6-luna' $F/00.out && grep -q 'steps.zsh B0' $F/00.out"
 S B0 > $F/B0.out 2>&1; check "B0: BEFORE wheels + venv from f754d3a9 and 6794ce02" sh -c "grep -q 'venv pip check rc=0' $F/B0.out && grep -q '^GraphTraj f754d3a9' $F/B0.out && grep -q '^graftling 6794ce02' $F/B0.out"
 grep -E '^GraphTraj |^graftling ' $F/B0.out
@@ -100,17 +102,24 @@ standins $MAIN $CHILDS unavailable
 S C > $F/C-before.out 2>&1
 check "C (BEFORE) on stand-ins shaped as 535's evidence (child claim, thread not found, no notice) -> VERDICT REPRODUCED; copies in st/before" sh -c "grep -q 'VERDICT 540: REPRODUCED' $F/C-before.out && [ -f $F/st/before/continuity.jsonl ] && [ -f $F/st/before/summary.json ] && [ -f $F/st/before/agent-540rehearsal.json ]"
 sed -n '/^continuity/,/^VERDICT/p' $F/C-before.out
-if [[ -n ${VERIFY540_GTC:-} ]]; then
+if [[ -z ${VERIFY540_BEFORE_ONLY:-} ]]; then
   S B > $F/B.out 2>&1; check "B: exact 540 diff, AFTER wheels + venv" sh -c "grep -q 'CHECK 540 GraphTraj product diff is exactly the 540 files: PASS' $F/B.out && grep -q 'venv pip check rc=0' $F/B.out"
   grep -E '^GraphTraj |^graftling |files changed' $F/B.out
-  S V > $F/V.out 2>&1; check "V: same hooks.json as Vb (no new hook review), active -> cand, role PASS, main-sessions cleared" sh -c "cmp -s $F/hooks-vb.json $F/vproject/.codex/hooks.json && grep -q 'active -> $F/base/cand' $F/V.out && grep -q 'CHECK 540 child role resolves: PASS' $F/V.out && [ ! -e $F/vproject/.graphtraj/runner/main-sessions ]"
+  S V > $F/V.out 2>&1; check "V: active -> cand, role PASS, main-sessions cleared, at most one dialog (hook review)" sh -c "grep -q 'active -> $F/base/cand' $F/V.out && grep -q 'CHECK 540 child role resolves: PASS' $F/V.out && [ ! -e $F/vproject/.graphtraj/runner/main-sessions ] && grep -q '比 Vb 多了 540 探针钩子' $F/V.out"
+  check "V hooks.json = Vb's + exactly one probe540.py command appended to SessionStart" \
+    $F/base/active/venv/bin/python -I -c 'import json, sys
+a, b = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+extra = b["hooks"]["SessionStart"][0]["hooks"].pop()
+print("probe hook:", extra["command"])
+sys.exit(0 if a == b and "probe540.py" in extra["command"] else 1)' $F/hooks-vb.json $F/vproject/.codex/hooks.json
   rm -f $R/rollout-*.jsonl
   fire $MAIN cli main > $F/fire-a-main.out 2>&1; fire $CHILDS exec child > $F/fire-a-child.out 2>&1
   check "AFTER hooks: the Main still goes on to Main association; the marked child is skipped ({}) before any native contact" \
     sh -c "grep -q 'app-server-control.sock' $F/fire-a-main.out && grep -qx '{}' $F/fire-a-child.out"
   standins $MAIN $CHILDS pushed notice
   S C > $F/C-after.out 2>&1
-  check "C (AFTER): no child claim, no notification_error, notice in the Main rollout -> VERDICT FIXED; copies in st/after" sh -c "grep -q 'VERDICT 540: FIXED' $F/C-after.out && [ -f $F/st/after/summary.json ]"
+  check "C (AFTER): probe saw the child hook fire WITH the marker and the Main's without; no child claim, no notification_error, notice in the Main rollout -> VERDICT FIXED" \
+    sh -c "grep -q 'CHECK 540 the child SessionStart hook fired and saw GRAFTLING_MEMBER_RUN: PASS' $F/C-after.out && grep -q 'CHECK 540 the Main SessionStart hook fired without GRAFTLING_MEMBER_RUN: PASS' $F/C-after.out && grep -q 'VERDICT 540: FIXED' $F/C-after.out && [ -f $F/st/after/summary.json ] && [ -f $F/st/after/graphtraj-540-probe.jsonl ]"
   sed -n '/^continuity/,/^VERDICT/p' $F/C-after.out
   VERIFY540_TESTS="tests/test_main_finalize.py::test_agents_launched_codex_child_never_continues_main tests/test_external_session_entry.py::test_pi_and_dsh_agents_children_never_continue_main" S G > $F/G.out 2>&1
   S GR > $F/GR.out 2>&1

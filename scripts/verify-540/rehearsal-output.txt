@@ -1,0 +1,56 @@
+rehearsal dir: /tmp/claude-501/r540e-221147 (empty before the run; under TMPDIR, outside the Harness)
+== rehearsal in /private/tmp/claude-501/r540e-221147 (stub codex; real BEFORE and AFTER commits pinned in steps.zsh)
+REHEARSAL PASS 00: isolation OK, codex exec answer names gpt-6-luna
+REHEARSAL PASS B0: BEFORE wheels + venv from f754d3a9 and 6794ce02
+GraphTraj f754d3a955fe7740fa11b54f194d19fb70d2d438 Merge commit '309e0d903582f678f804168666fe39bd5127f7a7' into dev
+graftling 6794ce02b6210ec88837437affb8d7b525612804 Merge branch 'agent/538-dsh-graphtraj-notice-block-display' into dev
+graftling 0.6.2 /private/tmp/claude-501/r540e-221147/base/base/venv/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL PASS T: one dialog (directory trust), /exit
+REHEARSAL PASS Vb: hooks via active link, role codex = gpt-6-luna resolves, USER command + prompt (runtime codex), at most one dialog
+hooks.json: {'SessionStart': ['/private/tmp/claude-501/r540e-221147/base/active/venv/bin/python -m graphtraj.runtimes.codex.stop_hook'], 'SessionEnd': ['/private/tmp/claude-501/r540e-221147/base/active/venv/bin/python -m graphtraj.runtimes.codex.stop_hook']}
+REHEARSAL PASS Vb hooks.json: exactly GraphTraj's SessionStart + SessionEnd stop_hook via the active venv
+REHEARSAL PASS BEFORE hook: the marked exec child is NOT skipped; it goes on to Main association (stops only at the missing app-server)
+REHEARSAL PASS C (BEFORE) on stand-ins shaped as 535's evidence (child claim, thread not found, no notice) -> VERDICT REPRODUCED; copies in st/before
+continuity /private/tmp/claude-501/r540e-221147/vproject/.graphtraj/runner/main-sessions/continuity.jsonl (2 claims; copied):
+  codex:SessionStart:startup session 01a1f989-df2b-7792-956b-e0329f5daf4f previous None (after start)
+  codex:SessionStart:startup session 01a1f98a-5102-7340-9bc5-b432b0995473 previous 01a1f989-df2b-7792-956b-e0329f5daf4f (after start)
+child control record /private/tmp/claude-501/r540e-221147/vproject/.graphtraj/swarm/control/agents/agent-540rehearsal.json (copied): agent agent-540rehearsal, runtime codex, model gpt-6-luna, session 01a1f98a-5102-7340-9bc5-b432b0995473, creator session 01a1f989-df2b-7792-956b-e0329f5daf4f
+  execution eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee: outcome completed, notification unavailable, notification_error {'code': 'RUNTIME_RPC_ERROR', 'message': 'thread not found: 01a1f98a-5102-7340-9bc5-b432b0995473'}
+Main rollout: /private/tmp/claude-501/r540e-221147/codex-home/sessions/2026/11/21/rollout-01a1f989-df2b-7792-956b-e0329f5daf4f.jsonl
+probe /private/tmp/claude-501/r540e-221147/vproject/.codex/graphtraj-540-probe.jsonl: absent (expected only after V)
+CHECK 540 continuity holds no claim by the child session: FAIL
+CHECK 540 child control record has no notification_error: FAIL
+CHECK 540 Main rollout holds the child completion notice: FAIL
+VERDICT 540: REPRODUCED
+REHEARSAL PASS B: exact 540 diff, AFTER wheels + venv
+GraphTraj product files changed f754d3a955fe7740fa11b54f194d19fb70d2d438..0d8033da4d2c34860898b7f2aac997cfe9d42ea7: src/graphtraj/execution/runner_status.py, src/graphtraj/runtimes/claude/host.py, src/graphtraj/runtimes/codex/stop_hook.py, src/graphtraj/runtimes/native_entry.py, tests/conftest.py, tests/test_claude_native_host.py, tests/test_external_session_entry.py, tests/test_main_finalize.py
+GraphTraj 0d8033da4d2c34860898b7f2aac997cfe9d42ea7 An agents-launched child never registers as Main nor takes Main's notices (540)
+graftling 6794ce02b6210ec88837437affb8d7b525612804 Merge branch 'agent/538-dsh-graphtraj-notice-block-display' into dev
+graftling 0.6.2 /private/tmp/claude-501/r540e-221147/base/cand/venv/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL PASS V: active -> cand, role PASS, main-sessions cleared, at most one dialog (hook review)
+probe hook: /Users/luoxiao/miniconda3/bin/python3.13 -I /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/540-codex-task-free-child-claims-main/scripts/verify-540/probe540.py /private/tmp/claude-501/r540e-221147/vproject/.codex/graphtraj-540-probe.jsonl
+REHEARSAL PASS V hooks.json = Vb's + exactly one probe540.py command appended to SessionStart
+REHEARSAL PASS AFTER hooks: the Main still goes on to Main association; the marked child is skipped ({}) before any native contact
+REHEARSAL PASS C (AFTER): probe saw the child hook fire WITH the marker and the Main's without; no child claim, no notification_error, notice in the Main rollout -> VERDICT FIXED
+continuity /private/tmp/claude-501/r540e-221147/vproject/.graphtraj/runner/main-sessions/continuity.jsonl (1 claims; copied):
+  codex:SessionStart:startup session 01a1f989-df2b-7792-956b-e0329f5daf4f previous None (after start)
+child control record /private/tmp/claude-501/r540e-221147/vproject/.graphtraj/swarm/control/agents/agent-540rehearsal.json (copied): agent agent-540rehearsal, runtime codex, model gpt-6-luna, session 01a1f98a-5102-7340-9bc5-b432b0995473, creator session 01a1f989-df2b-7792-956b-e0329f5daf4f
+  execution eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee: outcome completed, notification pushed, notification_error None
+Main rollout: /private/tmp/claude-501/r540e-221147/codex-home/sessions/2026/11/21/rollout-01a1f989-df2b-7792-956b-e0329f5daf4f.jsonl
+  notice at line 2 (graftling): '[Graftling notice from n5402212 · completed · execution eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee]\n\nCHILD-540-OK'
+probe /private/tmp/claude-501/r540e-221147/vproject/.codex/graphtraj-540-probe.jsonl (copied): SessionStart hooks fired after start: [('01a1f989-df2b-7792-956b-e0329f5daf4f', 'startup', False), ('01a1f98a-5102-7340-9bc5-b432b0995473', 'startup', True)]
+CHECK 540 the child SessionStart hook fired and saw GRAFTLING_MEMBER_RUN: PASS
+CHECK 540 the Main SessionStart hook fired without GRAFTLING_MEMBER_RUN: PASS
+CHECK 540 continuity holds no claim by the child session: PASS
+CHECK 540 child control record has no notification_error: PASS
+CHECK 540 Main rollout holds the child completion notice: PASS
+VERDICT 540: FIXED
+REHEARSAL PASS G: TMPDIR stated outside the Harness; the limited real-fixture run exit=0
+TMPDIR=${TMPDIR:-/tmp} -> /private/tmp/claude-501 (outside the Harness) | pytest temp root /private/tmp/claude-501/verify-540-gt-20261121T221215 | candidate 0d8033da4d2c34860898b7f2aac997cfe9d42ea7 | graftling 6794ce02b6210ec88837437affb8d7b525612804
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/540-codex-task-free-child-claims-main/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/r540e-221147/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+2 passed in 1.13s
+exit=0
+(no FAILED/ERROR lines)
+Success: 'exit=0', or only 'known (516)' lines; judge any 'NEW' line against the base.
+== rehearsal: 13 passed, 0 failed

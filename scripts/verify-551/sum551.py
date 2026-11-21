@@ -311,6 +311,12 @@ def main() -> int:
         toolset = ('DSH launch-patch agent-preset tool rows', sorted(dsh_rows) or None)
     print(f"[{runtime}] RECORD TOOLSET ({toolset[0]}): "
           f"{', '.join(toolset[1]) if toolset[1] else ('none' if toolset[1] == [] else 'NOT IN RECORDS')}")
+    # Which MCP server name the child's own tool lists and tool calls show for agents/tasks (E1 renamed
+    # graftling -> graphtraj). Prose is not counted: the probe text itself names mcp__graphtraj__tasks as an example.
+    listed = ' '.join([*tool_fields, *(json.dumps(tools) for _n, _m, tools, _s in inits), *calls])
+    names = sorted(set(re.findall(r'mcp__(graphtraj|graftling)__(agents|tasks)\b', listed)))
+    print(f"[{runtime}] RECORD child MCP server name for agents/tasks (tool lists and calls): "
+          f"{', '.join(f'mcp__{server}__{tool}' for server, tool in names) or 'none found'}")
     outcome = outcomes[-1] if outcomes else None
     print(f"[{runtime}] RECORD execution outcome (agents control record): {outcome or 'none'}")
     failed = outcome is not None and not outcome.startswith('completed')

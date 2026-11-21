@@ -179,8 +179,10 @@ probe() {  # $1 label, $2 runtime, $3 tag, $4 extra create arguments ("" for non
   D=$OUT/$3-$rt-$(date +%Y%m%dT%H%M%S)-$$; mkdir -p $D; touch $D/marker
   local args="\"workspace\": \"$p/ws-551\"${4:+, $4}"
   print -r -- "label $1 | installation $(inst $1) | runtime $rt | create arguments besides runtime/name/instruction: $args" > $D/run.txt
+  print -r -- "host versions: $HOSTV" >> $D/run.txt
   say "[$3 $rt] Claude Main ($PARENT_MODEL, claude -p in $p) creates one Task-free $rt child and waits (dialog: none). At most 25 min.
-create arguments besides runtime/name/instruction: {$args} (workspace ws-551 for every child, all Runtimes alike)"
+create arguments besides runtime/name/instruction: {$args} (workspace ws-551 for every child, all Runtimes alike)
+host versions: $HOSTV"
   parent_prompt $rt "$args" > $D/parent-prompt.txt
   local S=$(uuidgen | tr A-Z a-z); print -r -- $S > $D/parent-session.txt
   (cd $p && clean $BOUND 1500 claude -p --model $PARENT_MODEL --output-format stream-json --verbose \
@@ -194,6 +196,14 @@ create arguments besides runtime/name/instruction: {$args} (workspace ws-551 for
   print -r -- "evidence: $D (parent.jsonl, parent.err, records/, summary.txt)"
   return $rc
 }
+# The host versions every A/AU run names (the user updated DSH 0.2.2-alpha.2 -> alpha.3 at ~22:47; Worldline
+# 20261121T224836.947774+0900). Read once per step into HOSTV and DSHV.
+host_versions() {
+  DSHV=$(dsh --version 2>&1 | tail -1)
+  HOSTV="claude $(claude --version 2>&1 | head -1) | codex $(codex --version 2>&1 | tail -1) | pi $(pi --version 2>&1 | tail -1) | dsh $DSHV"
+  print -r -- "host versions for this step: $HOSTV"
+}
+HOSTV=unknown; DSHV=unknown
 rt_list() { if [[ $1 == all ]]; then print claude codex pi dsh; elif [[ $1 == (claude|codex|pi|dsh) ]]; then print $1; else return 1; fi; }
 
 [[ -d $H/.graphtraj || -n ${VERIFY551_H:-} ]] || { print "STOP: $H is not the Harness root"; return 1; }
@@ -391,6 +401,7 @@ step_A() {
   [[ -f $BASE/venv-after/installed && -f $BASE/heading-after.txt ]] || { print "STOP: run A0 first"; return 1; }
   load_key || print "NOTE: DEEPSEEK_API_KEY unset; the pi and dsh children cannot reach their model"
   pi_sandbox
+  host_versions
   say "Claude parent gate again in $(project after) (no paid child run unless it passes)"
   gate after; local g=$?
   if (( g != 0 )); then
@@ -408,14 +419,14 @@ step_A() {
       verdict=$(a_verdict $expect "$check" $rc)
       if [[ $rt == dsh && $name == plain && $verdict != OK* ]]; then
         # Main's A run: DSH plain ended RUNTIME_CONNECTION_CLOSED after its turn completed; re-run once, keep both.
-        RESULTS+=("A $rt $name {no tool arguments} (first run): $verdict | $D/summary.txt")
+        RESULTS+=("A $rt $name {no tool arguments} (first run): $verdict | DSH $DSHV | $D/summary.txt")
         print -r -- "DSH plain did not complete ($verdict); re-running it once"
         probe after $rt A-$name-rerun "$args"; rc=$?
         verdict=$(a_verdict $expect "$check" $rc)
         name="$name (re-run)"
       fi
       [[ $rt == codex && $name == deny ]] && verdict+=" | note: judged by the tool list only; the child may still reach web pages through other host MCP tools (e.g. mcp__playwright), which this deny does not name"
-      RESULTS+=("A $rt $name {${args:-no tool arguments}}: $verdict | $D/summary.txt")
+      RESULTS+=("A $rt $name {${args:-no tool arguments}}: $verdict | DSH $DSHV | $D/summary.txt")
       [[ $verdict == (OK*|CHILD*) ]] || FAILS+=(A-$rt-${name%% *})
     done
   done
@@ -465,6 +476,7 @@ print(next((t for t in ("grep", "find", "ls") if t not in host), ""))')
   parent_prompt $rt "$args" user "$extra" > $D/parent-prompt.txt
   local S=$(uuidgen | tr A-Z a-z); print -r -- $S > $D/parent-session.txt
   print -r -- "$rt $answer $p $tool $mode" > $D/run.txt
+  host_versions; print -r -- "host versions: $HOSTV" > $D/hosts.txt
   say "[AU $rt] USER, in THIS terminal: an interactive Claude Main ($PARENT_MODEL) in $p.
 Dialog: none of Claude Code itself is expected (project trusted in U; the parent's agents calls are pre-allowed).
 What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: $answer
@@ -486,6 +498,7 @@ step_AC() {  # read only: the newest AU run of $ARG
   clean $BASE/venv-after/bin/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-after.txt 2>/dev/null || print -- -)" \
     ${run[4]} ${run[5]} | redact | tee $D/summary.txt
   local rc=$?
+  print -r -- "$(cat $D/hosts.txt 2>/dev/null || print 'host versions: not recorded (AU before this field)')"
   print -r -- "the step told the user to answer: ${run[2]} | parent REQUEST/REPLY lines:"
   grep -ho 'REQUEST-551[^"\\]*\|REPLY-551[^"\\]*' $D/parent.jsonl 2>/dev/null | sort -u | head -6
   (( rc == 0 )) || { print "NOT COMPLETE: no created child or no final message in this AU run (above)"; return 1; }

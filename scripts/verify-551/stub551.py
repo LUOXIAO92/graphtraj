@@ -53,7 +53,8 @@ def main() -> int:
                       {'type': 'final', 'sessionId': sid, 'reason': 'completed', 'text': 'READY-551 stub-dsh (REHEARSAL STUB)'}):
             emit(value)
         return 0
-    text = sys.stdin.read() if not sys.stdin.isatty() else ''
+    # Interactive AU passes the prompt as an argument and leaves stdin open: never wait on it then.
+    text = '' if sys.stdin.isatty() or 'probe-551-' in ' '.join(argv) else sys.stdin.read()
     prompt = text or ' '.join(argv)
     model = argv[argv.index('--model') + 1] if '--model' in argv else 'stub'
     if 'probe-551-' not in prompt:

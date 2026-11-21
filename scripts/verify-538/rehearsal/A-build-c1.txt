@@ -1,0 +1,72 @@
+# A rehearsal (538 c1) 2026-11-21 02:40:48, cwd = Worktree (as Main), empty BASE; VERIFY538_NOMODEL/ASSUME_PLUGIN/NOBROWSER; the cases then STOP (no playwright/browser/key in the Engineer sandbox)
+## run 1: empty BASE
+== [A] AFTER: Worktree HEAD 45f45f6b + graftling 70542bc58f; G and S run1, then run2 on the same commits, then the comparison. Dialog: none. ~5-25 min.
+== [after] build GraphTraj 45f45f6b13 + graftling 70542bc58f under $TMPDIR/538/rehA/base/after (DSH_HOME=$TMPDIR/538/rehA/base/after/dsh-home, never ~/.dsh)
+venv: graftling 0.6.2 | graphtraj 0.1.0
+Create dev from 99f856b703af4162b72025c5b9cd54a7d4a0669b? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+roles OK
+probe Task 1 ready
+profile web538: created ($TMPDIR/538/rehA/base/after/dsh-home/profiles/web538)
+REHEARSAL: graftling-dsh assumed present in web538
+dsh plugin add graftling-dsh from $TMPDIR/538/rehA/base/after/venv/lib/python3.13/site-packages/graftling/dsh
+dsh plugin add failed (rc 1):
+    × adding a new package
+    ╰─▶ Failed to open the store operation lock at "pnpm-store-operation-locks":
+        Operation not permitted (os error 1)
+  dsh: plugin command failed; diagnostics: $TMPDIR/538/rehA/base/after/dsh-home/profiles/web538/.plugin-manager/logs/operation-ObDZNG/pnpm.log
+REHEARSAL: graftling-dsh assumed present in web538
+graftling-dsh: in web538 (source not recorded)
+S rows: llm-deepseek (expected agents-host llm-deepseek)
+G rows: llm-deepseek graphtraj-main (expected llm-deepseek graphtraj-main)
+STOP: the after phase is not built or step 00 was not run
+STOP: the after phase is not built or step 00 was not run
+STOP: the after phase is not built or step 00 was not run
+STOP: the after phase is not built or step 00 was not run
+== [A] run1 vs run2 (same commits)
+Same result when run1 and run2 reach the same phases and show the same (a)/(b) observables per case.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display/scripts/verify-538/steps.zsh C
+## wheel logs
+--- wheel-45f45f6b13.log
+cwd /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display | TMPDIR $TMPDIR | git version 2.50.1 (Apple Git-155) | python /Users/luoxiao/miniconda3/bin/python3.13
++ git -C /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display archive 45f45f6b1335cd7aa1c2da06e25f648483893b62 . | tar -x -C $TMPDIR/538/rehA/base/after/wheels/src-45f45f6b13
+archive|tar exit: 0; files extracted: 1330
++ pip wheel $TMPDIR/538/rehA/base/after/wheels/src-45f45f6b13/.
+wheel ok: filename=graphtraj-0.1.0-py3-none-any.whl
+--- wheel-70542bc58f.log
+cwd /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display | TMPDIR $TMPDIR | git version 2.50.1 (Apple Git-155) | python /Users/luoxiao/miniconda3/bin/python3.13
++ git -C /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display/.scratch/graftling archive 70542bc58fa69cfb6fb62bdf5f5cb0b8046646ec src/graftling | tar -x -C $TMPDIR/538/rehA/base/after/wheels/src-70542bc58f
+archive|tar exit: 0; files extracted: 100
++ pip wheel $TMPDIR/538/rehA/base/after/wheels/src-70542bc58f/src/graftling
+wheel ok: filename=graftling-0.6.2-py3-none-any.whl
+graftling-0.6.2-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+install.log
+src-45f45f6b13
+src-70542bc58f
+wheel-45f45f6b13.log
+wheel-70542bc58f.log
+## run 2: over a failed partial state (venv/installed removed, a stale partial src dir + stale wheel left as Main's)
+== [A] AFTER: Worktree HEAD 45f45f6b + graftling 70542bc58f; G and S run1, then run2 on the same commits, then the comparison. Dialog: none. ~5-25 min.
+== [after] build GraphTraj 45f45f6b13 + graftling 70542bc58f under $TMPDIR/538/rehA/base/after (DSH_HOME=$TMPDIR/538/rehA/base/after/dsh-home, never ~/.dsh)
+venv: graftling 0.6.2 | graphtraj 0.1.0
+roles OK
+probe Task 1 ready
+profile web538: present ($TMPDIR/538/rehA/base/after/dsh-home/profiles/web538)
+REHEARSAL: graftling-dsh assumed present in web538
+dsh plugin add graftling-dsh from $TMPDIR/538/rehA/base/after/venv/lib/python3.13/site-packages/graftling/dsh
+graftling-0.6.2-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+install.log
+src-45f45f6b13
+src-70542bc58f
+wheel-45f45f6b13.log
+wheel-70542bc58f.log
+## failure path: wheel() on a subtree without a build config (tests/fixtures), as built by steps.zsh
+wheel: pip wheel failed for 45f45f6b13 ($TMPDIR/538/wfail/src-45f45f6b13/tests/fixtures); log $TMPDIR/538/wfail/wheel-45f45f6b13.log:
+  cwd /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display | TMPDIR $TMPDIR | git version 2.50.1 (Apple Git-155) | python /Users/luoxiao/miniconda3/bin/python3.13
+  + git -C /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/538-dsh-graphtraj-notice-block-display archive 45f45f6b1335cd7aa1c2da06e25f648483893b62 tests/fixtures | tar -x -C $TMPDIR/538/wfail/src-45f45f6b13
+  archive|tar exit: 0; files extracted: 10
+  + pip wheel $TMPDIR/538/wfail/src-45f45f6b13/tests/fixtures
+  ERROR: Directory '$TMPDIR/538/wfail/src-45f45f6b13/tests/fixtures' is not installable. Neither 'setup.py' nor 'pyproject.toml' found.

@@ -102,9 +102,21 @@ source = str(init.get("apiKeySource"))
 login = "none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login" if source == "none" else source + " = API key source"
 print("parent model (init):", init.get("model"), "| login source (init apiKeySource):", login, "| answer (self-report):", str(res.get("result", ""))[:100].replace("\n", " "))
 print("parent init mcp_servers:", servers, "| mcp tools:", tools)
-ok = ("graphtraj", "connected") in servers and "mcp__graphtraj__agents" in tools
-print("CHECK 551 Claude parent gate:", "PASS" if ok else "NOT PASSED")
-sys.exit(0 if ok else 1)' $G/gate.jsonl || { print -r -- "gate stderr: $(head -c 400 $G/gate.err)"; return 1; }
+# The GraphTraj host plugin (project .claude/skills/graphtraj-claude-host) verifies Main for agents create; an
+# untrusted folder skips it (Main B run 1: plugin_warnings project-scope-suppressed-untrusted -> authority-denied).
+warnings = init.get("plugin_warnings", [])
+untrusted = [w for w in warnings if "untrusted" in json.dumps(w)]
+plugins = init.get("plugins", [])
+host = "graphtraj-claude-host" in json.dumps(plugins)
+print("parent init plugin_warnings:", json.dumps(warnings)[:400])
+print("parent init plugins:", json.dumps(plugins)[:400], "| graphtraj-claude-host loaded:", host)
+ok = ("graphtraj", "connected") in servers and "mcp__graphtraj__agents" in tools and not untrusted and host
+print("CHECK 551 Claude parent gate:", "PASS" if ok else "NOT PASSED" + (" (folder not trusted: run U)" if untrusted or not host else ""))
+sys.exit(0 if ok else (3 if untrusted or not host else 1))' $G/gate.jsonl
+  local rc=$?
+  (( rc == 0 )) && return 0
+  print -r -- "gate stderr: $(head -c 400 $G/gate.err)"
+  return $rc
 }
 child_instruction() {
   print -r -- 'This is a scripted probe. Do not edit or create any file. Answer in English.
@@ -190,7 +202,9 @@ step_00() {
   print -r -- "raw host outputs: $R/{claude.jsonl,codex.txt,pi.jsonl,dsh.jsonl,dsh-config.yml,dsh-session/}"
   build_project before || FAILS+=(build)
   say "Claude parent gate in $(project before)"
-  gate before || { FAILS+=(gate); print "If gate stderr or the answer names folder trust or login: zsh $THIS U"; }
+  gate before; local g=$?
+  (( g == 3 )) && FAILS+=("gate: folder not trusted or graphtraj-claude-host not loaded; run zsh $THIS U before, then 00 again")
+  (( g != 0 && g != 3 )) && FAILS+=(gate)
   print "READY when: 'READY-551 <host>: PASS' x4 (actual model from each host's record: claude $PARENT_MODEL, codex $CODEX_MODEL, pi $PI_PROVIDER/$PI_MODEL, dsh $PI_MODEL), 'CHECK 551 role <rt>: PASS' x4, 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'."
   if (( $#FAILS )); then print -r -- "
 NOT READY: ${FAILS[*]}"; return 1; fi
@@ -199,10 +213,13 @@ NOT READY: ${FAILS[*]}"; return 1; fi
 }
 
 step_U() {
-  say "[U] USER, only when 00's gate reported folder trust or login. Plain macOS Terminal, one dialog:"
-  print -r -- "  cd $(project ${ARG:-before}) && claude"
-  print "Dialog: 'Do you trust the files in this folder?' naming that project: choose 'Yes, proceed', then type /exit. Send no message."
-  next "zsh $THIS 00"
+  local label=${ARG:-before}
+  say "[U] USER, required once for each new project path ($(project $label)). Plain macOS Terminal:"
+  print -r -- "  cd $(project $label) && claude"
+  print "Dialog 1: 'Do you trust the files in this folder?' naming that project: choose 'Yes, proceed'.
+If Claude then shows an MCP server dialog for 'graphtraj' (this project's .mcp.json): choose to use it.
+Then type /exit. Send no message."
+  [[ $label == before ]] && next "zsh $THIS 00" || next "zsh $THIS A0"
 }
 
 step_B() {
@@ -210,6 +227,13 @@ step_B() {
   [[ -f $BASE/heading-before.txt ]] || { print "STOP: run 00 first"; return 1; }
   load_key || print "NOTE: DEEPSEEK_API_KEY unset; the pi and dsh children cannot reach their model"
   pi_sandbox
+  say "Claude parent gate again (no paid child run unless it passes)"
+  gate before; local g=$?
+  if (( g != 0 )); then
+    (( g == 3 )) && print -r -- "NOT READY: folder not trusted or graphtraj-claude-host not loaded: zsh $THIS U before, then B again" \
+                 || print -r -- "NOT READY: parent gate failed (above)"
+    return 1
+  fi
   local rt FAILS=()
   for rt in $list; do probe before $rt B "" || FAILS+=(B-$rt); done
   print "Read per Runtime: 'RECORD init' / 'RECORD launch flags' (what the child really got, from its own records),

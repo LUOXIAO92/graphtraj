@@ -14,14 +14,22 @@ mkdir -p $R; R=${R:A}
 [[ -z $(ls -A $R) ]] || { print "STOP: $R is not empty"; return 1; }
 mkdir -p $R/bin
 local h; for h in claude codex pi dsh; do
+  # While $R/untrusted exists the stub Claude's init carries the untrusted-folder warning (survives clean()).
   print -r -- "#!/bin/sh
+[ -f $R/untrusted ] && export STUB551_UNTRUSTED=1
 exec $HOME/miniconda3/bin/python3.13 -I $SD/stub551.py $h \"\$@\"" > $R/bin/$h; chmod +x $R/bin/$h
 done
 export VERIFY551_BASE=$R/base VERIFY551_STUB=$R/bin VERIFY551_PI_SANDBOX_ENV=$R/no-pi-sandbox.env \
   VERIFY551_DSH_SESSIONS=$R/dsh-sessions    # empty: the stub DSH writes no session log (the NOT RECORDED path)
 cd $R
-local steps=("$@"); (( $#steps )) || steps=(00 "B claude")
+local steps=("$@"); (( $#steps )) || steps=(untrusted 00 "B claude" U trusted 00 "B claude")
 local s; for s in $steps; do
+  case $s in   # rehearsal-only switches of the stub's folder trust
+    untrusted) touch $R/untrusted; print -r -- "
+=============== (rehearsal: the project folder is UNTRUSTED from here) ==============="; continue ;;
+    trusted) rm -f $R/untrusted; print -r -- "
+=============== (rehearsal: the user trusted the folder in U) ==============="; continue ;;
+  esac
   print -r -- "
 =============== \$ zsh steps.zsh $s ==============="
   zsh $SD/steps.zsh ${=s}; print -r -- "(exit $?)"

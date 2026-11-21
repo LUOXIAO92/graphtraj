@@ -7,6 +7,7 @@ claude: a one-line prompt -> a stream-json init (graphtraj connected, mcp__graph
 codex/pi/dsh: print one READY-551 line.
 """
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -14,6 +15,16 @@ from pathlib import Path
 
 def emit(value):
     print(json.dumps(value))
+
+
+def trust() -> dict:
+    """The init fields of folder trust: the shape Main's B run 1 recorded when untrusted (the rehearsal wrapper
+    sets STUB551_UNTRUSTED while its marker file exists), else the GraphTraj host plugin loaded."""
+    if os.environ.get('STUB551_UNTRUSTED'):
+        return {'plugin_warnings': [{'type': 'project-scope-suppressed-untrusted', 'message':
+                                     '1 project-scope directory under ./.claude/skills/ was skipped because this '
+                                     'workspace was not trusted (STUB)'}], 'plugins': []}
+    return {'plugin_warnings': [], 'plugins': [{'name': 'graphtraj-claude-host', 'path': './.claude/skills/graphtraj-claude-host'}]}
 
 
 def main() -> int:
@@ -51,7 +62,7 @@ def main() -> int:
             return 0
         emit({'type': 'system', 'subtype': 'init', 'model': model, 'apiKeySource': 'none',
               'tools': ['Read', 'mcp__graphtraj__agents', 'mcp__graphtraj__tasks'],
-              'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}]})
+              'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()})
         emit({'type': 'result', 'result': f'READY-551 {model} (REHEARSAL STUB)'})
         return 0
     runtime = re.search(r'"runtime": "([a-z]+)"', prompt).group(1)
@@ -77,7 +88,7 @@ def main() -> int:
     final = ('TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\nMCP-551: graphtraj: agents\n'
              'TASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent')
     emit({'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
-          'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}]})
+          'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()})
     for call_id, feature, result in (('c1', 'create', {'agent': agent, 'state': 'running'}),
                                      ('c2', 'wait', {'agent': agent, 'state': 'ended', 'last_message': final})):
         emit({'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'id': call_id, 'name': 'mcp__graphtraj__agents',

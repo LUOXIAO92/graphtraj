@@ -1,4 +1,6 @@
 (version 1)
 (allow default)
-(deny file-read* (subpath "/private/tmp/claude-501/reh552/base/u") (subpath "/private/tmp/claude-501/reh552/base/logs") (subpath "/private/tmp/claude-501/reh552/base/audit") (subpath "/private/tmp/claude-501/reh552/base/project/runs") (subpath "/private/tmp/claude-501/reh552/base/dsh") (subpath "/private/tmp/claude-501/reh552/fake-workspace") (subpath "/Users/luoxiao/.claude") (subpath "/Users/luoxiao/.codex") (subpath "/Users/luoxiao/.dsh") (subpath "/Users/luoxiao/.agents") (subpath "/Users/luoxiao/.pi"))
-(allow file-read* (subpath "/private/tmp/claude-501/reh552/base/project/runs/dsh-S2-r1/ws") (subpath "/private/tmp/claude-501/reh552/base/dsh/dsh-S2-r1") (subpath "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime") (subpath "/private/tmp/claude-501/reh552/base/bin"))
+(deny file-read-data file-read-xattr (subpath "/private/tmp") (subpath "/private/var/tmp") (subpath "/Users/luoxiao/workspace") (subpath "/private/tmp/claude-501/reh552/fake-workspace") (subpath "/Users/luoxiao/.claude") (subpath "/Users/luoxiao/.codex") (subpath "/Users/luoxiao/.dsh") (subpath "/Users/luoxiao/.agents") (subpath "/Users/luoxiao/.pi"))
+(allow file-read* (subpath "/private/tmp/claude-501/reh552/base/project") (subpath "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime") (subpath "/private/tmp/claude-501/reh552/base/bin"))
+(deny file-read-data file-read-xattr (subpath "/private/tmp/claude-501/reh552/base/project/runs"))
+(allow file-read* (subpath "/private/tmp/claude-501/reh552/base/project/runs/dsh-S2-r1/ws") (subpath "/private/tmp/claude-501/reh552/base/dsh/dsh-S2-r1"))

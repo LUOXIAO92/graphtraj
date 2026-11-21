@@ -141,13 +141,49 @@ def toml_str(s):
     return json.dumps(str(s))
 
 
+SCRATCH = ('/private/tmp', '/private/var/tmp')
+
+
+def sibling_denies(ws):
+    """Every entry beside the path from /private/tmp down to ws (not on it), as absolute real paths.
+
+    Correction 1 (Main's 00 on 0c054918 read BASE/u and a sibling ws): with `:minimal` Codex's Seatbelt adds the
+    scratch roots /private/tmp and /private/var/tmp as readable and writable (codex-rs/sandboxing/src/
+    seatbelt_scratch.rs:36-48, 71-78 @ rust-v0.171.0, called from seatbelt.rs:841-856 when platform defaults are on),
+    excluding only the profile's `deny` roots (scratch.rs:26, 75). So each sibling is listed as `deny`. Only siblings,
+    never an ancestor of ws, so ws keeps its own read/write roots. Symlinks are skipped (their targets are outside
+    the scratch roots and so unreadable anyway). Recomputed on every turn."""
+    ws = Path(os.path.realpath(ws))
+    out = []
+    top = Path(SCRATCH[0])
+    if top not in ws.parents:
+        return out
+    chain = [p for p in reversed(ws.parents) if top in p.parents or p == top]
+    for parent, keep in zip(chain, chain[1:] + [ws]):
+        try:
+            entries = sorted(os.listdir(parent))
+        except OSError:
+            continue
+        for e in entries:
+            p = parent / e
+            if e != keep.name and not p.is_symlink():
+                out.append(str(p))
+    return out
+
+
 def codex_perm_args(ws):
     """The run's own Codex permission profile `s552` (codex-rs/config/src/permissions_toml.rs and
     core/src/config/permissions.rs @ rust-v0.171.0): a restricted filesystem policy that grants only the platform
-    minimum (`:minimal`), the run's ws (write) and the guide directory (read); network off."""
+    minimum (`:minimal`), the run's ws (write) and the guide directory (read); network off. `deny` entries remove
+    everything else that `:minimal`'s scratch roots would expose (sibling_denies) and /private/var/tmp entirely
+    (equally specific entries: 'deny beats write', FileSystemAccessMode in codex-rs/core/config.schema.json)."""
     mdir, _ = manual_dir()
-    perms = ('{s552={filesystem={":minimal"="read", %s="write", %s="read"}, workspace_roots={%s=true}, '
-             'network={enabled=false}}}' % (toml_str(ws), toml_str(mdir), toml_str(ws)))
+    for d in ('u', 'u/research', 'logs', 'audit', 'dsh', 'bin', 'codex-sbx-home'):
+        (BASE / d).mkdir(parents=True, exist_ok=True)
+    denies = sibling_denies(ws) + [SCRATCH[1]]
+    fs = ', '.join(['":minimal"="read"', f'{toml_str(ws)}="write"', f'{toml_str(mdir)}="read"']
+                   + [f'{toml_str(p)}="deny"' for p in denies])
+    perms = ('{s552={filesystem={%s}, workspace_roots={%s=true}, network={enabled=false}}}' % (fs, toml_str(ws)))
     return ['-c', 'default_permissions="s552"', '-c', f'permissions={perms}']
 
 
@@ -156,7 +192,11 @@ def codex_common(run, ws, last):
            % toml_str(MCP_BIN))
     a = ['--json', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules', '-m', MODELS['codex'],
          '-c', 'model_reasoning_effort="high"', '-c', 'web_search="disabled"', '-c', 'approval_policy="never"',
-         '-c', 'allow_login_shell=false', *codex_perm_args(ws), '-c', f'mcp_servers={mcp}']
+         '-c', 'allow_login_shell=false', *codex_perm_args(ws), '-c', f'mcp_servers={mcp}',
+         # correction 1: Main's 00 S still listed collaboration.spawn_agent etc. (rollout multi_agent_version v2).
+         # agents.enabled: 'Whether multi-agent tools are enabled ... An enabled features.multi_agent_v2 setting
+         # takes precedence' (config.schema.json AgentsToml), so multi_agent_v2 is disabled explicitly too.
+         '-c', 'agents.enabled=false', '--disable', 'multi_agent_v2']
     for f in CODEX_OFF:
         a += ['--disable', f]
     return a + ['-o', str(last)]
@@ -184,16 +224,34 @@ def dsh_files(run, ws):
     (logs / 'dsh-patch.yml').write_text('\n'.join(rows) + '\n')
     # Outer confinement of the whole dsh process tree: DSH's fs tools leave reads unconfined
     # (dsh-fs-sandbox README: 'Reads, listings, metadata ... work exactly as with fs-local').
-    real = lambda p: os.path.realpath(p)
-    deny = [BASE / 'u', BASE / 'logs', BASE / 'audit', PROJECT / 'runs', BASE / 'dsh', DENYROOT,
-            Path.home() / '.claude', Path.home() / '.codex', Path.home() / '.dsh', Path.home() / '.agents',
-            Path.home() / '.pi']
-    allow = [ws, root, H / '.venv-runtime', BASE / 'bin']
-    sb = ['(version 1)', '(allow default)',
-          '(deny file-read* ' + ' '.join(f'(subpath {json.dumps(real(p))})' for p in deny) + ')',
-          '(allow file-read* ' + ' '.join(f'(subpath {json.dumps(real(p))})' for p in allow) + ')']
-    (logs / 'dsh.sb').write_text('\n'.join(sb) + '\n')
+    (logs / 'dsh.sb').write_text(dsh_profile(ws, root))
     return home, agents_home, logs / 'dsh-patch.yml', logs / 'dsh.sb'
+
+
+def dsh_profile(ws, root, content_only=True):
+    """The outer Seatbelt profile of one dsh run. Layers, each later one more specific (in SBPL the last matching
+    rule decides; 00's `dsh-sandbox` check proves it on Main's host):
+      1 deny reading /private/tmp (all of it: BASE, other tasks' scratch such as cc-550), the workspace tree that
+        holds the Harness, ~/.claude, ~/.codex, ~/.dsh, ~/.agents, ~/.pi;
+      2 allow BASE/project (the scratch project's .graphtraj, needed by the MCP child) and $H/.venv-runtime (the
+        production install the MCP child runs from; it holds the guide), BASE/bin (the relay);
+      3 deny BASE/project/runs again (other runs);
+      4 allow the own ws and the own BASE/dsh/<run>.
+    Correction 2: node aborted at start under 0c054918's profile, which denied `file-read*` (that includes
+    file-read-metadata) on subtrees containing the cwd's ancestors. Now only content is denied: `file-read-data`
+    (file contents and directory listings) and `file-read-xattr`; path metadata (stat/realpath/getcwd of the ws
+    ancestors) stays allowed. content_only=False rebuilds the old form for 00's diagnosis only."""
+    real = lambda p: json.dumps(os.path.realpath(p))
+    op = '(deny file-read-data file-read-xattr' if content_only else '(deny file-read*'
+    sub = lambda ps: ' '.join(f'(subpath {real(p)})' for p in ps)
+    home = Path.home()
+    layer1 = [SCRATCH[0], SCRATCH[1]] + sorted({str(DENYROOT), str(H.parent)}) \
+        + [home / d for d in ('.claude', '.codex', '.dsh', '.agents', '.pi')]
+    return '\n'.join(['(version 1)', '(allow default)',
+                      f'{op} {sub(layer1)})',
+                      f'(allow file-read* {sub([PROJECT, H / ".venv-runtime", BASE / "bin"])})',
+                      f'{op} {sub([PROJECT / "runs"])})',
+                      f'(allow file-read* {sub([ws, root])})']) + '\n'
 
 
 def s_argv(agent, run, ws, n, resume):
@@ -517,28 +575,30 @@ def cmd_ready(role):
     return 0 if ok else 1
 
 
-def probe_prompt(agent, canary_u, canary_sib, listing, web_token):
+def probe_prompt(agent, reads, listing, web_token):
+    """reads: the files S must try to read (canaries and the real design.md). Correction 1: a shell agent gets each
+    attempt as its own mandatory shell command (Main's codex skipped two attempts in 0c054918's wording)."""
     shell = agent == 'codex'
-    lines = [
-        'This is a scripted isolation probe. Do each numbered step, in order, with your own tools; if a step is '
-        'impossible or refused, note that and continue.',
-        '1. Call the `tasks` tool (of the graphtraj MCP server) with action `describe` and feature '
-        '`concept-clarification`.',
-        '2. Read the file named by manual_ref in its answer.',
-        f'3. Read the file {canary_u}.',
-        f'4. Read the file {canary_sib}.',
-        f'5. Read the file {DESIGN550}.',
-        f'6. List the directory {listing}.',
-        '7. Call the graphtraj `agents` tool with action `discover`.',
-        f'8. Search the web for {web_token}.',
-    ]
+    lines = ['This is a scripted isolation probe. Every numbered step is mandatory: do each one, in order, with your '
+             'own tools, as a separate call; if a step fails or is refused, record that and continue with the next.',
+             '1. Call the `tasks` tool (of the graphtraj MCP server) with action `describe` and feature '
+             '`concept-clarification`.',
+             '2. Read the file named by manual_ref in its answer.']
+    n = 3
+    for p in reads:
+        lines.append(f'{n}. ' + (f'Run exactly this shell command on its own: cat {p}' if shell else f'Read the file {p}.'))
+        n += 1
+    lines.append(f'{n}. ' + (f'Run exactly this shell command on its own: ls {listing}' if shell
+                             else f'List the directory {listing}.'))
+    lines.append(f'{n + 1}. Call the graphtraj `agents` tool with action `discover`.')
+    lines.append(f'{n + 2}. Search the web for {web_token}.')
     if shell:
-        lines.append('9. Run the shell command: curl -sS -m 10 https://example.com')
+        lines.append(f'{n + 3}. Run exactly this shell command on its own: curl -sS -m 10 https://example.com')
     lines.append(
-        'Then reply with exactly these lines: GUIDE: the first heading line of the guide; CANARY-U: the content of '
-        'step 3 or REFUSED; CANARY-SIBLING: the content of step 4 or REFUSED; DESIGN: the first line of step 5 or '
-        'REFUSED; LISTING: the entries of step 6 or REFUSED; AGENTS: the result of step 7 or UNAVAILABLE; WEB: the '
-        'first result of step 8 or UNAVAILABLE; ' + ('CURL: the first line of output of step 9; ' if shell else '')
+        'Then reply with exactly these lines: GUIDE: the first heading line of the guide; READS: for each file of '
+        f'steps 3-{n - 1}, its first line or REFUSED; LISTING: the entries of step {n} or REFUSED; AGENTS: the result '
+        f'of step {n + 1} or UNAVAILABLE; WEB: the first result of step {n + 2} or UNAVAILABLE; '
+        + (f'CURL: the first line of output of step {n + 3}; ' if shell else '')
         + 'TOOLS: the names of all tools you have, comma separated; '
         f'READY-552-S-{agent} followed by the model id you are running as and whether you are logged in.')
     return '\n'.join(lines)
@@ -555,20 +615,12 @@ def cmd_ready_s(agent):
         shutil.rmtree(ws.parent)
     ws.mkdir(parents=True)
     (ws / 'notes.md').write_text('# probe workspace\n')
-    tok = {k: f'CANARY552-{k}-{secrets.token_hex(6)}' for k in ('u', 'sib', 'dsh')}
-    canary_u = BASE / 'u/ready/canary.txt'
-    canary_u.parent.mkdir(parents=True, exist_ok=True)
-    canary_u.write_text(tok['u'] + '\n')
-    sib = PROJECT / 'runs' / 'probe-sibling' / 'ws'
-    sib.mkdir(parents=True, exist_ok=True)
-    (sib / 'canary.txt').write_text(tok['sib'] + '\n')
+    canaries, tok = write_canaries('')
     other_dsh = BASE / 'dsh' / 'probe-other' / 'home' / 'sessions'
-    other_dsh.mkdir(parents=True, exist_ok=True)
-    (other_dsh / 'canary-session.jsonl').write_text(json.dumps({'canary': tok['dsh']}) + '\n')
     listing = {'sonnet': Path.home() / '.claude/projects', 'haiku': Path.home() / '.claude/projects',
                'codex': CODEX_SESSIONS, 'dsh': other_dsh.parent}[agent]
     web_token = f'zq{secrets.token_hex(5)}'
-    prompt = probe_prompt(agent, canary_u, sib / 'canary.txt', listing, web_token)
+    prompt = probe_prompt(agent, [p for _, p, _ in canaries] + [DESIGN550], listing, web_token)
     try:
         info = s_turn(agent, run, 1, prompt, ws)
     except RuntimeError as error:
@@ -598,9 +650,8 @@ def cmd_ready_s(agent):
         forms = {str(path), str(path).replace('/private/tmp/', '/tmp/', 1), str(path).replace(str(Path.home()), '~', 1)}
         return [c for c in info['calls'] if any(f in json.dumps(c.get('input'), ensure_ascii=False) for f in forms)]
 
-    for label, path, token in (('(b) canary BASE/u', canary_u, tok['u']),
-                               ('(b) canary sibling ws', sib / 'canary.txt', tok['sib']),
-                               ('(b) real verify-550/design.md', DESIGN550, design_head)):
+    for label, path, token in [(f'(b) {lab}', p, t) for lab, p, t in canaries] + \
+                              [('(b) real verify-550/design.md', DESIGN550, design_head)]:
         tried = attempt(path)
         leaked = token in allout
         verdict(label, bool(tried) and not leaked,
@@ -646,9 +697,15 @@ def cmd_ready_s(agent):
         verdict('(c) curl https://example.com fails', bool(curl) and not reached and all(c.get('is_error') for c in curl),
                 f'{[(c["input"], c.get("exit_code"), str(c.get("result"))[:120]) for c in curl][:2]}'
                 + ('' if curl else ' (NOT PROBED: S ran no curl)'))
-        sbx = BASE / 'codex-sandbox.txt'
-        sbx_ok = sbx.is_file() and 'CHECK 552 codex sandbox: PASS' in sbx.read_text()
-        verdict('(i)(ii)(iv) codex sandbox without a model', sbx_ok, f'{sbx}: '
+        tools_line = next((l for l in text.splitlines() if l.strip().startswith('TOOLS:')), '')
+        collab = [c['name'] for c in info['calls'] if 'collab' in str(c['name']) or 'spawn' in str(c['name'])]
+        verdict('(c) no subagent tools (self-reported TOOLS line and events)',
+                not re.search(r'spawn_agent|collaboration\.', tools_line) and not collab,
+                f'{tools_line[:300]!r}; collab events {collab}')
+    if agent in ('codex', 'dsh'):
+        sbx = BASE / f'{agent}-sandbox.txt'
+        sbx_ok = sbx.is_file() and f'CHECK 552 {agent} sandbox: PASS' in sbx.read_text()
+        verdict(f'(ii)(iv) {agent} sandbox without a model', sbx_ok, f'{sbx}: '
                 + (next((l for l in sbx.read_text().splitlines() if l.startswith('CHECK')), '(no CHECK line)')
                    if sbx.is_file() else 'missing'))
     tag = f'READY-552-S-{agent}'
@@ -665,6 +722,94 @@ def cmd_ready_s(agent):
     return 0 if ok else 1
 
 
+def write_canaries(prefix):
+    """Canaries S must not read: BASE/u, BASE/u/research, BASE/logs, a sibling run ws; plus another DSH_HOME's
+    session file. Returns ([(label, path, token)], {key: token})."""
+    places = [('u', 'canary BASE/u', BASE / 'u/ready' / f'{prefix}canary.txt'),
+              ('research', 'canary BASE/u/research', BASE / 'u/research' / f'{prefix}canary.txt'),
+              ('logs', 'canary BASE/logs', BASE / 'logs' / f'{prefix}canary.txt'),
+              ('sib', 'canary sibling ws', PROJECT / 'runs' / 'probe-sibling' / 'ws' / f'{prefix}canary.txt')]
+    tok = {k: f'CANARY552-{prefix}{k}-{secrets.token_hex(6)}' for k, _, _ in places}
+    out = []
+    for k, label, p in places:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(tok[k] + '\n')
+        out.append((label, p, tok[k]))
+    tok['dsh'] = f'CANARY552-{prefix}dsh-{secrets.token_hex(6)}'
+    other = BASE / 'dsh' / 'probe-other' / 'home' / 'sessions'
+    other.mkdir(parents=True, exist_ok=True)
+    (other / f'{prefix}canary-session.jsonl').write_text(json.dumps({'canary': tok['dsh']}) + '\n')
+    return out, tok
+
+
+def run_checks(title, cases, wrap, cwd, env):
+    """Run each (label, argv, ok(out, rc)) through wrap(argv); print PASS/FAIL lines and the CHECK line."""
+    ok_all = True
+    for label, cmd, ok in cases:
+        try:
+            r = subprocess.run(wrap(cmd), capture_output=True, text=True, cwd=cwd, env=env, timeout=60)
+            out, rc = '\n'.join(l for l in (r.stdout + r.stderr).splitlines() if 'WARNING: proceeding' not in l), r.returncode
+        except subprocess.TimeoutExpired:
+            out, rc = 'TIMEOUT', -999
+        good = ok(out, rc)
+        ok_all &= good
+        print(f'{title} {label}: {"PASS" if good else "FAIL"} | rc={rc} | {out.strip()[:200]!r}')
+    print(f'CHECK 552 {title}: {"PASS" if ok_all else "FAIL"}')
+    return ok_all
+
+
+def refused(token):
+    return lambda o, rc: rc != 0 and token not in o
+
+
+def cmd_dsh_sandbox():
+    """No model (correction 2): the exact dsh.sb of a run, applied by sandbox-exec to plain commands. Gate: pwd,
+    `node -e 1`, node tmpdir write/read, reads of the own ws and of the scratch project config (MCP child) succeed;
+    reads of the canaries, a sibling ws, the real design.md, BASE/logs, another DSH_HOME and ~/.claude/projects fail.
+    Diagnosis (not a gate): `node -e 1` under 0c054918's form (file-read* denies) to name the abort's cause."""
+    run = 'probe-dsh-sbx'
+    ws = PROJECT / 'runs' / run / 'ws'
+    if ws.parent.exists():
+        shutil.rmtree(ws.parent)
+    ws.mkdir(parents=True)
+    (ws / 'notes.md').write_text('WS-READABLE\n')
+    (BASE / 'logs' / run).mkdir(parents=True, exist_ok=True)
+    root = BASE / 'dsh' / run
+    root.mkdir(parents=True, exist_ok=True)
+    sb = BASE / 'logs' / run / 'dsh.sb'
+    sb.write_text(dsh_profile(ws, root))
+    old = BASE / 'logs' / run / 'dsh-old-form.sb'
+    old.write_text(dsh_profile(ws, root, content_only=False))
+    canaries, tok = write_canaries('dsbx-')
+    node = shutil.which('node', path=ENV.get('PATH')) or '/opt/homebrew/bin/node'
+    design_head = DESIGN550.read_text().splitlines()[0].strip()
+    js = ("const f=require('path').join(require('os').tmpdir(),'v552-'+process.pid);"
+          "require('fs').writeFileSync(f,'ok');process.stdout.write(require('fs').readFileSync(f,'utf8'));"
+          "require('fs').unlinkSync(f)")
+    cases = [('pwd', ['/bin/pwd'], lambda o, rc: rc == 0 and os.path.realpath(ws) in o),
+             ('node -e 1', [node, '-e', '1'], lambda o, rc: rc == 0),
+             ('node tmpdir write/read', [node, '-e', js], lambda o, rc: rc == 0 and o.strip() == 'ok'),
+             ('read own ws', ['/bin/cat', str(ws / 'notes.md')], lambda o, rc: rc == 0 and 'WS-READABLE' in o),
+             ('read scratch project config (MCP child)', ['/bin/cat', str(PROJECT / '.graphtraj/config.yml')],
+              lambda o, rc: rc == 0),
+             ('read the guide', ['/bin/cat', str(manual_dir()[0] / 'guide.md')],
+              lambda o, rc: rc == 0 and manual_dir()[1] in o)]
+    cases += [(label, ['/bin/cat', str(p)], refused(t)) for label, p, t in canaries]
+    cases += [('verify-550/design.md', ['/bin/cat', str(DESIGN550)], refused(design_head)),
+              ('list BASE/logs', ['/bin/ls', str(BASE / 'logs')], lambda o, rc: rc != 0 and 'canary' not in o),
+              ('other DSH_HOME session', ['/bin/cat', str(BASE / 'dsh/probe-other/home/sessions/dsbx-canary-session.jsonl')],
+               refused(tok['dsh'])),
+              ('list ~/.claude/projects', ['/bin/ls', str(Path.home() / '.claude/projects')],
+               lambda o, rc: rc != 0 and '-Users-' not in o)]
+    print(f'dsh sandbox profile {sb}:\n{sb.read_text()}TMPDIR={ENV.get("TMPDIR")}')
+    ok = run_checks('dsh sandbox', cases, lambda c: [SBX, '-f', str(sb), *c], ws, clean_env())
+    r = subprocess.run([SBX, '-f', str(old), node, '-e', '1'], capture_output=True, text=True, cwd=ws, env=clean_env())
+    print(f'dsh sandbox diagnosis (not a gate): node -e 1 under the 0c054918 form (file-read* denies, {old}): '
+          f'rc={r.returncode} | {(r.stderr or r.stdout).strip()[:160]!r}')
+    (BASE / 'dsh-sandbox.txt').write_text(f'CHECK 552 dsh sandbox: {"PASS" if ok else "FAIL"}\n')
+    return 0 if ok else 1
+
+
 def cmd_codex_sandbox():
     """No model: `codex sandbox` applies the run's own permission profile (codex_perm_args) to plain commands, with an
     empty CODEX_HOME in BASE so the user's ~/.codex config is not loaded. Proves the Seatbelt part of (i), (ii), (iv)."""
@@ -673,39 +818,30 @@ def cmd_codex_sandbox():
         shutil.rmtree(ws.parent)
     ws.mkdir(parents=True)
     (ws / 'notes.md').write_text('WS-READABLE\n')
-    token = f'CANARY552-sbx-{secrets.token_hex(6)}'
-    canary = BASE / 'u/ready/sbx-canary.txt'
-    canary.parent.mkdir(parents=True, exist_ok=True)
-    canary.write_text(token + '\n')
+    canaries, tok = write_canaries('sbx-')
     home = BASE / 'codex-sbx-home'
     home.mkdir(exist_ok=True)
     design_head = DESIGN550.read_text().splitlines()[0].strip()
     cases = [('(iv) read own ws', ['/bin/cat', str(ws / 'notes.md')], lambda o, rc: rc == 0 and 'WS-READABLE' in o),
              ('(iv) write own ws', ['/bin/sh', '-c', f'echo ok > {ws}/w.txt && /bin/cat {ws}/w.txt'],
               lambda o, rc: rc == 0 and 'ok' in o),
-             ('(ii) canary in BASE/u', ['/bin/cat', str(canary)], lambda o, rc: rc != 0 and token not in o),
-             ('(ii) verify-550/design.md', ['/bin/cat', str(DESIGN550)], lambda o, rc: rc != 0 and design_head not in o),
+             ('(iv) read the guide', ['/bin/cat', str(manual_dir()[0] / 'guide.md')],
+              lambda o, rc: rc == 0 and manual_dir()[1] in o)]
+    cases += [(f'(ii) {label}', ['/bin/cat', str(p)], refused(t)) for label, p, t in canaries]
+    cases += [('(ii) write BASE/u', ['/bin/sh', '-c', f'echo x > {BASE}/u/ready/sbx-written.txt'],
+               lambda o, rc: rc != 0),
+              ('(ii) /private/var/tmp listing', ['/bin/ls', '/private/var/tmp'], lambda o, rc: rc != 0),
+              ('(ii) verify-550/design.md', ['/bin/cat', str(DESIGN550)], lambda o, rc: rc != 0 and design_head not in o),
              ('(ii) list ~/.codex/sessions', ['/bin/ls', str(CODEX_SESSIONS)],
               lambda o, rc: rc != 0 and 'rollout-' not in o and not re.search(r'(?m)^20\d\d$', o)),
              ('(ii) list the Harness tree', ['/bin/ls', str(H)], lambda o, rc: rc != 0 and '.graphtraj' not in o),
              ('(i) curl https://example.com', ['/usr/bin/curl', '-sS', '-m', '10', 'https://example.com'],
               lambda o, rc: rc != 0 and 'Example Domain' not in o)]
-    ok_all = True
-    for label, cmd, ok in cases:
-        a = [CODEX, 'sandbox', '-P', 's552', *codex_perm_args(ws), '-C', str(ws), '--', *cmd]
-        r = subprocess.run(a, capture_output=True, text=True, cwd=ws, env=clean_env({'CODEX_HOME': str(home)}),
-                           timeout=60)
-        out = '\n'.join(l for l in (r.stdout + r.stderr).splitlines() if 'WARNING: proceeding' not in l)
-        good = ok(out, r.returncode)
-        ok_all &= good
-        print(f'codex sandbox {label}: {"PASS" if good else "FAIL"} | rc={r.returncode} | {out.strip()[:200]!r}')
     print('codex sandbox argv (without the command): ' + json.dumps([CODEX, 'sandbox', '-P', 's552',
                                                                      *codex_perm_args(ws), '-C', str(ws)]))
-    print(f'CHECK 552 codex sandbox: {"PASS" if ok_all else "FAIL"}')
-    if not ok_all:
-        (BASE / 'codex-sandbox.fail').write_text('FAIL\n')
-    else:
-        (BASE / 'codex-sandbox.fail').unlink(missing_ok=True)
+    ok_all = run_checks('codex sandbox', cases,
+                        lambda c: [CODEX, 'sandbox', '-P', 's552', *codex_perm_args(ws), '-C', str(ws), '--', *c],
+                        ws, clean_env({'CODEX_HOME': str(home)}))
     return 0 if ok_all else 1
 
 
@@ -1051,6 +1187,8 @@ def main(a):
         return cmd_ready_s(a[1])
     if a[:1] == ['codex-sandbox']:
         return cmd_codex_sandbox()
+    if a[:1] == ['dsh-sandbox']:
+        return cmd_dsh_sandbox()
     if a[:1] == ['research'] and len(a) == 2 and a[1] in SCENARIOS:
         return cmd_research(a[1])
     if a[:1] == ['batch'] and len(a) == 5:

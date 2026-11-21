@@ -21,7 +21,7 @@
   "--append-system-prompt",
   "<instruction with HIDDEN, see design.md / design-552.md>",
   "--resume",
-  "32fe3b86-55f9-407a-bd4e-2cab16dab642"
+  "3c527db7-6620-4736-a07a-9066462f4de4"
  ],
  "cwd": "/private/tmp/claude-501/reh552/base/u/codex-S1-r1"
 }

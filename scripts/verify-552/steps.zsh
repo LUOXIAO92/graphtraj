@@ -8,6 +8,8 @@
 #   00  versions; isolated project BASE/project (production graphtraj setup + claude host configuration, as 550);
 #       READY U and A; Codex Seatbelt check without a model (codex sandbox); per agent S READY + probes (a)-(d) with
 #       the exact run flags. An agent whose probes FAIL is blocked from R (no BASE/ready-<agent>.ok).
+#   P <agent>...  re-probe only these agents (e.g. `P codex dsh`): their no-model Seatbelt checks and S READY +
+#       probes; U/A READY, F and other agents' runs are untouched. Prints `R <agent> all` for each agent that passes.
 #   F   one Fable research session per scenario (background) -> BASE/u/research/S#.md
 #   R <agent|all> <S#|all> [runs, default 3] [cap, default 8]   relay runs in the background, at most cap at once
 #   W   status (read only)
@@ -81,10 +83,18 @@ step_00() {
   say "READY-552-U (Fable high) and READY-552-A (Sonnet; medium, else high, else low)"
   drv ready U || { print "STOP: U is not ready"; return 1; }
   drv ready A || { print "STOP: A is not ready"; return 1; }
-  say "Codex Seatbelt without a model: the run's permission profile applied by 'codex sandbox' to plain commands"
-  drv codex-sandbox | tee $BASE/codex-sandbox.txt
+  probe_agents sonnet haiku dsh codex
+  next "zsh $THIS F"
+}
+
+probe_agents() {  # $@: agents. No-model Seatbelt checks (codex, dsh), then S READY + probes with the exact run flags
   local ag fails=()
-  for ag in sonnet haiku dsh codex; do
+  [[ ${@[(Ie)codex]} -gt 0 ]] && { say "Codex Seatbelt without a model: the run's permission profile applied by 'codex sandbox' to plain commands"
+    drv codex-sandbox 2>&1 | tee $BASE/codex-sandbox.txt; }
+  [[ ${@[(Ie)dsh]} -gt 0 ]] && { say "dsh outer Seatbelt without a model: the run's dsh.sb applied by sandbox-exec to plain commands"
+    drv dsh-sandbox 2>&1 | tee $BASE/dsh-sandbox.out; }
+  for ag in $@; do
+    rm -f $BASE/ready-$ag.ok
     say "READY-552-S-$ag + probes (a) (b) (c) (d) with the exact run flags (dialog: none)"
     drv ready-s $ag 2>&1 | tee $BASE/probes-$ag.txt
     (( ${pipestatus[1]} == 0 )) || fails+=($ag)
@@ -93,9 +103,21 @@ step_00() {
     [[ -f $BASE/logs/ready-$ag/s-settings.json ]] && print "claude settings: $BASE/logs/ready-$ag/s-settings.json ($(grep -c '"' $BASE/logs/ready-$ag/s-settings.json) lines), MCP: $(tr -d '\n ' < $BASE/logs/ready-$ag/s-mcp.json)"
   done
   say "summary"
-  for ag in sonnet haiku dsh codex; do print -r -- "$ag: $([[ -f $BASE/ready-$ag.ok ]] && print 'PASS (R allowed)' || print 'FAIL (blocked from R; Main reports the probe lines above to the Leader)')"; done
+  for ag in $@; do print -r -- "$ag: $([[ -f $BASE/ready-$ag.ok ]] && print 'PASS (R allowed)' || print 'FAIL (blocked from R; Main reports the probe lines above to the Leader)')"; done
   (( ${#fails} == 0 )) || print "STOP for: ${fails[*]}"
-  next "zsh $THIS F"
+  for ag in $@; do [[ -f $BASE/ready-$ag.ok ]] && next "zsh $THIS R $ag all   (after F's 4 notes exist)"; done
+  return 0
+}
+
+step_P() {  # re-probe only the named agents (correction 1-3); U/A READY and other agents' runs are not touched
+  local ag list=(${A1:-} ${A2:-} ${A3:-} ${A4:-}); list=(${list:#})
+  (( ${#list} )) || { print "usage: P <sonnet|haiku|dsh|codex>...   (e.g. P codex dsh)"; return 2; }
+  for ag in $list; do [[ $ag == (sonnet|haiku|dsh|codex) ]] || { print "usage: P <sonnet|haiku|dsh|codex>..."; return 2; }; done
+  [[ -f $BASE/effort-A.txt && -d $P/.graphtraj ]] || { print "STOP: run 00 first"; return 1; }
+  say "versions: codex $($CODEX --version 2>&1 | grep -v WARNING | tail -1) | dsh $($DSH --version 2>&1 | tail -1) | node $(node --version 2>&1)"
+  [[ ${list[(Ie)codex]} -gt 0 ]] && print -r -- "codex: $(clean $CODEX login status 2>&1 | grep -v WARNING | tail -1)"
+  [[ ${list[(Ie)dsh]} -gt 0 ]] && load_key
+  probe_agents $list
 }
 
 step_F() {
@@ -162,10 +184,11 @@ step_C() {
 
 case $STEP in
   00) step_00 ;;
+  P) step_P ;;
   F) step_F ;;
   R) step_R ;;
   W) step_W ;;
   A) step_A ;;
   C) step_C ;;
-  *) print "usage: zsh $THIS <00 | F | R <agent|all> <S#|all> [runs] [cap] | W | A <agent|all|run id> [cap] | C>"; return 2 ;;
+  *) print "usage: zsh $THIS <00 | P <agent>... | F | R <agent|all> <S#|all> [runs] [cap] | W | A <agent|all|run id> [cap] | C>"; return 2 ;;
 esac

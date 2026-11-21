@@ -49,6 +49,20 @@ It ran from an empty directory under `$TMPDIR`. Harness `tmp/552/` is not writab
   1. Real dsh 0.2.2-alpha.2 booted headless with this exact patch, a fake key and no network (`rehearsal/real-dsh-boot-*`). All plugins loaded, and the MCP row (`failOnStartupError: true`) connected through the relay to production `graphtraj-mcp`. The session log's `request/header` recorded `tools` = create_goal, edit, get_goal, glob, grep, list_mcp_resource_templates, list_mcp_resources, mcp__graphtraj__tasks, read, read_image, read_mcp_resource, todo_write, update_goal, working_directory, write. It also recorded `config` = deepseek-official / deepseek-flash / reasoningEffort high. The turn then ended `TRANSPORT` with exit 1, because the network was blocked.
   2. Real codex 0.171.0 `codex sandbox` with the run's `-c default_permissions` / `-c permissions={s552=...}` reached `sandbox-exec`, so the profile parses. An undefined profile instead stops with `default_permissions requires a [permissions] table`. The Seatbelt itself could not run here (below).
 
+## Correction 1 (after Main's real 00 on 0c054918)
+
+- **New step `P <agent>...`** (e.g. `P codex dsh`). It re-runs only those agents' no-model Seatbelt checks and their S READY + probes. U/A READY, F and other agents' runs are not touched. For each agent that passes it prints `R <agent> all`. 00 calls the same function for all four agents.
+- **codex leak.**
+  - Cause: `:minimal` makes Codex's Seatbelt add `/private/tmp` and `/private/var/tmp` as readable+writable scratch roots (codex-rs/sandboxing/src/seatbelt_scratch.rs:36-48,71-78 @ rust-v0.171.0, used by seatbelt.rs:841-856). Those roots exclude only the profile's `deny` roots (scratch.rs:26,75).
+  - Fix: profile `s552` now lists as `"deny"` every sibling entry along `/private/tmp → BASE → project → runs → <run>` (recomputed each turn), plus `/private/var/tmp`.
+  - Also added: `-c agents.enabled=false --disable multi_agent_v2`. Main's S had offered `collaboration.spawn_agent`.
+- **dsh abort.**
+  - The outer profile now denies only `file-read-data file-read-xattr` (contents and listings) and leaves path metadata readable. 0c054918 denied `file-read*` on subtrees containing the cwd's ancestors.
+  - Layers, the last match deciding: deny `/private/tmp`, `/private/var/tmp`, the workspace tree and the home configs → allow BASE/project, `$H/.venv-runtime`, BASE/bin → deny BASE/project/runs → allow own ws and own BASE/dsh/<run>.
+  - New no-model gate `dsh-sandbox`. Under the exact profile it runs pwd, `node -e 1`, a node tmpdir write/read, and reads of the own ws, the scratch project config and the guide; all must succeed. Reads of the BASE/u, BASE/u/research, BASE/logs and sibling-ws canaries, design.md, another DSH_HOME, a listing of BASE/logs and of ~/.claude/projects must fail. A diagnosis line (not a gate) runs `node -e 1` under the old form.
+- **Probes.** Canaries are added in BASE/logs and BASE/u/research. Codex gets every attempt as its own mandatory shell command.
+- **Rehearsal stubs now model the rules instead of always refusing.** The `codex sandbox` stub applies the scratch roots minus `deny` entries. With the old profile it reads the canary (negative control, rc=0); with the new one it refuses. The `sandbox-exec` stub evaluates the profile's rules for cat/ls, last match deciding. Real Seatbelt is still proved only by Main.
+
 ## Seatbelt
 
 `sandbox-exec: sandbox_apply: Operation not permitted` is printed by macOS `/usr/bin/sandbox-exec` (its own `sandbox-exec:` prefix) when it runs inside another Seatbelt sandbox, as in the Engineer's Claude Code Bash. Main's 00 is the proof that Codex's shell Seatbelt and dsh's outer profile work on Main's host. If either is refused there too, the probes FAIL and that agent is blocked (STOP to the Leader). The isolation is never weakened.

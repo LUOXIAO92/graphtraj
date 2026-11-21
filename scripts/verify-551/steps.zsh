@@ -512,6 +512,15 @@ step_AC() {  # read only: the newest AU run of $ARG
     || print "beyond-host evidence: NO (see AU CLASS above; not counted)"
   grep -q '^AU tasks calls raised requests: 0 ' $D/summary.txt \
     || { print "NOT COMPLETE: a tasks call raised a request (user decision 551: tasks needs none; see above)"; return 1; }
+  if [[ $rt == pi ]]; then
+    # AU pi creates the child with a `tools` list: the available set must keep the owner's own entries
+    # (Main's AU pi run on f8c39a95: --tools read,grep left the child with no MCP, TASKS-551 absent).
+    local ok=$(grep -c -E 'self-report TASKS-551: TASKS-551: ok' $D/summary.txt) listed
+    listed=$(grep -m1 'RECORD child MCP server name' $D/summary.txt | grep -o 'mcp__graphtraj__tasks' | head -1)
+    local argv=$(grep -m1 'RECORD TOOLSET' $D/summary.txt | sed 's/.*): //')
+    print -r -- "tools-list child keeps the owner entries: TASKS-551 ok: $( (( ok )) && print YES || print NO) | mcp__graphtraj__tasks in its record: $([[ -n $listed ]] && print YES || print NO) | launch: $argv"
+    (( ok )) && [[ -n $listed ]] || { print "NOT COMPLETE: the child's available set dropped the owner's tasks entry"; return 1; }
+  fi
   next "zsh $THIS AU $rt $([[ ${run[2]} == deny ]] && print allow || print deny)   (the other answer), then AC $rt; or G"
 }
 

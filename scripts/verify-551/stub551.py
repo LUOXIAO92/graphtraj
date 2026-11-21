@@ -145,9 +145,18 @@ def main() -> int:
                 {'type': 'namespace', 'name': 'functions', 'tools': [{'name': 'exec', 'description': '\n'.join(declared)}]}]}},
             {'type': 'response_item', 'payload': {'type': 'custom_tool_call', 'name': 'exec', 'call_id': 'x1',
                                                   'input': 'const r = await tools.mcp__graphtraj__tasks({action:"discover"});'}})))
-    if runtime == 'pi':  # pi-process.json: the launch argv
+    chosen = (re.findall(r'"tools": \[([^\]]*)\]', prompt) or [None])[0]
+    drops = bool(os.environ.get('STUB551_PI_DROPS_MCP'))  # the defect Main saw on f8c39a95, for the FAIL path
+    if runtime == 'pi':  # pi-process.json: the launch argv (the fixed one keeps the owner's MCP entries)
+        names = re.findall(r'"([^"]+)"', chosen) if chosen is not None else []
+        if chosen is not None and not drops:
+            names += ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
         (folder / 'pi-process.json').write_text(json.dumps({'argv': ['pi', '--mode', 'rpc', '--model', 'stub'] + (
+            ['--tools', ','.join(names)] if chosen is not None else []) + (
             ['--exclude-tools', 'bash'] if 'bash' in denied else [])}))
+        if not drops:  # the Pi child's session: its tasks call as Pi records it
+            (folder / 'session.jsonl').write_text(json.dumps({'type': 'message', 'message': {'role': 'assistant', 'content': [
+                {'type': 'toolCall', 'id': 'p1', 'name': 'mcp__graphtraj__tasks', 'arguments': {'action': 'discover'}}]}}) + '\n')
     if runtime == 'dsh':  # the launch patch's agent-preset rows
         (folder / 'cordis.patch.yml').write_text(
             "- id: preset-standard\n  config:\n    plugins:\n      - {id: tool-fs, name: x}\n"
@@ -165,6 +174,10 @@ def main() -> int:
         if failed else {'outcome': 'completed'}]}, indent=1))
     final = ('TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\nMCP-551: graphtraj: agents\n'
              'TASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent')
+    if runtime == 'pi':
+        final = (('TOOLS-551: read, grep (STUB)\nMCP-551: NONE\nTASKS-551: absent\n' if drops else
+                  'TOOLS-551: read, grep, mcp__graphtraj__agents, mcp__graphtraj__tasks (STUB)\nMCP-551: graphtraj: agents, tasks\n'
+                  'TASKS-551: ok\n') + 'DESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent')
     lines = [{'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
               'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()}]
     steps = [('c1', 'create', {}, {'agent': agent, 'state': 'running'})]

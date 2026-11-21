@@ -25,10 +25,9 @@ T=${VERIFY563_T:-$H/tmp/563}
 OUT=${VERIFY563_OUT:-$H/.graphtraj/core/state/tasks/563-versioned-task-definition-files/realhost}
 PROD=${VERIFY563_PROD:-$H/.graphtraj/core/state}
 G=$H/graftling
-# graftling dev paired with GraphTraj dev e2ff2960: graftling `Merge 545` (23:57:13), merged into GraphTraj by
-# 55939d57 (23:57:22); it has notice_text, which tests/test_current_host_events.py and test_parent_host_status.py
-# import (v0.6.2 does not, so collection fails there). Later graftling 53b96aa/9f962bc (561/546) are not in this base.
-GCOMMIT=1aa6f007857a5d029e6d49498d074cd1d96cbd5d
+# graftling dev accepted with GraphTraj dev e2ff2960 (Main); it has notice_text; later 1aa6f007 adds 555's envelope
+# change (aea5962), which this GraphTraj base does not adopt, so 6 envelope tests fail with it.
+GCOMMIT=6794ce02b6210ec88837437affb8d7b525612804
 SD=${0:A:h}
 THIS=${0:A}
 CONDA=$HOME/miniconda3/bin/python3.13

@@ -139,8 +139,28 @@ def main() -> int:
     for line in requests:
         print(f"[{runtime}] {line}")
     inits, calls, tasks_calls, manual_reads, heading_seen, launches = [], {}, [], [], [], []
+    tool_fields: dict[str, set] = {}     # Runtime-written 'tools' lists/settings, by value -> files
+    dsh_rows: dict[str, set] = {}        # DSH agent-preset tool rows (id -> disabled) in a launch patch
+    web: dict[str, set] = {}             # Codex web_search settings
     for file, value in records(step / 'records'):
+        if isinstance(value, list) and file.suffix in ('.yml', '.yaml'):
+            value = {'patch': value}
         for node in walk(value):
+            tools = node.get('tools')
+            if isinstance(tools, list) and tools and all(isinstance(t, (str, dict)) for t in tools):
+                names = [t if isinstance(t, str) else str(t.get('name') or t.get('type') or sorted(t)) for t in tools]
+                tool_fields.setdefault(', '.join(names)[:700], set()).add(file.name)
+            elif isinstance(tools, dict) and tools:
+                tool_fields.setdefault(json.dumps(tools, default=str)[:400], set()).add(file.name)
+            if isinstance(node.get('plugins'), list):
+                for row in walk(node['plugins']):
+                    if isinstance(row.get('id'), str) and row['id'].startswith('tool-'):
+                        flag = row.get('disabled', False)
+                        state = 'disabled' if flag is True else 'enabled' if flag is False else 'per-platform'
+                        dsh_rows.setdefault(f"{row['id']}={state}", set()).add(file.name)
+            for key in ('web_search', 'web_search_request', 'tools.web_search'):
+                if key in node and not isinstance(node[key], (dict, list)):
+                    web.setdefault(f'{key}={node[key]}', set()).add(file.name)
             for init in ([node] if node.get('subtype') == 'init' else []) + \
                     ([node['native_init']] if isinstance(node.get('native_init'), dict) else []):
                 if 'tools' in init or 'mcp_servers' in init:
@@ -180,6 +200,14 @@ def main() -> int:
             continue
         shown.add(key)
         print(f"[{runtime}] RECORD launch flags ({name}): {flags or 'no tool/MCP flag (Runtime defaults)'}")
+    for value, files in list(tool_fields.items())[:6]:
+        print(f"[{runtime}] RECORD tools field ({', '.join(sorted(files))[:120]}): {value}")
+    if not tool_fields:
+        print(f"[{runtime}] RECORD tools field: none in the child's records")
+    if dsh_rows:
+        print(f"[{runtime}] RECORD DSH agent-preset tool rows (launch patch): {', '.join(sorted(dsh_rows))}")
+    if web:
+        print(f"[{runtime}] RECORD web search settings: {', '.join(f'{k} ({sorted(v)[0]})' for k, v in sorted(web.items()))}")
     print(f"[{runtime}] RECORD tool calls by name: {calls or 'none found'}")
     print(f"[{runtime}] RECORD tasks calls: {tasks_calls or 'none'}")
     print(f"[{runtime}] RECORD manual guide.md reads: {manual_reads or 'none'}")

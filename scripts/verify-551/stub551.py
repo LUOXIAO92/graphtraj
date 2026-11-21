@@ -66,6 +66,21 @@ def main() -> int:
         emit({'type': 'result', 'result': f'READY-551 {model} (REHEARSAL STUB)'})
         return 0
     runtime = re.search(r'"runtime": "([a-z]+)"', prompt).group(1)
+    # A's refusal cases, FABRICATED here in the shape agents create returns them (rehearses the verdicts only).
+    refusal = next((code for marker, code in (('mcp__undefined551__x', 'unavailable'),
+                                              ('"tool-plugin-market"', 'authorization-required'),
+                                              ('"tools": ["web_search"]', 'authorization-required'))
+                    if marker in prompt), None)
+    if refusal is not None:
+        emit({'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
+              'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()})
+        error = {'action': 'create', 'error': {'code': refusal, 'message': 'STUB refusal'}}
+        emit({'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'id': 'c1', 'name': 'mcp__graphtraj__agents',
+                                                            'input': {'action': 'execute', 'feature': 'create'}}]}})
+        emit({'type': 'user', 'message': {'content': [{'type': 'tool_result', 'tool_use_id': 'c1', 'is_error': True,
+                                                       'content': [{'type': 'text', 'text': json.dumps(error)}]}]}})
+        emit({'type': 'result', 'result': f'CREATE-ERROR {refusal}: STUB refusal'})
+        return 0
     agent = f'agent-stub-{runtime}'
     session = '00000000-0000-4000-8000-0000000005{0:02d}'.format(len(runtime))
     manual = '/stub/share/graphtraj/manuals/concept-clarification/guide.md'

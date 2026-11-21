@@ -14,7 +14,14 @@
 #       .mcp.json) creates ONE Task-free child of that Runtime with agents create, waits for it, and prints the
 #       child's final message. The child lists its tools and MCP servers, calls tasks discover/describe
 #       concept-clarification and reads the manual_ref. sum551.py judges from the child's own records too.
-#   A0, A, G, GR: added with the candidate commits (README).
+#   A0  candidate: wheels of GraphTraj $GT (this Worktree HEAD) + graftling $GL (551 branch of <Worktree>/.graftling-551.git)
+#       into BASE/venv-after; dependency direction (graftling wheel alone in a clean venv: no GraphTraj requirement,
+#       GraphTraj absent, every graftling module imports); project-after (needs its own U after), roles, tasks, gate.
+#   A   per Runtime, headless (dialog: none): plain, one manual deny (claude WebFetch, codex web_search, pi bash,
+#       dsh tool-web); Codex beyond web_search and an undefined MCP deny; DSH beyond tool-plugin-market.
+#   AU  USER: `AU <claude|pi> <deny|allow>`: an interactive Claude Main parent shows the child's beyond-host request
+#       and asks you; you type deny/allow and it answers through agents reply. AC <claude|pi> summarizes (read only).
+#   G   both full suites in the background (GraphTraj 6 shards with graftling $GL; graftling's own suite). GR reads.
 # Layout: BASE=/private/tmp/agents-551 (outside the Harness): project-before/, runs/<STEP>-<runtime>-<time>/
 # (parent.jsonl, records/ = every project record changed during the run, plus the child's Codex rollout by id).
 # Never written: ~/.claude, ~/.codex, ~/.pi, dotfiles, the Harness, .venv-runtime (only executed). The one exception
@@ -32,6 +39,16 @@ PARENT_MODEL=${VERIFY551_PARENT_MODEL:-claude-sonnet-5-5}
 CODEX_MODEL=gpt-6-luna; PI_PROVIDER=deepseek; PI_MODEL=deepseek-flash
 PI_SANDBOX_ENV=${VERIFY551_PI_SANDBOX_ENV:-$HOME/agents-pi-sandbox/pi-sandbox.env}   # verify-513: srt for Pi
 DSH_SESSIONS=${VERIFY551_DSH_SESSIONS:-$HOME/.dsh/sessions}   # DSH's own session logs (clean env: no DSH_HOME); read only
+# AFTER = the candidate: GraphTraj $GT (this Worktree) + graftling $GL (the 551 branch of the shared clone), as wheels.
+GLREPO=${VERIFY551_GLREPO:-$WT/.graftling-551.git}; GLBRANCH=agent/551-task-free-children-reach-tasks-methods
+GT=${VERIFY551_GT:-$(git -C $WT rev-parse HEAD)}
+GL=${VERIFY551_GL:-$(git --git-dir=$GLREPO rev-parse $GLBRANCH 2>/dev/null || print -- missing)}
+GLBASE=6794ce02b6210ec88837437affb8d7b525612804                 # graftling dev the branch starts from
+T=${VERIFY551_T:-$H/tmp/551}                                     # G's venvs (Task: test directory Harness tmp/551)
+RTSP=$RT/lib/python3.13/site-packages                            # click, yaml, websockets copied from here (read only)
+PYTEST_TMP=${TMPDIR:-/tmp}
+KNOWN528=$H/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/G-8267f9e5-20261119T235550/suite.txt
+KNOWN516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
 STEP=${1:-}; ARG=${2:-}
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 [[ -n ${VERIFY551_STUB:-} ]] && path=($VERIFY551_STUB $path)        # rehearsal only: stub hosts first
@@ -118,8 +135,9 @@ sys.exit(0 if ok else (3 if untrusted or not host else 1))' $G/gate.jsonl
   print -r -- "gate stderr: $(head -c 400 $G/gate.err)"
   return $rc
 }
-child_instruction() {
-  print -r -- 'This is a scripted probe. Do not edit or create any file. Answer in English.
+child_instruction() {  # $1 optional extra step (AU's beyond-host Pi tool)
+  print -r -- "${1:+Before anything else: $1
+}"'This is a scripted probe. Do not edit or create any file. Answer in English.
 1. Without calling any tool, write one line "TOOLS-551: " followed by the exact names of every tool you can call, comma-separated, exactly as they were given to you.
 2. Write one line "MCP-551: " followed by each MCP server you can use and its tools, or NONE.
 3. If you have a GraphTraj tool named tasks (it may carry a prefix, such as mcp__graphtraj__tasks), call it with {"action": "discover"} and then with {"action": "describe", "feature": "concept-clarification"}. Write one line "TASKS-551: " followed by ok, or absent, or the exact error. Write one line "DESCRIBE-551: " followed by the manual_ref it returned, or the exact error.
@@ -127,12 +145,14 @@ child_instruction() {
 5. Fetch https://example.com with your web tool (not a shell). Write one line "WEB-551: " followed by the page title, or the exact error or refusal text, or absent if you have no web tool.
 Use no other tool. End your turn after these six lines.'
 }
-parent_prompt() {  # $1 runtime, $2 extra create arguments as JSON object members ("" for none)
-  local child=$($CONDA -I -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$(child_instruction)")
+parent_prompt() {  # $1 runtime, $2 extra create arguments as JSON members ("" none), $3 'user' = ask the user, $4 extra child step
+  local child=$($CONDA -I -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$(child_instruction ${4:-})")
+  local answer='answer it with the reply feature choosing deny (see describe reply), and wait again.'
+  [[ ${3:-} == user ]] && answer='then ask me, the user, exactly: "REQUEST-551: allow or deny?" and wait for my answer. Answer the request with the reply feature (see describe reply) choosing exactly what I said, print one line REPLY-551 followed by the reply you sent, and wait again. Never decide it yourself.'
   print -r -- "This is a scripted probe. Use only the MCP tool mcp__graphtraj__agents.
 1. Call it with {\"action\": \"execute\", \"feature\": \"create\", \"arguments\": {\"runtime\": \"$1\", \"name\": \"probe-551-$1\"${2:+, $2}, \"instruction\": $child}}. Pass no other argument and do not change these. If create is refused, print one line CREATE-ERROR followed by the exact error, and stop.
-2. Call it with {\"action\": \"execute\", \"feature\": \"wait\", \"arguments\": {\"agent\": <the agent reference create returned>, \"timeout_seconds\": 300}}. Repeat the wait until the child's execution has ended, at most 4 times.
-3. If a wait result shows a pending approval or input request of the child, call the requests feature for that agent once, print one line REQUEST-551 followed by the request's tool and text, answer it with the reply feature choosing deny (see describe reply), and wait again.
+2. Call it with {\"action\": \"execute\", \"feature\": \"wait\", \"arguments\": {\"agent\": <the agent reference create returned>, \"timeout_seconds\": 300}}. Repeat the wait until the child's execution has ended, at most 6 times.
+3. If a wait result shows a pending approval or input request of the child, call the requests feature for that agent once, print one line REQUEST-551 followed by the request's tool and text, $answer
 4. Finally print the line BEGIN-CHILD, then the child's final message exactly as returned, then the line END-CHILD. Do nothing else."
 }
 collect() {  # $1 project: project records changed since the marker, then the Codex child's rollout by its session id
@@ -245,9 +265,250 @@ NOT COMPLETE: ${FAILS[*]} (no created child or no child final message; see that 
   next "Leader: read $OUT/B-*/summary.txt"
 }
 
+# ---------------------------------------------------------------- AFTER (candidate) and the full suites
+deps() {  # $1 venv, $2...: packages copied from production's site-packages (read only)
+  local v=$1; shift
+  local SP=$($v/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))') n
+  for n in "$@"; do cp -Rp $RTSP/$n $RTSP/$n-*.dist-info(N) $SP/ 2>/dev/null; done
+  [[ " $* " == *" yaml "* ]] && cp -Rp $RTSP/_yaml(N) $RTSP/[Pp]y[Yy][Aa][Mm][Ll]-*.dist-info(N) $SP/
+  return 0
+}
+gitr() {  # $1 a bare/separate git dir (has objects/) or a work tree, then git arguments
+  local r=$1; shift
+  if [[ -d $r/objects ]]; then git --git-dir=$r "$@"; else git -C $r "$@"; fi
+}
+wheel() {  # $1 git dir or work tree, $2 commit, $3 subdirectory ('.' = all), $4 output directory: from git archive only
+  local src=$4/src-${2[1,10]}; rm -rf $src; mkdir -p $src $4
+  gitr $1 archive $2 $3 | tar -x -C $src || return 1
+  $CONDA -m pip wheel -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
+    -w $4 $src/$3 >/dev/null
+}
+one() { local found=($1/$~2(N)); (( $#found == 1 )) && print -r -- $found || { print -r -- "STOP: expected one $2 in $1, found ${#found}" >&2; return 1; }; }
+
+step_A0() {
+  local FAILS=()
+  say "[A0] candidate installation (dialog: none): GraphTraj $GT + graftling $GL (branch $GLBRANCH of $GLREPO, base $GLBASE)"
+  [[ $GL != missing ]] || { print "STOP: no graftling branch $GLBRANCH in $GLREPO"; return 1; }
+  git --git-dir=$GLREPO merge-base --is-ancestor $GLBASE $GL && print "graftling $GL descends from dev $GLBASE" \
+    || FAILS+=(graftling-base)
+  print -r -- "graftling commits since dev: $(git --git-dir=$GLREPO log --oneline $GLBASE..$GL | tr '\n' ';')"
+  print -r -- "GraphTraj commits since dev f754d3a9: $(git -C $WT log --oneline f754d3a9..$GT | wc -l | tr -d ' ')"
+  local V=$BASE/venv-after W=$BASE/wheels-after
+  if [[ ! -f $V/installed || $(<$V/installed) != "$GT $GL" ]]; then
+    rm -rf $W; mkdir -p $W
+    wheel $GLREPO $GL src/graftling $W && wheel $WT $GT . $W || { print "STOP: a wheel did not build"; return 1; }
+    local gw hw; gw=$(one $W 'graftling-*.whl') && hw=$(one $W 'graphtraj-*.whl') || return 1
+    [[ -e $V ]] && mv $V $V.$(date +%H%M%S)
+    $CONDA -m venv $V && deps $V click yaml websockets && $V/bin/python -m pip install -q --disable-pip-version-check \
+      --no-cache-dir --no-index --no-deps $gw $hw || { print "STOP: the candidate venv install failed"; return 1; }
+    print -r -- "$GT $GL" > $V/installed
+  else print -r -- "venv $V already holds $GT + $GL"; fi
+  (cd $BASE && $V/bin/python -I -c 'import importlib.metadata as m, graftling, graphtraj, sysconfig
+print("candidate venv: graphtraj", m.version("graphtraj"), "from", graphtraj.__file__, "| graftling", m.version("graftling"), "from", graftling.__file__)
+print("manuals in the candidate:", sysconfig.get_path("data") + "/share/graphtraj/manuals")')
+  say "dependency direction (required result 4): graftling's wheel alone in a clean venv, GraphTraj NOT installed"
+  local VG=$BASE/venv-graftling-only
+  rm -rf $VG; $CONDA -m venv $VG && deps $VG yaml websockets \
+    && $VG/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $(one $BASE/wheels-after 'graftling-*.whl') \
+    || { FAILS+=(dependency-venv); }
+  (cd $BASE && $VG/bin/python -I -c 'import importlib, importlib.metadata as m, importlib.util, pkgutil, sys, graftling
+requires = m.requires("graftling") or []
+print("graftling wheel Requires-Dist:", requires)
+print("graphtraj installed in this venv:", importlib.util.find_spec("graphtraj") is not None)
+failed = {}
+names = [i.name for i in pkgutil.walk_packages(graftling.__path__, "graftling.")]
+for name in names:
+    try: importlib.import_module(name)
+    except Exception as error: failed[name] = f"{type(error).__name__}: {error}"
+print("graftling modules imported:", len(names), "| failed:", failed or "none", "| graphtraj modules loaded:", [n for n in sys.modules if n.split(".")[0] == "graphtraj"])
+ok = not any(r.lower().startswith("graphtraj") for r in requires) and importlib.util.find_spec("graphtraj") is None and not failed
+print("CHECK 551 dependency direction:", "PASS" if ok else "FAIL")
+sys.exit(0 if ok else 1)') || FAILS+=(dependency-direction)
+  build_project after || FAILS+=(build)
+  say "Claude parent gate in $(project after)"
+  gate after; local g=$?
+  (( g == 3 )) && FAILS+=("gate: folder not trusted or graphtraj-claude-host not loaded; run zsh $THIS U after, then A0 again")
+  (( g != 0 && g != 3 )) && FAILS+=(gate)
+  if (( $#FAILS )); then print -r -- "
+NOT READY: ${FAILS[*]}"; return 1; fi
+  print "READY: candidate installed, dependency direction PASS, roles x4, tasks probe and gate PASS"
+  next "zsh $THIS A all"
+}
+
+# A's headless probes per Runtime: plain, one manual deny, and (Codex, DSH) the beyond-host requests that have no
+# dialog. 'expect' = the create refusal code that is the correct outcome, or '-' for a created child.
+a_cases() {
+  case $1 in
+    claude) print -l -- 'plain||-' 'deny|"disallowed_tools": ["WebFetch"]|-' ;;
+    codex)  print -l -- 'plain||-' 'deny|"disallowed_tools": ["web_search"]|-' \
+                        'beyond|"tools": ["web_search"]|authorization-required-or-off' \
+                        'undefined-mcp|"disallowed_tools": ["mcp__undefined551__x"]|unavailable' ;;
+    pi)     print -l -- 'plain||-' 'deny|"disallowed_tools": ["bash"]|-' ;;
+    dsh)    print -l -- 'plain||-' 'deny|"disallowed_tools": ["tool-web"]|-' \
+                        'beyond|"tools": ["tool-fs", "tool-plugin-market"]|authorization-required' ;;
+  esac
+}
+step_A() {
+  local list; list=($(rt_list ${ARG:-all})) || { print "usage: A <claude|codex|pi|dsh|all>"; return 2; }
+  [[ -f $BASE/venv-after/installed && -f $BASE/heading-after.txt ]] || { print "STOP: run A0 first"; return 1; }
+  load_key || print "NOTE: DEEPSEEK_API_KEY unset; the pi and dsh children cannot reach their model"
+  pi_sandbox
+  say "Claude parent gate again in $(project after) (no paid child run unless it passes)"
+  gate after; local g=$?
+  if (( g != 0 )); then
+    (( g == 3 )) && print -r -- "NOT READY: folder not trusted or graphtraj-claude-host not loaded: zsh $THIS U after, then A again" \
+                 || print -r -- "NOT READY: parent gate failed (above)"
+    return 1
+  fi
+  local rt line name args expect FAILS=() RESULTS=()
+  for rt in $list; do
+    for line in ${(f)"$(a_cases $rt)"}; do
+      name=${line%%|*}; args=${${line#*|}%|*}; expect=${line##*|}
+      probe after $rt A-$name "$args"; local rc=$?
+      local created=$(grep -c 'CHECK 551 .* child run: COMPLETE' $D/summary.txt) code=$(grep -o -m1 -E 'authorization-required|unavailable' $D/summary.txt || true)
+      local verdict
+      case $expect in
+        -) (( rc == 0 )) && verdict=OK || verdict="NOT COMPLETE" ;;
+        authorization-required-or-off) [[ $code == authorization-required ]] && verdict="OK (refused authorization-required)" \
+             || { (( created )) && verdict="CHILD CREATED: read WEB-551/RECORD init whether web search stayed off" || verdict="UNEXPECTED (${code:-no code})"; } ;;
+        *) [[ $code == $expect ]] && verdict="OK (refused $expect)" || verdict="UNEXPECTED (expected $expect, got ${code:-a created child})" ;;
+      esac
+      RESULTS+=("A $rt $name {${args:-no tool arguments}}: $verdict | $D/summary.txt")
+      [[ $verdict == (OK*|CHILD*) ]] || FAILS+=(A-$rt-$name)
+    done
+  done
+  say "A results"
+  print -l -- $RESULTS
+  if (( $#FAILS )); then print -r -- "
+NOT COMPLETE: ${FAILS[*]}"; return 1; fi
+  print "COMPLETE"
+  next "zsh $THIS AU claude deny   (USER: the beyond-host request answered by you; then AC claude)"
+}
+
+# AU: the beyond-host request reaches the USER. An interactive Claude Main parent creates the child; the child's
+# request (Claude: WebFetch, not pre-allowed -> can_use_tool; Pi: a built-in the host's defaultTools lacks ->
+# Pi's confirm dialog) is retained for the parent, which shows it and asks you; it relays your answer via agents reply.
+step_AU() {
+  local rt=${ARG:-} answer=${3:-deny}
+  [[ $rt == (claude|pi) && $answer == (allow|deny) ]] || { print "usage: AU <claude|pi> <deny|allow>"; return 2; }
+  local p=$(project after) extra="" args="\"workspace\": \"$(project after)/ws-551\""
+  if [[ $rt == pi ]]; then
+    load_key || { print "STOP: DEEPSEEK_API_KEY unset"; return 1; }
+    pi_sandbox
+    local tool=$(cd $BASE && $BASE/venv-after/bin/python -I -c 'import os, sys
+from pathlib import Path
+from graftling.pi.execution import host_default_tools
+host = host_default_tools(Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi/agent"))
+print(next((t for t in ("grep", "find", "ls") if t not in host), ""))')
+    [[ -n $tool ]] || { print "STOP: the host Pi already enables grep, find and ls; no built-in is beyond it"; return 1; }
+    args+=", \"tools\": [\"read\", \"$tool\"]"
+    extra="use your $tool tool once on your working directory (any harmless argument). Write one line \"BEYOND-551: \" followed by its result or the exact error or refusal."
+    print -r -- "Pi beyond-host tool: $tool (not in the host Pi's defaultTools)"
+  fi
+  D=$OUT/AU-$rt-$answer-$(date +%Y%m%dT%H%M%S)-$$; mkdir -p $D; touch $D/marker
+  parent_prompt $rt "$args" user "$extra" > $D/parent-prompt.txt
+  local S=$(uuidgen | tr A-Z a-z); print -r -- $S > $D/parent-session.txt; print -r -- "$rt $answer $p" > $D/run.txt
+  say "[AU $rt] USER, in THIS terminal (interactive Claude Main, $PARENT_MODEL, in $p). Expected: no dialog of Claude Code itself.
+When Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: $answer
+(that request is the child's beyond-host ask: $([[ $rt == claude ]] && print 'Claude Code can_use_tool for WebFetch' || print "Pi's confirm dialog 'agents: allow a tool beyond the host settings' for $tool")).
+When it has printed END-CHILD, type /exit."
+  (cd $p && clean claude --model $PARENT_MODEL --session-id $S \
+     --mcp-config $p/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__agents "$(<$D/parent-prompt.txt)") || print "claude exit $?"
+  next "zsh $THIS AC $rt"
+}
+step_AC() {  # read only: the newest AU run of $ARG
+  local rt=${ARG:-}; [[ $rt == (claude|pi) ]] || { print "usage: AC <claude|pi>"; return 2; }
+  D=($OUT/AU-$rt-*(N/om[1])); D=${D[1]:-}; [[ -n $D ]] || { print "STOP: no AU $rt run"; return 1; }
+  local S=$(<$D/parent-session.txt) f
+  for f in $HOME/.claude/projects/*/$S.jsonl(N.); do cp $f $D/parent.jsonl && print -r -- "parent transcript (read only, by its session id): $f"; done
+  [[ -f $D/parent.jsonl ]] || print "NOTE: no Claude transcript named $S.jsonl"
+  collect $(project after) $rt
+  clean $BASE/venv-after/bin/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-after.txt 2>/dev/null || print -- -)" | redact | tee $D/summary.txt
+  local rc=$?
+  print -r -- "user's answer in this run: $(cut -d' ' -f2 $D/run.txt) | parent REQUEST/REPLY lines:"
+  grep -ho 'REQUEST-551[^"\\]*\|REPLY-551[^"\\]*' $D/parent.jsonl 2>/dev/null | sort -u | head -6
+  (( rc == 0 )) || { print "NOT COMPLETE: no created child or no final message in this AU run (above)"; return 1; }
+  next "zsh $THIS AU $rt allow   (the second run), then AC $rt; or G"
+}
+
+check_tmp() {
+  case ${PYTEST_TMP:A}/ in ${H:A}/*) print "STOP: TMPDIR $PYTEST_TMP is inside the Harness; set TMPDIR outside it"; return 1 ;; esac
+  print -r -- "pytest temp: TMPDIR=$PYTEST_TMP (outside the Harness)"
+}
+g_venv() {  # G's venv: conda --system-site-packages + production click/yaml/websockets + graftling $GL wheel + this Worktree editable
+  V=$T/venv-g-${GL[1,8]}
+  if [[ -x $V/bin/python && -f $V/installed && $(<$V/installed) == "$GL $WT" ]]; then print -r -- "reusing $V"; return 0; fi
+  rm -rf $V $T/wheels-g; mkdir -p $T/wheels-g
+  wheel $GLREPO $GL src/graftling $T/wheels-g || return 1   # never the working tree
+  $CONDA -m venv --system-site-packages $V && deps $V click yaml websockets || return 1
+  $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $(one $T/wheels-g 'graftling-*.whl') || return 1
+  $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT 2>&1 | grep -vi cache
+  print -r -- "$GL $WT" > $V/installed
+}
+step_G() {
+  say "[G] GraphTraj full suite of this Worktree ($(git -C $WT rev-parse --short HEAD); 6 shards, background) with graftling $GL,
+then graftling's own suite at $GL (git archive, editable). Dialog: none. Run nothing else meanwhile."
+  local dirty=$(git -C $WT status --porcelain -- src tests plugins)
+  [[ -z $dirty ]] || { print -r -- "STOP: uncommitted changes in $WT: $dirty"; return 1; }
+  [[ $GL != missing ]] || { print "STOP: no graftling branch"; return 1; }
+  check_tmp || return 1
+  local others=$(ps -axww -o pid=,command= | grep -E 'run_test_shards|-m pytest' | grep -v grep || true)
+  [[ -z $others ]] || { print -r -- "STOP: another test run is running: $others"; return 1; }
+  mkdir -p $T; local V; g_venv || { print "STOP: G venv failed"; return 1; }
+  local RUNTMP=${PYTEST_TMP:A}/verify-551-G-$(date +%Y%m%dT%H%M%S); mkdir -p $RUNTMP
+  local R=$OUT/G-$(git -C $WT rev-parse --short HEAD)-${GL[1,8]}-$(date +%Y%m%dT%H%M%S); mkdir -p $R
+  local GS=$T/graftling-src-${GL[1,8]}
+  rm -rf $GS; mkdir -p $GS; gitr $GLREPO archive $GL | tar -x -C $GS || return 1
+  local GV=$T/venv-gl-suite-${GL[1,8]}
+  rm -rf $GV; $CONDA -m venv --system-site-packages $GV && deps $GV click yaml websockets \
+    && $GV/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $GS/src/graftling 2>&1 | grep -vi cache
+  (cd $RUNTMP && $V/bin/python -I -c 'import graphtraj, graftling, pytest; print("G venv: graphtraj", graphtraj.__file__, "| graftling", graftling.__version__, graftling.__file__, "| pytest", pytest.__version__)') | tee $R/run.txt
+  (cd $RUNTMP && $GV/bin/python -I -c 'import graftling; print("graftling suite venv: graftling", graftling.__file__)') | tee -a $R/run.txt
+  print -r -- "candidate: GraphTraj $(git -C $WT rev-parse HEAD) | graftling $GL | pytest temp root $RUNTMP (TMPDIR=$PYTEST_TMP)" | tee -a $R/run.txt
+  if [[ -n ${VERIFY551_TESTS:-} ]]; then
+    print -r -- "REHEARSAL: GraphTraj tests limited to $VERIFY551_TESTS; graftling tests limited to ${VERIFY551_GL_TESTS:-tests/test_no_graphtraj_dependency.py} (same venvs, temp root, exit files)" | tee -a $R/run.txt
+    (cd $WT && TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rfE ${=VERIFY551_TESTS} > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt
+     cd $GS && TMPDIR=$RUNTMP $GV/bin/python -m pytest -p no:cacheprovider -q -rfE ${=VERIFY551_GL_TESTS:-tests/test_no_graphtraj_dependency.py} > $R/graftling-suite.txt 2>&1; print "exit=$?" >> $R/graftling-suite.txt) &!
+  else
+    (cd $WT && TMPDIR=$RUNTMP $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt
+     cd $GS && TMPDIR=$RUNTMP $GV/bin/python -m pytest -p no:cacheprovider -q -rfE > $R/graftling-suite.txt 2>&1; print "exit=$?" >> $R/graftling-suite.txt) &!
+  fi
+  print -r -- $R > $OUT/G-latest
+  print -r -- "started in the background at $(date +%T): $R/suite.txt then $R/graftling-suite.txt (each ends with 'exit=N')"
+  next "zsh $THIS GR   (after both files end with exit=; ~30 min)"
+}
+classify() {  # FAILED/ERROR lines of files $@ as known (528's accepted G, 516) or NEW
+  local line t any=0
+  for line in ${(f)"$(grep -h -E '^(FAILED|ERROR) ' $@ 2>/dev/null | sed -E 's/ - .*//' | sort -u)"}; do
+    any=1; t=${${line#* }%%\[*}
+    if grep -qF -- "$t" $KNOWN528 2>/dev/null; then print -r -- "known (528 accepted G): $line"
+    elif grep -qF -- "${t##*::}" $KNOWN516 2>/dev/null; then print -r -- "known (516): $line"
+    else print -r -- "NEW: $line"; fi
+  done
+  (( any )) || print "(no FAILED/ERROR lines)"
+}
+step_GR() {
+  say "[GR] read only: newest G; FAILED/ERROR lines classed known (528 accepted G, 516) or NEW. Dialog: none."
+  local g=$(cat $OUT/G-latest 2>/dev/null)
+  [[ -n $g && -f $g/suite.txt ]] || { print -r -- "no G result yet; run: zsh $THIS G"; return 1; }
+  cat $g/run.txt
+  print -r -- "---- GraphTraj $g/suite.txt"; tail -4 $g/suite.txt; classify $g/suite.txt $g/shards/*(N.)
+  print -r -- "---- graftling $g/graftling-suite.txt"; tail -3 $g/graftling-suite.txt 2>/dev/null; classify $g/graftling-suite.txt
+  local done=1; grep -q '^exit=' $g/suite.txt && grep -q '^exit=' $g/graftling-suite.txt 2>/dev/null || done=0
+  (( done )) || { print "NOT COMPLETE: G still running (no exit= line yet); GR again later"; return 1; }
+  if classify $g/suite.txt $g/shards/*(N.) $g/graftling-suite.txt | grep -q '^NEW'; then print "NOT COMPLETE: NEW failures (above)"; return 1; fi
+  print "COMPLETE: no NEW failure in either suite"
+}
+
 case $STEP in
   00) step_00 ;;
   U) step_U ;;
   B) step_B ;;
-  *) print "usage: zsh $THIS <00|U|B <claude|codex|pi|dsh|all>>"; return 2 ;;
+  A0) step_A0 ;;
+  A) step_A ;;
+  AU) step_AU "$@" ;;
+  AC) step_AC ;;
+  G) step_G ;;
+  GR) step_GR ;;
+  *) print "usage: zsh $THIS <00|U [before|after]|B <rt|all>|A0|A <rt|all>|AU <claude|pi> <deny|allow>|AC <claude|pi>|G|GR>"; return 2 ;;
 esac

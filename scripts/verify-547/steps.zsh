@@ -176,7 +176,7 @@ GR)
   [[ -n $g && -f $g/suite.txt ]] || { print -r -- "no G result yet; run: zsh $THIS G"; return 0; }
   [[ -n $b && -f $b/suite.txt ]] || { print -r -- "no B result yet (classification uses 516 only); run: zsh $THIS B"; b=; }
   for r in $g $b; do print -r -- "---- $r"; cat $r/run.txt; tail -4 $r/suite.txt; grep -q '^exit=' $r/suite.txt || print "still running (no exit= line yet)"; done
-  print "---- candidate G classification"; classify "$b" $g/suite.txt $g/shards/*(N.)
+  print -r -- "---- candidate G classification"; classify "$b" $g/suite.txt $g/shards/*(N.)
   [[ -n $t ]] && { print -r -- "---- Gt $t"; tail -2 $t/suite.txt; classify "" $t/suite.txt; }
   print "Success: G 'exit=0' or only 'known' lines; no 'NEW' line in G or Gt."
   print -r -- "next: report $OUT/GR.txt to the Leader"

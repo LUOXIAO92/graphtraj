@@ -1,0 +1,9 @@
+23:46:47 ws /private/tmp/claude-501/reh553b/base/project/runs/dsh-S2-r1/ws: ['glossary.md', 'sap-draft.md'] | U cwd /private/tmp/claude-501/reh553b/base/u/dsh-S2-r1 | S dsh deepseek-flash high | U high
+23:46:48 turn 01 S/dsh rc=0 1s model=deepseek-flash session=session-37d8cffa-40e5-4602-8c64-6f02685f50ba is_error=False tools=4 web=0 text_chars=94
+23:46:48 turn 02 U rc=0 0s model=claude-fable-5-2 session=cd300945-9e99-4930-b940-71f15b1545ae is_error=False web_search_requests=0 text_chars=75
+23:46:49 turn 03 S/dsh rc=0 0s model=deepseek-flash session=session-37d8cffa-40e5-4602-8c64-6f02685f50ba is_error=False tools=1 web=0 text_chars=53
+23:46:49 turn 04 U rc=0 0s model=claude-fable-5-2 session=cd300945-9e99-4930-b940-71f15b1545ae is_error=False web_search_requests=0 text_chars=11
+23:46:49 END {"run": "dsh-S2-r1", "agent": "dsh", "scenario": "S2", "exchanges": 1, "done": true, "error": null}
+23:46:50 audit folder /private/tmp/claude-501/reh553b/base/audit/dsh-S2-r1: 23 files
+23:46:50 turn 90 A rc=0 0s model=claude-sonnet-5-5 session=bc5bb750-5c62-42b6-b6a5-2432de801706 is_error=False web_search_requests=0 text_chars=122
+23:46:50 audit.md first line: AUDIT: CLEAN

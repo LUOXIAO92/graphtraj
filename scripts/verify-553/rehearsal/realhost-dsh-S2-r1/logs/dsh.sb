@@ -1,0 +1,6 @@
+(version 1)
+(allow default)
+(deny file-read-data file-read-xattr (subpath "/private/tmp") (subpath "/private/var/tmp") (subpath "/Users/luoxiao/workspace") (subpath "/private/tmp/claude-501/reh553b/fake-workspace") (subpath "/Users/luoxiao/.claude") (subpath "/Users/luoxiao/.codex") (subpath "/Users/luoxiao/.dsh") (subpath "/Users/luoxiao/.agents") (subpath "/Users/luoxiao/.pi"))
+(allow file-read-data file-read-xattr (subpath "/private/tmp/claude-501/reh553b/base/project") (subpath "/private/tmp/claude-501/reh553b/base/bin") (subpath "/private/tmp/claude-501/reh553b/t/venv/bin") (subpath "/private/tmp/claude-501/reh553b/t/venv/lib") (subpath "/private/tmp/claude-501/reh553b/t/venv/pyvenv.cfg"))
+(deny file-read-data file-read-xattr (subpath "/private/tmp/claude-501/reh553b/base/project/runs"))
+(allow file-read-data file-read-xattr (subpath "/private/tmp/claude-501/reh553b/base/project/runs/dsh-S2-r1/ws") (subpath "/private/tmp/claude-501/reh553b/base/dsh/dsh-S2-r1") (subpath "/private/tmp/claude-501/reh553b/t/venv/share/graphtraj/manuals/concept-clarification"))

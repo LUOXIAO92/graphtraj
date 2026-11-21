@@ -1,0 +1,8 @@
+{
+  "run": "dsh-S2-r1",
+  "agent": "dsh",
+  "scenario": "S2",
+  "exchanges": 1,
+  "done": true,
+  "error": null
+}

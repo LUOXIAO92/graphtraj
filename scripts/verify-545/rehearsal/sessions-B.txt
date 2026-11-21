@@ -1,0 +1,14 @@
+# sessions545.mjs (fixed: all zstd frames) on the real B logs, read only, 2026-11-21 21:52:28
+
+## G: node sessions545.mjs /private/tmp/dsh-ui-545/before/dsh-home /private/tmp/dsh-ui-545/before/project
+session /sessions/--private-tmp-dsh-ui-545-before-project--/session-85c444eb-ed19-489a-95be-946fd96a03af/session.v4.jsonl.zstd: turns 1, user inputs 1
+  relay graphtraj-notice:session-85c444eb-ed19-489a-95be-946fd96a03af:1:0 from agent-cc2c2b7faf9a41399a8c2dc2ce70622b: turn 1 step 3 -> inside a running turn
+  relays 1, opened a turn 0, inside a running turn 1, duplicate ids []
+skipped /sessions/--private-tmp-dsh-ui-545-before-project--/session-55117d12-7eb8-4537-9f7e-8d49954518a7/session.v4.jsonl.zstd: 4 event(s), no turn (header-only session)
+exit=0
+
+## S: node sessions545.mjs /private/tmp/dsh-ui-545/before/dsh-home /private/tmp/dsh-ui-545/before/work-standalone
+session /sessions/--private-tmp-dsh-ui-545-before-work-standalone--/session-cbcfa359-178b-405a-84ef-bd4e72279ad0/session.v4.jsonl.zstd: turns 1, user inputs 1
+  relay agents-notice:cb6fc269c4284b9b8a5f80b323eb6a16:completed from agent-c03fdcb4613a444d989ba671c03a397a: turn 1 step 3 -> inside a running turn
+  relays 1, opened a turn 0, inside a running turn 1, duplicate ids []
+exit=0

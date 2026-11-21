@@ -30,4 +30,7 @@ Main runs, from this Worktree in Main's Bash: `zsh scripts/verify-545/steps.zsh 
 
 ## Rehearsal (`rehearsal/`)
 
-See `rehearsal/*.txt`: step 00 and T/TR from an empty directory through this entry (flags named in each file).
+- `00.txt`: step 00 from an empty directory in the Engineer sandbox, with VERIFY545_BASE=$TMPDIR/545/base (the sandbox cannot write /private/tmp/dsh-ui-545), VERIFY545_NOMODEL, VERIFY545_NOBROWSER and VERIFY545_ASSUME_PLUGIN. The sandbox has no `claude`, no browser cache and no pnpm store lock, so model calls, the browser and the plugin add are stubbed. The `send target` line shows next-step / next-step on BEFORE.
+- `T-TR.txt`: T and TR from an empty directory. VERIFY545_TESTS is set to real repository tests (conftest + `project` fixture), run through the same venv and entry as the full suite. The AFTER build line shows next-turn / next-turn.
+- `old-vs-new.txt`: the candidate GraphTraj tests fail on f754d3a9 and pass on the candidate. The graftling fixture fails on 6794ce0 and passes on 6443e9e0. graftling `test_dsh_live.py` + `test_pi_dsh_notice_holding.py` pass on 6443e9e0.
+- `sessions545.mjs` was checked only on a synthetic zstd log in the event shape that DSH's agent loop appends (`turn/start`, `step/start`, `user/message` with `source`). If the real log differs, it prints `firstKeys`.

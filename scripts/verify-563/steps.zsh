@@ -199,7 +199,9 @@ G)
   { print -r -- "pytest temp root: $RUNTMP"; print -r -- "candidate: $(git -C $WT rev-parse HEAD) | graftling $GCOMMIT"; } > $R/run.txt
   local extra=(${=${VERIFY563_PYTEST_ARGS:-}})
   (( $#extra )) && print -r -- "REHEARSAL: extra pytest args after -- -rA: $extra (same shard entry; whole suite collected)" | tee -a $R/run.txt
-  (cd $WT && TMPDIR=$RUNTMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA $extra > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
+  # `&!` disowns the run and all output is redirected; nohup is not used (without a console it exits 127:
+  # "can't detach from console").
+  (cd $WT && TMPDIR=$RUNTMP $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA $extra > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
   print -r -- $R > $OUT/G-latest
   print -r -- "started in the background at $(date +%T); output: $R/suite.txt (last line 'exit=N' when it ends)"
   print "Success: the graphtraj line under $WT/src, 'graftling <version> ...' built from $GCOMMIT, 'started in the background'."

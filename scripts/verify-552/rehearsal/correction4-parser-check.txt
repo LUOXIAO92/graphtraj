@@ -1,0 +1,8 @@
+alpha.3 real record (copy of /private/tmp/cc-552/dsh/ready-dsh/home/sessions/.../session.v4.jsonl.zstd): tools=['create_goal', 'edit', 'get_goal', 'glob', 'grep', 'list_mcp_resource_templates', 'list_mcp_resources', 'mcp__graphtraj__tasks', 'read', 'read_image', 'read_mcp_resource', 'todo_write', 'update_goal', 'working_directory', 'write']
+  equals expected list: True | banned present: none | tasks present: True | model=deepseek-flash effort=high
+  -> probe (c) tool list verdict would be PASS
+alpha.2 real record (rehearsal/real-dsh-boot-session.jsonl, string form): tools=['create_goal', 'edit', 'get_goal', 'glob', 'grep', 'list_mcp_resource_templates', 'list_mcp_resources', 'mcp__graphtraj__tasks', 'read', 'read_image', 'read_mcp_resource', 'todo_write', 'update_goal', 'working_directory', 'write']
+  equals expected list: True | banned present: none | tasks present: True | model=deepseek-flash effort=high
+  -> probe (c) tool list verdict would be PASS
+negative control, 7145af06 expression (strings only) on the alpha.3 record: [] -> no tool list found (FAIL, as in Main P-dsh-2)
+alpha.3 entry shape: dict with keys ['description', 'name', 'parameters']; 1 request/header record(s)

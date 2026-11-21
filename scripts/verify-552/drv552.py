@@ -491,7 +491,10 @@ def parse_dsh(out, _last=None, home=None):
             info['is_error'] = True
     if home:
         headers = dsh_headers(home)
-        tools = sorted({t for h in headers for t in (h.get('tools') or []) if isinstance(t, str)})
+        # dsh 0.2.2-alpha.2 records each tool as a name string; alpha.3 as {name, description, parameters}
+        # (Leader correction 4, from the real alpha.3 record). Either form yields the tool's name.
+        tools = sorted({t if isinstance(t, str) else t['name'] for h in headers for t in (h.get('tools') or [])
+                        if isinstance(t, str) or (isinstance(t, dict) and isinstance(t.get('name'), str))})
         info['tools'] = tools or None
         info['tool_keys'] = [f'request/header.tools of {len(headers)} request(s)']
         configs = [h.get('config') or {} for h in headers]

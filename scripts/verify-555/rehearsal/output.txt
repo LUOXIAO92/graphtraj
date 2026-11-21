@@ -2,17 +2,25 @@
 =============== $ zsh steps.zsh 00 ===============
 
 ### versions (dialog: none)
-zsh 5.9 | git version 2.50.1 (Apple Git-155) | driver python: Python 3.13.11 (/Users/luoxiao/miniconda3/bin/python3.13) | BASE /private/tmp/claude-501/gl555-rehearsal2/base
+zsh 5.9 | git version 2.50.1 (Apple Git-155) | driver python: Python 3.13.11 (/Users/luoxiao/miniconda3/bin/python3.13) | BASE /private/tmp/claude-501/gl555-rehearsal3/base
 candidate: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/555-graftling-mcp-full-validation-json-file-arguments/.scratch/555/graftling @ aea5962d118aa785f32878ada095862d5ec545a3 (agent/555-graftling-mcp-full-validation-json-file-arguments)
 candidate author: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+baseline:  6794ce02b6210ec88837437affb8d7b525612804 (Merge branch 'agent/538-dsh-graphtraj-notice-block-display' into dev)
+baseline is an ancestor of the candidate: yes
 model host: none (no model is called by any step)
 
 ### candidate copy BASE/src and venv BASE/venv (dialog: none)
 websockets: copied read only from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
-graftling 0.6.2 from /private/tmp/claude-501/gl555-rehearsal2/base/src/src/graftling/__init__.py
+graftling 0.6.2 from /private/tmp/claude-501/gl555-rehearsal3/base/src/src/graftling/__init__.py
 websockets 16.1.1 | PyYAML 6.0.3
-new public names: True
-agents-mcp entry: /private/tmp/claude-501/gl555-rehearsal2/base/venv/bin/agents-mcp
+555 public names: True
+agents-mcp entry: /private/tmp/claude-501/gl555-rehearsal3/base/venv/bin/agents-mcp
+
+### baseline copy BASE/base-src and venv BASE/base-venv (dialog: none)
+websockets: copied read only from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+graftling 0.6.2 from /private/tmp/claude-501/gl555-rehearsal3/base/base-src/src/graftling/__init__.py
+websockets 16.1.1 | PyYAML 6.0.3
+555 public names: False
 
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/555-graftling-mcp-full-validation-json-file-arguments/scripts/verify-555/steps.zsh D
 (exit 0)
@@ -20,8 +28,8 @@ agents-mcp entry: /private/tmp/claude-501/gl555-rehearsal2/base/venv/bin/agents-
 =============== $ zsh steps.zsh D ===============
 
 ### demo through agents-mcp and its owning DSH host (dialog: none)
-workspace (boundary = native Session cwd): /private/tmp/claude-501/gl555-rehearsal2/base/demo/ws | outside file: /private/tmp/claude-501/gl555-rehearsal2/base/demo/outside.json | ws/args/link.json -> /private/tmp/claude-501/gl555-rehearsal2/base/demo/outside.json
-owning host: graftling.dsh.host pid 25767, channel /private/tmp/claude-501/gl555-rehearsal2/base/demo/data/live/dsh-host/control-e69zousp
+workspace (boundary = native Session cwd): /private/tmp/claude-501/gl555-rehearsal3/base/demo/ws | outside file: /private/tmp/claude-501/gl555-rehearsal3/base/demo/outside.json | ws/args/link.json -> /private/tmp/claude-501/gl555-rehearsal3/base/demo/outside.json
+owning host: graftling.dsh.host pid 37830, channel /private/tmp/claude-501/gl555-rehearsal3/base/demo/data/live/dsh-host/control-xylflhkb
 agents-mcp serverInfo: {"name": "agents", "version": "0.6.2"}
 
 [several problems in one call (envelope + arguments)] isError=True
@@ -50,11 +58,11 @@ agents-mcp serverInfo: {"name": "agents", "version": "0.6.2"}
 
 [outside the boundary (..)] isError=True
   request: {"action": "execute", "feature": "status", "arguments_file": "../outside.json"}
-  result:  {"action": "execute", "error": {"code": "invalid-input", "message": "request.arguments_file: ../outside.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal2/base/demo/ws)", "errors": [{"path": "request.arguments_file", "reason": "../outside.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal2/base/demo/ws)"}]}}
+  result:  {"action": "execute", "error": {"code": "invalid-input", "message": "request.arguments_file: ../outside.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal3/base/demo/ws)", "errors": [{"path": "request.arguments_file", "reason": "../outside.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal3/base/demo/ws)"}]}}
 
 [outside the boundary (symlink in ws)] isError=True
   request: {"action": "execute", "feature": "status", "arguments_file": "args/link.json"}
-  result:  {"action": "execute", "error": {"code": "invalid-input", "message": "request.arguments_file: args/link.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal2/base/demo/ws)", "errors": [{"path": "request.arguments_file", "reason": "args/link.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal2/base/demo/ws)"}]}}
+  result:  {"action": "execute", "error": {"code": "invalid-input", "message": "request.arguments_file: args/link.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal3/base/demo/ws)", "errors": [{"path": "request.arguments_file", "reason": "args/link.json is outside the directory this caller may read (/private/tmp/claude-501/gl555-rehearsal3/base/demo/ws)"}]}}
 
 owning host exit: 0; agents-mcp exit: 0
 
@@ -63,23 +71,48 @@ owning host exit: 0; agents-mcp exit: 0
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/555-graftling-mcp-full-validation-json-file-arguments/scripts/verify-555/steps.zsh T
 (exit 0)
 
-=============== $ zsh steps.zsh T tests/test_envelope_validation_555.py tests/test_dsh_standalone_host.py ===============
+=============== $ zsh steps.zsh T tests/test_dsh_standalone_host.py tests/test_approval_layers.py ===============
 
-### graftling pytest in /private/tmp/claude-501/gl555-rehearsal2/base/src (dialog: none)
-candidate aea5962d118aa785f32878ada095862d5ec545a3 | TMPDIR=/tmp/claude-501 | args: tests/test_envelope_validation_555.py tests/test_dsh_standalone_host.py
-.....................................                                    [100%]
-37 passed in 6.05s
-(pytest exit 0)
+### graftling pytest on the candidate (dialog: none)
+candidate aea5962d118aa785f32878ada095862d5ec545a3 in /private/tmp/claude-501/gl555-rehearsal3/base/src | TMPDIR=/tmp/claude-501 | args: tests/test_dsh_standalone_host.py tests/test_approval_layers.py
+............................................................             [100%]
+60 passed in 8.15s
+(candidate pytest exit 0)
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/555-graftling-mcp-full-validation-json-file-arguments/scripts/verify-555/steps.zsh TB tests/test_dsh_standalone_host.py tests/test_approval_layers.py
+(exit 0)
+
+=============== $ zsh steps.zsh TB ===============
+
+### graftling pytest on the baseline (dialog: none)
+baseline 6794ce02b6210ec88837437affb8d7b525612804 in /private/tmp/claude-501/gl555-rehearsal3/base/base-src | TMPDIR=/tmp/claude-501 | args: tests/test_dsh_standalone_host.py tests/test_approval_layers.py
+............................................................             [100%]
+60 passed in 5.17s
+(baseline pytest exit 0)
 
 ==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/555-graftling-mcp-full-validation-json-file-arguments/scripts/verify-555/steps.zsh C
 (exit 0)
 
 =============== $ zsh steps.zsh C ===============
 
-### copy logs to /private/tmp/claude-501/gl555-rehearsal2/realhost (dialog: none)
-total 56
--rw-r--r--  1 luoxiao  wheel    41 11月 21 21:46 CANDIDATE
--rw-r--r--  1 luoxiao  wheel  4157 11月 21 21:46 D.out
--rw-r--r--  1 luoxiao  wheel  8419 11月 21 21:46 D.transcript.jsonl
--rw-r--r--  1 luoxiao  wheel    99 11月 21 21:46 T.out
+### compare candidate and baseline failures (read only; dialog: none)
+candidate args: tests/test_dsh_standalone_host.py tests/test_approval_layers.py | baseline args: tests/test_dsh_standalone_host.py tests/test_approval_layers.py
+candidate summary: 60 passed in 8.15s
+baseline summary:  60 passed in 5.17s
+failing in candidate: 0 | in baseline: 0 | in both: 0
+NEW (candidate only): 0
+baseline only: 0
+
+### copy logs to /private/tmp/claude-501/gl555-rehearsal3/realhost (dialog: none)
+total 88
+-rw-r--r--  1 luoxiao  wheel    41 11月 21 21:51 BASELINE
+-rw-r--r--  1 luoxiao  wheel    41 11月 21 21:51 CANDIDATE
+-rw-r--r--  1 luoxiao  wheel  4157 11月 21 21:51 D.out
+-rw-r--r--  1 luoxiao  wheel  8419 11月 21 21:51 D.transcript.jsonl
+-rw-r--r--  1 luoxiao  wheel    64 11月 21 21:51 T.args
+-rw-r--r--  1 luoxiao  wheel     0 11月 21 21:51 T.failing
+-rw-r--r--  1 luoxiao  wheel    99 11月 21 21:51 T.out
+-rw-r--r--  1 luoxiao  wheel    64 11月 21 21:51 TB.args
+-rw-r--r--  1 luoxiao  wheel     0 11月 21 21:51 TB.failing
+-rw-r--r--  1 luoxiao  wheel    99 11月 21 21:51 TB.out
 (exit 0)

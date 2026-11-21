@@ -1,0 +1,15 @@
+Dialog: none
+== [B] Main. The same full suite on base fba1b6b5 for comparison (background ~25 min). Dialog: none. Run nothing else meanwhile.
+NOTE: ps is not permitted here (quiet:2: operation not permitted: ps); check by hand that no other test run is running
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-547-base-20261121T154705
+reusing /tmp/claude-501/r547/t/venv-base (/tmp/claude-501/r547/t/base-src-fba1b6b5 editable; graftling ec91db5e wheel)
+graphtraj /private/tmp/claude-501/r547/t/base-src-fba1b6b5/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/r547/t/venv-base/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+base: fba1b6b59a790b027ebcc66bddde8c89d6f16e65 | graftling wheel from git archive ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground
+...........                                                              [100%]
+11 passed in 5.87s
+exit=0
+Success: the graphtraj line under /tmp/claude-501/r547/t/base-src-fba1b6b5/src, 'started in the background'.
+next: after B's suite.txt ends with exit=: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/547-backup-cross-repository-sub-issues/scripts/verify-547/steps.zsh GR

@@ -120,7 +120,8 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
     for task in (first, second, dependent):
         task["source"] = f"local:task/{task['task_id']}"
         _register(installed_commands, root, task)
-    original_definitions = {path: path.read_bytes() for path in state.glob("tasks/*/task.md")}
+    original_definitions = {path: path.read_bytes() for path in state.glob("tasks/*/definitions/*.md")}
+    assert len(original_definitions) == 3
     assert [item["task_id"] for item in product("task", "graph")["tasks"] if item["ready"]] == ["1"]
     _change_status(installed_commands, root, "1", "ready")
     batch = root / "frontier.yml"

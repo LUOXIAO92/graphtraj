@@ -9,7 +9,7 @@ import shutil
 import yaml
 
 from conftest import InstalledCommands, run_process
-from test_task_migration import _ticket_project, _snapshot, _migrate
+from test_task_migration import REGISTERED, _ticket_project, _snapshot, _migrate
 from graphtraj.sessions.storage import SessionStore, session_path
 
 
@@ -76,7 +76,10 @@ def test_snapshot_migrates_without_original_project_or_sources(
     graph = run_process([str(installed_commands.product), 'task', 'graph', '--view', 'full'], cwd=copy)
     assert graph.returncode == 0, graph.stderr
     assert len(yaml.safe_load(graph.stdout)['tasks']) == 2
-    assert (state / 'tasks/2-child/definition-link').read_bytes() == (state / 'tasks/1-summary/task.md').read_bytes()
+    # A link to the first definition follows it to its versioned name.
+    first = state / f"tasks/1-summary/definitions/{REGISTERED['1']}.md"
+    assert (state / 'tasks/2-child/definition-link').resolve() == first.resolve()
+    assert (state / 'tasks/2-child/definition-link').read_bytes() == first.read_bytes()
     backup = yaml.safe_load(result.stdout)['backup']
     restored = run_process([str(installed_commands.product), 'migrate-tickets', '--restore', backup], cwd=copy)
     assert restored.returncode == 0, restored.stderr

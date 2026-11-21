@@ -40,7 +40,9 @@ MODEL=claude-opus-5-5
 STEP=${1:-}
 PYTEST_TMP=${TMPDIR:-/tmp}
 KNOWN528=$H/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/G-8267f9e5-20261119T235550/suite.txt
-KNOWN516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
+# 516's CURRENT definition, named by current_definition in its task.yml (563: task.md is only its initial text).
+D516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests
+KNOWN516=$D516/${${${(M)${(f)"$(<$D516/task.yml)"}:#current_definition: *}#current_definition: }//[\'\"]/}
 FOCUSED=(tests/test_claude_resource_grants_531.py tests/test_claude_runtime.py tests/test_member_history_grants.py
          tests/test_caller_identity_lock_531.py tests/test_hosted_cli.py tests/test_desktop_host.py
          tests/test_parent_host_status.py tests/test_descendant_stop_control.py)

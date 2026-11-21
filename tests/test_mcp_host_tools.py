@@ -18,7 +18,7 @@ from typing import Iterator
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, runner_command
+from conftest import FakeCodex, InstalledCommands, current_definition, run_process, runner_command
 from graphtraj.interfaces import gateway, tools
 from runner_fixtures import configure_harness
 from test_task_graph import _configure, _task, _write
@@ -399,7 +399,8 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
         "caused_by_event_ids": [],
         "evidence_refs":       ["evidence.md"],
         "tasks":             [
-            {**_task("74", "second-graph"), "current_definition": "task.md"}
+            # Each project observes its own current definition before revising.
+            {**_task("74", "second-graph"), "current_definition": None}
         ],
     }
     change = {
@@ -421,6 +422,7 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
             host_directories.append(
                 Path(registered["structuredContent"]["task_directory"])
             )
+        revision["tasks"][0]["current_definition"] = current_definition(host_project, "74")
         revised = server.call("task_revise", revision)["result"]
         assert revised["isError"] is False
         updated = server.call("task_update", change)["result"]
@@ -440,6 +442,7 @@ def test_installed_mcp_server_submits_the_same_graph_operations_as_the_cli(
         assert host_directory.relative_to(host_project) == Path(
             cli_registered.stdout.strip()
         ).relative_to(cli_project)
+    revision["tasks"][0]["current_definition"] = current_definition(cli_project, "74")
     cli_revised = _cli(
         installed_commands,
         cli_project,
@@ -1002,7 +1005,7 @@ def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
                         total=10,
                         revision_reason="Main accepted the retained stop diagnosis.",
                     ),
-                    "current_definition": "task.md",
+                    "current_definition": current_definition(harness, "76"),
                 }
             ],
         })
@@ -2059,7 +2062,7 @@ def test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller(
                             total=10,
                             revision_reason="Main accepted the retained stop diagnosis.",
                         ),
-                        "current_definition": "task.md",
+                        "current_definition": current_definition(harness, "76"),
                     }
                 ],
             },

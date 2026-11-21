@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -10,6 +11,8 @@ import yaml
 from conftest import InstalledCommands, run_process
 
 REVISION = "definitions/20261015T070000.000000+0900.md"
+# Registration event of each fixture Ticket, which names its first definition.
+REGISTERED = {"1": "20261014T070001.000000+0900", "2": "20261014T070002.000000+0900"}
 
 
 def _definition(task_id: str, name: str, parent: str | None, body: str) -> str:
@@ -46,6 +49,19 @@ def _ticket_project(root: Path) -> dict[str, Path]:
             "active_team_ordinal": 1 if task_id == "2" else None,
             "worktree": None, "branch": None, "current_candidate": None, "schema_version": 2,
         }, sort_keys=False))
+    # Each Ticket was registered by a Worldline event; conversion names the
+    # first definition by it.
+    worldline = graphtraj / "state/worldline"
+    worldline.mkdir()
+    (worldline / f"{REGISTERED['1']}.jsonl").write_text("".join(json.dumps({
+        "event_id": REGISTERED[task_id], "captured_at": captured,
+        "event": "ticket-registered", "caused_by_event_ids": [],
+        "evidence_refs": [f".graphtraj/state/tickets/{task_id}-{name}/ticket.md"],
+        "ticket_id": task_id, "dependencies": [],
+    }) + "\n" for task_id, name, captured in (
+        ("1", "summary", "2026-10-14T07:00:01.000000+09:00"),
+        ("2", "child", "2026-10-14T07:00:02.000000+09:00"),
+    )))
     report = tickets / "2-child/teams/1/rounds/1/engineer.md"
     report.parent.mkdir(parents=True)
     report.write_text("Report mentions ticket-completed and state/tickets literally.\n")
@@ -94,7 +110,12 @@ def test_migration_converts_structure_and_keeps_text_and_identity(
     tasks = {task["task_id"]: {**document["details"][task["task_id"]], **task} for task in document["tasks"]}
     assert tasks["1"]["children"] == ["2"] and tasks["2"]["parent_id"] == "1"
     assert tasks["2"]["current_definition"] == REVISION and tasks["2"]["status"] == "implementing"
-    assert tasks["2"]["body"] == "Revised ticket body.\n" and tasks["1"]["current_definition"] == "task.md"
+    assert tasks["2"]["body"] == "Revised ticket body.\n"
+    # The first definition is named by the Ticket's registration event.
+    assert tasks["1"]["current_definition"] == f"definitions/{REGISTERED['1']}.md"
+    assert not (tmp_path / ".graphtraj/state/tasks/1-summary/task.md").exists()
+    assert (tmp_path / ".graphtraj/state/tasks/2-child" / f"definitions/{REGISTERED['2']}.md").read_text().endswith(
+        "---\nBody of ticket 2.\n")
 
     state = tmp_path / ".graphtraj/state/tasks/2-child"
     assert (state / "teams/1/rounds/1/engineer.md").read_bytes() == before[

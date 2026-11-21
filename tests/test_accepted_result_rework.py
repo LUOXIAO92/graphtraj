@@ -15,6 +15,7 @@ from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.interfaces import tools
 from graphtraj.interfaces.cli.agent_runner import main as runner_main
 from graphtraj.interfaces.cli.graphtraj import main
+from conftest import current_definition
 from test_result_submission import result_project
 
 
@@ -238,13 +239,13 @@ def test_explicit_reopening_of_integrated_file_task_requires_new_result_acceptan
     assert nodes['148']['current_candidate'] == decision['commit']
     with runtime_caller(runner, 'research@x1'), pytest.raises(ValueError):
         tools.complete_current_task({
-            'task_id': '149', 'current_definition': 'task.md',
+            'task_id': '149', 'current_definition': current_definition(tmp_path / 'state', '149'),
             'reason': 'A member cannot self-accept a pure summary', 'cancelled_scope': {},
             'evidence_refs': ['evidence.md'], 'caused_by_event_ids': [],
         })
     with runtime_caller(runner, None):
         tools.complete_current_task({
-            'task_id': '149', 'current_definition': 'task.md',
+            'task_id': '149', 'current_definition': current_definition(tmp_path / 'state', '149'),
             'reason': 'The added child scope has been independently accepted', 'cancelled_scope': {},
             'evidence_refs': ['evidence.md'], 'caused_by_event_ids': [],
         })

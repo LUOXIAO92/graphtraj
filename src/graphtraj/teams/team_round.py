@@ -1060,9 +1060,11 @@ def _execute_agent(
     round_directory = traces.parent / "rounds" / str(ordinal)
     task_prompt += "\nAssigned report paths: " + ', '.join(map(str, report_files)) + ".\n"
     task_prompt += (
-        "`.state/task.md` is this Task's initial text and never changes. A revision during "
-        "execution adds a file under `.state/definitions/`; `current_definition` in "
-        "`.state/task.yml` names the latest, and task_graph with this Task in details returns it.\n"
+        "Every version of this Task's definition, including the initial text, is a read-only "
+        "file `.state/definitions/<event_id>.md` named by the Worldline event that recorded it, "
+        "so names sort oldest to newest. A revision during execution adds a newer file; "
+        "`current_definition` in `.state/task.yml` names the current one, and task_graph with "
+        "this Task in details returns it.\n"
     )
     task_prompt += (
         "To submit a task result, use the tasks tool's submit_result feature "

@@ -324,6 +324,9 @@ print("graftling modules imported:", len(names), "| failed:", failed or "none", 
 ok = not any(r.lower().startswith("graphtraj") for r in requires) and importlib.util.find_spec("graphtraj") is None and not failed
 print("CHECK 551 dependency direction:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)') || FAILS+=(dependency-direction)
+  # The roles need the Pi sandbox (srt) and the DeepSeek key exactly as in 00; prep551 rewrites roles.yml every run.
+  load_key || FAILS+=(DEEPSEEK_API_KEY)
+  pi_sandbox
   build_project after || FAILS+=(build)
   say "Claude parent gate in $(project after)"
   gate after; local g=$?

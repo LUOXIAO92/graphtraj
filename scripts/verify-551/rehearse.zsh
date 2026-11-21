@@ -19,7 +19,7 @@ local h; for h in claude codex pi dsh; do
 [ -f $R/untrusted ] && export STUB551_UNTRUSTED=1
 exec $HOME/miniconda3/bin/python3.13 -I $SD/stub551.py $h \"\$@\"" > $R/bin/$h; chmod +x $R/bin/$h
 done
-export VERIFY551_BASE=$R/base VERIFY551_STUB=$R/bin VERIFY551_PI_SANDBOX_ENV=$R/no-pi-sandbox.env \
+export VERIFY551_BASE=$R/base VERIFY551_STUB=$R/bin VERIFY551_PI_SANDBOX_ENV=${VERIFY551_PI_SANDBOX_ENV:-$R/no-pi-sandbox.env} \
   VERIFY551_DSH_SESSIONS=$R/dsh-sessions \
   VERIFY551_T=$R/t    # G's venvs here, not in the Harness tmp/551 (rehearsal only)
 # VERIFY551_TESTS / VERIFY551_GL_TESTS (set by the caller) limit G to real test files through the same entry.

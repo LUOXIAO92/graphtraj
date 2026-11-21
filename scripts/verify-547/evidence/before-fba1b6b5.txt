@@ -1,5 +1,6 @@
 # tests/test_github_backup.py at 17c74beb run against base fba1b6b5 source (git archive at $TMPDIR/old547, editable in its own venv; pyproject pythonpath=src -> old547/src)
 # imports: /private/tmp/claude-501/old547/src/graphtraj/graph/github_backup.py
+# (trailing spaces of the captured pytest output stripped for git diff --check)
 ..........FFFFFF.                                                        [100%]
 =================================== FAILURES ===================================
 _______ test_cross_repository_sub_issues_link_once_and_mark_the_summary ________
@@ -13,13 +14,13 @@ remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cr
         """Summary 1 in owner/other#1 links children #43/#44 of owner/repo, whose own #1 is external."""
         _register_summary()
         assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
-    
+
         summary = _backup_task("1", repository="owner/other")
         assert summary["backup"]["issue"]["url"] == "https://github.com/owner/other/issues/1"
 >       assert summary["hierarchy"] == [
             {"parent": "1", "child": "2", "outcome": "linked", "child_repository": "owner/repo"}]
 E       AssertionError: assert [] == [{'parent': '...'owner/repo'}]
-E         
+E
 E         Right contains one more item: {'parent': '1', 'child': '2', 'outcome': 'linked', 'child_repository': 'owner/repo'}
 E         Use -v to get more diff
 
@@ -39,7 +40,7 @@ remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cr
         assert _backup_task("2")["hierarchy"][0]["outcome"] == "linked"
         assert _backup_task("4", repository="owner/other")["backup"]["issue"]["number"] == 1
         assert _parents(remote) == {"44": 43}
-    
+
         _reparent(_FIRST, "4")
         moved = _backup_task("2")
 >       assert moved["hierarchy"] == [{
@@ -47,7 +48,7 @@ remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cr
             "previous_parent": "1", "previous_parent_issue": 43,
         }]
 E       AssertionError: assert [{'parent': '...': 'pending'}] == [{'parent': '.../other', ...}]
-E         
+E
 E         At index 0 diff: {'parent': '4', 'child': '2', 'outcome': 'pending'} != {'parent': '4', 'child': '2', 'outcome': 'moved', 'parent_repository': 'owner/other', 'previous_parent': '1', 'previous_parent_issue': 43}
 E         Use -v to get more diff
 
@@ -66,7 +67,7 @@ remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cr
         _backup_task("2")
 >       assert _parents(remote) == {"43": "owner/other#1"}
 E       AssertionError: assert {} == {'43': 'owner/other#1'}
-E         
+E
 E         Right contains 1 more item:
 E         {'43': 'owner/other#1'}
 E         Use -v to get more diff
@@ -86,14 +87,14 @@ remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_sa
         document = json.loads(remote.read_text())
         document["parents"] = {"43": 1}
         remote.write_text(json.dumps(document))
-    
+
         summary = _backup_task("1", repository="owner/other")
 >       assert summary["hierarchy"] == [{
             "parent": "1", "child": "2", "outcome": "other-parent", "child_repository": "owner/repo",
             "expected_parent_issue": 1, "remote_parent_issue": 1, "remote_parent_repository": "owner/repo",
         }]
 E       AssertionError: assert [] == [{'parent': '...r/repo', ...}]
-E         
+E
 E         Right contains one more item: {'parent': '1', 'child': '2', 'outcome': 'other-parent', 'child_repository': 'owner/repo', ...}
 E         Use -v to get more diff
 
@@ -117,12 +118,12 @@ remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_ta
         document = json.loads(remote.read_text())
         document["parents"] = {"43": "owner/other#1"}
         remote.write_text(json.dumps(document))
-    
+
 >       assert _backup_task("42")["hierarchy"] == [{
             "parent": None, "child": "42", "outcome": "other-parent",
             "remote_parent_issue": 1, "remote_parent_repository": "owner/other"}]
 E       AssertionError: assert [{'parent': N...nt_issue': 1}] == [{'parent': N...sue': 1, ...}]
-E         
+E
 E         At index 0 diff: {'parent': None, 'child': '42', 'outcome': 'other-parent', 'remote_parent_issue': 1} != {'parent': None, 'child': '42', 'outcome': 'other-parent', 'remote_parent_issue': 1, 'remote_parent_repository': 'owner/other'}
 E         Use -v to get more diff
 
@@ -141,12 +142,12 @@ remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_pa
         assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
         assert _backup_task("1", "--host", "ghe.example.com", repository="owner/other")["hierarchy"] == []
         assert _hierarchy_writes(remote) == []
-    
+
         # Task 1's only github.com mapping, in another repository, is the parent.
 >       assert _backup_task("1", repository="owner/other")["hierarchy"] == [
             {"parent": "1", "child": "2", "outcome": "linked", "child_repository": "owner/repo"}]
 E       AssertionError: assert [] == [{'parent': '...'owner/repo'}]
-E         
+E
 E         Right contains one more item: {'parent': '1', 'child': '2', 'outcome': 'linked', 'child_repository': 'owner/repo'}
 E         Use -v to get more diff
 

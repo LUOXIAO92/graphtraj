@@ -18,7 +18,11 @@ import re
 import sys
 from pathlib import Path
 
-SELF = ('TOOLS-551', 'MCP-551', 'TASKS-551', 'DESCRIBE-551', 'READ-551', 'DENY-551', 'BEYOND-551')
+SELF = ('TOOLS-551', 'MCP-551', 'TASKS-551', 'DESCRIBE-551', 'READ-551', 'WEB-551')
+try:  # the installation's python has PyYAML (session.yml native_init); without it YAML files are skipped
+    import yaml
+except ImportError:
+    yaml = None
 TOOL_KEYS = ('name', 'tool_name', 'toolName', 'tool')
 
 
@@ -29,7 +33,14 @@ def records(path: Path):
             text = file.read_text(errors='replace')
         except OSError:
             continue
-        if file.suffix in ('.json', '.yml', '.yaml') and not text.lstrip().startswith(('{', '[')):
+        if file.suffix in ('.yml', '.yaml'):
+            if yaml is not None:
+                try:
+                    yield file, yaml.safe_load(text)
+                except yaml.YAMLError:
+                    pass
+            continue
+        if file.suffix == '.json' and not text.lstrip().startswith(('{', '[')):
             continue
         for line in text.splitlines() if not text.lstrip().startswith('[') else [text]:
             try:
@@ -130,12 +141,15 @@ def main() -> int:
     inits, calls, tasks_calls, manual_reads, heading_seen, launches = [], {}, [], [], [], []
     for file, value in records(step / 'records'):
         for node in walk(value):
-            if node.get('subtype') == 'init' and ('tools' in node or 'mcp_servers' in node):
-                inits.append((file.name, node.get('model'), node.get('tools'),
-                              [(s.get('name'), s.get('status')) for s in node.get('mcp_servers', []) if isinstance(s, dict)]))
+            for init in ([node] if node.get('subtype') == 'init' else []) + \
+                    ([node['native_init']] if isinstance(node.get('native_init'), dict) else []):
+                if 'tools' in init or 'mcp_servers' in init:
+                    inits.append((file.name, init.get('model'), init.get('tools'),
+                                  [(s.get('name'), s.get('status')) if isinstance(s, dict) else s
+                                   for s in init.get('mcp_servers', []) or []]))
             for key in ('argv', 'command', 'args'):
                 item = node.get(key)
-                if isinstance(item, list) and any(isinstance(a, str) and a in ('--tools', '--mcp-config', '--disallowedTools', '--allowedTools') for a in item):
+                if isinstance(item, list) and any(isinstance(a, str) and a in ('--model', '--mode', '--tools') for a in item):
                     launches.append((file.name, item))
             name = call_name(node)
             if name:
@@ -155,10 +169,17 @@ def main() -> int:
             continue
         seen.add(key)
         print(f"[{runtime}] RECORD init ({name}, model {model}): tools={tools} mcp_servers={servers}")
-    for name, argv in launches[:3]:
-        flags = {argv[i]: argv[i + 1][:300] for i in range(len(argv) - 1)
-                 if argv[i] in ('--tools', '--mcp-config', '--disallowedTools', '--allowedTools')}
-        print(f"[{runtime}] RECORD launch flags ({name}): {flags}")
+    shown = set()
+    for name, argv in launches:
+        flags = {argv[i]: str(argv[i + 1])[:300] for i in range(len(argv) - 1)
+                 if argv[i] in ('--tools', '--mcp-config', '--disallowedTools', '--allowedTools', '--exclude-tools',
+                                '--no-tools', '--no-builtin-tools', '--extension', '--restricted')}
+        flags.update({flag: True for flag in ('--restricted', '--no-tools', '--no-builtin-tools', '--no-mcp') if flag in argv})
+        key = json.dumps(flags, sort_keys=True)
+        if key in shown:
+            continue
+        shown.add(key)
+        print(f"[{runtime}] RECORD launch flags ({name}): {flags or 'no tool/MCP flag (Runtime defaults)'}")
     print(f"[{runtime}] RECORD tool calls by name: {calls or 'none found'}")
     print(f"[{runtime}] RECORD tasks calls: {tasks_calls or 'none'}")
     print(f"[{runtime}] RECORD manual guide.md reads: {manual_reads or 'none'}")

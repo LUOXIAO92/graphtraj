@@ -42,6 +42,9 @@ def main() -> int:
     manual = '/stub/share/graphtraj/manuals/concept-clarification/guide.md'
     record = Path.cwd() / '.graphtraj/swarm/stub-run' / agent / 'trace.jsonl'
     record.parent.mkdir(parents=True, exist_ok=True)
+    (record.parent / 'session.yml').write_text(  # the shape E1 names: native_init.tools (YAML, flow style is valid)
+        'native_init: {model: stub-child, tools: [Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents]}\n'
+        'argv: [claude, --print, --restricted, --tools, "Bash,Read,Write,Edit,Glob,Grep", --model, stub-child]\n')
     with record.open('w') as handle:
         for value in (
             {'type': 'system', 'subtype': 'init', 'model': 'stub-child', 'session_id': session,
@@ -54,7 +57,7 @@ def main() -> int:
         ):
             handle.write(json.dumps(value) + '\n')
     final = ('TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\nMCP-551: graphtraj: agents\n'
-             'TASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped')
+             'TASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent')
     emit({'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
           'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}]})
     for call_id, feature, result in (('c1', 'create', {'agent': agent, 'state': 'running'}),

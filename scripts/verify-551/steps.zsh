@@ -106,7 +106,8 @@ child_instruction() {
 2. Write one line "MCP-551: " followed by each MCP server you can use and its tools, or NONE.
 3. If you have a GraphTraj tool named tasks (it may carry a prefix, such as mcp__graphtraj__tasks), call it with {"action": "discover"} and then with {"action": "describe", "feature": "concept-clarification"}. Write one line "TASKS-551: " followed by ok, or absent, or the exact error. Write one line "DESCRIBE-551: " followed by the manual_ref it returned, or the exact error.
 4. If you got a manual_ref, read that file with your file-reading tool (not a shell) and write one line "READ-551: " followed by its first line that starts with #, or the exact error or refusal text. Otherwise write "READ-551: skipped".
-Use no other tool. End your turn after these five lines.'
+5. Fetch https://example.com with your web tool (not a shell). Write one line "WEB-551: " followed by the page title, or the exact error or refusal text, or absent if you have no web tool.
+Use no other tool. End your turn after these six lines.'
 }
 parent_prompt() {  # $1 runtime, $2 extra create arguments as JSON object members ("" for none)
   local child=$($CONDA -I -c 'import json, sys; print(json.dumps(sys.argv[1]))' "$(child_instruction)")
@@ -143,7 +144,7 @@ probe() {  # $1 label, $2 runtime, $3 tag, $4 extra create arguments ("" for non
      < $D/parent-prompt.txt > $D/parent.jsonl 2> $D/parent.err) || print "claude (parent) rc=$?"
   cp $p/.graphtraj/claude-host/host.log $D/host.log 2>/dev/null || true
   collect $p $rt
-  clean $CONDA -I $SD/sum551.py $D $rt "$(cat $BASE/heading-$1.txt 2>/dev/null || print -- -)" | redact | tee $D/summary.txt
+  clean $(inst $1)/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-$1.txt 2>/dev/null || print -- -)" | redact | tee $D/summary.txt
   print -r -- "evidence: $D (parent.jsonl, parent.err, records/, summary.txt)"
 }
 rt_list() { if [[ $1 == all ]]; then print claude codex pi dsh; elif [[ $1 == (claude|codex|pi|dsh) ]]; then print $1; else return 1; fi; }

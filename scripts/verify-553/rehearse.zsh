@@ -52,7 +52,8 @@ print -r -- "realhost/codex/S1-r1: $(ls $R/realhost/codex/S1-r1 | tr '\n' ' ') |
 print -r -- "decoy rollout copied anywhere: $(grep -rl decoy0000000 $R/realhost $R/base/logs $R/base/audit 2>/dev/null | head -3 || true)"
 print -r -- "hidden text of S1 under any S ws: $(grep -rl 'accepted AND merged' $R/base/project/runs 2>/dev/null || print none)"
 print -r -- "U system prompt carries the copied notes (haiku-S1-r1 turn 02 stub reply): $(grep -o 'RESEARCH NOTES present: [A-Za-z]*' $R/base/logs/haiku-S1-r1/02-U.jsonl | head -1)"
-print -r -- "every S MCP server is the candidate venv's: $(grep -l "$R/t/venv/bin/graphtraj-mcp" $R/base/logs/*-S1-r1/01-S.argv.json $R/base/logs/sonnet-S1-r1/s-mcp.json $R/base/dsh/dsh-S1-r1/dsh-patch.yml 2>/dev/null | wc -l | tr -d ' ') of 5 files"
+print -r -- "S's MCP server is the candidate venv's (sonnet/haiku s-mcp.json, codex argv, dsh patch): $(grep -l "$R/t/venv/bin/graphtraj-mcp" $R/base/logs/sonnet-S1-r1/s-mcp.json $R/base/logs/haiku-S1-r1/s-mcp.json $R/base/logs/codex-S1-r1/01-S.argv.json $R/base/dsh/dsh-S1-r1/dsh-patch.yml 2>/dev/null | wc -l | tr -d ' ') of 4 files"
+print -r -- "production graphtraj-mcp named by any S config: $(grep -l '.venv-runtime/bin/graphtraj-mcp' $R/base/logs/*/s-mcp.json $R/base/logs/*/01-S.argv.json $R/base/dsh/*/dsh-patch.yml 2>/dev/null | wc -l | tr -d ' ') files"
 print -r -- "
 --- realhost/dsh/S2-r1/digest.md (head) ---"; head -24 $R/realhost/dsh/S2-r1/digest.md
 print -r -- "

@@ -63,7 +63,8 @@ def test_dsh_main_gets_one_relay_per_notice_from_the_member(
     shown = json.loads(result.stdout)
     assert (shown['first'], shown['again']) == (2, 0)          # delivered once, then acknowledged
     end, request = (item['message'] for item in shown['sent'])
-    assert all(item['queue'] == 'next-step' and item['wake'] is True for item in shown['sent'])
+    # 545: next-turn, so a notice that reaches a running turn opens its own turn (and block) afterwards
+    assert all(item['queue'] == 'next-turn' and item['wake'] is True for item in shown['sent'])
     # Who sent it: the member's alias as agent and session (graftling-dsh prints an equal pair once),
     # to this Main's session; each relay has its own communication id.
     for message, alias in ((end, 'n536@advisor'), (request, 'w@engineer')):

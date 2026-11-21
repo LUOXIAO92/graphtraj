@@ -212,7 +212,7 @@ if (runtime === 'pi') {
   });
   assert.equal(await deliverNotices(agent, entry), 1);
   assert.equal(await deliverNotices(agent, entry), 0);
-  assert.equal(delivered[0].queue, 'next-step');
+  assert.equal(delivered[0].queue, 'next-turn');   // 545: its own turn, also when one is running
   // The wake flag is what lets an idle (long-lived) DSH Main start a turn for the notice.
   assert.equal(delivered[0].wake, true);
   assert.equal(delivered[0].message.source.kind, 'agent-message');

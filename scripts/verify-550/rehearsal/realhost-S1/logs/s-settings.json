@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(//private/tmp/claude-501/reh550-190754/base/u/**)",
+      "Read(//tmp/claude-501/reh550-190754/base/u/**)",
+      "Read(//private/tmp/claude-501/reh550-190754/base/u)",
+      "Read(//tmp/claude-501/reh550-190754/base/u)",
+      "Read(//private/tmp/claude-501/reh550-190754/base/audit/**)",
+      "Read(//tmp/claude-501/reh550-190754/base/audit/**)",
+      "Read(//private/tmp/claude-501/reh550-190754/base/audit)",
+      "Read(//tmp/claude-501/reh550-190754/base/audit)",
+      "Read(//private/tmp/claude-501/reh550-190754/base/logs/**)",
+      "Read(//tmp/claude-501/reh550-190754/base/logs/**)",
+      "Read(//private/tmp/claude-501/reh550-190754/base/logs)",
+      "Read(//tmp/claude-501/reh550-190754/base/logs)",
+      "Read(//Users/luoxiao/.claude/**)",
+      "Read(//Users/luoxiao/.claude)",
+      "Read(//private/tmp/claude-501/reh550-190754/fake-workspace/**)",
+      "Read(//tmp/claude-501/reh550-190754/fake-workspace/**)",
+      "Read(//private/tmp/claude-501/reh550-190754/fake-workspace)",
+      "Read(//tmp/claude-501/reh550-190754/fake-workspace)",
+      "Edit(//Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification/**)",
+      "Edit(//Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification)",
+      "Write(//Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification/**)",
+      "Write(//Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification)",
+      "Bash",
+      "WebSearch",
+      "WebFetch",
+      "mcp__graphtraj__agents"
+    ],
+    "allow": [
+      "mcp__graphtraj__tasks",
+      "Read(//Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification/**)",
+      "Read(//Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification)"
+    ],
+    "additionalDirectories": [
+      "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification"
+    ],
+    "blockReadsOutsideWorkingDirectories": true
+  }
+}

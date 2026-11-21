@@ -1,0 +1,3 @@
+{"type": "system", "subtype": "init", "session_id": "257fc6fa-5bd0-469d-809b-8c4d8667910c", "model": "claude-fable-5-2", "tools": ["WebSearch", "WebFetch"], "apiKeySource": "stub", "cwd": "/private/tmp/claude-501/reh550-190754/base/u/S1"}
+{"type": "assistant", "session_id": "257fc6fa-5bd0-469d-809b-8c4d8667910c", "message": {"content": [{"type": "text", "text": "Stub user reply (U instruction with hidden block present: True)."}]}}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Stub user reply (U instruction with hidden block present: True).", "session_id": "257fc6fa-5bd0-469d-809b-8c4d8667910c"}

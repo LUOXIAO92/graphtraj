@@ -1,0 +1,1 @@
+Stub user reply (U instruction with hidden block present: True).

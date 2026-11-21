@@ -410,6 +410,15 @@ features first and returns a selected feature's schema only when requested.
 When several roles in the project use the same Runtime, `agents` `create` must
 name the role in `configuration`. `wait` takes `agent` and an explicit finite
 `timeout_seconds`.
+For long arguments, write them once to a UTF-8 JSON file holding the arguments
+object (at most 1 MiB) and call `execute` with `arguments_file` instead of, or
+beside, `arguments`; inline `arguments` replace the file's top-level fields.
+The file must lie inside the caller's own workspace (the project for Main, its
+Worktree for a member; a relative path starts there) and outside `.graphtraj`;
+links that resolve elsewhere are refused, and a refusal names only the path.
+A rejected call lists every input problem at once, schema and the feature's own
+checks together, as `error.errors` items `{path, reason}` under the code
+`invalid-input`; fix the file and call again. `describe` repeats this usage.
 The `graphtraj-tool` JSON-lines process is an internal host bridge for the
 desktop and event delivery, not another model tool. CLI or MCP access alone
 does not connect background events or

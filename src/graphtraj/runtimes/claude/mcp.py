@@ -17,7 +17,8 @@ import yaml
 from graftling import (AgentsError, AgentsResult, ConcurrentServer, handle_request as discover_agents,
                          mcp_error_response, mcp_respond, mcp_result_response, mcp_tool_documents)
 from graphtraj.execution.runner_models import RunnerError
-from graphtraj.interfaces.gateway import handle_request, INPUT_SCHEMA
+from graphtraj.interfaces.gateway import (INPUT_SCHEMA, ValidationErrors, handle_request, invalid_input,
+                                         read_arguments_file)
 from graphtraj.interfaces.hosted_cli import agents_dispatch, forward_request
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, recovery_review
 
@@ -85,7 +86,8 @@ def serve(
         if params.get('name') not in [item['name'] for item in descriptors()] or not isinstance(params.get('arguments', {}), dict):
             return mcp_error_response(identity, -32602, 'Expected agents and object arguments.')
         try:
-            arguments = params.get('arguments', {})
+            # The trusted host directory bounds the caller's arguments file.
+            arguments = read_arguments_file(params.get('arguments', {}), cwd)
             # Only a verified native Main host's own call reaches this reviewer;
             # an operation without review never invokes it.
             reviewer = (functools.partial(review, feature=arguments.get('feature'))
@@ -93,6 +95,8 @@ def serve(
             with recovery_review(reviewer):
                 result = (tasks(arguments) if params['name'] == 'tasks' else
                           native_call(arguments) if native_call is not None else discover_agents(arguments, dispatch))
+        except ValidationErrors as error:
+            result = invalid_input(error.errors)
         except (AgentsError, RunnerError, RuntimeAdapterError) as error:
             result = AgentsResult({'error': {'code': error.code, 'message': error.message}}, failed=True)
         except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:

@@ -10,7 +10,7 @@ from typing import Any
 import click
 import yaml
 
-from graphtraj.interfaces.gateway import _validate, handle_request
+from graphtraj.interfaces.gateway import _validate, argument_errors, handle_request, schema_errors
 from graphtraj.interfaces.tools import TOOLS, ToolResult
 
 
@@ -25,16 +25,22 @@ def invoke_tool(feature: str, arguments: dict[str, Any], **context: Any) -> Tool
             arguments = yaml.safe_load(context["input_file"].read_text(encoding="utf-8"))
         except (OSError, UnicodeError, yaml.YAMLError) as error:
             raise click.BadParameter(str(error), param_hint="--swarm-input") from error
-    try:
-        _validate(arguments, TOOLS[feature].input_schema, "arguments")
-    except ValueError as error:
-        raise click.UsageError(str(error)) from error
+    # The same schema and feature-level checks as the tool, all reported at once.
+    # Exit codes stay as before: a schema problem is a usage error (2), a
+    # feature's own problem an operation error (1).
+    errors = argument_errors(feature, arguments)
+    if errors:
+        message = "; ".join(f"{error['path']}: {error['reason']}" for error in errors)
+        if schema_errors(arguments, TOOLS[feature].input_schema, "arguments"):
+            raise click.UsageError(message)
+        raise click.ClickException(message)
     from graphtraj.interfaces.hosted_cli import forward_cli
 
     forwarded = forward_cli(feature, arguments, context.get('cwd') or Path.cwd())
     if forwarded is not None:
         if forwarded.failed and 'error' in forwarded.document:
-            raise click.ClickException(str(forwarded.document.get('error', 'Host operation failed.')))
+            error = forwarded.document['error']
+            raise click.ClickException(str(error['message'] if isinstance(error, dict) else error))
         return forwarded
     return TOOLS[feature].handler(arguments, **context)
 

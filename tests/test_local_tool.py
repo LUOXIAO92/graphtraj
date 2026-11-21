@@ -81,7 +81,7 @@ def test_python_binding_discovers_describes_reads_and_writes(project: Path) -> N
 
     described = call({"action": "describe", "feature": "task_graph"})
     assert Path(described.document["manual_ref"]).read_text() == "Fixture manual for task_graph."
-    assert set(described.document) == {"feature", "description", "manual_ref"}
+    assert set(described.document) == {"feature", "description", "manual_ref", "arguments_file"}
     parameters = call({"action": "describe", "feature": "task_graph", "schema": True})
     assert parameters.document == {"input_schema": tools.TOOLS["task_graph"].input_schema}
 

@@ -168,10 +168,18 @@ def answer(
 
     A validation or business rejection is a normal answer and keeps the loop
     serving later requests. The wire document is either
-    ``{"failed": false, "result": {...}}`` or ``{"failed": true, "error": "..."}``.
+    ``{"failed": false, "result": {...}}`` or ``{"failed": true, "error": "..."}``;
+    a failed operation, including every input problem at once (556), is
+    ``{"failed": true, "result": {..., "error": ...}}`` as before. An
+    ``arguments_file`` is read from inside ``cwd`` (the caller's workspace).
     """
     if not isinstance(request, dict):
         return {"failed": True, "error": "Invalid request"}
+    try:
+        # This bridge runs in its caller's workspace, which bounds an arguments file.
+        request = gateway.read_arguments_file(request, cwd or Path.cwd())
+    except gateway.ValidationErrors as error:
+        return {"failed": True, "result": gateway.invalid_input(error.errors).document}
     try:
         from graphtraj.interfaces.hosted_cli import forward_request
 

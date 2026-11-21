@@ -20,11 +20,13 @@ from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.delivery_worldline import (
     append_project_worldline_event,
     read_worldline,
+    supplied_event_errors,
 )
 from graphtraj.graph.task_graph import (
     read_graph,
     register_task,
     revise_tasks,
+    revision_errors,
     update_task_state,
     complete_task,
 )
@@ -138,7 +140,9 @@ class Tool:
     ``manual_ref`` identifies caller-managed text; registering or executing an
     operation does not read it. A ``None`` handler marks a method-only feature:
     it carries guidance and no executable action. ``examples`` holds structured
-    argument examples.
+    argument examples. ``check`` returns the feature's own problems with its
+    arguments as ``{"path", "reason"}`` items; it reads no project state, so
+    the gateway reports them with schema errors in one answer (556).
     """
 
     name: str
@@ -149,6 +153,7 @@ class Tool:
     examples: tuple[dict[str, Any], ...] = ()
     cli_path: tuple[str, ...] = ()
     cli_parameters: dict[str, tuple[str, str]] = field(default_factory=dict)
+    check: Callable[[Any], list[dict[str, str]]] | None = None
 
 
 TOOLS: dict[str, Tool] = {}
@@ -161,9 +166,10 @@ def register_tool(
     *,
     manual_ref: str | None = None,
     examples: tuple[dict[str, Any], ...] = (),
+    check: Callable[[Any], list[dict[str, str]]] | None = None,
 ) -> None:
-    """Bind an operation and optional manual reference/examples to its schema."""
-    TOOLS[name] = Tool(name, description, input_schema, handler, manual_ref, examples)
+    """Bind an operation and optional manual reference/examples/check to its schema."""
+    TOOLS[name] = Tool(name, description, input_schema, handler, manual_ref, examples, check=check)
 
 
 def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
@@ -602,6 +608,7 @@ register_tool(
     _REVISION_SCHEMA,
     revise_current_tasks,
     manual_ref="manuals/task-breakdown/guide.md",
+    check=lambda arguments: revision_errors(arguments, "arguments"),
 )
 register_tool(
     "task_complete",
@@ -665,6 +672,8 @@ register_tool(
     _WORLDLINE_APPEND_SCHEMA,
     append_worldline_event,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: (supplied_event_errors(arguments["event"], "arguments.event")
+                             if isinstance(arguments, dict) and "event" in arguments else []),
 )
 register_tool(
     "worldline_read",
@@ -731,6 +740,13 @@ register_tool(
 
 
 
+def _recovery_input_errors(arguments: Any) -> list[dict[str, str]]:
+    """Return approved_recovery's own argument problems (imported on use)."""
+    from graphtraj.execution.approved_recovery import recovery_input_errors
+
+    return recovery_input_errors(arguments)
+
+
 def recover_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
     """Prepare native approval or retry the same applied recovery."""
     from graphtraj.execution.approved_recovery import approved_recovery
@@ -761,6 +777,7 @@ register_tool(
         'retry_event_id': {'type': 'string', 'description': 'Applied recovery event; retry continuation without another repair.'},
     }, 'required': ['alias'], 'additionalProperties': False},
     recover_execution, manual_ref='manuals/task-delivery/guide.md',
+    check=_recovery_input_errors,
 )
 
 

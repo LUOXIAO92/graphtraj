@@ -49,16 +49,44 @@ def _validate_revision(revision: Any) -> None:
     from graphtraj.interfaces.gateway import _validate
 
     _validate(revision, protocol.REVISION_SCHEMA, "revision")
-    _validate_string_list(revision, "caused_by_event_ids", allow_empty=True)
-    _validate_string_list(revision, "evidence_refs", allow_empty=False)
-    if "reopen_task_ids" in revision:
-        _validate_string_list(revision, "reopen_task_ids", allow_empty=True)
+    errors = revision_errors(revision, "revision")
+    if errors:
+        raise ValueError("; ".join(error["reason"] for error in errors))
+
+
+def revision_errors(revision: Any, path: str) -> list[dict[str, str]]:
+    """Return every definition-level problem of a revision as ``{"path", "reason"}``.
+
+    Schema problems are the schema's; this adds the checks the schema cannot
+    express, one per list field and one per Task definition, so a caller sees
+    them all in one answer (556). Nothing here reads project state.
+    """
+    if not isinstance(revision, dict):
+        return []
+
+    errors = []
+    for field, allow_empty in (("caused_by_event_ids", True), ("evidence_refs", False),
+                               ("reopen_task_ids", True)):
+        if field in revision:
+            try:
+                _validate_string_list(revision, field, allow_empty=allow_empty)
+            except ValueError as error:
+                errors.append({"path": f"{path}.{field}", "reason": str(error)})
+
     identifiers = []
-    for definition in revision["tasks"]:
-        _validate_issue({key: definition[key] for key in protocol.TASK_PROPERTIES})
+    tasks = revision.get("tasks")
+    for index, definition in enumerate(tasks if isinstance(tasks, list) else []):
+        # A definition missing fields is reported by the schema.
+        if not isinstance(definition, dict) or not set(protocol.TASK_PROPERTIES) <= set(definition):
+            continue
+        try:
+            _validate_issue({key: definition[key] for key in protocol.TASK_PROPERTIES})
+        except ValueError as error:
+            errors.append({"path": f"{path}.tasks[{index}]", "reason": str(error)})
         identifiers.append(definition["task_id"])
-    if len(identifiers) != len(set(identifiers)):
-        raise ValueError("Task revision repeats a Task")
+    if len(identifiers) != len(set(map(str, identifiers))):
+        errors.append({"path": f"{path}.tasks", "reason": "Task revision repeats a Task"})
+    return errors
 
 
 def _validate_string_list(

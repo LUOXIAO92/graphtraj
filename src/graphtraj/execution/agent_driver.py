@@ -98,7 +98,16 @@ class AdapterDriver:
         from graftling.codex import CodexDriver
         from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 
-        self.codex = CodexDriver(execution=CodexManagedExecution)
+        self.codex = CodexDriver(execution=CodexManagedExecution, extra_tools=self.child_tools)
+
+    def child_tools(self, run: Run) -> list:
+        """Return the tools a Task-free child gets beside ``agents``: GraphTraj's ``tasks`` entry.
+
+        It is bound to the child's own Agent ID, never to its parent's identity.
+        """
+        from graphtraj.interfaces.task_free import task_free_tools
+
+        return task_free_tools(self.root, run.agent)
 
     def _ancestor_worktree(self, agent: str) -> Path | None:
         """Return the Worktree of the Task member ``agent`` descends from, if any."""
@@ -262,7 +271,8 @@ class AdapterDriver:
             turn.configure_independent(
                 archive=run.archive, agents_callback=callback,
                 extra_fields=graphtraj_fields(str(turn.request['harness_root']), turn.directory.name,
-                                              extra_fields=run.extra_fields))
+                                              extra_fields=run.extra_fields),
+                extra_tools=self.child_tools(run))
         if run.runtime == 'dsh':
             from graphtraj.runtimes.dsh.driver import bind_agents
 

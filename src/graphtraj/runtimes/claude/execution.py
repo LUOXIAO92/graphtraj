@@ -17,6 +17,18 @@ from graftling.claude import ClaudeExecution as NativeClaudeExecution
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, record_runtime_process
 
 
+def installed_manuals() -> list[Path]:
+    """Return the installed general-method manuals directory, if this installation has one.
+
+    The one switch for granting it: Task members and agents children read the
+    same installed guides that ``tasks describe`` names (551).
+    """
+    from graphtraj.interfaces.task_free import manuals_directory
+
+    directory = manuals_directory().resolve()
+    return [directory] if directory.is_dir() else []
+
+
 class ClaudeExecution(NativeClaudeExecution):
     """Supply project resources and Runner services to the same native transport.
 
@@ -67,6 +79,9 @@ class ClaudeExecution(NativeClaudeExecution):
         # and the native sandbox profile grow with every associated Session.
         explicit = [Path(path).resolve() for path in request['resources']]
         resources.extend(explicit)
+        # The general methods' installed manuals, which ``tasks describe``
+        # names by manual_ref: read-only like every other resource (551).
+        resources.extend(path for path in installed_manuals() if path not in resources)
         # Project development records stay readable for diagnosis across
         # Agents; control channels, Runtime homes and credentials stay denied.
         records = [request['state_directory'], str(project_runner_directory(root))]

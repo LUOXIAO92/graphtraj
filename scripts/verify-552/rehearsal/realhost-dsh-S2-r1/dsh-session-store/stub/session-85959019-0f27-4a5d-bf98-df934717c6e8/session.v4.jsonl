@@ -1,0 +1,2 @@
+{"type": "request/header", "seq": 0, "data": {"header": {"tools": ["edit", "glob", "grep", "mcp__graphtraj__tasks", "read", "todo_write", "write"], "config": {"provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "high"}}}}
+{"type": "request/header", "seq": 1, "data": {"header": {"tools": ["edit", "glob", "grep", "mcp__graphtraj__tasks", "read", "todo_write", "write"], "config": {"provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "high"}}}}

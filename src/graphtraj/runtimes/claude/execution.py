@@ -40,10 +40,9 @@ class ClaudeExecution(NativeClaudeExecution):
     # A Runner execution's member reaches the hosted CLI, not graftling's own owner.
     connection_env = 'GRAPHTRAJ_CLI_CONNECTION'
 
-    @property
-    def mcp_server(self) -> str:
-        """Name a member's own server ``graphtraj`` (mcp__graphtraj__*); agents alone keeps graftling's."""
-        return super().mcp_server if self.independent else 'graphtraj'
+    # Members and agents children alike reach agents and tasks as mcp__graphtraj__* (551).
+    # A child's --strict-mcp-config loads no other server, so no host entry can share the name.
+    mcp_server = 'graphtraj'
 
     def __init__(self, *arguments) -> None:
         """Bind the project archive and its GraphTraj header fields to a Runner execution."""

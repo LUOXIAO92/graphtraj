@@ -169,7 +169,10 @@ directory. If the member's record is unreadable or its Worktree is gone, `create
 fails with `workspace-denied` rather than starting wider.
 
 Every child created through `agents` in a GraphTraj project also gets a `tasks`
-tool beside `agents`. It offers only the general methods (`setup-project`,
+tool beside `agents`, on all four Runtimes under GraphTraj's server name, as
+`mcp__graphtraj__agents` and `mcp__graphtraj__tasks` like a Task member's. The
+child's server is its owner's alone: a Claude child loads no other MCP
+configuration, and a Codex child's entry replaces any captured one of that name. It offers only the general methods (`setup-project`,
 `task-breakdown`, `task-delivery`, `research`, `concept-clarification`) through
 the same discover/describe as Task members: `describe` returns the installed
 manual's `manual_ref`, which Claude members and children may read (a read-only

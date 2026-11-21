@@ -123,10 +123,9 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
 class CodexManagedExecution(NativeCodexExecution):
     """Attach GraphTraj task policy to the independent native execution owner."""
 
-    @property
-    def mcp_server(self) -> str:
-        """Keep a formal Worker's ``mcp__graphtraj__*`` tool names; agents alone uses graftling's."""
-        return super().mcp_server if self.independent else 'graphtraj'
+    # Workers and agents children alike reach agents and tasks as mcp__graphtraj__* (551).
+    # The owner's entry replaces any captured server of that name (see graftling's _run).
+    mcp_server = 'graphtraj'
 
     def __init__(
         self,

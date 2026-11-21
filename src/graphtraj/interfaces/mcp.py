@@ -204,11 +204,11 @@ def _tool_call_response(
 def _agents_card(arguments: Mapping[str, Any], document: Mapping[str, Any]) -> str | None:
     """Return Codex's card text for a create/send/resume, else None.
 
-    Codex's collapsed MCP card shows the last three content lines; the
-    expanded card adds the call's arguments, which already hold the message.
-    So the text is display only and never repeats the message (in code mode
-    the model also reads content): a reply carried in the result with its
-    ``← <name> replied`` line, then the recipient ``→ <name> [<agent>]`` last.
+    Codex's collapsed MCP card shows the last content lines; the expanded
+    card adds the call's arguments, which already hold the message. So the
+    text is only the recipient line ``→ <name> [<agent>]``: never the message
+    (in code mode the model also reads content) and never an earlier reply
+    carried in the result, which would read as a reply to this message.
     """
     record, agent, given = document.get('result'), document.get('agent'), arguments.get('arguments')
     feature = arguments.get('feature')
@@ -217,12 +217,7 @@ def _agents_card(arguments: Mapping[str, Any], document: Mapping[str, Any]) -> s
             or record.get('resumed') is False or not isinstance(agent, str) or not agent
             or not isinstance(given, dict) or not isinstance(given.get('instruction', given.get('message')), str)):
         return None
-    member, lines = str(record.get('name') or agent), []
-    reply = record.get('last_result')
-    if isinstance(reply, dict) and reply.get('id') and isinstance(reply.get('last_message'), str) \
-            and reply['last_message'].strip():
-        lines += [reply['last_message'].rstrip('\n'), f'← {member} replied']
-    return '\n'.join(lines + [f'→ {member} [{agent}]'])
+    return f"→ {record.get('name') or agent} [{agent}]"
 
 
 def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:

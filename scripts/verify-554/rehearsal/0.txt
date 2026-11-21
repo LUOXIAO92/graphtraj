@@ -1,0 +1,12 @@
+Dialog: none
+== [0] Main. Preflight + candidate venv. Dialog: none. ~1 min.
+zsh: 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/scripts/verify-554/steps.zsh)
+Harness: /Users/luoxiao/workspace/you-are-a-product-architect-delivery | Worktree: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate | HEAD 6bfbb3a40cf267607e3f634ff90d26e90132ec8d (branch agent/554-task-sync-manual-and-retire-harness-duplicate)
+graftling: 6794ce02b6210ec88837437affb8d7b525612804 Merge branch 'agent/538-dsh-graphtraj-notice-block-display' into dev (from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling, git archive)
+no Runtime is started and no GitHub request is made (backup tests use the fake gh)
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+built /tmp/claude-501/v554/t/venv-cand: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate editable + graftling wheel from git archive 6794ce02b6
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/v554/t/venv-cand/lib/python3.13/site-packages/graftling/__init__.py
+Success: 'pytest temp: TMPDIR=... (outside the Harness)', the graphtraj line under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/src, a graftling line under /tmp/claude-501/v554/t.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/scripts/verify-554/steps.zsh Gt

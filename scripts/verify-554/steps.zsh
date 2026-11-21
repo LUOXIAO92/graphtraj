@@ -158,7 +158,7 @@ GR)
   print -r -- "---- candidate G classification"; classify $g/suite.txt $g/shards/*(N.)
   [[ -n $t ]] && { print -r -- "---- Gt $t"; tail -2 $t/suite.txt; classify $t/suite.txt; }
   print -r -- "---- prior evidence: accepted 547 full suite on dev ($PRIOR547)"
-  grep -E 'passed|^exit=|^\(no FAILED' $PRIOR547 2>/dev/null | head -4 || print "(not readable)"
+  grep -E 'passed|^exit=' $PRIOR547 2>/dev/null | head -2 || print "(not readable)"   # its G (candidate) lines
   print "Success: G 'exit=0' or only 'known (516)' lines; no 'NEW' line in G or Gt."
   print -r -- "next: report $OUT/GR.txt to the Leader"
   ;;

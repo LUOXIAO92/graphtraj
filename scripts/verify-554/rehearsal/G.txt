@@ -1,0 +1,16 @@
+Dialog: none
+== [G] Main. GraphTraj full suite of the Worktree HEAD (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. Run nothing else meanwhile.
+NOTE: ps is not permitted here (quiet:2: operation not permitted: ps); check by hand that no other test run is running
+uncommitted in src/tests/plugins/manuals: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-554-cand-20261121T213832
+reusing /tmp/claude-501/v554/t/venv-cand (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate editable; graftling 6794ce02 wheel)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/v554/t/venv-cand/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+cand: 6bfbb3a40cf267607e3f634ff90d26e90132ec8d | graftling wheel from git archive 6794ce02b6210ec88837437affb8d7b525612804
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground
+.................                                                        [100%]
+17 passed in 11.38s
+exit=0
+Success: the graphtraj line under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/src, 'graftling ...' under /tmp/claude-501/v554/t, 'started in the background'.
+next: after /tmp/claude-501/v554/out/G-6bfbb3a4-20261121T213833/suite.txt ends with exit=: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/554-task-sync-manual-and-retire-harness-duplicate/scripts/verify-554/steps.zsh GR

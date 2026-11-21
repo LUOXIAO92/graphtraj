@@ -25,7 +25,13 @@ Every step ends with a ready-to-paste `==> next` line with real paths.
 Order: `00` → `Tu before` → `Tu after` → `P` → `B` (at most 5 valid attempts) → `S before` → `A` (as many runs) →
 `S after` → `G` → `GR` (until both `exit=`) → `C`.
 
-Round 2 (graftling candidate 2ee1345, which replaces 7b349f0): `00` → `A` ×5 → `S after` → `G` → `GR` → `C`.
+Round 2: `00` → `A` ×5 → `S after` → `G` → `GR` → `C`, for graftling candidate 11b7f8e (branch head, so steps.zsh
+picks it up). 11b7f8e replaces 2ee1345, which was rejected because GraphTraj's AdapterDriver drops `finishing`, and
+2ee1345 itself replaced 7b349f0. AFTER attempts go to `after/attempts-11b7f8e4685d`.
+
+The GraphTraj-path scratch check is `gtpath546.py`, outputs `rehearsal/gtpath-11b7f8e.txt` (PASS) and
+`rehearsal/gtpath-2ee1345.txt` (the closing window FAILs there). It drives GraphTraj's real
+`AdapterDriver.deliver → _operate → _native_error` with a fake turn.
 - `00` reuses the cached BEFORE venv (`before: venv ... holds ...`). It rebuilds only the AFTER venv, because the
   graftling commit changed. The project directories are the same, so the trust and plugin gate still pass. 00 then
   prints `AFTER attempts for graftling <gl12>: .../after/attempts-<gl12> (0 valid so far)` and next = `A`.

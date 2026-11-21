@@ -1,0 +1,12 @@
+# C c3 rehearsal 2026-11-21 03:04:09: stale after-run1-G-{b-notice,a-send-card}.png seeded; run1/G has only b-notice-region.txt + summary.json; after-run1-S-* has no new run dir and must stay
+before:
+after-run1-G-a-send-card.png
+after-run1-G-b-notice.png
+after-run1-S-b-notice.png
+== [C] (read only on BASE) copy shots + redacted text to $TMPDIR/538/rehC3/realhost/. Dialog: none.
+  after-run1-S-b-notice.png
+== after
+after:
+after-run1-G-b-notice-region.txt
+after-run1-G-summary.json
+after-run1-S-b-notice.png

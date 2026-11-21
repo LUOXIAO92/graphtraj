@@ -34,15 +34,20 @@ async function attachMain(agent, python) {
 /**
  * Deliver the DSH Main's queued GraphTraj notices through its native inbox,
  * as the agents plugin relays Agent messages; acknowledge only after send.
+ * Each notice is one relay from the member that ended (538): the model reads
+ * its `graftling.notice_text` (title with the execution, Markdown content,
+ * Facts), and the sender is the member's alias, so graftling-dsh's browser
+ * module names the member rather than 'graphtraj'.
  */
 export async function deliverNotices(agent, entry) {
   const pending = await entry(agent, { event: 'notices' });
   if (!pending.notices) return 0;
-  agent.send(createUserMessage({
-    content: [{ type: 'text', text: pending.text }],
-    source: { kind: 'agent-message', form: 'relay', senderSessionId: 'graphtraj', senderAgentId: 'graphtraj',
-      recipientAgentId: agent.session.id, communicationId: `graphtraj-notice:${agent.session.id}:${pending.position}` },
-  }), 'next-step', true);
+  pending.items.forEach(({ text, sender }, index) => agent.send(createUserMessage({
+    content: [{ type: 'text', text }],
+    source: { kind: 'agent-message', form: 'relay', senderSessionId: sender, senderAgentId: sender,
+      recipientAgentId: agent.session.id,
+      communicationId: `graphtraj-notice:${agent.session.id}:${pending.position}:${index}` },
+  }), 'next-step', true));
   await entry(agent, { event: 'notices_ack', position: pending.position });
   return pending.notices;
 }

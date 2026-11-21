@@ -20,6 +20,11 @@ export async function check(ctx, parent, signal, entry) {
   try {
     const prepared = await entry(parent, { event: 'check_context' }, signal);
     if (prepared.error) throw new Error(prepared.error);
+    // Answered without a checker (no local Task): show it and fork nothing.
+    if (prepared.result) {
+      ctx.logger.info(`Completion check ${prepared.result.status}: ${prepared.result.reason}`);
+      return;
+    }
     const source = parent.session.snapshotEvents();
     const seed = source.length ? buildForkSeed(source, source.at(-1).seq) : [];
     const depth = resolveChildDepth(parent, undefined);

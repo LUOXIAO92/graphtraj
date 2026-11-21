@@ -226,6 +226,11 @@ export default function graphtraj(pi) {
     try {
       const prepared = await nativeEntry(ctx, environment, { event: 'check_context' }, ctx.signal);
       if (prepared.error) throw new Error(prepared.error);
+      // Answered without a checker (no local Task): show it and fork nothing.
+      if (prepared.result) {
+        ctx.ui.notify(`Completion check ${prepared.result.status}: ${prepared.result.reason}`, 'info');
+        return;
+      }
       // Load the SDK belonging to the running Pi, rather than a second installation.
       const sdk = await loadHostSdk();
       const manager = sdk.SessionManager.forkFrom(ctx.sessionManager.getSessionFile(), ctx.cwd);

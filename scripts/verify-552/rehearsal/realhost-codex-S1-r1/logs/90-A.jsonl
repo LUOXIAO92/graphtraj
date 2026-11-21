@@ -1,0 +1,5 @@
+{"type": "system", "subtype": "init", "session_id": "6a967d82-68d2-4495-a6e5-e85b1988a691", "model": "claude-sonnet-5-5", "tools": ["Read", "Glob", "Grep"], "apiKeySource": "stub", "cwd": "/private/tmp/claude-501/reh552/base/audit/codex-S1-r1"}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "toolu_stub_1", "name": "Read", "input": {"file_path": "/private/tmp/claude-501/reh552/base/audit/codex-S1-r1/S-turn-01-S.err"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_stub_1", "is_error": false, "content": ""}]}}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "AUDIT: CLEAN\n(1) none found (stub)\n(2) none found (stub)\n(3) none found (stub)\n(4) none found (stub)\n(5) none found (stub)"}]}}
+{"type": "result", "subtype": "success", "is_error": false, "result": "AUDIT: CLEAN\n(1) none found (stub)\n(2) none found (stub)\n(3) none found (stub)\n(4) none found (stub)\n(5) none found (stub)", "session_id": "6a967d82-68d2-4495-a6e5-e85b1988a691", "usage": {}}

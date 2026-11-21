@@ -1,0 +1,26 @@
+{
+ "argv": [
+  "/private/tmp/claude-501/reh552/bin/sandbox-exec",
+  "-f",
+  "/private/tmp/claude-501/reh552/base/logs/dsh-S2-r1/dsh.sb",
+  "/private/tmp/claude-501/reh552/bin/dsh",
+  "--profile",
+  "headless",
+  "--patch",
+  "/private/tmp/claude-501/reh552/base/logs/dsh-S2-r1/dsh-patch.yml",
+  "--json",
+  "--permission-mode",
+  "workspace-write",
+  "--approval-policy",
+  "never",
+  "--session-id",
+  "session-85959019-0f27-4a5d-bf98-df934717c6e8",
+  "-"
+ ],
+ "env_added": [
+  "DSH_AGENTS_HOME",
+  "DSH_HOME",
+  "DEEPSEEK_API_KEY=[redacted]"
+ ],
+ "cwd": "/private/tmp/claude-501/reh552/base/project/runs/dsh-S2-r1/ws"
+}

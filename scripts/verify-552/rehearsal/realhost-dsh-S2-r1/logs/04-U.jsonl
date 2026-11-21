@@ -1,0 +1,3 @@
+{"type": "system", "subtype": "init", "session_id": "76c524a4-6422-4cbb-9cb8-da889be3469c", "model": "claude-fable-5-2", "tools": ["WebSearch", "WebFetch"], "apiKeySource": "stub", "cwd": "/private/tmp/claude-501/reh552/base/u/dsh-S2-r1"}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "none (stub)"}]}}
+{"type": "result", "subtype": "success", "is_error": false, "result": "none (stub)", "session_id": "76c524a4-6422-4cbb-9cb8-da889be3469c", "usage": {}}

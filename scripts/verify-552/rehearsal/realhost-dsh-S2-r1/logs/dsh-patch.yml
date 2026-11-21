@@ -1,0 +1,41 @@
+- id: tool-web
+  disabled: true
+- id: web
+  disabled: true
+- id: web-search-deepseek
+  disabled: true
+- id: web-deepseek-api
+  disabled: true
+- id: web-fetch-http
+  disabled: true
+- id: tool-bash
+  disabled: true
+- id: tool-jobs
+  disabled: true
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-workflow
+  disabled: true
+- id: workflow-ptc
+  disabled: true
+- id: tool-skill
+  disabled: true
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-flash
+    reasoningEffort: high
+- insert:
+  - id: mcp-graphtraj
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: graphtraj
+      transport: stdio
+      command: "/Users/luoxiao/miniconda3/bin/python3.13"
+      args: ["-I", "/private/tmp/claude-501/reh552/base/bin/mcp_tasks_only.py", "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/bin/graphtraj-mcp"]
+      cwd: "/private/tmp/claude-501/reh552/base/project/runs/dsh-S2-r1/ws"
+      failOnStartupError: true

@@ -438,6 +438,49 @@ NOT COMPLETE: ${FAILS[*]}"; return 1; fi
   next "zsh $THIS AU claude deny   (USER: the beyond-host request answered by you; then AC claude)"
 }
 
+# AX: the user's rule 'an allow/deny entry the child's Runtime does not know is refused or reported, never
+# ignored' (551), one headless case per Runtime in project-after (dialog: none). Fields: create tool arguments |
+# expected: 'report:<entry>' (child created, agents status tool_check lists it in tools_not_offered) or
+# 'refuse:<entry>' (create refused `unavailable` naming it; Codex names the unknown server, as in A's
+# undefined-mcp case: "MCP servers ['undefined551'] are not in the captured Codex settings ...").
+ax_cases() {
+  print -l -- 'claude|"tools": ["Read", "NoSuchTool551"]|report:NoSuchTool551' \
+              'pi|"tools": ["read", "nosuchtool551"]|refuse:nosuchtool551' \
+              'codex|"disallowed_tools": ["mcp__nosuchserver551__x"]|refuse:nosuchserver551' \
+              'dsh|"tools": ["tool-nosuch551"]|refuse:tool-nosuch551'
+}
+step_AX() {
+  [[ -f $BASE/venv-after/installed && -f $BASE/heading-after.txt ]] || { print "STOP: run A0 first"; return 1; }
+  load_key || print "NOTE: DEEPSEEK_API_KEY unset; the pi and dsh children cannot reach their model"
+  pi_sandbox
+  host_versions
+  say "[AX] unknown manual tool entries per Runtime are refused or reported, never ignored (dialog: none)"
+  gate after; local g=$?
+  (( g == 0 )) || { print -r -- "NOT READY: parent gate failed (above; U after if untrusted)"; return 1; }
+  local line rt args expect entry kind verdict fields FAILS=() RESULTS=() check created
+  for line in ${(f)"$(ax_cases)"}; do
+    fields=("${(@s:|:)line}"); rt=$fields[1]; args=$fields[2]; expect=$fields[3]
+    kind=${expect%%:*}; entry=${expect#*:}
+    probe after $rt AX "$args" ${${kind:#report}:+yes}
+    created=$(grep -m1 'parent create result' $D/summary.txt)
+    if [[ $kind == refuse ]]; then
+      [[ $created == *unavailable* && $created == *$entry* ]] && verdict="OK (create refused unavailable naming $entry)" \
+        || verdict="NOT OK (expected create refused unavailable naming $entry; got: ${created[1,200]})"
+    else
+      check=$(grep -m1 'RECORD tool_check' $D/summary.txt)
+      if [[ $check == *tools_not_offered* && $check == *$entry* ]]; then verdict="OK (child created; status tool_check reports $entry: ${check#*: })"
+      else verdict="NOT OK (expected tool_check.tools_not_offered to list $entry; got: ${check:-no tool_check} | create: ${created[1,120]})"; fi
+    fi
+    RESULTS+=("AX $rt {$args}: $verdict | DSH $DSHV | $D/summary.txt")
+    [[ $verdict == OK* ]] || FAILS+=(AX-$rt)
+  done
+  say "AX results"
+  print -l -- $RESULTS
+  if (( $#FAILS )); then print -r -- "
+NOT COMPLETE: ${FAILS[*]}"; return 1; fi
+  print "COMPLETE"
+}
+
 # AU: the beyond-host request reaches the USER. An interactive Claude Main parent creates the child; the child's
 # request (Claude: WebSearch, not pre-allowed -> can_use_tool; Pi: a built-in the host's defaultTools lacks ->
 # Pi's confirm dialog) is retained for the parent, which shows it and asks you; it relays your answer via agents reply.
@@ -599,9 +642,10 @@ case $STEP in
   B) step_B ;;
   A0) step_A0 ;;
   A) step_A ;;
+  AX) step_AX ;;
   AU) step_AU "$@" ;;
   AC) step_AC ;;
   G) step_G ;;
   GR) step_GR ;;
-  *) print "usage: zsh $THIS <00|U [before|after]|B <rt|all>|A0|A <rt|all>|AU <claude|pi> <deny|allow>|AC <claude|pi>|G|GR>"; return 2 ;;
+  *) print "usage: zsh $THIS <00|U [before|after]|B <rt|all>|A0|A <rt|all>|AX|AU <claude|pi> <deny|allow>|AC <claude|pi>|G|GR>"; return 2 ;;
 esac

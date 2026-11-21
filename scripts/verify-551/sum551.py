@@ -222,6 +222,9 @@ def main() -> int:
             value = {'patch': value}
         if 'control/agents' in str(file) and isinstance(value, dict) and isinstance(value.get('executions'), list):
             for execution in value['executions']:
+                check = (execution.get('process') or {}).get('tool_check')
+                if check:  # the create entries the child's Runtime did not apply, as agents status reports them
+                    print(f"RECORD tool_check (agents status): {json.dumps(check, sort_keys=True)}")
                 error = execution.get('error') or {}
                 outcomes.append(f"{execution.get('outcome')}{' ' + str(error.get('code')) + ': ' + str(error.get('message')) if error else ''}")
         for node in walk(value):

@@ -1,0 +1,51 @@
+........................................................................ [ 10%]
+........................................................................ [ 21%]
+.......................................................................s [ 32%]
+sssssssssss............................................................. [ 43%]
+.................................F...ssssssss........................... [ 54%]
+....................................................................s... [ 65%]
+........................................................................ [ 76%]
+........................................................................ [ 87%]
+........................................................................ [ 97%]
+..............                                                           [100%]
+=================================== FAILURES ===================================
+_________ test_installed_native_relay_without_duplicate_model_content __________
+
+    def test_installed_native_relay_without_duplicate_model_content() -> None:
+        """Native registration and Session projection; not official UI acceptance."""
+        node, dsh = shutil.which('node'), shutil.which('dsh')
+        if node is None or dsh is None:
+            pytest.skip('Installed DSH and Node are required.')
+        if (reason := unsupported_dsh()) is not None:
+            pytest.skip(reason)
+        root = Path(__file__).resolve().parents[1]
+        result = subprocess.run([
+            node, str(root / 'tests/fixtures/dsh_communication.mjs'), str(Path(dsh).resolve()),
+            str(root / 'src/graftling/dsh/communication.mjs'),
+        ], capture_output=True, text=True, timeout=10)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: node:internal/modules/run_main:107
+E             triggerUncaughtException(
+E             ^
+E         
+E         Error: cannot get property "sessionQuery" without inject
+E             at Proxy.deliver (file:///Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/.scratch/graftling/src/graftling/dsh/communication.mjs:27:42)
+E             at Object.apply (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:122:36)
+E             at Proxy.receive (file:///Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/.scratch/graftling/src/graftling/dsh/communication.mjs:18:29)
+E             at Object.apply (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:122:36)
+E             at Proxy.invokePrepared (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js:952:25)
+E             at Object.apply (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis/lib/index.js:122:36)
+E             at Proxy.invoke (file:///opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-api-gateway/lib/index.js:947:15)
+E             at async Promise.all (index 0)
+E             at async file:///Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/.scratch/graftling/tests/fixtures/dsh_communication.mjs:41:1
+E         
+E         Node.js v26.5.0
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/opt/homebrew/bin/node', '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graph...d-after-create-runtime-input-closed/.scratch/graftling/tests/fixtures/dsh_communication.mjs:41:1\n\nNode.js v26.5.0\n').returncode
+
+tests/test_dsh_live.py:76: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
+1 failed, 640 passed, 21 skipped in 220.11s (0:03:40)
+exit=1

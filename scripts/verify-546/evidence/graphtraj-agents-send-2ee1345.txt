@@ -1,0 +1,9 @@
+...............................................................ss....... [ 85%]
+.....s......                                                             [100%]leftover test processes of PYTEST_GRAPHTRAJ_RUN=5ee7b3dd19f84be8a735d0117633183e: found=4 stopped=4 remaining=0
+  59214 /private/tmp/claude-501/t546/r2/pt/pytest-of-luoxiao/pytest-0/installed-environment0/venv/bin/python -I -m graphtraj.execution.runner_worker /private/tmp/claude-501/t546/r2/pt/pytest-of-luoxiao/pytest-0/test_main_default_status_lists0/.graphtraj/runner/sessions/113-managed_probe-handover0-first_prob...
+  59314 /private/tmp/claude-501/t546/r2/pt/pytest-of-luoxiao/pytest-0/installed-environment0/venv/bin/python -I -m graphtraj.execution.runner_worker /private/tmp/claude-501/t546/r2/pt/pytest-of-luoxiao/pytest-0/test_main_default_status_lists0/.graphtraj/runner/sessions/113-managed_probe-handover0-second_pro...
+  60238 /private/tmp/claude-501/t546/r2/pt/pytest-of-luoxiao/pytest-0/installed-environment0/venv/bin/python -I -m graphtraj.execution.runner_worker /private/tmp/claude-501/t546/r2/pt/pytest-of-luoxiao/pytest-0/test_task_member_agent_referen0/.graphtraj/runner/sessions/113-managed_probe-handover0-managed_pr...
+  60252 /tmp/claude-501/t546/r2/venv-g/bin/python /private/tmp/claude-501/t546/r2/pt/pytest-of-luoxiao/pytest-0/test_task_member_agent_referen0/fake-runtime-bin/codex app-server --listen stdio://
+
+81 passed, 3 skipped in 44.95s
+exit=0

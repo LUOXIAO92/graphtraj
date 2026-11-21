@@ -41,7 +41,9 @@ check_tmp() {
   print "pytest temp: TMPDIR=$PYTEST_TMP (outside the Harness)"
 }
 quiet() {
-  local others=$(ps -axww -o pid=,command= | grep -E 'run_test_shards|-m pytest' | grep -v grep || true)
+  local listing
+  listing=$(ps -axww -o pid=,command= 2>&1) || { print "NOTE: ps is not permitted here ($listing); check by hand that no other test run is running"; return 0; }
+  local others=$(print -r -- $listing | grep -E 'run_test_shards|-m pytest' | grep -v grep || true)
   [[ -z $others ]] || { print "STOP: another test run is running; rerun later: zsh $THIS $STEP"; print -r -- $others; return 1; }
 }
 deps() {  # click, yaml, websockets from production's runtime into venv $1 (read only; no PyPI)

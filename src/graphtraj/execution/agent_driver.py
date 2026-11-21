@@ -41,6 +41,24 @@ def _native_error(error: RuntimeAdapterError) -> AgentsError:
     return AgentsError(error.code, error.message)
 
 
+def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> None:
+    """Apply a create's ``tools``/``disallowed_tools`` (551) to a child's launch request.
+
+    Omitted at create, the child keeps the host's own tool settings. Claude
+    takes them as native flags (``ClaudeExecution.tool_arguments``); Codex
+    maps what it can express (``graftling.codex.driver.apply_tools``).
+    """
+    if runtime == 'claude':
+        request['tools'] = tools['tools']
+        request['disallowed_tools'] = list(tools['disallowed_tools'])
+    elif runtime == 'codex':
+        from graftling.codex.driver import apply_tools
+
+        apply_tools(request['session_parameters']['config'], tools)
+    else:
+        raise AgentsError('unavailable', f'Setting a child\'s tools is not available for {runtime!r} yet.')
+
+
 def _git_common_directory(cwd: Path) -> Path:
     """Return the Git common directory of ``cwd``, or ``cwd/.git`` outside Git."""
     try:
@@ -142,7 +160,7 @@ class AdapterDriver:
         return Path(worktree)
 
     def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None,
-                workspace: Path | None = None) -> dict:
+                workspace: Path | None = None, tools: Mapping[str, Any] | None = None) -> dict:
         """Resolve the Runtime's role preset and freeze its launch settings.
 
         An explicit configuration selects an existing preset, not an identity.
@@ -193,6 +211,8 @@ class AdapterDriver:
             raise _native_error(error) from None
         request  = prepared.launch_document()["adapter_request"]
         evidence = prepared.evidence_document()
+        if tools is not None:
+            apply_child_tools(runtime, request, tools)
         # Record what launches: the frozen request (or its evidence) first,
         # then the preset; Codex keeps effort under its native key.
         model    = request.get("model") or evidence.get("model") or getattr(preset, "model", None)
@@ -293,6 +313,10 @@ class AdapterDriver:
             turn.extra_fields = graphtraj_fields(str(turn.request['harness_root']), run.agent,
                                                  extra_fields=run.extra_fields)
             turn.agent_call = getattr(run, 'call', None)
+            from graftling.extra_tools import extra_tool_table
+
+            # The child's tasks entry beside agents (551); PiExecution serves it.
+            turn.extra_tools = extra_tool_table(self.child_tools(run))
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

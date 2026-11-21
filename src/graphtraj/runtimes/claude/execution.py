@@ -62,6 +62,13 @@ class ClaudeExecution(NativeClaudeExecution):
 
         return notify_direct_parent(self.directory, message, details)
 
+    # A Task member's fixed native tools, unchanged by 551.
+    MEMBER_TOOLS = 'Bash,Read,Write,Edit,Glob,Grep'
+
+    def tool_arguments(self) -> list[str]:
+        """Keep a Task member's fixed tools; an agents child keeps the host's or its create's choice."""
+        return super().tool_arguments() if self.independent else ['--tools', self.MEMBER_TOOLS]
+
     def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Publish native process evidence through the existing Runner binding."""
         record_runtime_process(pid, outcome)

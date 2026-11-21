@@ -166,7 +166,25 @@ Worktree on all four Runtimes, and the result and record report that path as
 `workspace`. Descendants inherit it and may only narrow it; the caller's working
 directory no longer sets it. Main's children and Task-free Agents keep the host's
 directory. If the member's record is unreadable or its Worktree is gone, `create`
-fails with `workspace-denied` rather than starting wider. `codex.unix_sockets` and
+fails with `workspace-denied` rather than starting wider.
+
+Every child created through `agents` in a GraphTraj project also gets a `tasks`
+tool beside `agents`. It offers only the general methods (`setup-project`,
+`task-breakdown`, `task-delivery`, `research`, `concept-clarification`) through
+the same discover/describe as Task members: `describe` returns the installed
+manual's `manual_ref`, which Claude members and children may read (a read-only
+grant of that one directory). This is a deliberate limit: no execution feature
+(`submit_result`, `decide_result`, `swarm`, `task_graph` and the rest) is
+offered to such a child, and each answers `Unknown feature`; calls run as the
+child's own Agent, never as Main or its parent. `task_graph` stays out because
+some of its revision branches would not provably refuse a Task-free caller.
+
+A child's tools follow the host's own settings unless `create` (or a
+`config.yml` preset) names `tools` or `disallowed_tools`; Task members keep
+their fixed Claude tool list. What each Runtime can express, and how a use
+beyond the host's settings is approved, is in Graftling's
+[`PUBLIC_API.md`](https://github.com/LUOXIAO92/graftling/blob/main/src/graftling/PUBLIC_API.md)
+section 2 (Tools); Pi and DSH children refuse a tool choice until supported. `codex.unix_sockets` and
 `local_websocket.worktrees` match the exact working directory, so an entry for a
 member's Codex child must name the Worktree, not the project root.
 

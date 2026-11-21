@@ -184,3 +184,43 @@ def test_claude_manual_grant_uses_the_installed_directory(monkeypatch: pytest.Mo
     assert installed_manuals() == []
     (tmp_path / 'manuals').mkdir()
     assert installed_manuals() == [(tmp_path / 'manuals').resolve()]
+
+
+@pytest.mark.parametrize('independent', [False, True])
+def test_claude_member_tools_stay_fixed_and_children_inherit_the_host(
+    tmp_path: Path, claude_environment: None, independent: bool,
+) -> None:
+    """A Task member keeps its fixed tool list; an agents child gets no --tools unless it chose some."""
+    result_project(tmp_path)
+    with ExitStack() as stack:
+        turn, _, _ = execution(tmp_path, stack, 'unused')
+        if independent:
+            turn.configure_independent(archive=None, agents_callback=lambda request: AgentsResult({}))
+        argv, _ = turn._prepare(str(tmp_path / 'connection.sock'))
+        if independent:
+            assert '--tools' not in argv and '--disallowedTools' not in argv
+            turn.request.update(tools=['Read', 'WebFetch'], disallowed_tools=['Bash'])
+            chosen, _ = turn._prepare(str(tmp_path / 'connection.sock'))
+            assert chosen[chosen.index('--tools') + 1] == 'Read,WebFetch'
+            assert chosen[chosen.index('--disallowedTools') + 1] == 'Bash'
+        else:
+            assert argv[argv.index('--tools') + 1] == 'Bash,Read,Write,Edit,Glob,Grep'
+            assert '--disallowedTools' not in argv
+            turn.request.update(tools=['Read'], disallowed_tools=['Bash'])
+            assert turn._prepare(str(tmp_path / 'connection.sock'))[0] == argv
+
+
+def test_child_tool_choice_reaches_each_runtime_request() -> None:
+    """Claude takes flags, Codex its expressible config, other Runtimes refuse for now."""
+    from graftling import AgentsError
+
+    from graphtraj.execution.agent_driver import apply_child_tools
+
+    claude: dict = {}
+    apply_child_tools('claude', claude, {'tools': None, 'disallowed_tools': ['WebFetch']})
+    assert claude == {'tools': None, 'disallowed_tools': ['WebFetch']}
+    codex = {'session_parameters': {'config': {}}}
+    apply_child_tools('codex', codex, {'tools': None, 'disallowed_tools': ['web_search']})
+    assert codex['session_parameters']['config']['web_search'] == 'disabled'
+    with pytest.raises(AgentsError):
+        apply_child_tools('codex', codex, {'tools': None, 'disallowed_tools': ['shell']})

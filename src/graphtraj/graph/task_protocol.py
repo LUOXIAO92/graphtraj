@@ -131,6 +131,72 @@ TASK_SCHEMA = object_schema({
 })
 
 
+def definition_errors(issue: Any, path: str) -> list[dict[str, str]]:
+    """Return every invalid field of one Task definition as ``{"path", "reason"}`` (556).
+
+    Fields the schema reports as missing or of the wrong type are skipped
+    when absent; nothing here reads project state.
+    """
+    if not isinstance(issue, dict):
+        return [{"path": path, "reason": "must be a Task definition object"}]
+
+    errors = []
+
+    def bad(field: str, reason: str) -> None:
+        """Record one field problem."""
+        errors.append({"path": f"{path}.{field}", "reason": reason})
+
+    def task_ids(value: Any) -> bool:
+        """Whether ``value`` is a list of unique Task IDs."""
+        return (isinstance(value, list)
+                and all(isinstance(item, str) and TASK_ID.fullmatch(item) for item in value)
+                and len(value) == len(set(value)))
+
+    task_id = issue.get("task_id")
+    if "task_id" in issue and (not isinstance(task_id, str) or TASK_ID.fullmatch(task_id) is None):
+        bad("task_id", "must be a Task ID")
+    if "task_name" in issue and (not isinstance(issue["task_name"], str)
+                                 or TASK_NAME.fullmatch(issue["task_name"]) is None):
+        bad("task_name", "must be a lowercase hyphenated Task name")
+    for field in ("source", "title"):
+        if field in issue and (not isinstance(issue[field], str) or not issue[field].strip()):
+            bad(field, "must be nonempty text")
+    if "dependencies" in issue:
+        dependencies = issue["dependencies"]
+        if not task_ids(dependencies):
+            bad("dependencies", "must be a list of unique Task IDs")
+        elif task_id in dependencies:
+            bad("dependencies", "must not include the Task itself")
+    if "schema_version" in issue and type(issue["schema_version"]) is not int:
+        bad("schema_version", "must be an integer")
+    parent = issue.get("parent_id")
+    if parent is not None and (not isinstance(parent, str) or TASK_ID.fullmatch(parent) is None):
+        bad("parent_id", "must be a Task ID or null")
+    disposition = issue.get("disposition")
+    if "disposition" in issue and disposition not in {"active", "superseded", "cancelled"}:
+        bad("disposition", "must be active, superseded or cancelled")
+    replacements = issue.get("replaced_by")
+    if "replaced_by" in issue:
+        if not task_ids(replacements):
+            bad("replaced_by", "must be a list of unique Task IDs")
+        elif (disposition == "superseded") != bool(replacements):
+            bad("replaced_by", "must be nonempty exactly when the disposition is superseded")
+    reason = issue.get("retirement_reason")
+    if disposition == "active" and reason is not None:
+        bad("retirement_reason", "must be null for an active Task")
+    if disposition in {"superseded", "cancelled"} and (not isinstance(reason, str) or not reason.strip()):
+        bad("retirement_reason", "must be nonempty text for a retired Task")
+    if "body" in issue:
+        if not isinstance(issue["body"], str):
+            bad("body", "must be text")
+        else:
+            try:
+                read_execution_budget(issue["body"])
+            except ExecutionBudgetError as error:
+                bad("body", f"execution budget is invalid: {error}")
+    return errors
+
+
 def validate_definition(issue: Any) -> None:
     """Validate one complete Task definition; the source is any nonempty text."""
     if not isinstance(issue, dict) or set(issue) != set(TASK_PROPERTIES):

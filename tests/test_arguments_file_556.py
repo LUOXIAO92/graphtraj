@@ -164,12 +164,64 @@ def test_json_bridge_and_cli_share_the_validation(project: Path) -> None:
                                  'arguments_file': '.graphtraj/config.yml'}, cwd=project)
     assert 'GraphTraj private state' in refused['result']['error']['message']
 
-    with pytest.raises(click.ClickException) as raised:
+    with pytest.raises(ValueError) as raised:
         invoke_tool('worldline_append', {'event': {'event': 'not plain!', 'caused_by_event_ids': 'x',
                                                    'evidence_refs': []}}, cwd=project)
-    assert not isinstance(raised.value, click.UsageError)
-    assert 'arguments.event.event' in raised.value.message
-    assert 'arguments.event.caused_by_event_ids' in raised.value.message
+    assert 'arguments.event.event' in str(raised.value)
+    assert 'arguments.event.caused_by_event_ids' in str(raised.value)
+    with pytest.raises(RunnerError) as refused:
+        invoke_tool('continue', {'task_id': 'bad id', 'caused_by_event_ids': ['a', 'a']}, cwd=project)
+    assert refused.value.code == 'invalid-input'
+    assert 'arguments.task_id' in refused.value.message and 'arguments.caused_by_event_ids' in refused.value.message
+
+
+def test_task_definition_and_state_change_fields_are_reported_one_by_one(project: Path) -> None:
+    """task_register, task_revise and task_update name each invalid field at its own path."""
+    definition = {
+        'schema_version': 2, 'task_id': 'not an id', 'parent_id': None, 'disposition': 'active',
+        'replaced_by': [], 'retirement_reason': 'should be null', 'task_name': 'Bad Name',
+        'source': ' ', 'title': 'Title', 'body': 'Body', 'dependencies': ['1', '1'],
+    }
+    registered = call('tasks', {'action': 'execute', 'feature': 'task_register', 'arguments': definition})
+    assert paths(registered) == ['arguments.task_id', 'arguments.task_name', 'arguments.source',
+                                 'arguments.dependencies', 'arguments.retirement_reason']
+
+    revised = call('tasks', {'action': 'execute', 'feature': 'task_revise', 'arguments': {
+        'product_preserving': True, 'caused_by_event_ids': [], 'evidence_refs': ['e'],
+        'tasks': [{**definition, 'task_id': '7', 'retirement_reason': None, 'source': 'ok', 'task_name': 'ok'}],
+    }})
+    # The schema's missing-field error and the definition's own error come together.
+    assert paths(revised)[-1] == 'arguments.tasks[0].dependencies'
+    assert len(paths(revised)) == 2
+
+    updated = call('tasks', {'action': 'execute', 'feature': 'task_update', 'arguments': {
+        'task_id': 'x y', 'status': 'ready', 'active_team_ordinal': 0, 'worktree': '', 'branch': None,
+        'current_candidate': 'abc', 'caused_by_event_ids': ['a', 'a'], 'evidence_refs': ['e'],
+    }})
+    assert paths(updated) == ['arguments.caused_by_event_ids', 'arguments.task_id',
+                              'arguments.active_team_ordinal', 'arguments.worktree',
+                              'arguments.current_candidate']
+
+
+def test_delivery_state_continue_and_completion_report_every_problem(project: Path) -> None:
+    """Other converted features list all their own problems in one result."""
+    delivery = call('tasks', {'action': 'execute', 'feature': 'delivery_state_apply', 'arguments': {
+        'request': {'phase': 'rework', 'task_id': '1', 'caused_by_event_ids': [], 'evidence_refs': ['e'],
+                    'extra': 1},
+        'facts': {},
+    }})
+    assert paths(delivery) == ['arguments.facts', 'arguments.request.extra',
+                               'arguments.request.caused_by_event_ids']
+
+    continued = call('tasks', {'action': 'execute', 'feature': 'continue', 'arguments': {
+        'task_id': 'bad id', 'caused_by_event_ids': ['a', 'a'],
+    }})
+    assert paths(continued) == ['arguments.task_id', 'arguments.caused_by_event_ids']
+
+    completed = call('tasks', {'action': 'execute', 'feature': 'task_complete', 'arguments': {
+        'task_id': '1', 'reason': ' ', 'caused_by_event_ids': ['a', 'a'], 'evidence_refs': ['e', 'e'],
+    }})
+    assert {'arguments.reason', 'arguments.caused_by_event_ids', 'arguments.evidence_refs'} <= set(paths(completed))
 
 
 def test_describe_documents_arguments_file(project: Path) -> None:

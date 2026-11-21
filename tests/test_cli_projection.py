@@ -145,7 +145,10 @@ def test_file_content_uses_same_nested_schema_as_gateway(
     schema["properties"]["task_id"] = {"type": "integer", "enum": [210]}
     for alternative in schema.get("anyOf", []):
         alternative["properties"]["task_id"] = schema["properties"]["task_id"]
-    monkeypatch.setitem(tools.TOOLS, "task_register", replace(original, input_schema=schema, handler=handler))
+    # The fixture schema's integer task_id is not a real Task ID, so the
+    # feature's own definition check is left out with the real handler.
+    monkeypatch.setitem(tools.TOOLS, "task_register", replace(original, input_schema=schema, handler=handler,
+                                                              check=None))
     document = {"task_id": 210, "task_name": "fixture", "source": "source", "title": "title",
                 "body": "body", "dependencies": [], "disposition": "active",
                 "schema_version": 2, "parent_id": None, "replaced_by": [], "retirement_reason": None}

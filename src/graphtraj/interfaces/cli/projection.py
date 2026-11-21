@@ -26,14 +26,19 @@ def invoke_tool(feature: str, arguments: dict[str, Any], **context: Any) -> Tool
         except (OSError, UnicodeError, yaml.YAMLError) as error:
             raise click.BadParameter(str(error), param_hint="--swarm-input") from error
     # The same schema and feature-level checks as the tool, all reported at once.
-    # Exit codes stay as before: a schema problem is a usage error (2), a
-    # feature's own problem an operation error (1).
+    # A schema problem stays a usage error (exit 2); a feature's own problem is
+    # raised as the refusal its command already renders (exit 1): agent-runner
+    # commands render RunnerError documents, graphtraj commands ValueError text.
     errors = argument_errors(feature, arguments)
     if errors:
         message = "; ".join(f"{error['path']}: {error['reason']}" for error in errors)
         if schema_errors(arguments, TOOLS[feature].input_schema, "arguments"):
             raise click.UsageError(message)
-        raise click.ClickException(message)
+        if TOOLS[feature].cli_path[:1] == ("agent-runner",):
+            from graphtraj.execution.runner_models import RunnerError
+
+            raise RunnerError("invalid-input", message)
+        raise ValueError(message)
     from graphtraj.interfaces.hosted_cli import forward_cli
 
     forwarded = forward_cli(feature, arguments, context.get('cwd') or Path.cwd())

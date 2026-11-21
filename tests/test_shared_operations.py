@@ -54,7 +54,8 @@ def test_python_and_cli_register_validate_and_read_the_same_graph(
             register_task(state, python_root, invalid)
         failed = runner.invoke(main, ["task", "register", "--task-file", str(_write(cli_root / "issue.yml", invalid))])
         assert failed.exit_code == 1
-        assert str(error.value) in failed.stderr
+        # The CLI shares the tool's field-level check for an invalid definition (556).
+        assert (str(error.value) if invalid is issue else "arguments.task_id: must be a Task ID") in failed.stderr
         assert read_graph(state) == before
         assert yaml.safe_load(runner.invoke(main, ["task", "graph"]).stdout) == before
 
@@ -420,7 +421,10 @@ def test_python_budgeted_launch_preserves_notices_without_writing_to_terminal(
             operation(*arguments)
         rendered = runner.invoke(runner_main, cli_arguments)
         assert rendered.exit_code == 1
-        assert yaml.safe_load(rendered.stdout) == {**identity, "error": error.value.as_document()}
+        document = yaml.safe_load(rendered.stdout)
+        # continue's own argument check runs before the handler and names the field (556).
+        assert {**document, "error": document["error"]["code"]} == {**identity, "error": error.value.code}
+        assert error.value.message in document["error"]["message"]
     interrupt_session(alias, root)
     refused = cleanup_task(root, "73")
     assert not refused.succeeded

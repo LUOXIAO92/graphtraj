@@ -16,7 +16,7 @@ from graphtraj.execution.runner_control import (
     submit_session_report,
 )
 from graphtraj.execution.runner_launch import launch_swarm, launch_swarm_file
-from graphtraj.graph.delivery_state import apply_delivery_state_request
+from graphtraj.graph.delivery_state import apply_delivery_state_request, delivery_request_errors
 from graphtraj.graph.delivery_worldline import (
     append_project_worldline_event,
     read_worldline,
@@ -27,6 +27,8 @@ from graphtraj.graph.task_graph import (
     register_task,
     revise_tasks,
     revision_errors,
+    state_change_errors,
+    completion_errors,
     update_task_state,
     complete_task,
 )
@@ -43,6 +45,7 @@ from graphtraj.graph.task_protocol import (
     REGISTER_SCHEMA as _ISSUE_SCHEMA,
     REVISION_SCHEMA as _REVISION_SCHEMA,
     COMPLETE_SCHEMA,
+    definition_errors,
     TASK_SCHEMA,
     STATE_CHANGE_SCHEMA as _STATE_CHANGE_SCHEMA,
 )
@@ -474,6 +477,23 @@ def launch_swarm_tool(
     return ToolResult(response.document, failed=not response.succeeded)
 
 
+def _continuation_errors(arguments: Any) -> list[dict[str, str]]:
+    """Return continue's own argument problems (556); the Task's state is checked later."""
+    from graphtraj.execution.runner_batch import valid_task_id
+
+    if not isinstance(arguments, dict):
+        return []
+    errors = []
+    if isinstance(arguments.get("task_id"), str) and not valid_task_id(arguments["task_id"]):
+        errors.append({"path": "arguments.task_id", "reason": "must be a Task ID"})
+    causes = arguments.get("caused_by_event_ids")
+    if isinstance(causes, list) and (not causes or len(set(map(str, causes))) != len(causes)
+                                     or any(not event_id for event_id in causes)):
+        errors.append({"path": "arguments.caused_by_event_ids",
+                       "reason": "Continuation requires unique causal Project Worldline event IDs."})
+    return errors
+
+
 def continue_task_execution(
     arguments: Mapping[str, Any], *, cwd: Path | None = None,
 ) -> ToolResult:
@@ -600,6 +620,7 @@ register_tool(
             "dependencies": [],
         },
     ),
+    check=lambda arguments: definition_errors(arguments, "arguments"),
 )
 register_tool(
     "task_revise",
@@ -616,6 +637,7 @@ register_tool(
     COMPLETE_SCHEMA,
     complete_current_task,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: completion_errors(arguments, "arguments"),
 )
 register_tool(
     "task_update",
@@ -624,6 +646,7 @@ register_tool(
     _STATE_CHANGE_SCHEMA,
     update_current_task_state,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: state_change_errors(arguments, "arguments"),
 )
 register_tool(
     "task_backup",
@@ -698,6 +721,8 @@ register_tool(
     _DELIVERY_STATE_SCHEMA,
     apply_state_request,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: (delivery_request_errors(arguments["request"], arguments.get("facts"), "arguments")
+                             if isinstance(arguments, dict) and "request" in arguments else []),
 )
 register_tool(
     "task_integrate",
@@ -728,6 +753,7 @@ register_tool(
     _CONTINUE_SCHEMA,
     continue_task_execution,
     manual_ref="manuals/task-delivery/guide.md",
+    check=_continuation_errors,
     examples=(
         {
             "task_id":           "paper-1",

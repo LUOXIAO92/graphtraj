@@ -1,4 +1,5 @@
-"""REHEARSAL ONLY: stand-ins for `claude`, `codex`, `dsh` and `sandbox-exec` (rehearse.zsh puts wrappers first on PATH).
+"""REHEARSAL ONLY (553: copy of verify-552/stub552.py; dsh reports 0.2.2-rc.5 and writes rc.5-shaped tool
+entries {name, description, parameters}, as in rehearsal/real-dsh-rc5-boot/session.v4.jsonl): stand-ins for `claude`, `codex`, `dsh` and `sandbox-exec` (rehearse.zsh puts wrappers first on PATH).
 
   python -I stub553.py <claude|codex|dsh|sandbox-exec> <the host's own argv...>
 
@@ -7,7 +8,7 @@ outer `sandbox-exec` around dsh (the stub just runs the command: nested Seatbelt
 sandbox). Refusals of out-of-workspace reads, `ls`, `curl` and web search are the STUB's texts, not enforcement.
 Real: S's `tasks describe concept-clarification` is a real tools/call to the MCP server the host was configured with
 (claude: --mcp-config file; codex: -c mcp_servers.graphtraj.command; dsh: the patch's mcp-graphtraj row, i.e. the
-tasks-only relay in front of the production graphtraj-mcp), the Reads of the guide and ws files, S's edits of its
+tasks-only relay in front of the candidate venv's graphtraj-mcp), the Reads of the guide and ws files, S's edits of its
 ws file, the codex rollout file written under V553_CODEX_SESSIONS, the DSH session log (zstd) under DSH_HOME whose
 request/header.tools is the tools/list answer of that same relay plus DSH's file tools.
 """
@@ -230,7 +231,7 @@ def codex(args):
 # ---------------------------------------------------------------- dsh
 def dsh(args):
     if '--version' in args:
-        print('0.2.2-alpha.2 (stub for verify-553 rehearsal)')
+        print('0.2.2-rc.5 (stub for verify-553 rehearsal)')
         return 0
     if '--dump-config' in args:
         print('# stub dsh --dump-config')
@@ -255,6 +256,7 @@ def dsh(args):
     tools = sorted(['edit', 'glob', 'grep', 'read', 'write', 'todo_write'] + [f'mcp__graphtraj__{t["name"]}' for t in listed])
     store = Path(os.environ['DSH_HOME']) / 'sessions' / 'stub' / sid
     store.mkdir(parents=True, exist_ok=True)
+    tools = [{'name': n, 'description': '(stub)', 'parameters': {}} for n in tools]   # rc.5 shape
     header = {'type': 'request/header', 'seq': turn, 'data': {'header': {'tools': tools, 'config': {
         'provider': 'deepseek-official', 'model': 'deepseek-flash', 'reasoningEffort': 'high'}}}}
     raw = store / 'session.v4.jsonl'

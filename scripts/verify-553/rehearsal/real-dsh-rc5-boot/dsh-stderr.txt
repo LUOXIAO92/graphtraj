@@ -1,0 +1,2 @@
+[llm-deepseek-api-key] model listing from https://api.deepseek.com/models failed (LlmError: could not reach https://api.deepseek.com/models); using the bundled catalog
+dsh: TRANSPORT: DeepSeek Messages transport failed

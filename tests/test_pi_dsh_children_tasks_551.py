@@ -47,3 +47,42 @@ def test_dsh_child_channel_serves_tasks_bound_to_the_child(tmp_path: Path, monke
     assert served == [(tmp_path, 'agent-551child', {'action': 'discover'})]
     # The child's agents entry is unchanged: graftling's own MCP server on the same channel.
     assert turn.request['mcp']['args'] == ['-I', '-m', 'graftling.mcp']
+
+
+def test_pi_child_tools_reach_its_launch_request() -> None:
+    """apply_child_tools hands Pi the create's choice; Pi applies it as --tools/--exclude-tools at launch."""
+    from graphtraj.execution.agent_driver import apply_child_tools
+
+    request = {'executable': '/x/pi'}
+    apply_child_tools('pi', request, {'tools': ['read', 'grep'], 'disallowed_tools': ['bash']})
+    assert request == {'executable': '/x/pi', 'tools': ['read', 'grep'], 'disallowed_tools': ['bash']}
+
+
+def dsh_install(tmp_path: Path) -> str:
+    """A DSH install root whose web-app bundle declares a preset with two tool rows, one disabled."""
+    import json
+
+    bundle = tmp_path / 'dsh/node_modules/@deepseek-ai/dsh-web-app'
+    (bundle / 'presets').mkdir(parents=True)
+    (bundle / 'package.json').write_text(json.dumps({'dsh': {'bundle': {'patch': ['./presets/standard.patch.yml']}}}))
+    (bundle / 'presets/standard.patch.yml').write_text(
+        "- insert:\n    - id: preset-standard\n      name: '@deepseek-ai/dsh-agent-preset'\n      config:\n"
+        "        id: standard\n        plugins:\n          - {id: persona, name: '@deepseek-ai/dsh-persona'}\n"
+        "          - {id: tool-web, name: '@deepseek-ai/dsh-tool-web'}\n"
+        "          - {id: tool-plugin-market, name: x, disabled: true}\n")
+    return str(tmp_path / 'dsh/package.json')
+
+
+def test_dsh_child_tools_are_checked_against_the_installed_preset(tmp_path: Path) -> None:
+    """A row id narrows freely; an unknown id is unavailable; a host-disabled row is authorization-required."""
+    from graftling import AgentsError
+    from graphtraj.execution.agent_driver import apply_child_tools
+
+    request = {'package': dsh_install(tmp_path)}
+    apply_child_tools('dsh', request, {'tools': None, 'disallowed_tools': ['tool-web']})
+    assert (request['tools'], request['disallowed_tools']) == (None, ['tool-web'])
+    for tools, code in (({'tools': ['web_fetch'], 'disallowed_tools': []}, 'unavailable'),
+                        ({'tools': ['tool-plugin-market'], 'disallowed_tools': []}, 'authorization-required')):
+        with pytest.raises(AgentsError) as refused:
+            apply_child_tools('dsh', {'package': request['package']}, tools)
+        assert refused.value.code == code

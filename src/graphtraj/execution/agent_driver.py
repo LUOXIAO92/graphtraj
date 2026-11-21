@@ -46,7 +46,10 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
 
     Omitted at create, the child keeps the host's own tool settings. Claude
     takes them as native flags (``ClaudeExecution.tool_arguments``); Codex
-    maps what it can express (``graftling.codex.driver.apply_tools``).
+    maps what it can express (``graftling.codex.driver.apply_tools``). Pi
+    takes ``--tools``/``--exclude-tools`` and asks the parent before a
+    built-in beyond the host's settings; DSH chooses installed agent-preset
+    tool rows and refuses enabling a host-disabled one.
     """
     if runtime == 'claude':
         request['tools'] = tools['tools']
@@ -55,6 +58,16 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
         from graftling.codex.driver import apply_tools
 
         apply_tools(request['session_parameters']['config'], tools)
+    elif runtime == 'pi':
+        # Pi's --tools / --exclude-tools; a built-in beyond the host's settings asks the parent first.
+        from graftling.pi.driver import apply_tools
+
+        apply_tools(request, tools)
+    elif runtime == 'dsh':
+        # DSH agent-preset tool rows; unknown -> unavailable, a host-disabled row -> authorization-required.
+        from graftling.dsh.execution import apply_tools
+
+        apply_tools(request, tools)
     else:
         raise AgentsError('unavailable', f'Setting a child\'s tools is not available for {runtime!r} yet.')
 

@@ -1422,11 +1422,15 @@ def test_task_recovery_authority_targets_and_separate_continuation(
     for invalid in (
         {**request, 'alias': 'unknown'},
         {**request, 'resume': True}, {**request, 'restore_active': True},
-        {**request, 'retry_event_id': request['caused_by_event_ids'][0]},
         {**request, 'additional_minutes': 0},
     ):
         with pytest.raises(RunnerError):
             call({'action': 'execute', 'feature': 'approved_recovery', 'arguments': invalid})
+    # A retry with repair fields is the caller's own input problem, returned with
+    # the other input problems before any authority or state check (556).
+    retry = call({'action': 'execute', 'feature': 'approved_recovery',
+                  'arguments': {**request, 'retry_event_id': request['caused_by_event_ids'][0]}})
+    assert retry.failed and retry.document['error']['code'] == 'invalid-input'
     for extra in ({'actor': 'main'}, {'task_id': '83'}):
         assert call({'action': 'execute', 'feature': 'approved_recovery',
                      'arguments': {**request, **extra}}).failed

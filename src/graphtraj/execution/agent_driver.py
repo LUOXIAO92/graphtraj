@@ -314,6 +314,8 @@ class AdapterDriver:
                 extra_fields=graphtraj_fields(str(turn.request['harness_root']), turn.directory.name,
                                               extra_fields=run.extra_fields),
                 extra_tools=self.child_tools(run))
+            # Tool entries the child's Claude did not apply reach the parent's status (551).
+            turn.tool_report = lambda check: run.events.process(tool_check=check)
         if run.runtime == 'dsh':
             from graphtraj.runtimes.dsh.driver import bind_agents
 

@@ -182,12 +182,19 @@ offered to such a child, and each answers `Unknown feature`; calls run as the
 child's own Agent, never as Main or its parent. `task_graph` stays out because
 some of its revision branches would not provably refuse a Task-free caller.
 
-A child's tools follow the host's own settings unless `create` (or a
-`config.yml` preset) names `tools` or `disallowed_tools`; Task members keep
+A child's tools follow its own Runtime's configuration on this machine (that
+Runtime's local settings, not the parent's) unless `create` (or a
+`config.yml` preset) names `tools` or `disallowed_tools`. Names are each
+Runtime's own; there is no shared tool model: Claude `WebSearch`, Codex
+`web_search`, MCP tools `mcp__<server>__<tool>`, Pi `bash`, DSH its `tool-web`
+preset rows. A name the child's Runtime does not know is refused at `create`
+(Codex, DSH) or, for Claude, whose tool set depends on its version, reported
+in the child's `status` as `tool_check` after start; it is never silently
+ignored. Calling `tasks` needs no approval unless `disallowed_tools` names it; Task members keep
 their fixed Claude tool list. What each Runtime can express, and how a use
 beyond the host's settings is approved, is in Graftling's
 [`PUBLIC_API.md`](https://github.com/LUOXIAO92/graftling/blob/main/src/graftling/PUBLIC_API.md)
-section 2 (Tools); Pi and DSH children refuse a tool choice until supported. `codex.unix_sockets` and
+section 2 (Tools). `codex.unix_sockets` and
 `local_websocket.worktrees` match the exact working directory, so an entry for a
 member's Codex child must name the Worktree, not the project root.
 

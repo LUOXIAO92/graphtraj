@@ -1,0 +1,88 @@
+== rehearsal in /private/tmp/claude-501/reh544d-1795266611 (stub codex)
+REHEARSAL PASS 00: isolation OK, codex exec answer names gpt-6-luna, next = T
+[00] Main. 预检。对话框: 无。约 1 分钟（一次 codex exec）。成功可见: 'isolation: OK' 与 'answer: CODEX-544-OK gpt-6-luna'。
+codex: /private/tmp/claude-501/reh544d-1795266611/stub/codex -> /private/tmp/claude-501/reh544d-1795266611/stub/codex | version: codex-cli 0.171.0 (stub)
+isolation: OK
+codex login: Logged in using ChatGPT (stub)
+codex exec rc=0 (142 = 300 s limit) | header model: gpt-6-luna | answer: CODEX-544-OK gpt-6-luna
+REHEARSAL PASS T: one dialog (folder trust), /exit, next = P
+REHEARSAL PASS P: config.toml has ONLY the probe server, real probe544.py self-test PASS, USER command, the 543 prompt, screenshot paths, next = Pr
+wrote /private/tmp/claude-501/reh544d-1795266611/vproject/.codex/config.toml:
+    [mcp_servers.probe]
+    command = "/Users/luoxiao/miniconda3/bin/python3.13"
+    args = ["-I", "/private/tmp/claude-501/reh544d-1795266611/base/probe544.py"]
+    default_tools_approval_mode = "approve"
+
+### probe server answers initialize + tools/call (one local JSON-RPC exchange, no model)
+probe text tail: ['status: sent', 'from: main', '→ member-x [probe-id]'] | structuredContent: {'ok': True, 'marker': 'PROBE-SC-544'}
+CHECK probe server self-test: PASS
+REHEARSAL PASS Pr: picks the project's rollout (not the newer other-cwd one); structuredContent -> PASS
+rollout: /private/tmp/claude-501/reh544d-1795266611/codex-home/sessions/2026/11/21/rollout-a-probe.jsonl (of 1 candidates)
+---- line 2 function_call name=mcp__probe__send_note namespace=None
+{"to":"member-x","message":"l1\nl2"}
+---- line 3 function_call_output (what the model received):
+{"ok": true, "marker": "PROBE-SC-544"}
+---- line 4 assistant reply:
+The tool returned {"ok": true, "marker": "PROBE-SC-544"}
+CHECK model input carries PROBE-SC-544 (structuredContent): PASS
+CHECK model input lacks PROBE-BODY-544 (content body): PASS
+model reply mentions PROBE-SC-544: True | mentions PROBE-BODY-544: False (information)
+CHECK 544 probe model input: PASS
+REHEARSAL PASS Pr: content body in the model input -> FAIL
+rehearsal clone: uncommitted 544 files committed in the clone only (7661dba4)
+REHEARSAL PASS B: exact 544 diff vs f754d3a9, candidate wheels + venv, the candidate has _agents_card
+[B] Main. 核对 544 改动文件并构建候选 wheel 与 venv（/private/tmp/claude-501/reh544d-1795266611/base/cand）。对话框: 无。约 1 分钟。成功可见: 'CHECK 544 product diff ...: PASS'、'venv pip check rc=0'、'has _agents_card: True'。
+GraphTraj product files changed f754d3a955fe7740fa11b54f194d19fb70d2d438..HEAD: src/graphtraj/interfaces/mcp.py, src/graphtraj/runtimes/codex/display_hook.py, tests/test_codex_agent_display.py, tests/test_codex_agents_card_544.py
+GraphTraj 7661dba4b19553300daed1099e3972a8cd6495da rehearsal only: uncommitted 544 files
+graftling 6794ce02b6210ec88837437affb8d7b525612804 Merge branch 'agent/538-dsh-graphtraj-notice-block-display' into dev
+venv pip check rc=0
+graftling 0.6.2 /private/tmp/claude-501/reh544d-1795266611/base/cand/venv/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL PASS V: config.toml = graphtraj only (probe gone), hooks.json SessionStart+PostToolUse+Stop, role PASS, prompt (create, wait, send), screenshot paths, next = Vr
+isolation: OK
+CHECK 535 child role resolves: PASS (runtime claude, model claude-opus-5-5, reasoning_effort high, role claude, roles ['claude'])
+child name for this run: n5442210
+REHEARSAL PASS Vr (code mode): the candidate's real Codex card -> PASS (no body, recipient last, structuredContent complete, no hook copy, sizes a/b/c printed)
+Main session 01a1f989-main-0000-0000-000000000544: rollout /private/tmp/claude-501/reh544d-1795266611/codex-home/sessions/2026/11/21/rollout-main-card.jsonl
+---- line 3 graphtraj.agents execute create (exec exec line 2, calls mcp__graphtraj__agents: True)
+  content: "→ n5442210 [agent-1a2b]"
+  CHECK content lacks the message body: PASS
+  CHECK content last line is "→ n5442210 [agent-…]": PASS
+  CHECK structuredContent present and complete (agent, result): PASS
+  SIZE (a) actual CallToolResult 220 B | (b) same with today's YAML content 307 B (DERIVED, not observed) | (c) custom_tool_call_output the model got 267 B (line 4) | delta (b)-(a) 87 B
+CHECK agents create/send/resume calls found: 1: PASS
+CHECK no 535 hook copy ("agents → n5442210" / "n5442210 · replied"): none: PASS
+CHECK 544 rollout: PASS
+REHEARSAL PASS Vr (code mode): content holding the message body -> FAIL
+REHEARSAL PASS Vr (code mode): YAML content + 535 hook copy -> FAIL
+/private/tmp/claude-501/reh544d-1795266611/Vr-body.out:[Vr] Main. 只读 USER 那次会话的 rollout。对话框: 无。<10 秒。成功可见: 'CHECK 544 rollout: PASS'。
+/private/tmp/claude-501/reh544d-1795266611/Vr-body.out:  CHECK content lacks the message body: FAIL
+/private/tmp/claude-501/reh544d-1795266611/Vr-body.out:  CHECK content last line is "→ n5442210 [agent-…]": PASS
+/private/tmp/claude-501/reh544d-1795266611/Vr-body.out:  CHECK structuredContent present and complete (agent, result): PASS
+/private/tmp/claude-501/reh544d-1795266611/Vr-body.out:CHECK agents create/send/resume calls found: 1: PASS
+/private/tmp/claude-501/reh544d-1795266611/Vr-body.out:CHECK no 535 hook copy ("agents → n5442210" / "n5442210 · replied"): none: PASS
+/private/tmp/claude-501/reh544d-1795266611/Vr-body.out:CHECK 544 rollout: FAIL
+/private/tmp/claude-501/reh544d-1795266611/Vr-hook.out:[Vr] Main. 只读 USER 那次会话的 rollout。对话框: 无。<10 秒。成功可见: 'CHECK 544 rollout: PASS'。
+/private/tmp/claude-501/reh544d-1795266611/Vr-hook.out:  CHECK content lacks the message body: PASS
+/private/tmp/claude-501/reh544d-1795266611/Vr-hook.out:  CHECK content last line is "→ n5442210 [agent-…]": FAIL
+/private/tmp/claude-501/reh544d-1795266611/Vr-hook.out:  CHECK structuredContent present and complete (agent, result): PASS
+/private/tmp/claude-501/reh544d-1795266611/Vr-hook.out:CHECK agents create/send/resume calls found: 1: PASS
+/private/tmp/claude-501/reh544d-1795266611/Vr-hook.out:CHECK no 535 hook copy ("agents → n5442210" / "n5442210 · replied"): [5]: FAIL
+/private/tmp/claude-501/reh544d-1795266611/Vr-hook.out:CHECK 544 rollout: FAIL
+REHEARSAL PASS Vr parser self-test on the real probe rollout: one McpToolCall probe.send_note via exec, sizes a/b/c
+self-test on /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/544-codex-sent-message-collapsible-card/realhost/main-raw/probe-rollout.jsonl: 1 McpToolCall item(s)
+---- line 24 probe.send_note (exec exec line 22); content last line: '→ member-x [probe-id]'
+  SIZE (a) actual CallToolResult 269 B | (b) same with today's YAML content 143 B (DERIVED, not observed) | (c) custom_tool_call_output the model got 316 B (line 25) | delta (b)-(a) -126 B
+REHEARSAL PASS G (limited, real tests incl. repo fixtures): exit=0, TMPDIR outside the Harness printed
+REHEARSAL PASS Gt (focused list, real) exit=0; GR classifies no failure in G and Gt
+pytest temp: TMPDIR=/private/tmp/claude-501 (outside the Harness)
+graphtraj /private/tmp/claude-501/reh544d-1795266611/wt/src/graphtraj/__init__.py
+graftling 0.6.2 /private/tmp/claude-501/reh544d-1795266611/base/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+==> /private/tmp/claude-501/reh544d-1795266611/w/G-7661dba4-20261121T221033/suite.txt <==
+22 passed in 6.39s
+exit=0
+
+==> /private/tmp/claude-501/reh544d-1795266611/w/Gt-7661dba4-20261121T221046/suite.txt <==
+97 passed, 14 skipped in 173.03s (0:02:53)
+exit=0
+成功可见: G 'exit=0' 或只有 'known (516)' 行；G 与 Gt 无 'NEW' 行。
+== rehearsal: 13 passed, 0 failed

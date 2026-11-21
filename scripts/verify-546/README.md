@@ -23,7 +23,18 @@ Every step ends with a ready-to-paste `==> next` line with real paths.
 | `C` | none | Prints each attempt's verdict. Copies `before/`, `after/` runs and attempts, `ready/` (READY and probe streams) and the newest G to `<Worktree>/.state/realhost/`, then counts the VERDICT lines. |
 
 Order: `00` → `Tu before` → `Tu after` → `P` → `B` (at most 5 valid attempts) → `S before` → `A` (as many runs) →
-`S after` → `G` → `GR` (until both `exit=`) → `C`. Main runs full suites one at a time, so G starts only when Main's queue allows.
+`S after` → `G` → `GR` (until both `exit=`) → `C`.
+
+Round 2 (graftling candidate 2ee1345, which replaces 7b349f0): `00` → `A` ×5 → `S after` → `G` → `GR` → `C`.
+- `00` reuses the cached BEFORE venv (`before: venv ... holds ...`). It rebuilds only the AFTER venv, because the
+  graftling commit changed. The project directories are the same, so the trust and plugin gate still pass. 00 then
+  prints `AFTER attempts for graftling <gl12>: .../after/attempts-<gl12> (0 valid so far)` and next = `A`.
+- AFTER attempts go to `after/attempts-<gl12>`, keyed by the graftling candidate. The old `after/attempts/` from
+  7b349f0 is not counted; B's `before/attempts/` is untouched. `S after` reads only `after/attempts-<gl12>`, and G
+  uses `venv-g-<gl12>`.
+- Rehearsal: `zsh scripts/verify-546/rehearse-r2.zsh <empty dir>`, with output in `rehearsal/output-r2.txt`. It
+  first builds the state with the old candidate (00, trust, P, B ×5, A ×2), then runs the new candidate: 00, A ×5,
+  S after, C. The stub replaced the same things as in `rehearse.zsh`. Main runs full suites one at a time, so G starts only when Main's queue allows.
 
 Trigger condition: Claude, Codex and DSH stop accepting input at the turn end. They report the end to agents only
 after closing and archiving. In Claude's `execution.py` run(), `accepting = False` is set before `done`, and the record

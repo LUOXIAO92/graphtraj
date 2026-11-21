@@ -232,6 +232,9 @@ def dsh(args):
     if '--version' in args:
         print('0.2.2-alpha.2 (stub for verify-552 rehearsal)')
         return 0
+    if '--dump-config' in args:
+        print('# stub dsh --dump-config')
+        return 0
     patch = Path(opt(args, '--patch')).read_text()
     command = [json.loads(re.search(r'command: (".*")', patch).group(1)), *json.loads(re.search(r'args: (\[.*\])', patch).group(1))]
     sid = opt(args, '--session-id') or f'session-{uuid.uuid4()}'
@@ -269,15 +272,23 @@ def sandbox_exec(args):
     profile's (deny|allow file-read*/file-read-data ... (subpath ...)) rules in order, the last match deciding
     (the SBPL rule this design assumes; Main's 00 dsh-sandbox check proves it for real). Every other command
     (dsh, node, pwd) runs unconfined."""
+    # Precedence modelled on Main's real run of 3356b581 (Leader correction 2): a rule that names the operation
+    # (file-read-data) decides before any `file-read*` wildcard rule; within each kind the last match wins.
     prof, cmd = Path(args[1]).read_text(), args[2:]
-    if Path(cmd[0]).name in ('cat', 'ls'):
-        rules = [(m.group(1), re.findall(r'\(subpath "([^"]+)"\)', m.group(2)))
-                 for m in re.finditer(r'^\((deny|allow) file-read[^\s(]*[^(]*(.*)\)$', prof, re.M)]
-        for p in cmd[1:]:
-            rp, verdict = os.path.realpath(p), 'allow'
-            for action, subs in rules:
-                if any(rp == s or rp.startswith(s.rstrip('/') + '/') for s in subs):
-                    verdict = action
+    trap = STATE / 'abort-if-denied'   # bisection self-test only: abort dsh when this path is denied by file-read*
+    if Path(cmd[0]).name == 'dsh' and trap.is_file() and \
+            f'(subpath "{trap.read_text().strip()}")' in ''.join(l for l in prof.splitlines() if l.startswith('(deny file-read*')):
+        os.abort()
+    if Path(cmd[0]).name in ('cat', 'ls', 'pwd'):
+        rules =[(m.group(1), m.group(2).split(), re.findall(r'\(subpath "([^"]+)"\)', m.group(3)))
+                 for m in re.finditer(r'^\((deny|allow) ((?:file-read[\w*-]*\s*)+)(.*)\)$', prof, re.M)]
+        targets = [os.getcwd()] if Path(cmd[0]).name == 'pwd' else cmd[1:]
+        for p in targets:
+            rp = os.path.realpath(p)
+            hit = lambda r: any(rp == s or rp.startswith(s.rstrip('/') + '/') for s in r[2])
+            specific = [r[0] for r in rules if 'file-read-data' in r[1] and hit(r)]
+            wildcard = [r[0] for r in rules if 'file-read*' in r[1] and hit(r)]
+            verdict = specific[-1] if specific else (wildcard[-1] if wildcard else 'allow')
             if verdict == 'deny':
                 print(f'{Path(cmd[0]).name}: {p}: Operation not permitted (stub)', file=sys.stderr)
                 return 1

@@ -1,0 +1,3 @@
+stub sandbox-exec (precedence model) with Main's real 3356b581 /private/tmp/cc-552/logs/probe-dsh-sbx/dsh.sb:
+cat: /private/tmp/cc-552/project/runs/probe-dsh-sbx/ws/notes.md: Operation not permitted (stub)
+rc=1

@@ -240,18 +240,39 @@ def dsh_profile(ws, root, content_only=True):
     Correction 2: node aborted at start under 0c054918's profile, which denied `file-read*` (that includes
     file-read-metadata) on subtrees containing the cwd's ancestors. Now only content is denied: `file-read-data`
     (file contents and directory listings) and `file-read-xattr`; path metadata (stat/realpath/getcwd of the ws
-    ancestors) stays allowed. content_only=False rebuilds the old form for 00's diagnosis only."""
+    ancestors) stays allowed. content_only=False rebuilds the old form for 00's diagnosis only.
+    Leader correction 2 (Main's `P dsh` on 3356b581): with `(deny file-read-data file-read-xattr ...)` followed by
+    `(allow file-read* ...)` every re-allow was ignored (own ws, project config, guide, `pwd` refused; node's
+    uv_cwd EPERM), while every deny held. So in this Seatbelt a rule naming the specific operation was not
+    overridden by a later rule using the `file-read*` wildcard (observed on Main's host; the precise precedence
+    rule is inferred from that run, not from Apple documentation). Every re-allow now names exactly the operations
+    of the deny it overrides (`file-read-data file-read-xattr`), keeping the layer order; metadata is never
+    denied, so it needs no re-allow."""
     real = lambda p: json.dumps(os.path.realpath(p))
-    op = '(deny file-read-data file-read-xattr' if content_only else '(deny file-read*'
+    ops = 'file-read-data file-read-xattr' if content_only else 'file-read*'
     sub = lambda ps: ' '.join(f'(subpath {real(p)})' for p in ps)
     home = Path.home()
     layer1 = [SCRATCH[0], SCRATCH[1]] + sorted({str(DENYROOT), str(H.parent)}) \
         + [home / d for d in ('.claude', '.codex', '.dsh', '.agents', '.pi')]
     return '\n'.join(['(version 1)', '(allow default)',
-                      f'{op} {sub(layer1)})',
-                      f'(allow file-read* {sub([PROJECT, H / ".venv-runtime", BASE / "bin"])})',
-                      f'{op} {sub([PROJECT / "runs"])})',
-                      f'(allow file-read* {sub([ws, root])})']) + '\n'
+                      f'(deny {ops} {sub(layer1)})',
+                      f'(allow {ops} {sub([PROJECT, H / ".venv-runtime", BASE / "bin"])})',
+                      f'(deny {ops} {sub([PROJECT / "runs"])})',
+                      f'(allow {ops} {sub([ws, root])})']) + '\n'
+
+
+def dsh_profile_0c054918(ws, root, drop=None):
+    """Diagnosis only: the exact outer profile of commit 0c054918 (under which dsh aborted in
+    node::InitializeOncePerProcessInternal), optionally without one deny subpath (`drop`) for bisection."""
+    real = lambda p: os.path.realpath(p)
+    deny = [BASE / 'u', BASE / 'logs', BASE / 'audit', PROJECT / 'runs', BASE / 'dsh', DENYROOT,
+            Path.home() / '.claude', Path.home() / '.codex', Path.home() / '.dsh', Path.home() / '.agents',
+            Path.home() / '.pi']
+    deny = [real(p) for p in deny if real(p) != drop]
+    allow = [real(p) for p in (ws, root, H / '.venv-runtime', BASE / 'bin')]
+    return '\n'.join(['(version 1)', '(allow default)',
+                      '(deny file-read* ' + ' '.join(f'(subpath {json.dumps(p)})' for p in deny) + ')',
+                      '(allow file-read* ' + ' '.join(f'(subpath {json.dumps(p)})' for p in allow) + ')']) + '\n'
 
 
 def s_argv(agent, run, ws, n, resume):
@@ -801,11 +822,52 @@ def cmd_dsh_sandbox():
                refused(tok['dsh'])),
               ('list ~/.claude/projects', ['/bin/ls', str(Path.home() / '.claude/projects')],
                lambda o, rc: rc != 0 and '-Users-' not in o)]
+    # Leader correction 2: the run's own dsh files (patch, DSH_HOME, DSH_AGENTS_HOME) and the real dsh entry
+    home, agents_home, patch, _ = dsh_files(run, ws)
+    sb.write_text(dsh_profile(ws, root))       # dsh_files wrote the same profile; keep the file the gate names
+    denv = clean_env({'DSH_HOME': str(home), 'DSH_AGENTS_HOME': str(agents_home)})
+    dsh_cmds = {'dsh --version': [DSH, '--version'],
+                'dsh --profile headless --patch <run patch> --dump-config': [DSH, '--profile', 'headless', '--patch',
+                                                                              str(patch), '--dump-config']}
+    cases.append(('dsh --version (real dsh entry, run env)', dsh_cmds['dsh --version'], lambda o, rc: rc == 0))
     print(f'dsh sandbox profile {sb}:\n{sb.read_text()}TMPDIR={ENV.get("TMPDIR")}')
-    ok = run_checks('dsh sandbox', cases, lambda c: [SBX, '-f', str(sb), *c], ws, clean_env())
-    r = subprocess.run([SBX, '-f', str(old), node, '-e', '1'], capture_output=True, text=True, cwd=ws, env=clean_env())
-    print(f'dsh sandbox diagnosis (not a gate): node -e 1 under the 0c054918 form (file-read* denies, {old}): '
-          f'rc={r.returncode} | {(r.stderr or r.stdout).strip()[:160]!r}')
+    ok = run_checks('dsh sandbox', cases, lambda c: [SBX, '-f', str(sb), *c], ws, denv)
+
+    def attempt(profile_text, cmd):
+        f = BASE / 'logs' / run / 'dsh-diag.sb'
+        f.write_text(profile_text)
+        try:
+            r = subprocess.run([SBX, '-f', str(f), *cmd], capture_output=True, text=True, cwd=ws, env=denv, timeout=120)
+            return r.returncode, (r.stderr or '').strip()
+        except subprocess.TimeoutExpired:
+            return 'timeout', ''
+
+    def show(label, rc, err):
+        sig = f' (signal {-rc})' if isinstance(rc, int) and rc < 0 else ''
+        tail = ' / '.join(l.strip() for l in err.splitlines()[-4:])
+        print(f'dsh sandbox diagnosis (not a gate): {label}: rc={rc}{sig} | stderr tail: {tail[:300]!r}')
+
+    old_text = dsh_profile_0c054918(ws, root)
+    old.write_text(old_text)
+    failing = []
+    for form, text in (('new form', sb.read_text()), ('0c054918 form', old_text)):
+        for name, cmd in dsh_cmds.items():
+            rc, err = attempt(text, cmd)
+            show(f'{name} under the {form}', rc, err)
+            if form == '0c054918 form' and rc != 0:
+                failing.append((name, cmd))
+    if failing:
+        name, cmd = failing[0]
+        deny = re.search(r'\(deny file-read\* (.*)\)', old_text).group(1)
+        for p in re.findall(r'\(subpath "([^"]+)"\)', deny):
+            rc, err = attempt(dsh_profile_0c054918(ws, root, drop=p), cmd)
+            show(f'{name} under the 0c054918 form without deny (subpath "{p}")', rc, err)
+            if rc == 0:
+                print(f'dsh sandbox diagnosis: INFERRED cause of the 0c054918 abort: the rule (deny file-read* '
+                      f'(subpath "{p}")); removing only it lets `{name}` start (inference from this bisection)')
+                break
+        else:
+            print('dsh sandbox diagnosis: no single 0c054918 deny explains the failure')
     (BASE / 'dsh-sandbox.txt').write_text(f'CHECK 552 dsh sandbox: {"PASS" if ok else "FAIL"}\n')
     return 0 if ok else 1
 

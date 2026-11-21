@@ -2,6 +2,8 @@
 
 usage: python -I pr544.py <codex sessions dir> <project> <P start epoch>
 
+Code mode (seen in the 544 probe): the call is custom_tool_call 'exec' whose input calls tools.mcp__probe__send_note
+and the model gets its custom_tool_call_output (the whole CallToolResult the script printed).
 The rollout = newest rollout-*.jsonl under <sessions> whose session_meta cwd is <project> and whose file changed at or
 after <P start epoch> and that holds a send_note call. Printed: the response_item function_call for send_note, its
 function_call_output (exactly what the model got) and the assistant messages after it.
@@ -45,7 +47,11 @@ def main(sessions: Path, project: Path, since: float) -> int:
         except ValueError:
             continue
         kind = payload.get('type')
-        if kind in ('function_call', 'custom_tool_call') and 'send_note' in f"{payload.get('namespace') or ''}{payload.get('name') or ''}":
+        # Direct calls name the tool; code mode (Codex 0.171.0, 544 probe) is custom_tool_call 'exec' whose
+        # input script calls tools.mcp__probe__send_note(...).
+        if kind in ('function_call', 'custom_tool_call') and 'send_note' in (
+                f"{payload.get('namespace') or ''}{payload.get('name') or ''}"
+                + (str(payload.get('input') or '') if payload.get('name') == 'exec' else '')):
             calls.add(payload.get('call_id'))
             print(f'---- line {number} {kind} name={payload.get("name")} namespace={payload.get("namespace")}')
             print(text_of(payload.get('arguments') or payload.get('input'))[:800])

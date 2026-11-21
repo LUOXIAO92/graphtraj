@@ -183,17 +183,46 @@ def _tool_call_response(
             request_id,
             {"content": [{"type": "text", "text": str(error)}], "isError": True},
         )
+    # Codex (its calls carry _meta.threadId) shows content in its tool card:
+    # a create/send/resume gets a short display text there (544). The model
+    # keeps the whole document in structuredContent. Every other host and
+    # every other result keep the CLI's YAML rendering.
+    card = (_agents_card(arguments, document)
+            if name == 'agents' and session is not None and not result.failed else None)
     return _result_response(
         request_id,
         {
-            # The text is the CLI's YAML rendering of the same document.
             "content":           [
-                {"type": "text", "text": yaml.safe_dump(document, sort_keys=False, allow_unicode=True)}
+                {"type": "text", "text": card or yaml.safe_dump(document, sort_keys=False, allow_unicode=True)}
             ],
             "structuredContent": document,
             "isError":           result.failed,
         },
     )
+
+
+def _agents_card(arguments: Mapping[str, Any], document: Mapping[str, Any]) -> str | None:
+    """Return Codex's card text for a create/send/resume, else None.
+
+    Codex's collapsed MCP card shows the last three content lines; the
+    expanded card adds the call's arguments, which already hold the message.
+    So the text is display only and never repeats the message (in code mode
+    the model also reads content): a reply carried in the result with its
+    ``← <name> replied`` line, then the recipient ``→ <name> [<agent>]`` last.
+    """
+    record, agent, given = document.get('result'), document.get('agent'), arguments.get('arguments')
+    feature = arguments.get('feature')
+    if (arguments.get('action') != 'execute' or feature not in {'create', 'send', 'resume'}
+            or document.get('action') != feature or document.get('error') or not isinstance(record, dict)
+            or record.get('resumed') is False or not isinstance(agent, str) or not agent
+            or not isinstance(given, dict) or not isinstance(given.get('instruction', given.get('message')), str)):
+        return None
+    member, lines = str(record.get('name') or agent), []
+    reply = record.get('last_result')
+    if isinstance(reply, dict) and reply.get('id') and isinstance(reply.get('last_message'), str) \
+            and reply['last_message'].strip():
+        lines += [reply['last_message'].rstrip('\n'), f'← {member} replied']
+    return '\n'.join(lines + [f'→ {member} [{agent}]'])
 
 
 def _respond(message: Mapping[str, Any]) -> dict[str, Any] | None:

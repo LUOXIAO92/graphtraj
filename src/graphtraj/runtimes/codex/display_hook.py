@@ -1,6 +1,8 @@
-"""Display observed agents communication through Codex's UI-only hook output.
+"""Display retained receipts through Codex's UI-only hook output.
 
-This optional PostToolUse hook neither calls a tool nor adds model context.
+This optional PostToolUse/Stop hook neither calls a tool nor adds model context.
+A Codex Main's own agents messages and replies are shown by the agents tool
+card itself (544), so this hook shows only receipts no agents call carries.
 Its per-Session cache contains displayed fact identifiers, never message bodies.
 The native host owns hook installation, trust and invocation.
 """
@@ -20,9 +22,9 @@ from graphtraj.execution.runner_io import write_yaml_durably
 
 
 def display(event: dict, state_directory: Path) -> dict:
-    """Return only new communication as systemMessage; never return model feedback.
+    """Return only new receipts as systemMessage; never return model feedback.
 
-    Besides the agents call itself, any PostToolUse or Stop shows the Session's
+    Any PostToolUse or Stop shows the Session's
     retained ordinary receipts once: completed child executions that this
     Codex Main did not start, kept without a model turn. The project records
     how far each addressed Main's receipts were shown, so no later Main shows
@@ -31,8 +33,7 @@ def display(event: dict, state_directory: Path) -> dict:
     session = event.get('session_id')
     if event.get('hook_event_name') not in {'PostToolUse', 'Stop'} or not isinstance(session, str) or not session:
         return {}
-    receipts, settle = _receipt_facts(event, session)
-    facts = _agents_facts(event, session) + receipts
+    facts, settle = _receipt_facts(event, session)
     if not facts:
         return {}
     shown = _show(facts, session, state_directory)
@@ -83,43 +84,6 @@ def _receipt_facts(event: dict, session: str) -> tuple[list[tuple[str, str, str]
             show_receipts(runner, runtime, addressed, at)
 
     return facts, settle
-
-
-def _agents_facts(event: dict, session: str) -> list[tuple[str, str, str]]:
-    """Return the request and reply facts of one successful agents call."""
-    if (event.get('hook_event_name') != 'PostToolUse'
-            or event.get('tool_name') not in {'mcp__graphtraj__agents', 'mcp__graftling__agents', 'mcp__agents__agents'}):
-        return []
-    request = event.get('tool_input', {})
-    response = event.get('tool_response', {})
-    if (not isinstance(request, dict) or request.get('action') != 'execute'
-            or not isinstance(response, dict) or response.get('isError')):
-        return []
-    document = response.get('structuredContent', {})
-    if not isinstance(document, dict) or document.get('error'):
-        return []
-    record = document.get('result', {})
-    agent = document.get('agent')
-    call_id = event.get('tool_use_id')
-    if (not isinstance(record, dict)
-            or not all(isinstance(value, str) and value for value in (agent, session, call_id))):
-        return []
-    # Who and what only (533's words); ids stay in the records and the tool result.
-    child = str(record.get('name') or agent)
-    facts = []
-    arguments = request.get('arguments', {})
-    if (request.get('feature') in {'create', 'send', 'resume'}
-            and document.get('action') == request['feature']
-            and record.get('resumed') is not False and isinstance(arguments, dict)):
-        body = arguments.get('instruction', arguments.get('message'))
-        if isinstance(body, str) and body:
-            facts.append((f'send:{call_id}', f'agents → {child}', body))
-    reply = record.get('last_result')
-    if isinstance(reply, dict) and reply.get('id'):
-        body = reply.get('last_message')
-        if isinstance(body, str) and body:
-            facts.append((f"reply:{agent}:{reply['id']}", f'{child} · replied', body))
-    return facts
 
 
 def _show(facts: list[tuple[str, str, str]], session: str, state_directory: Path) -> dict:

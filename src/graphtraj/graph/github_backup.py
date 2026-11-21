@@ -16,12 +16,15 @@ back into the Task graph. Mappings live in ``<state>/task-backups.yml``::
     last_published_at: <UTC time> | null
 
 A Task with local children also publishes integrated / required child counts
-and a dependency DAG of its children. After publishing, the Issue is attached
-as a real Sub-issue to its mapped parent, and its mapped children to it;
-endpoints are resolved only through mappings and unmapped ones are reported as
-pending. The relation follows the local parent: a Task without one is detached
-from a mapped remote parent (``unlinked``) and a child under a different mapped
-parent is moved (``moved``); a remote parent that is not mapped is reported as
+and a dependency DAG of its children; a child kept in another repository shows
+``owner/name#N`` on its node. After publishing, the Issue is attached as a real
+Sub-issue to its mapped parent, and its mapped children to it; endpoints are
+resolved only through mappings on the same host, in any repository (a Task's
+mapping in the same repository is preferred, otherwise its only one on the
+host), and unmapped ones are reported as pending. The relation follows the
+local parent: a Task without one is detached from a mapped remote parent
+(``unlinked``) and a child under a different mapped parent is moved
+(``moved``); a remote parent that is not mapped is reported as
 ``other-parent`` and never changed.
 
 Remote requests use the installed ``gh api`` command, so its existing login or
@@ -40,6 +43,7 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -135,7 +139,7 @@ def backup_task(
             # Persist the creation intent first so a retry looks for this marker
             # instead of creating a second Issue.
             _save(state, backups)
-        desired = _render(task, mapping["marker"], records)
+        desired = _render(task, mapping["marker"], records, _elsewhere(backups, mapping, records))
         try:
             outcome, conflict = _publish(mapping, desired, retry, confirm_remote)
             hierarchy = [] if conflict is not None else _link(backups, mapping, records)
@@ -219,50 +223,63 @@ def _link(
 ) -> list[dict[str, Any]]:
     """Make the mapped Issue's Sub-issue relations follow the local parent and children.
 
-    Remote Issues are resolved only through mappings of the same host and
-    repository, and only relations between mapped Issues are written: a Task
-    without a local parent is detached from a mapped remote parent, and a child
-    under a different mapped parent is moved. A remote parent that is not
-    mapped is reported, never changed; an unmapped endpoint is reported as
-    pending.
+    Remote Issues are resolved only through mappings of the same host, in any
+    repository (see ``_partner``), and only relations between mapped Issues
+    are written: a Task without a local parent is detached from a mapped
+    remote parent, and a child under a different mapped parent is moved. A
+    remote parent that is not mapped is reported, never changed; an unmapped
+    endpoint is reported as pending. Each request goes to the repository of
+    the Issue it names, and a remote parent is identified by its id or URL,
+    because Issue numbers repeat across repositories. An Issue number in
+    another repository than ``mapping`` is accompanied by
+    ``<field>_repository`` (``parent``, ``child``, ``previous_parent`` or
+    ``remote_parent``).
     """
-    same = [item for item in backups if item["issue"] is not None
-            and (item["host"], item["repository"]) == (mapping["host"], mapping["repository"])]
+    host, repository = mapping["host"], mapping["repository"]
+    known = [item for item in backups if item["issue"] is not None and item["host"] == host]
 
-    def mapped(key: str | None) -> dict[str, Any] | None:
-        return next((item["issue"] for item in same if item["task_id"] == key), None)
+    def owner(issue: dict[str, Any]) -> dict[str, Any] | None:
+        return next((item for item in known if item["issue"]["id"] == issue["id"]
+                     or item["issue"]["url"] == issue["html_url"]), None)
 
-    def owner(number: int) -> str | None:
-        return next((item["task_id"] for item in same if item["issue"]["number"] == number), None)
-
-    def remote_parent(child: dict[str, Any]) -> int | None:
+    def remote_parent(child: dict[str, Any]) -> dict[str, Any] | None:
         try:
-            return gh_api(host, "GET", "{0}/{1}/parent".format(base, child["number"]))["number"]
+            return gh_api(host, "GET", "repos/{0}/issues/{1}/parent".format(
+                child["repository"], child["issue"]["number"]))
         except RemoteError as error:
             if "HTTP 404" not in str(error):
                 raise
             return None
 
+    def where(entry: dict[str, Any], field: str, other: str) -> None:
+        if other != repository:
+            entry[field + "_repository"] = other
+
     task_id = mapping["task_id"]
-    host, base = mapping["host"], "repos/{0}/issues".format(mapping["repository"])
     report  = []
     if not records[task_id]["parent_id"]:
-        current = remote_parent(mapping["issue"])
+        current = remote_parent(mapping)
         if current is not None:
             previous = owner(current)
             entry    = {"parent": None, "child": task_id}
             report.append(entry)
             if previous is None:
-                entry.update(outcome="other-parent", remote_parent_issue=current)
+                entry.update(outcome="other-parent", remote_parent_issue=current["number"])
+                where(entry, "remote_parent", _repository_of(current))
             else:
-                gh_api(host, "DELETE", "{0}/{1}/sub_issue".format(base, current),
-                       {"sub_issue_id": mapping["issue"]["id"]})
-                entry.update(outcome="unlinked", previous_parent=previous,
-                             previous_parent_issue=current)
-    pairs   = [(records[task_id]["parent_id"], task_id)] if records[task_id]["parent_id"] else []
-    pairs  += [(task_id, child) for child in records[task_id]["children"] if mapped(child)]
-    for parent_id, child_id in pairs:
-        parent, child = mapped(parent_id), mapped(child_id)
+                gh_api(host, "DELETE", "repos/{0}/issues/{1}/sub_issue".format(
+                    previous["repository"], previous["issue"]["number"]),
+                    {"sub_issue_id": mapping["issue"]["id"]})
+                entry.update(outcome="unlinked", previous_parent=previous["task_id"],
+                             previous_parent_issue=previous["issue"]["number"])
+                where(entry, "previous_parent", previous["repository"])
+    parent_id = records[task_id]["parent_id"]
+    pairs = [(parent_id, _partner(backups, parent_id, mapping), task_id, mapping)] if parent_id else []
+    for child_id in records[task_id]["children"]:
+        child = _partner(backups, child_id, mapping)
+        if child is not None:
+            pairs.append((task_id, mapping, child_id, child))
+    for parent_id, parent, child_id, child in pairs:
         entry = {"parent": parent_id, "child": child_id}
         report.append(entry)
         if parent is None:
@@ -270,19 +287,55 @@ def _link(
             continue
         current  = remote_parent(child)
         previous = owner(current) if current is not None else None
-        if current == parent["number"]:
+        if current is not None and previous is parent:
             entry["outcome"] = "unchanged"
         elif current is not None and previous is None:
-            entry.update(outcome="other-parent", expected_parent_issue=parent["number"],
-                         remote_parent_issue=current)
+            entry.update(outcome="other-parent", expected_parent_issue=parent["issue"]["number"],
+                         remote_parent_issue=current["number"])
+            where(entry, "remote_parent", _repository_of(current))
         else:
-            payload = {"sub_issue_id": child["id"]}
+            payload = {"sub_issue_id": child["issue"]["id"]}
             if current is not None:
                 payload["replace_parent"] = True
-                entry.update(previous_parent=previous, previous_parent_issue=current)
-            gh_api(host, "POST", "{0}/{1}/sub_issues".format(base, parent["number"]), payload)
+                entry.update(previous_parent=previous["task_id"],
+                             previous_parent_issue=previous["issue"]["number"])
+                where(entry, "previous_parent", previous["repository"])
+            gh_api(host, "POST", "repos/{0}/issues/{1}/sub_issues".format(
+                parent["repository"], parent["issue"]["number"]), payload)
             entry["outcome"] = "linked" if current is None else "moved"
+        where(entry, "parent", parent["repository"])
+        where(entry, "child", child["repository"])
     return report
+
+
+def _choose(backups: list[dict[str, Any]], task_id: str, host: str, preferred: str) -> dict[str, Any] | None:
+    """Return Task ``task_id``'s mapping on ``host``: the one in ``preferred``, else its only one."""
+    candidates = [item for item in backups if (item["task_id"], item["host"]) == (task_id, host)]
+    chosen     = [item for item in candidates if item["repository"] == preferred] or candidates
+    return chosen[0] if len(chosen) == 1 else None
+
+
+def _partner(
+    backups: list[dict[str, Any]], task_id: str, mapping: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Return the published mapping of ``task_id`` related to ``mapping``, or None.
+
+    Each side chooses the other Task's mapping on the same host, preferring
+    its own repository; the two mappings are related only when each is the
+    other's choice, so every backup sees the same relation and a Task mapped
+    in several repositories never moves a child between its own Issues.
+    """
+    partner = _choose(backups, task_id, mapping["host"], mapping["repository"])
+    if partner is None or partner["issue"] is None:
+        return None
+    if _choose(backups, mapping["task_id"], mapping["host"], partner["repository"]) is not mapping:
+        return None
+    return partner
+
+
+def _repository_of(issue: dict[str, Any]) -> str:
+    """Return ``owner/name`` from a remote Issue's ``html_url``."""
+    return "/".join(urlsplit(issue["html_url"]).path.split("/")[1:3])
 
 
 def _find_created(mapping: dict[str, Any]) -> dict[str, Any] | None:
@@ -299,10 +352,27 @@ def _find_created(mapping: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _elsewhere(
+    backups: list[dict[str, Any]], mapping: dict[str, Any], records: dict[str, dict[str, Any]],
+) -> dict[str, str]:
+    """Return ``owner/name#N`` of each related child Issue in another repository than ``mapping``."""
+    marks = {}
+    for child_id in records[mapping["task_id"]]["children"]:
+        child = _partner(backups, child_id, mapping)
+        if child is not None and child["repository"] != mapping["repository"]:
+            marks[child_id] = "{0}#{1}".format(child["repository"], child["issue"]["number"])
+    return marks
+
+
 def _render(
     task: dict[str, Any], marker: str, records: dict[str, dict[str, Any]],
+    elsewhere: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """Build the remote copy from explicit Task definition and state fields only."""
+    """Build the remote copy from explicit Task definition and state fields only.
+
+    ``elsewhere`` names child Issues kept in another repository; the summary
+    diagram shows them on their nodes.
+    """
     body = "\n".join([
         _marker_line({"marker": marker, "task_id": task["task_id"]}),
         "Backup of local GraphTraj Task {0} (`{1}`). The local Task is authoritative; "
@@ -313,7 +383,7 @@ def _render(
         "- Parent: {0}".format(task["parent_id"] or "none"),
         "- Dependencies: {0}".format(", ".join(task["dependencies"]) or "none"),
         "- Replaced by: {0}".format(", ".join(task["replaced_by"]) or "none"),
-        *_progress(records, records[task["task_id"]]["children"]),
+        *_progress(records, records[task["task_id"]]["children"], elsewhere),
         "",
         "---",
         "",
@@ -326,8 +396,15 @@ def _render(
 _MARKS = {"integrated": "✅", "pending": "⏳", "ready": "⏳", "blocked": "⛔", "escalated": "⛔"}
 
 
-def _progress(records: dict[str, dict[str, Any]], children: list[str]) -> list[str]:
-    """Render a summary's child progress and dependency DAG from local state only."""
+def _progress(
+    records: dict[str, dict[str, Any]], children: list[str],
+    elsewhere: dict[str, str] | None = None,
+) -> list[str]:
+    """Render a summary's child progress and dependency DAG from local state only.
+
+    A child in ``elsewhere`` (Task ID to ``owner/name#N``) is kept in another
+    repository; its node ends with that reference. Other nodes are unchanged.
+    """
     if not children:
         return []
     # Required children are the active ones; superseded or cancelled children
@@ -344,8 +421,9 @@ def _progress(records: dict[str, dict[str, Any]], children: list[str]) -> list[s
         record = records[key]
         state  = record["status"] if record["disposition"] == "active" else record["disposition"]
         mark   = _MARKS.get(state, "🔄") if record["disposition"] == "active" else "➖"
-        lines.append('  T{0}["{1} {0} {2}<br/>{3}"]'.format(
-            key, mark, record["title"].replace('"', "#quot;"), state))
+        where  = "<br/>" + elsewhere[key] if elsewhere and key in elsewhere else ""
+        lines.append('  T{0}["{1} {0} {2}<br/>{3}{4}"]'.format(
+            key, mark, record["title"].replace('"', "#quot;"), state, where))
     lines += ["  T{0} --> T{1}".format(source, key)
               for key in children for source in records[key]["dependencies"]]
     return lines + [

@@ -1,0 +1,12 @@
+$ (graftling 2ee1345 venv) python -I scripts/verify-546/gtpath546.py <scratch>
+graphtraj: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/546-send-after-create-runtime-input-closed/src/graphtraj/execution/agent_driver.py
+graftling: /tmp/claude-501/t546/r2/venv-g/lib/python3.13/site-packages/graftling/__init__.py
+case closing window: failed=True took=0.00s
+  send result: {"code": "runtime-input-closed", "message": "Claude finished accepting input for this execution."}
+  first execution receipt: [{"at": 1795278889.0078971, "delivery": "rejected", "error": {"code": "runtime-input-closed", "message": "Claude finished accepting input for this execution."}}]
+case request pending: failed=True took=0.00s
+  send result: {"code": "runtime-input-closed", "message": "Claude finished accepting input for this execution."}
+  first execution receipt: [{"at": 1795278889.0123708, "delivery": "rejected", "error": {"code": "runtime-input-closed", "message": "Claude finished accepting input for this execution."}}]
+CHECK closing window via AdapterDriver -> next-execution: FAIL
+CHECK pending request via AdapterDriver -> prompt rejected: PASS
+exit=1

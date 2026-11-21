@@ -307,7 +307,9 @@ def main() -> None:
     directory = channel_file.parent
     try:
         parent = native_parent(executable)
-        if 'GRAFTLING_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ:
+        from graphtraj.execution.runner_status import launched_by_agents
+
+        if 'GRAFTLING_CONNECTION' in os.environ or 'GRAPHTRAJ_CLI_CONNECTION' in os.environ or launched_by_agents():
             raise AgentsError('authority-denied', 'A bound child must use its existing owner, not adopt Main.')
         if Path.cwd().resolve() != cwd.resolve():
             raise ValueError(f'Claude Code was started in {Path.cwd().resolve()}, but this host is configured '

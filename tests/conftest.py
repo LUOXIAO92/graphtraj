@@ -301,6 +301,8 @@ def app_server_peer(
 def isolated_runner_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test Harnesses must not inherit the invoking Agent's role or Session."""
     monkeypatch.delenv("CODEX_THREAD_ID", raising=False)
+    # An Agent graftling started carries its execution marker; a test's Main must not (540).
+    monkeypatch.delenv("GRAFTLING_MEMBER_RUN", raising=False)
     for name in tuple(os.environ):
         if name.startswith("GRAPHTRAJ_"):
             monkeypatch.delenv(name)

@@ -49,13 +49,19 @@ def test_dsh_child_channel_serves_tasks_bound_to_the_child(tmp_path: Path, monke
     assert turn.request['mcp']['args'] == ['-I', '-m', 'graftling.mcp']
 
 
-def test_pi_child_tools_reach_its_launch_request() -> None:
+def test_pi_child_tools_reach_its_launch_request(tmp_path: Path) -> None:
     """apply_child_tools hands Pi the create's choice; Pi applies it as --tools/--exclude-tools at launch."""
+    from graftling import AgentsError
     from graphtraj.execution.agent_driver import apply_child_tools
 
-    request = {'executable': '/x/pi'}
-    apply_child_tools('pi', request, {'tools': ['read', 'grep'], 'disallowed_tools': ['bash']})
-    assert request == {'executable': '/x/pi', 'tools': ['read', 'grep'], 'disallowed_tools': ['bash']}
+    request = {'executable': '/x/pi', 'agent_dir': str(tmp_path)}
+    apply_child_tools('pi', request, {'tools': ['read', 'grep'], 'disallowed_tools': ['bash', 'mcp__graphtraj__tasks']})
+    assert request == {'executable': '/x/pi', 'agent_dir': str(tmp_path), 'tools': ['read', 'grep'],
+                       'disallowed_tools': ['bash', 'mcp__graphtraj__tasks']}
+    # An entry the Pi child provably does not know refuses the create (551 user decision).
+    with pytest.raises(AgentsError) as refused:
+        apply_child_tools('pi', {'agent_dir': str(tmp_path)}, {'tools': ['nosuchtool'], 'disallowed_tools': []})
+    assert refused.value.code == 'unavailable' and 'nosuchtool' in refused.value.message
 
 
 def dsh_install(tmp_path: Path) -> str:

@@ -65,9 +65,11 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
                     own_server=CodexManagedExecution.mcp_server, own_tools=TASK_FREE_TOOL_NAMES)
     elif runtime == 'pi':
         # Pi's --tools / --exclude-tools; a built-in beyond the host's settings asks the parent first.
+        # An entry Pi provably does not know refuses the create; the child's own tools are mcp__graphtraj__*.
         from graftling.pi.driver import apply_tools
+        from graphtraj.runtimes.pi.managed_session import PiManagedExecution
 
-        apply_tools(request, tools)
+        apply_tools(request, tools, own_server=PiManagedExecution.mcp_server)
     elif runtime == 'dsh':
         # DSH agent-preset tool rows; unknown -> unavailable, a host-disabled row -> authorization-required.
         from graftling.dsh.execution import apply_tools

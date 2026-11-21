@@ -19,9 +19,9 @@ WT=${VERIFY540_WT:-$H/.graphtraj/core/worktrees/540-codex-task-free-child-claims
 GLDEV=${VERIFY540_GLDEV:-$H/.graphtraj/core/worktrees/graftling-dev}   # graftling commits are read from here
 GTBASE=f754d3a955fe7740fa11b54f194d19fb70d2d438       # GraphTraj dev the Worktree branched from
 GLBASE=6794ce02b6210ec88837437affb8d7b525612804       # graftling dev
-GTC=${VERIFY540_GTC:-}                                 # candidate GraphTraj commit (filled in when delivered)
-GLC=${VERIFY540_GLC:-$GLBASE}                          # 540 changes no graftling file: the candidate uses graftling dev
-GTFILES=${VERIFY540_GTFILES:-}                         # the candidate's exact product files (filled in when delivered)
+GTC=0d8033da4d2c34860898b7f2aac997cfe9d42ea7          # candidate GraphTraj commit (the 540 fix)
+GLC=$GLBASE                                            # 540 changes no graftling file: the candidate uses graftling dev
+GTFILES=src/graphtraj/execution/runner_status.py,src/graphtraj/runtimes/claude/host.py,src/graphtraj/runtimes/codex/stop_hook.py,src/graphtraj/runtimes/native_entry.py,tests/conftest.py,tests/test_claude_native_host.py,tests/test_external_session_entry.py,tests/test_main_finalize.py
 BASE=${VERIFY540_BASE:-$H/tmp/540}                    # scratch venvs and wheels
 ST=${VERIFY540_ST:-$H/.graphtraj/core/state/tasks/540-codex-task-free-child-claims-main/realhost}
 W=$ST/540                                             # raw step output
@@ -33,6 +33,7 @@ CODEX_MODEL=gpt-6-luna
 KNOWN516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
 CHILD=$(cat $W/child-name 2>/dev/null || print n540)   # step_V picks a fresh one per run; C reads it
 ACTIVE=$BASE/active                                    # link -> $BASE/base or $BASE/cand
+PROBE=$VPROJECT/.codex/graphtraj-540-probe.jsonl       # V only: what probe540.py recorded per SessionStart
 path=(/opt/homebrew/bin $HOME/.local/bin ${path:#$RT/bin})
 
 next() { print -- "\n==> 下一步 / next（直接粘贴）: $*"; }
@@ -148,7 +149,14 @@ step_V() {  # $1 = base (Vb) | cand (V)
   say "$ACTIVE -> $L ($(cat $L/commits)): the isolated project now runs this graphtraj + graftling"
   vproject_init $ACTIVE/venv/bin/graphtraj && isolation $ACTIVE/venv/bin/python || { print "STOP: isolation NOT OK"; return 1; }
   (cd $VPROJECT && clean $ACTIVE/venv/bin/python -I $SD/codex_files540.py $VPROJECT) || { print "STOP: project .codex files not written"; return 1; }
-  print "wrote $VPROJECT/.codex/config.toml and hooks.json (GraphTraj's public Codex hook material, SessionStart + SessionEnd):"
+  rm -f $PROBE
+  if [[ $1 == cand ]]; then  # AFTER only: a second SessionStart hook records that it fired and whether the marker reached it
+    $CONDA -I -c 'import json, shlex, sys
+p = sys.argv[1]; h = json.load(open(p))
+h["hooks"]["SessionStart"][0]["hooks"].append({"type": "command", "command": shlex.join(sys.argv[2:])})
+open(p, "w").write(json.dumps(h, indent=2) + "\n")' $VPROJECT/.codex/hooks.json $CONDA -I $SD/probe540.py $PROBE || return 1
+  fi
+  print "wrote $VPROJECT/.codex/config.toml and hooks.json (GraphTraj's public Codex hook material, SessionStart + SessionEnd$([[ $1 == cand ]] && print '; AFTER adds the 540 probe hook to SessionStart')):"
   sed 's/^/    /' $VPROJECT/.codex/config.toml $VPROJECT/.codex/hooks.json
   say "child role: ONE role 'codex' = the user's catalog model $CODEX_MODEL (read only); resolved without launching a model"
   (cd $BASE && $ACTIVE/venv/bin/python -I $SD/roles540.py $VPROJECT $CODEX_MODEL) || { print "STOP: the child role does not resolve (above); Main reports it to the Leader"; return 1; }
@@ -167,7 +175,7 @@ step_V() {  # $1 = base (Vb) | cand (V)
   if [[ $1 == base ]]; then
     print "2) 预期对话框（最多一个，Codex 自己的）: $VPROJECT/.codex/hooks.json 的 hook 审核 → approve。文件夹信任已在 T 完成；若仍出现信任框 → Yes 并告诉 Main。其它任何框按 Esc 并把标题告诉 Main。"
   else
-    print "2) 预期对话框: 无（hooks.json 与 Vb 相同）。若仍出现 hook 审核框 → approve，并把标题告诉 Main。其它任何框按 Esc 并报告标题。"
+    print "2) 预期对话框（最多一个，Codex 自己的）: hooks.json 的 hook 审核（比 Vb 多了 540 探针钩子）→ approve。其它任何框按 Esc 并报告标题。"
   fi
   print "   启动后应看到 'GraphTraj Main Session associated.'；若没有: /exit 再运行同一命令一次。"
   print "3) 粘贴下面整段提示（也在 $W/V-prompt.txt），回车:"
@@ -182,12 +190,12 @@ step_V() {  # $1 = base (Vb) | cand (V)
 }
 
 step_C() {
-  local s=($W/V{base,cand}.start(N.om))
+  local s=($W/V*.start(N.om))   # Vbase.start or Vcand.start, newest first (one glob, so om sorts across both)
   [[ -n ${s[1]:-} ]] || { print "no Vb/V start stamp in $W: run Vb or V first"; return 1; }
   local tag=$([[ ${s[1]:t} == Vbase.start ]] && print before || print after)
   say "read only: $VPROJECT continuity, the $CHILD control record, the Main's rollout under $CODEX_HOME_USED/sessions; copies -> $ST/$tag"
   print "run: ${s[1]:t} at $(cat ${s[1]}) | active: $(readlink $ACTIVE) ($(cat $ACTIVE/commits 2>/dev/null))"
-  $CONDA -I $SD/c540.py $VPROJECT $CODEX_HOME_USED/sessions $CHILD $(cat ${s[1]}) $ST/$tag
+  $CONDA -I $SD/c540.py $VPROJECT $CODEX_HOME_USED/sessions $CHILD $(cat ${s[1]}) $ST/$tag $PROBE
   print "Expected: BEFORE 'VERDICT 540: REPRODUCED'; AFTER 'VERDICT 540: FIXED'."
 }
 
@@ -242,7 +250,7 @@ case ${1:-help} in
   Vb) print "[Vb] Main 准备隔离项目（修改前），然后 USER 在真实 codex 里操作一次。对话框: Main 无；USER 最多 1 个（hooks.json 审核 → approve）。"; logged $W/Vb.txt step_V base ;;
   C)  print "[C] Main. 只读收集 continuity、子 Agent 控制记录与 Main rollout，复制到 realhost/<before|after>。对话框: 无。<10 秒。"; logged $W/C.txt step_C ;;
   B)  print "[B] Main. 构建修改后 wheel 与 venv（$BASE/cand）。对话框: 无。约 1 分钟。"; logged $W/B.txt step_B && next "zsh $THIS V    （也可以先 zsh $THIS G）" ;;
-  V)  print "[V] Main 准备隔离项目（修改后），然后 USER 在真实 codex 里操作一次。对话框: Main 无；USER 预期无。"; logged $W/V.txt step_V cand ;;
+  V)  print "[V] Main 准备隔离项目（修改后），然后 USER 在真实 codex 里操作一次。对话框: Main 无；USER 最多 1 个（hooks.json 审核 → approve）。"; logged $W/V.txt step_V cand ;;
   G)  print "[G] Main. GraphTraj 全套测试（后台）。对话框: 无。立即返回。"; logged $W/G.txt step_G ;;
   GR) print "[GR] Main. 只读。对话框: 无。"; logged $W/GR.txt step_GR ;;
   *)  print "usage: zsh $THIS 00|B0|T|Vb|C|B|V|G|GR   (order: 00 → B0 → T (USER) → Vb (USER) → C → B → V (USER) → C; G after B, then GR)"; next "zsh $THIS 00" ;;

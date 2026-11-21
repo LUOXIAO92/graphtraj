@@ -153,6 +153,29 @@ def check_prompt(binding: dict) -> str:
     }, ensure_ascii=False)
 
 
+def no_task_result(binding: dict) -> dict[str, Any] | None:
+    """Return the check result for a project with no local Task, else None.
+
+    An empty task graph leaves the checker nothing to assess, so no checker or
+    model runs. Unreadable Task state is not proof of an empty graph; the
+    normal check then runs and reports it. An explicit user pause keeps its
+    precedence over every result.
+    """
+    from graphtraj.graph.task_index import read_index
+
+    if binding.get('user_pause', {}).get('paused') is True:
+        return None
+    try:
+        tasks = read_index(load_project_configuration(Path(binding['cwd'])).state)['tasks']
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
+        return None
+    if tasks:
+        return None
+    return {'status': 'completed',
+            'conclusion': 'Main may end this turn: the project has no local Task to check.',
+            'reason': 'The task graph has no local Task; no checker ran.', 'nodes': []}
+
+
 def bind_checker(binding_file: Path, binding: dict, child: str) -> Path:
     """Retain a native child returned to its owning Adapter before execution."""
     if not isinstance(child, str) or not child or child == binding['session']:
@@ -265,6 +288,11 @@ def _check_main_finalize(binding_file: Path, event: dict[str, Any]) -> dict[str,
     context = adapter.finalize_event(binding, event)
     if context is None:
         return adapter.finalize_response(None, False)
+
+    # Nothing to check: report briefly without a checker, usage line or wakeup.
+    if (empty := no_task_result(binding)) is not None:
+        return adapter.finalize_response(empty, context['continued'])
+
     usage = adapter.finalize_usage()
     recovery_failure = None
     try:

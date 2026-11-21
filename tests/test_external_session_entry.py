@@ -16,6 +16,7 @@ from graphtraj.runtimes import replacement
 from graphtraj.runtimes.native_entry import main
 from graphtraj.workspace.runner_project import discover_runner_directory
 import graftling
+from test_main_finalize import register_goal_task
 GRAFTLING = Path(graftling.__file__).resolve().parent  # the installed graftling package
 
 
@@ -168,11 +169,26 @@ def test_dsh_start_resume_child_and_stale_context(project: Path, monkeypatch: py
         caller_alias(discover_runner_directory(project))
 
 
+def test_dsh_check_without_tasks_needs_no_checker(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """DSH Main's check context is a finished result until the project has a Task."""
+    dsh_session(monkeypatch, 'main')
+    header = {'version': 4, 'id': 'main', 'isSeeded': False}
+    assert native('dsh', {'event': 'agent/created', 'source': 'startup', 'header': header}) == {'source': 'main'}
+    empty = native('dsh', {'event': 'check_context'})
+    assert set(empty) == {'result'} and empty['result']['status'] == 'completed'
+    assert empty['result']['nodes'] == []
+    register_goal_task(project)
+    assert set(native('dsh', {'event': 'check_context'})) == {'prompt'}
+
+
 def test_pi_adapter_owns_checker_result_without_main_tool_calls(
     project: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Native extension plumbing binds and collects a distinct checker directly."""
     assert native('pi', pi_session(project, monkeypatch, 'main', [])) == {'source': 'main'}
+    # With no local Task the entry answers itself, so the extension starts no checker.
+    assert set(native('pi', {'event': 'check_context'})) == {'result'}
+    register_goal_task(project)
     assert native('pi', {'event': 'check_context'})['prompt']
     assert native('pi', {'event': 'checker_created', 'session': 'checker'}) == {'session': 'checker'}
     result = {'status': 'waiting', 'conclusion': 'Wait for native approval.',

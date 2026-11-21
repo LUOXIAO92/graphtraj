@@ -221,11 +221,16 @@ def dsh_files(run, ws):
                 f'      command: {json.dumps(PY)}\n'
                 f'      args: {json.dumps(["-I", str(proxy), MCP_BIN])}\n'
                 f'      cwd: {json.dumps(str(ws))}\n      failOnStartupError: true')
-    (logs / 'dsh-patch.yml').write_text('\n'.join(rows) + '\n')
+    # Leader correction 3: dsh reads the patch at run time (dsh-app-boot loadOverlayPatches), so the file it is given
+    # lives in BASE/dsh/<run>/ (re-allowed for this run by its profile), never in the denied BASE/logs. The identical
+    # copy in logs/<run>/ is only for the audit folder and C's collection.
+    patch_text = '\n'.join(rows) + '\n'
+    (root / 'dsh-patch.yml').write_text(patch_text)
+    (logs / 'dsh-patch.yml').write_text(patch_text)
     # Outer confinement of the whole dsh process tree: DSH's fs tools leave reads unconfined
     # (dsh-fs-sandbox README: 'Reads, listings, metadata ... work exactly as with fs-local').
     (logs / 'dsh.sb').write_text(dsh_profile(ws, root))
-    return home, agents_home, logs / 'dsh-patch.yml', logs / 'dsh.sb'
+    return home, agents_home, root / 'dsh-patch.yml', logs / 'dsh.sb'
 
 
 def dsh_profile(ws, root, content_only=True):
@@ -830,6 +835,10 @@ def cmd_dsh_sandbox():
                 'dsh --profile headless --patch <run patch> --dump-config': [DSH, '--profile', 'headless', '--patch',
                                                                               str(patch), '--dump-config']}
     cases.append(('dsh --version (real dsh entry, run env)', dsh_cmds['dsh --version'], lambda o, rc: rc == 0))
+    # Leader correction 3: the run's patch as dsh reads it, and dsh's no-model load of that patch
+    cases.append((f'read the run patch {patch}', ['/bin/cat', str(patch)], lambda o, rc: rc == 0 and 'mcp-graphtraj' in o))
+    cases.append(('dsh --profile headless --patch <run patch> --dump-config (no-model load, run env)',
+                  dsh_cmds['dsh --profile headless --patch <run patch> --dump-config'], lambda o, rc: rc == 0))
     print(f'dsh sandbox profile {sb}:\n{sb.read_text()}TMPDIR={ENV.get("TMPDIR")}')
     ok = run_checks('dsh sandbox', cases, lambda c: [SBX, '-f', str(sb), *c], ws, denv)
 

@@ -279,10 +279,11 @@ def sandbox_exec(args):
     if Path(cmd[0]).name == 'dsh' and trap.is_file() and \
             f'(subpath "{trap.read_text().strip()}")' in ''.join(l for l in prof.splitlines() if l.startswith('(deny file-read*')):
         os.abort()
-    if Path(cmd[0]).name in ('cat', 'ls', 'pwd'):
+    if Path(cmd[0]).name in ('cat', 'ls', 'pwd') or (Path(cmd[0]).name == 'dsh' and '--patch' in cmd):
         rules =[(m.group(1), m.group(2).split(), re.findall(r'\(subpath "([^"]+)"\)', m.group(3)))
                  for m in re.finditer(r'^\((deny|allow) ((?:file-read[\w*-]*\s*)+)(.*)\)$', prof, re.M)]
-        targets = [os.getcwd()] if Path(cmd[0]).name == 'pwd' else cmd[1:]
+        name = Path(cmd[0]).name
+        targets = [os.getcwd()] if name == 'pwd' else ([cmd[cmd.index('--patch') + 1]] if name == 'dsh' else cmd[1:])
         for p in targets:
             rp = os.path.realpath(p)
             hit = lambda r: any(rp == s or rp.startswith(s.rstrip('/') + '/') for s in r[2])

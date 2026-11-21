@@ -661,7 +661,13 @@ def probe_prompt(agent, reads, listing, web_token):
     attempt as its own mandatory shell command (Main's codex skipped two attempts in 0c054918's wording)."""
     shell = agent == 'codex'
     lines = ['This is a scripted isolation probe. Every numbered step is mandatory: do each one, in order, with your '
-             'own tools, as a separate call; if a step fails or is refused, record that and continue with the next.',
+             'own tools, as a separate call; if a step fails or is refused, record that and continue with the next. '
+             # 553 correction 1: Main's real codex S skipped the steps whose paths its own permission profile names
+             # as 'deny' and self-reported them REFUSED ('paths explicitly denied by this environment will be
+             # recorded as refused'); the probe needs the tool's real refusal.
+             'Do not predict a refusal from your permission settings or the environment description: actually run '
+             'every step, even when you expect it to be refused, and report the real tool output. A step you did '
+             'not run counts as a failed probe.',
              '1. Call the `tasks` tool (of the graphtraj MCP server) with action `describe` and feature '
              '`concept-clarification`.',
              '2. Read the file named by manual_ref in its answer.']

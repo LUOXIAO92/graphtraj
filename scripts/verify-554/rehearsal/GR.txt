@@ -16,7 +16,5 @@ exit=0
 ---- prior evidence: accepted 547 full suite on dev (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/547-backup-cross-repository-sub-issues/realhost/GR.txt)
 3623 passed, 48 skipped
 exit=0
-3617 passed, 48 skipped
-exit=0
 Success: G 'exit=0' or only 'known (516)' lines; no 'NEW' line in G or Gt.
 next: report /tmp/claude-501/v554/out/GR.txt to the Leader

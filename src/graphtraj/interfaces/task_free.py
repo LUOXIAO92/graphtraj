@@ -28,6 +28,9 @@ TASK_FREE_FEATURES = frozenset(METHOD_FEATURE_NAMES)
 
 TASKS_DESCRIPTION = 'Discover, describe, or execute Task features.'
 
+# The names of the tools task_free_tools declares beside agents.
+TASK_FREE_TOOL_NAMES = ('tasks',)
+
 
 def manuals_directory() -> Path:
     """Return the installed directory holding the delivered method manuals."""

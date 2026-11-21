@@ -56,8 +56,13 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
         request['disallowed_tools'] = list(tools['disallowed_tools'])
     elif runtime == 'codex':
         from graftling.codex.driver import apply_tools
+        from graphtraj.interfaces.task_free import TASK_FREE_TOOL_NAMES
+        from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 
-        apply_tools(request['session_parameters']['config'], tools)
+        # The child's own agents/tasks are never mapped or refused here: a disallowed
+        # one is dropped at start (CodexDriver, from the settings' disallowed_tools).
+        apply_tools(request['session_parameters']['config'], tools,
+                    own_server=CodexManagedExecution.mcp_server, own_tools=TASK_FREE_TOOL_NAMES)
     elif runtime == 'pi':
         # Pi's --tools / --exclude-tools; a built-in beyond the host's settings asks the parent first.
         from graftling.pi.driver import apply_tools
@@ -238,6 +243,9 @@ class AdapterDriver:
             "connection":      prepared.launch_document().get("connection", {}),
             "evidence":        evidence,
             "applied":         {"configuration": name, "model": model, "reasoning_effort": effort},
+            # Codex drops a disallowed owner tool (tasks) at start (551).
+            **({"disallowed_tools": list(tools.get("disallowed_tools") or ())}
+               if tools is not None and runtime == 'codex' else {}),
         }
 
     def start(self, run: Run) -> None:

@@ -106,3 +106,20 @@ def test_claude_child_calls_tasks_without_asking_unless_disallowed(
         else:
             assert turn.exempt_tools == [] and 'tasks' not in turn.extra_tools
             assert asked == ['WebSearch', 'mcp__graphtraj__tasks']
+
+
+@pytest.mark.parametrize('denied', ['tasks', 'mcp__graphtraj__tasks'])
+def test_codex_child_disallowing_tasks_drops_it_and_keeps_agents(denied: str) -> None:
+    """A Codex create disallowing tasks succeeds; the child keeps agents and loses only tasks."""
+    from types import SimpleNamespace
+
+    from graftling.codex.driver import owner_tools_kept
+    from graphtraj.execution.agent_driver import apply_child_tools
+    from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+
+    request = {'session_parameters': {'config': {}}}
+    apply_child_tools('codex', request, {'tools': ['mcp__graphtraj__agents'], 'disallowed_tools': [denied]})
+    assert request['session_parameters']['config'] == {'web_search': 'disabled'}
+    pairs = task_free_tools(Path('/project'), CHILD)
+    assert owner_tools_kept(pairs, [denied], CodexManagedExecution.mcp_server) == []
+    assert owner_tools_kept(pairs, ['web_search'], CodexManagedExecution.mcp_server) == pairs

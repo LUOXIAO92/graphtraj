@@ -2,6 +2,7 @@
 
   python -I drv546.py main <project> <out> <claude> <model>     one headless Main run (stream-json, timed lines)
   python -I drv546.py ready <dir> <out> <claude> <model>        one-line READY answer with init model and login
+  python -I drv546.py probe <project> <out> <claude> <model> <label>   agents tool loaded + status call not refused
   python -I drv546.py summary <project> <out>                   the observable from <out>/main.jsonl + agent record
 Standard library only. The agent record is the product's own (<project>/.graphtraj/**/control/agents/<id>.json).
 """
@@ -67,6 +68,39 @@ def ready(cwd: str, out: str, claude: str, model: str) -> int:
     ok = rc == 0 and 'READY-546-CLAUDE' in answer and init.get('model', '').startswith(model)
     print(f"CHECK 546 READY-546-CLAUDE: {'PASS' if ok else 'FAIL'} | init model: {init.get('model')} | "
           f"auth source (init apiKeySource): {init.get('apiKeySource')} | answer: {answer[:80]!r} | exit {rc}")
+    return 0 if ok else 1
+
+
+PROBE = """PROBE-546. Call the agents tool exactly once: action execute, feature status, arguments {} (no agent).
+Do not call describe first. Then answer with exactly one line: PROBE-546 DONE.
+"""
+
+
+def probe(project: str, out: str, claude: str, model: str, label: str) -> int:
+    """With B/A's exact flags: the agents tool is loaded and a status call is not refused for authority."""
+    path = Path(out) / f'probe-{label}.jsonl'
+    rc = run_timed([claude, *flags(model)], project, PROBE, path)
+    init, results, calls = {}, [], {}
+    for _, r in records(path):
+        if r.get('type') == 'system' and r.get('subtype') == 'init':
+            init = r
+        for block in (r.get('message') or {}).get('content') or []:
+            if isinstance(block, dict) and block.get('type') == 'tool_use' and 'agents' in str(block.get('name')):
+                calls[block['id']] = block
+            elif isinstance(block, dict) and block.get('type') == 'tool_result' and block.get('tool_use_id') in calls:
+                content = block.get('content')
+                text = content if isinstance(content, str) else ' '.join(
+                    c.get('text', '') for c in content or [] if isinstance(c, dict))
+                results.append((calls[block['tool_use_id']].get('input'), bool(block.get('is_error')), text))
+    loaded = 'mcp__graphtraj__agents' in (init.get('tools') or [])
+    servers = {s.get('name'): s.get('status') for s in init.get('mcp_servers') or [] if isinstance(s, dict)}
+    refused = [t for _, _, t in results if 'authority' in t or 'verified caller' in t]
+    ok = rc == 0 and loaded and bool(results) and not refused and not any(e for _, e, _ in results)
+    first = ' / '.join(x.strip() for x in (results[0][2] if results else '').splitlines()[:3] if x.strip())
+    print(f"CHECK 546 AGENTS {label}: {'PASS' if ok else 'FAIL'} | init model: {init.get('model')} | "
+          f"mcp servers: {servers} | mcp__graphtraj__agents in init tools: {loaded} | "
+          f"call: {results[0][0] if results else None} | error: {results[0][1] if results else None} | "
+          f"result: {first[:300]!r} | exit {rc}")
     return 0 if ok else 1
 
 
@@ -160,6 +194,8 @@ if __name__ == '__main__':
         sys.exit(main_run(*a[1:]))
     if a[:1] == ['ready'] and len(a) == 5:
         sys.exit(ready(*a[1:]))
+    if a[:1] == ['probe'] and len(a) == 6:
+        sys.exit(probe(*a[1:]))
     if a[:1] == ['summary'] and len(a) == 3:
         sys.exit(summary(*a[1:]))
     print(__doc__)

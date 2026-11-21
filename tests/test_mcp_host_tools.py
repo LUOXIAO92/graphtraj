@@ -341,7 +341,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         })["result"]
         description = described["structuredContent"]
         assert description["feature"] == "task_graph"
-        assert set(description) == {"feature", "description", "manual_ref"}
+        assert set(description) == {"feature", "description", "manual_ref", "arguments_file"}
         reference = Path(description["manual_ref"])
         assert reference.is_absolute() and reference.read_text(encoding="utf-8")
         parameters = server.request("tools/call", {

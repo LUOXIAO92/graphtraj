@@ -12,6 +12,7 @@ Runtime and raises no approval dialog.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,8 +25,12 @@ def call(entry: str, project: Path, name: str, arguments: dict) -> dict:
     request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
                'params': {'name': name, 'arguments': arguments}}
     print(f'>>> {name} {json.dumps(arguments)}')
+    # The scratch project is served by this entry itself, never forwarded to
+    # the calling Session's host channel.
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in ('GRAPHTRAJ_CLI_CONNECTION', 'GRAFTLING_CONNECTION')}
     completed = subprocess.run([entry], input=json.dumps(request) + '\n', capture_output=True,
-                               text=True, cwd=project, timeout=120, check=False)
+                               text=True, cwd=project, env=environment, timeout=120, check=False)
     result = json.loads(completed.stdout.splitlines()[0])['result']
     print('<<< isError =', result['isError'])
     print(json.dumps(result.get('structuredContent', result['content']), indent=2, ensure_ascii=False))

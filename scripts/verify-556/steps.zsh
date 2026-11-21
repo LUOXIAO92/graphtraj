@@ -33,7 +33,7 @@ STEP=${1:-}
 PYTEST_TMP=${TMPDIR:-/tmp}
 KNOWN516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
 FOCUSED=(tests/test_arguments_file_556.py tests/test_gateway.py tests/test_shared_tools.py tests/test_local_tool.py
-         tests/test_cli_projection.py tests/test_graphtraj_public_agents_api.py)
+         tests/test_cli_projection.py tests/test_graphtraj_public_agents_api.py tests/test_mcp_host_tools.py)
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 
 say() { print -r -- "== $*"; }
@@ -151,7 +151,7 @@ case $STEP in
   print -r -- "next: zsh $THIS Gt"
   ;;
 Gt)
-  say "[Gt] Main. Focused 556 tests via the candidate venv, foreground. Dialog: none. <1 min."
+  say "[Gt] Main. Focused 556 tests via the candidate venv, foreground. Dialog: none. ~3 min."
   local V S RUNTMP; prepare cand || return 1
   local R=$OUT/Gt-$(git -C $WT rev-parse --short HEAD)-$(date +%Y%m%dT%H%M%S); mkdir -p $R
   print -r -- "files: $FOCUSED" | tee $R/run.txt

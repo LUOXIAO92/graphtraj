@@ -292,3 +292,49 @@ To adopt an already committed escalated integration without starting work, inspe
 the changed contents and supply `--confirm-resolution <full-commit>` with the
 original validation command. This confirms that exact version under the caller's
 task authority; it does not resume or reset a stopped execution budget.
+
+## Back up Tasks to Issues
+
+The local Task is the original, authoritative record. Backing it up to an Issue
+platform is optional and one-way. The current adapter is GitHub. Use MCP `tasks`
+feature `task_backup` with the local Task ID and `repository` as `owner/name`;
+`host` defaults to `github.com`. Requests go through the installed `gh` login or
+`GH_TOKEN` / `GITHUB_TOKEN`. Registering a Task needs no Issue, an Issue number is
+not the Task ID, and closing an Issue is not local acceptance or integration.
+
+Choose the repository per Task and call. The project's state keeps one mapping
+per Task, host and repository with a creation marker in the Issue body; repeat
+the call to retry or update the same Issue, including one whose creation response
+was lost. The Issue holds the Task title, explicit definition and state fields
+only, and is closed when the Task is integrated, superseded or cancelled. A Task
+with children also shows integrated / required child counts and a dependency
+diagram with a legend; a child kept in another repository shows `owner/name#N`.
+
+The result `outcome` is `created`, `updated`, `unchanged`, `conflict` or `failed`.
+`failed` records the error in the mapping and leaves local Tasks unchanged;
+repeat the call. `conflict` means the Issue changed since the last backup: remote
+edits are reported in `differences` with a `remote_digest` and never imported.
+Revise the local Task through Task operations when the evidence warrants it, then
+repeat with `confirm_remote` set to that digest. It applies only to that exact
+remote copy.
+
+Parent-child relations become GitHub Sub-issues between mapped Issues, reported
+in `hierarchy`:
+
+- `linked`: the child Issue is placed under its parent's Issue.
+- `unchanged`: it already was.
+- `moved`: it was under another mapped Issue and now follows the local parent.
+- `unlinked`: the local Task has no parent, so its link to a mapped remote parent
+  is removed.
+- `other-parent`: the remote parent maps to no Task; reported, never changed.
+- `pending`: the parent's Issue is not resolved; nothing is written.
+
+A related Task's Issue comes from its mapping on the same host in the backed-up
+repository, otherwise its only mapping on that host, once that mapping has an
+Issue; both sides must resolve each other this way. A Task mapped only on
+another host, or in two or more other repositories, is not resolved, so keep each
+Task backed up to one repository. An Issue number in another repository comes
+with `parent_repository`, `child_repository`, `previous_parent_repository` or
+`remote_parent_repository`. Unmapped children are not published automatically and
+unresolved children are omitted from a parent's `hierarchy`. Read `hierarchy`
+rather than inferring links from the Issue body.

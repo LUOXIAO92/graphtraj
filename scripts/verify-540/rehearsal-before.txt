@@ -1,0 +1,24 @@
+rehearsal dir: /tmp/claude-501/r540c-214553 (empty before the run; TMPDIR, outside the Harness)
+== rehearsal in /private/tmp/claude-501/r540c-214553 (stub codex; real BEFORE commits)
+REHEARSAL PASS 00: isolation OK, codex exec answer names gpt-6-luna
+REHEARSAL PASS B0: BEFORE wheels + venv from f754d3a9 and 6794ce02
+GraphTraj f754d3a955fe7740fa11b54f194d19fb70d2d438 Merge commit '309e0d903582f678f804168666fe39bd5127f7a7' into dev
+graftling 6794ce02b6210ec88837437affb8d7b525612804 Merge branch 'agent/538-dsh-graphtraj-notice-block-display' into dev
+graftling 0.6.2 /private/tmp/claude-501/r540c-214553/base/base/venv/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL PASS T: one dialog (directory trust), /exit
+REHEARSAL PASS Vb: hooks via active link, role codex = gpt-6-luna resolves, USER command + prompt (runtime codex), at most one dialog
+hooks.json: {'SessionStart': ['/private/tmp/claude-501/r540c-214553/base/active/venv/bin/python -m graphtraj.runtimes.codex.stop_hook'], 'SessionEnd': ['/private/tmp/claude-501/r540c-214553/base/active/venv/bin/python -m graphtraj.runtimes.codex.stop_hook']}
+REHEARSAL PASS Vb hooks.json: exactly GraphTraj's SessionStart + SessionEnd stop_hook via the active venv
+REHEARSAL PASS BEFORE hook: the marked exec child is NOT skipped; it goes on to Main association (stops only at the missing app-server)
+REHEARSAL PASS C (BEFORE) on stand-ins shaped as 535's evidence (child claim, thread not found, no notice) -> VERDICT REPRODUCED; copies in st/before
+continuity /private/tmp/claude-501/r540c-214553/vproject/.graphtraj/runner/main-sessions/continuity.jsonl (2 claims; copied):
+  codex:SessionStart:startup session 01a1f989-df2b-7792-956b-e0329f5daf4f previous None (after start)
+  codex:SessionStart:startup session 01a1f98a-5102-7340-9bc5-b432b0995473 previous 01a1f989-df2b-7792-956b-e0329f5daf4f (after start)
+child control record /private/tmp/claude-501/r540c-214553/vproject/.graphtraj/swarm/control/agents/agent-540rehearsal.json (copied): agent agent-540rehearsal, runtime codex, model gpt-6-luna, session 01a1f98a-5102-7340-9bc5-b432b0995473, creator session 01a1f989-df2b-7792-956b-e0329f5daf4f
+  execution eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee: outcome completed, notification unavailable, notification_error {'code': 'RUNTIME_RPC_ERROR', 'message': 'thread not found: 01a1f98a-5102-7340-9bc5-b432b0995473'}
+Main rollout: /private/tmp/claude-501/r540c-214553/codex-home/sessions/2026/11/21/rollout-01a1f989-df2b-7792-956b-e0329f5daf4f.jsonl
+CHECK 540 continuity holds no claim by the child session: FAIL
+CHECK 540 child control record has no notification_error: FAIL
+CHECK 540 Main rollout holds the child completion notice: FAIL
+VERDICT 540: REPRODUCED
+== rehearsal: 7 passed, 0 failed

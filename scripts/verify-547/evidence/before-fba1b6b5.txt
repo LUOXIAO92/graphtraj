@@ -1,0 +1,162 @@
+# tests/test_github_backup.py at 17c74beb run against base fba1b6b5 source (git archive at $TMPDIR/old547, editable in its own venv; pyproject pythonpath=src -> old547/src)
+# imports: /private/tmp/claude-501/old547/src/graphtraj/graph/github_backup.py
+# (trailing spaces of the captured pytest output stripped for git diff --check)
+..........FFFFFF.                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_cross_repository_sub_issues_link_once_and_mark_the_summary ________
+
+project = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cross_repository_sub_issu0/target-project')
+remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cross_repository_sub_issu0/remote.json')
+
+    def test_cross_repository_sub_issues_link_once_and_mark_the_summary(
+        project: Path, remote: Path,
+    ) -> None:
+        """Summary 1 in owner/other#1 links children #43/#44 of owner/repo, whose own #1 is external."""
+        _register_summary()
+        assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
+
+        summary = _backup_task("1", repository="owner/other")
+        assert summary["backup"]["issue"]["url"] == "https://github.com/owner/other/issues/1"
+>       assert summary["hierarchy"] == [
+            {"parent": "1", "child": "2", "outcome": "linked", "child_repository": "owner/repo"}]
+E       AssertionError: assert [] == [{'parent': '...'owner/repo'}]
+E
+E         Right contains one more item: {'parent': '1', 'child': '2', 'outcome': 'linked', 'child_repository': 'owner/repo'}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/old547/tests/test_github_backup.py:515: AssertionError
+_________ test_cross_repository_child_is_moved_in_both_directions_once _________
+
+project = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cross_repository_child_is0/target-project')
+remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cross_repository_child_is0/remote.json')
+
+    def test_cross_repository_child_is_moved_in_both_directions_once(
+        project: Path, remote: Path,
+    ) -> None:
+        """2 moves from owner/repo#43 to owner/other#1 and back, each time with one replacing write."""
+        _register_summary()
+        _operate("task_register", _task(task_id="4", task_name="other", title="Other summary"))
+        _backup_task("1")
+        assert _backup_task("2")["hierarchy"][0]["outcome"] == "linked"
+        assert _backup_task("4", repository="owner/other")["backup"]["issue"]["number"] == 1
+        assert _parents(remote) == {"44": 43}
+
+        _reparent(_FIRST, "4")
+        moved = _backup_task("2")
+>       assert moved["hierarchy"] == [{
+            "parent": "4", "child": "2", "outcome": "moved", "parent_repository": "owner/other",
+            "previous_parent": "1", "previous_parent_issue": 43,
+        }]
+E       AssertionError: assert [{'parent': '...': 'pending'}] == [{'parent': '.../other', ...}]
+E
+E         At index 0 diff: {'parent': '4', 'child': '2', 'outcome': 'pending'} != {'parent': '4', 'child': '2', 'outcome': 'moved', 'parent_repository': 'owner/other', 'previous_parent': '1', 'previous_parent_issue': 43}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/old547/tests/test_github_backup.py:558: AssertionError
+________ test_cross_repository_parent_is_detached_on_its_own_repository ________
+
+project = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cross_repository_parent_i0/target-project')
+remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_cross_repository_parent_i0/remote.json')
+
+    def test_cross_repository_parent_is_detached_on_its_own_repository(
+        project: Path, remote: Path,
+    ) -> None:
+        """Without a local parent, #43 leaves owner/other#1 through that repository's endpoint."""
+        _register_summary()
+        _backup_task("1", repository="owner/other")
+        _backup_task("2")
+>       assert _parents(remote) == {"43": "owner/other#1"}
+E       AssertionError: assert {} == {'43': 'owner/other#1'}
+E
+E         Right contains 1 more item:
+E         {'43': 'owner/other#1'}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/old547/tests/test_github_backup.py:591: AssertionError
+__ test_same_number_in_another_repository_is_not_mistaken_for_a_mapped_parent __
+
+project = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_same_number_in_another_re0/target-project')
+remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_same_number_in_another_re0/remote.json')
+
+    def test_same_number_in_another_repository_is_not_mistaken_for_a_mapped_parent(
+        project: Path, remote: Path,
+    ) -> None:
+        """#43 under external owner/repo#1 is not under mapped owner/other#1; nothing is written."""
+        _register_summary()
+        _backup_task("2")
+        document = json.loads(remote.read_text())
+        document["parents"] = {"43": 1}
+        remote.write_text(json.dumps(document))
+
+        summary = _backup_task("1", repository="owner/other")
+>       assert summary["hierarchy"] == [{
+            "parent": "1", "child": "2", "outcome": "other-parent", "child_repository": "owner/repo",
+            "expected_parent_issue": 1, "remote_parent_issue": 1, "remote_parent_repository": "owner/repo",
+        }]
+E       AssertionError: assert [] == [{'parent': '...r/repo', ...}]
+E
+E         Right contains one more item: {'parent': '1', 'child': '2', 'outcome': 'other-parent', 'child_repository': 'owner/repo', ...}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/old547/tests/test_github_backup.py:621: AssertionError
+_ test_task_without_parent_under_an_external_issue_of_another_repository_is_only_reported _
+
+project = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_task_without_parent_under0/target-project')
+remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_task_without_parent_under0/remote.json')
+
+    def test_task_without_parent_under_an_external_issue_of_another_repository_is_only_reported(
+        project: Path, remote: Path,
+    ) -> None:
+        """External owner/other#1 is reported with its repository and left in place."""
+        document = json.loads(remote.read_text())
+        document["issues"].append({
+            "repository": "owner/other", "number": 1, "id": 500, "node_id": "X_500",
+            "html_url": "https://github.com/owner/other/issues/1", "title": "External epic",
+            "body": "Kept by a user.", "state": "open"})
+        remote.write_text(json.dumps(document))
+        _backup_task("42")
+        document = json.loads(remote.read_text())
+        document["parents"] = {"43": "owner/other#1"}
+        remote.write_text(json.dumps(document))
+
+>       assert _backup_task("42")["hierarchy"] == [{
+            "parent": None, "child": "42", "outcome": "other-parent",
+            "remote_parent_issue": 1, "remote_parent_repository": "owner/other"}]
+E       AssertionError: assert [{'parent': N...nt_issue': 1}] == [{'parent': N...sue': 1, ...}]
+E
+E         At index 0 diff: {'parent': None, 'child': '42', 'outcome': 'other-parent', 'remote_parent_issue': 1} != {'parent': None, 'child': '42', 'outcome': 'other-parent', 'remote_parent_issue': 1, 'remote_parent_repository': 'owner/other'}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/old547/tests/test_github_backup.py:647: AssertionError
+_ test_parent_on_another_host_stays_pending_and_an_ambiguous_parent_writes_nothing _
+
+project = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_parent_on_another_host_st0/target-project')
+remote = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-170/test_parent_on_another_host_st0/remote.json')
+
+    def test_parent_on_another_host_stays_pending_and_an_ambiguous_parent_writes_nothing(
+        project: Path, remote: Path,
+    ) -> None:
+        """One same-host mapping, preferring the backed-up repository, is an endpoint; else nothing is written."""
+        _register_summary()
+        _backup_task("1", "--host", "ghe.example.com", repository="owner/other")
+        assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
+        assert _backup_task("1", "--host", "ghe.example.com", repository="owner/other")["hierarchy"] == []
+        assert _hierarchy_writes(remote) == []
+
+        # Task 1's only github.com mapping, in another repository, is the parent.
+>       assert _backup_task("1", repository="owner/other")["hierarchy"] == [
+            {"parent": "1", "child": "2", "outcome": "linked", "child_repository": "owner/repo"}]
+E       AssertionError: assert [] == [{'parent': '...'owner/repo'}]
+E
+E         Right contains one more item: {'parent': '1', 'child': '2', 'outcome': 'linked', 'child_repository': 'owner/repo'}
+E         Use -v to get more diff
+
+/private/tmp/claude-501/old547/tests/test_github_backup.py:664: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_github_backup.py::test_cross_repository_sub_issues_link_once_and_mark_the_summary
+FAILED tests/test_github_backup.py::test_cross_repository_child_is_moved_in_both_directions_once
+FAILED tests/test_github_backup.py::test_cross_repository_parent_is_detached_on_its_own_repository
+FAILED tests/test_github_backup.py::test_same_number_in_another_repository_is_not_mistaken_for_a_mapped_parent
+FAILED tests/test_github_backup.py::test_task_without_parent_under_an_external_issue_of_another_repository_is_only_reported
+FAILED tests/test_github_backup.py::test_parent_on_another_host_stays_pending_and_an_ambiguous_parent_writes_nothing
+6 failed, 11 passed in 9.27s

@@ -1,0 +1,16 @@
+Dialog: none
+== [G] Main. GraphTraj full suite of the Worktree HEAD (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. Run nothing else meanwhile.
+NOTE: ps is not permitted here (quiet:2: operation not permitted: ps); check by hand that no other test run is running
+uncommitted in src/tests/plugins: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-547-cand-20261121T154655
+reusing /tmp/claude-501/r547/t/venv-cand (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/547-backup-cross-repository-sub-issues editable; graftling ec91db5e wheel)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/547-backup-cross-repository-sub-issues/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/r547/t/venv-cand/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+cand: 17c74beb513eb529acc3c48d9d62b2ec09873ceb | graftling wheel from git archive ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground
+.................                                                        [100%]
+17 passed in 10.26s
+exit=0
+Success: the graphtraj line under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/547-backup-cross-repository-sub-issues/src, 'graftling ...' under /tmp/claude-501/r547/t, 'started in the background'.
+next: after G's suite.txt ends with exit=: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/547-backup-cross-repository-sub-issues/scripts/verify-547/steps.zsh B

@@ -15,7 +15,10 @@ from graphtraj.graph.github_backup import _progress
 from graphtraj.interfaces import gateway
 from graphtraj.interfaces.cli import graphtraj
 
-# A stand-in for ``gh api`` that keeps one repository's Issues in a JSON file.
+# A stand-in for ``gh api`` that keeps Issues of several repositories in a JSON file.
+# Issues without a ``repository`` belong to owner/repo; numbers repeat across
+# repositories while ids stay unique. ``parents`` maps a child to its parent as a
+# bare number in owner/repo and as ``owner/name#N`` elsewhere.
 # ``mode`` selects offline failure or a creation whose response is lost.
 _FAKE_GH = '''
 import json, os, sys
@@ -37,35 +40,54 @@ def finish(document, code=0):
         sys.stdout.write(json.dumps(document))
     sys.exit(code)
 
+def where(issue):
+    return issue.get("repository", "owner/repo")
+
+def ref(issue):
+    return issue["number"] if where(issue) == "owner/repo" else "%s#%d" % (where(issue), issue["number"])
+
+def find(repository, number):
+    return next(issue for issue in issues if (where(issue), issue["number"]) == (repository, number))
+
 if state["mode"] == "offline":
     finish("error connecting to api.github.com", 1)
 url    = urlsplit(target)
 parts  = url.path.split("/")
 issues = state["issues"]
+repo   = "/".join(parts[1:3])
+here   = [issue for issue in issues if where(issue) == repo]
 if len(parts) == 6:
     # Sub-issue endpoints: GET .../{child}/parent, POST .../{parent}/sub_issues
     # (optionally replace_parent) and DELETE .../{parent}/sub_issue.
     parents = state.setdefault("parents", {})
+    if method in ("DELETE", "POST"):
+        child  = next(issue for issue in issues if issue["id"] == payload["sub_issue_id"])
+        parent = find(repo, int(parts[4]))
     if method == "DELETE":
-        child = next(issue for issue in issues if issue["id"] == payload["sub_issue_id"])
-        assert parents.get(str(child["number"])) == int(parts[4]), "not a Sub-issue of this parent"
-        del parents[str(child["number"])]
-        finish(next(issue for issue in issues if issue["number"] == int(parts[4])))
+        assert parents.get(str(ref(child))) == ref(parent), "not a Sub-issue of this parent"
+        del parents[str(ref(child))]
+        finish(parent)
     if method == "POST":
-        child = next(issue for issue in issues if issue["id"] == payload["sub_issue_id"])
         if payload.get("replace_parent"):
-            parents.pop(str(child["number"]), None)
-        assert str(child["number"]) not in parents, "GitHub rejects a second parent"
-        parents[str(child["number"])] = int(parts[4])
-        finish(next(issue for issue in issues if issue["number"] == int(parts[4])))
-    if parts[4] not in parents:
+            parents.pop(str(ref(child)), None)
+        assert str(ref(child)) not in parents, "GitHub rejects a second parent"
+        parents[str(ref(child))] = ref(parent)
+        finish(parent)
+    key = str(ref(find(repo, int(parts[4]))))
+    if key not in parents:
         finish("gh: Not Found (HTTP 404)", 1)
-    finish(next(issue for issue in issues if issue["number"] == parents[parts[4]]))
+    value = parents[key]
+    if isinstance(value, int):
+        finish(find("owner/repo", value))
+    finish(find(value.split("#")[0], int(value.split("#")[1])))
 if method == "POST":
-    number = max([issue["number"] for issue in issues] + [0]) + 1
-    issue  = {"number": number, "id": 9000 + number, "node_id": "I_%d" % number,
+    number = max([issue["number"] for issue in here] + [0]) + 1
+    serial = len(issues) + 1
+    issue  = {"number": number, "id": 9000 + serial, "node_id": "I_%d" % serial,
               "html_url": "https://github.com/%s/%s/issues/%d" % (parts[1], parts[2], number),
               "title": payload["title"], "body": payload["body"], "state": "open"}
+    if repo != "owner/repo":
+        issue["repository"] = repo
     issues.append(issue)
     if state["mode"] == "lose-create-response":
         state["mode"] = "online"
@@ -74,8 +96,8 @@ if method == "POST":
 if len(parts) == 4:
     query = parse_qs(url.query)
     assert query["state"] == ["all"] and query["since"]
-    finish(sorted(issues, key=lambda issue: -issue["number"]))
-issue = next(issue for issue in issues if issue["number"] == int(parts[4]))
+    finish(sorted(here, key=lambda issue: -issue["number"]))
+issue = find(repo, int(parts[4]))
 if method == "PATCH":
     issue.update(payload)
 finish(issue)
@@ -290,10 +312,10 @@ def _register_summary() -> None:
                                     parent_id="1", dependencies=["2"]))
 
 
-def _backup_task(task_id: str, *options: str) -> dict[str, Any]:
-    """Back up one local Task to owner/repo and require success."""
+def _backup_task(task_id: str, *options: str, repository: str = "owner/repo") -> dict[str, Any]:
+    """Back up one local Task to ``repository`` (default owner/repo) and require success."""
     result = CliRunner().invoke(graphtraj.main, [
-        "task", "backup", "--task-id", task_id, "--repository", "owner/repo", *options])
+        "task", "backup", "--task-id", task_id, "--repository", repository, *options])
     assert result.exit_code == 0, result.output
     return yaml.safe_load(result.output)
 
@@ -468,6 +490,194 @@ def test_task_without_local_parent_under_an_external_issue_is_only_reported(
         "parent": None, "child": "42", "outcome": "other-parent", "remote_parent_issue": 1}]
     assert json.loads(remote.read_text())["parents"] == {"43": 1}
     assert _hierarchy_writes(remote) == []
+
+
+def _parents(remote: Path) -> dict[str, Any]:
+    """Return the fake remote's child-to-parent relations (other repositories as owner/name#N)."""
+    return json.loads(remote.read_text()).get("parents", {})
+
+
+def _issue(remote: Path, repository: str, number: int) -> dict[str, Any]:
+    """Return one Issue of the fake remote; numbers repeat across repositories."""
+    return next(issue for issue in json.loads(remote.read_text())["issues"]
+                if (issue.get("repository", "owner/repo"), issue["number"]) == (repository, number))
+
+
+def test_cross_repository_sub_issues_link_once_and_mark_the_summary(
+    project: Path, remote: Path,
+) -> None:
+    """Summary 1 in owner/other#1 links children #43/#44 of owner/repo, whose own #1 is external."""
+    _register_summary()
+    assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
+
+    summary = _backup_task("1", repository="owner/other")
+    assert summary["backup"]["issue"]["url"] == "https://github.com/owner/other/issues/1"
+    assert summary["hierarchy"] == [
+        {"parent": "1", "child": "2", "outcome": "linked", "child_repository": "owner/repo"}]
+    later = _backup_task("3")
+    assert later["hierarchy"] == [
+        {"parent": "1", "child": "3", "outcome": "linked", "parent_repository": "owner/other"}]
+    assert _parents(remote) == {"43": "owner/other#1", "44": "owner/other#1"}
+    assert [(request["target"], request["payload"]) for request in _hierarchy_writes(remote)] == [
+        ("repos/owner/other/issues/1/sub_issues", {"sub_issue_id": 9043}),
+        ("repos/owner/other/issues/1/sub_issues", {"sub_issue_id": 9045}),
+    ]
+
+    # The summary node of a child in another repository names it; unmapped nodes stay plain.
+    assert _backup_task("1", repository="owner/other")["outcome"] == "updated"
+    body = _issue(remote, "owner/other", 1)["body"]
+    assert 'T2["⏳ 2 First<br/>pending<br/>owner/repo#43"]' in body
+    assert 'T3["⏳ 3 Second<br/>pending<br/>owner/repo#44"]' in body
+    assert "Integrated required children: 0 / 2" in body and "  T2 --> T3" in body
+
+    writes = len(_hierarchy_writes(remote))
+    again  = _backup_task("1", repository="owner/other")
+    assert again["outcome"] == "unchanged"
+    assert again["hierarchy"] == [
+        {"parent": "1", "child": "2", "outcome": "unchanged", "child_repository": "owner/repo"},
+        {"parent": "1", "child": "3", "outcome": "unchanged", "child_repository": "owner/repo"},
+    ]
+    assert _backup_task("2")["hierarchy"] == [
+        {"parent": "1", "child": "2", "outcome": "unchanged", "parent_repository": "owner/other"}]
+    assert len(_hierarchy_writes(remote)) == writes and len(_issues(remote)) == 44
+
+
+def test_cross_repository_child_is_moved_in_both_directions_once(
+    project: Path, remote: Path,
+) -> None:
+    """2 moves from owner/repo#43 to owner/other#1 and back, each time with one replacing write."""
+    _register_summary()
+    _operate("task_register", _task(task_id="4", task_name="other", title="Other summary"))
+    _backup_task("1")
+    assert _backup_task("2")["hierarchy"][0]["outcome"] == "linked"
+    assert _backup_task("4", repository="owner/other")["backup"]["issue"]["number"] == 1
+    assert _parents(remote) == {"44": 43}
+
+    _reparent(_FIRST, "4")
+    moved = _backup_task("2")
+    assert moved["hierarchy"] == [{
+        "parent": "4", "child": "2", "outcome": "moved", "parent_repository": "owner/other",
+        "previous_parent": "1", "previous_parent_issue": 43,
+    }]
+    assert _parents(remote) == {"44": "owner/other#1"}
+    assert (_hierarchy_writes(remote)[-1]["target"], _hierarchy_writes(remote)[-1]["payload"]) == (
+        "repos/owner/other/issues/1/sub_issues", {"sub_issue_id": 9044, "replace_parent": True})
+    writes = len(_hierarchy_writes(remote))
+    assert _backup_task("4", repository="owner/other")["hierarchy"] == [
+        {"parent": "4", "child": "2", "outcome": "unchanged", "child_repository": "owner/repo"}]
+    assert _backup_task("1")["hierarchy"] == []
+    assert len(_hierarchy_writes(remote)) == writes
+
+    _reparent(_FIRST, "1")
+    back = _backup_task("1")
+    assert back["hierarchy"] == [{
+        "parent": "1", "child": "2", "outcome": "moved", "previous_parent": "4",
+        "previous_parent_issue": 1, "previous_parent_repository": "owner/other",
+    }]
+    assert _parents(remote) == {"44": 43}
+    assert (_hierarchy_writes(remote)[-1]["target"], _hierarchy_writes(remote)[-1]["payload"]) == (
+        "repos/owner/repo/issues/43/sub_issues", {"sub_issue_id": 9044, "replace_parent": True})
+    assert _backup_task("2")["hierarchy"][0]["outcome"] == "unchanged"
+    assert len(_hierarchy_writes(remote)) == writes + 1
+
+
+def test_cross_repository_parent_is_detached_on_its_own_repository(
+    project: Path, remote: Path,
+) -> None:
+    """Without a local parent, #43 leaves owner/other#1 through that repository's endpoint."""
+    _register_summary()
+    _backup_task("1", repository="owner/other")
+    _backup_task("2")
+    assert _parents(remote) == {"43": "owner/other#1"}
+
+    _reparent(_FIRST, None)
+    detached = _backup_task("2")
+    assert detached["hierarchy"] == [{
+        "parent": None, "child": "2", "outcome": "unlinked", "previous_parent": "1",
+        "previous_parent_issue": 1, "previous_parent_repository": "owner/other",
+    }]
+    assert _parents(remote) == {}
+    last = _hierarchy_writes(remote)[-1]
+    assert (last["method"], last["target"], last["payload"]) == (
+        "DELETE", "repos/owner/other/issues/1/sub_issue", {"sub_issue_id": 9044})
+
+    writes = len(_hierarchy_writes(remote))
+    assert _backup_task("2")["hierarchy"] == []
+    assert _backup_task("1", repository="owner/other")["hierarchy"] == []
+    assert len(_hierarchy_writes(remote)) == writes
+
+
+def test_same_number_in_another_repository_is_not_mistaken_for_a_mapped_parent(
+    project: Path, remote: Path,
+) -> None:
+    """#43 under external owner/repo#1 is not under mapped owner/other#1; nothing is written."""
+    _register_summary()
+    _backup_task("2")
+    document = json.loads(remote.read_text())
+    document["parents"] = {"43": 1}
+    remote.write_text(json.dumps(document))
+
+    summary = _backup_task("1", repository="owner/other")
+    assert summary["hierarchy"] == [{
+        "parent": "1", "child": "2", "outcome": "other-parent", "child_repository": "owner/repo",
+        "expected_parent_issue": 1, "remote_parent_issue": 1, "remote_parent_repository": "owner/repo",
+    }]
+    assert _backup_task("2")["hierarchy"] == [{
+        "parent": "1", "child": "2", "outcome": "other-parent", "parent_repository": "owner/other",
+        "expected_parent_issue": 1, "remote_parent_issue": 1,
+    }]
+    assert _parents(remote) == {"43": 1} and _hierarchy_writes(remote) == []
+
+
+def test_task_without_parent_under_an_external_issue_of_another_repository_is_only_reported(
+    project: Path, remote: Path,
+) -> None:
+    """External owner/other#1 is reported with its repository and left in place."""
+    document = json.loads(remote.read_text())
+    document["issues"].append({
+        "repository": "owner/other", "number": 1, "id": 500, "node_id": "X_500",
+        "html_url": "https://github.com/owner/other/issues/1", "title": "External epic",
+        "body": "Kept by a user.", "state": "open"})
+    remote.write_text(json.dumps(document))
+    _backup_task("42")
+    document = json.loads(remote.read_text())
+    document["parents"] = {"43": "owner/other#1"}
+    remote.write_text(json.dumps(document))
+
+    assert _backup_task("42")["hierarchy"] == [{
+        "parent": None, "child": "42", "outcome": "other-parent",
+        "remote_parent_issue": 1, "remote_parent_repository": "owner/other"}]
+    assert _parents(remote) == {"43": "owner/other#1"} and _hierarchy_writes(remote) == []
+
+
+def test_parent_on_another_host_stays_pending_and_an_ambiguous_parent_writes_nothing(
+    project: Path, remote: Path,
+) -> None:
+    """One same-host mapping, preferring the backed-up repository, is an endpoint; else nothing is written."""
+    _register_summary()
+    _backup_task("1", "--host", "ghe.example.com", repository="owner/other")
+    assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
+    assert _backup_task("1", "--host", "ghe.example.com", repository="owner/other")["hierarchy"] == []
+    assert _hierarchy_writes(remote) == []
+
+    # Task 1's only github.com mapping, in another repository, is the parent.
+    assert _backup_task("1", repository="owner/other")["hierarchy"] == [
+        {"parent": "1", "child": "2", "outcome": "linked", "child_repository": "owner/repo"}]
+    # A second one in yet another repository makes the choice ambiguous: the
+    # existing link stays, the child reports pending and no backup writes.
+    writes = len(_hierarchy_writes(remote))
+    assert _backup_task("1", repository="owner/third")["hierarchy"] == []
+    assert _backup_task("1", repository="owner/other")["hierarchy"] == []
+    assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "pending"}]
+    assert len(_hierarchy_writes(remote)) == writes and _parents(remote) == {"43": "owner/other#2"}
+
+    # A mapping in the child's own repository is preferred and takes the child over once.
+    assert _backup_task("1")["hierarchy"] == [{
+        "parent": "1", "child": "2", "outcome": "moved", "previous_parent": "1",
+        "previous_parent_issue": 2, "previous_parent_repository": "owner/other"}]
+    assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "unchanged"}]
+    assert _backup_task("1", repository="owner/other")["hierarchy"] == []
+    assert _parents(remote) == {"43": 44} and len(_hierarchy_writes(remote)) == writes + 1
 
 
 def test_progress_counts_only_active_children_and_marks_each_state() -> None:

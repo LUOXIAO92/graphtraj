@@ -1,0 +1,24 @@
+Dialog: none
+== [GR] Main. Read only. Newest G, B and Gt; candidate FAILED/ERROR lines classed known (fails on base B too, 516) or NEW. Dialog: none. <10 s.
+---- /tmp/claude-501/r547/out3/G-17c74beb-20261121T154655
+pytest temp root: /private/tmp/claude-501/verify-547-cand-20261121T154655
+cand: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/547-backup-cross-repository-sub-issues at 17c74beb513eb529acc3c48d9d62b2ec09873ceb | graftling ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground
+.................                                                        [100%]
+17 passed in 10.26s
+exit=0
+---- /tmp/claude-501/r547/out3/B-fba1b6b5-20261121T154706
+pytest temp root: /private/tmp/claude-501/verify-547-base-20261121T154705
+base: /tmp/claude-501/r547/t/base-src-fba1b6b5 at fba1b6b59a790b027ebcc66bddde8c89d6f16e65 | graftling ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground
+...........                                                              [100%]
+11 passed in 5.87s
+exit=0
+---- candidate G classification
+(no FAILED/ERROR lines)
+---- Gt /tmp/claude-501/r547/out3/Gt-17c74beb-20261121T154643
+19 passed in 10.67s
+exit=0
+(no FAILED/ERROR lines)
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line in G or Gt.
+next: report /tmp/claude-501/r547/out3/GR.txt to the Leader

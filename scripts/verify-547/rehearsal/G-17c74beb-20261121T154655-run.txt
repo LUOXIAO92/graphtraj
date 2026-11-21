@@ -1,0 +1,3 @@
+pytest temp root: /private/tmp/claude-501/verify-547-cand-20261121T154655
+cand: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/547-backup-cross-repository-sub-issues at 17c74beb513eb529acc3c48d9d62b2ec09873ceb | graftling ec91db5e24b73dc7255619c041a3ea8c7c9fe1e7
+REHEARSAL: tests limited to tests/test_github_backup.py (plain pytest, same venv, temp root and exit file); foreground

@@ -1,0 +1,56 @@
+== [demo] Main. Copy production state, preview, migrate, migrate again, compare hashes. Dialog: none. ~3 min.
+pytest temp: TMPDIR=$TMPDIR (outside the Harness)
+reusing $TMPDIR/v563/venv-g-gl-4a002129 (graftling 4a002129; this Worktree editable)
+== links in production Task state that read a task.md: 0
+== copying from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state (read only) to $TMPDIR/v563/demo/h/.graphtraj/core/state: Worldline, task index, and every Task's task.yml, task.md, definitions/
+copy: 470 Task directories, 470 task.md, 891 definitions/*.md
+hashed 470 Tasks into $TMPDIR/v563/demo/before.json
+== preview (public entry; writes nothing)
+preview rc=0
+tasks: 470
+unchanged: 0
+preview: true
+planned renames: 470
+renamed:
+- task_id: '100'
+  from: .graphtraj/core/state/tasks/100-early-lifecycle/task.md
+  to: .graphtraj/core/state/tasks/100-early-lifecycle/definitions/20260912T225630.948467+0900.md
+  current_definition_updated: false
+- task_id: '101'
+  from: .graphtraj/core/state/tasks/101-upstream-handoff/task.md
+  to: .graphtraj/core/state/tasks/101-upstream-handoff/definitions/20260913T005730.809278+0900.md
+  current_definition_updated: false
+== migrate
+migrate rc=0
+tasks: 470
+unchanged: 0
+backup: .graphtraj/backups/task-definitions-20261121T173152200591Z
+event_id: 20261122T023153.957566+0900
+renamed: 470
+== migrate again (must change nothing)
+again rc=0
+tasks: 470
+unchanged: 470
+renamed: []
+links: []
+preview: false
+message: Every Task definition already has a versioned name.
+PASS: second run renames nothing
+== an earlier event's task.md reference resolves through the rename event (516's registration)
+events task-definitions-renamed: 1 | mappings: 470
+516 registered with .graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md -> .graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261118T205330.926114+0900.md
+== compare
+hashed 470 Tasks into $TMPDIR/v563/demo/after.json
+PASS: same Task directories (470 before, 470 after)
+PASS: every Task keeps all version contents in the same order
+PASS: every Task keeps its current definition content
+PASS: version count unchanged (1361 versions)
+PASS: no task.md remains
+PASS: names sort oldest first
+PASS: every version stays read-only (0o444)
+PASS: current_definition names a definitions/ file
+PASS: Task Graph loads every Task (470 Tasks)
+RESULT: PASS
+kept: $TMPDIR/v563/demo/{before,after}.json, preview.yml, migrate.yml, again.yml
+Success: 'migrate rc=0', 'PASS: second run renames nothing', every check PASS and 'RESULT: PASS'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files/scripts/verify-563/steps.zsh G  (background ~25 min; then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files/scripts/verify-563/steps.zsh GR)

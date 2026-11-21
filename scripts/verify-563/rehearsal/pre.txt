@@ -1,0 +1,16 @@
+== [pre] Main. Preflight. Dialog: none. <10 s.
+zsh: 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files/scripts/verify-563/steps.zsh)
+Harness: /Users/luoxiao/workspace/you-are-a-product-architect-delivery | Worktree: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files (e2ff2960) | T=$TMPDIR/v563 | OUT=$TMPDIR/v563/out | PROD=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state
+pytest temp: TMPDIR=$TMPDIR (outside the Harness)
+production Task directories: 470 (read only)
+516 current definition (from task.yml): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T020909.524768+0900.md
+graftling 4a002129f8b97f32980afd59e5a1a64c428fe684 present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
+uncommitted in src/tests/plugins/scripts:  M src/graphtraj/graph/task_graph.py
+ M src/graphtraj/interfaces/cli/graphtraj.py
+ M src/graphtraj/teams/team_round.py
+ M src/graphtraj/workspace/migration_snapshot.py
+ M src/graphtraj/workspace/task_migration.py
+?? scripts/verify-563/
+?? src/graphtraj/workspace/definition_migration.py
+Success: 'pytest temp: ... outside the Harness', the 516 path ends in definitions/<time>.md, 'uncommitted ...: none'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files/scripts/verify-563/steps.zsh demo

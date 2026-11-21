@@ -1,0 +1,12 @@
+== [GR] Main. Read only. Newest G; FAILED/ERROR lines classed known (528 accepted G, 516 current definition) or NEW. <10 s.
+516 current definition: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+---- G $TMPDIR/v563/out/G-3d9efcdb-20261122T031201
+pytest temp root: /private$TMPDIR/verify-563-G-20261122T031201
+candidate: 3d9efcdbcc31a7a064a4891cdf00b12c6f5fa82e | graftling 4a002129f8b97f32980afd59e5a1a64c428fe684
+REHEARSAL: tests limited to tests/test_task_definition_migration.py (plain pytest, same venv, temp root and exit file)
+....                                                                     [100%]
+4 passed in 5.32s
+exit=0
+(no FAILED/ERROR lines)
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line.
+next: report $TMPDIR/v563/out/GR.txt to the Leader

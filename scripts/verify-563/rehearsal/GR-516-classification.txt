@@ -1,0 +1,28 @@
+######## .scratch/verify-531-old/steps.zsh GR on synthetic-suite.txt
+== [GR] Main. Read only. Newest G and Gt; FAILED/ERROR lines classed known (528 accepted G, 516) or NEW. <10 s.
+known (516): FAILED tests/test_claude_runner.py::test_child_registration_follows_its_owning_execution
+NEW: FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp]
+NEW: FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+NEW: FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
+NEW: FAILED tests/test_synthetic_563.py::test_not_listed_anywhere
+NEW: FAILED tests/test_team_replacement.py::test_interrupt_returns_after_slow_terminal_record
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line in G or Gt.
+######## scripts/verify-531/steps.zsh GR on synthetic-suite.txt
+== [GR] Main. Read only. Newest G and Gt; FAILED/ERROR lines classed known (528 accepted G, 516) or NEW. <10 s.
+known (516): FAILED tests/test_claude_runner.py::test_child_registration_follows_its_owning_execution
+known (516): FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp]
+known (516): FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+known (516): FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
+NEW: FAILED tests/test_synthetic_563.py::test_not_listed_anywhere
+known (516): FAILED tests/test_team_replacement.py::test_interrupt_returns_after_slow_terminal_record
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line in G or Gt.
+######## scripts/verify-563/steps.zsh GR on synthetic-suite.txt
+== [GR] Main. Read only. Newest G; FAILED/ERROR lines classed known (528 accepted G, 516 current definition) or NEW. <10 s.
+516 current definition: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+known (516): FAILED tests/test_claude_runner.py::test_child_registration_follows_its_owning_execution
+known (516): FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp]
+known (516): FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+known (516): FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
+NEW: FAILED tests/test_synthetic_563.py::test_not_listed_anywhere
+known (516): FAILED tests/test_team_replacement.py::test_interrupt_returns_after_slow_terminal_record
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line.

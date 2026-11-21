@@ -1,0 +1,43 @@
+== [00] preflight. Dialog: none. Builds the venv (no network), the project, the raw server results, then one-line prompts (codex, pi, dsh; each at most 120 s).
+zsh 5.9; git version 2.50.1 (Apple Git-155); conda Python 3.13.11; codex codex-cli 0.171.0; pi 1.4.0; dsh 0.2.2-alpha.2
+GraphTraj 500e1f175f6ceb990972af1a158993b119d36d37 (500e1f17 Merge commit '53a082ff913b9b15843f07a01b5bd51f06b59d1f' into ); graftling 6794ce02b6210ec88837437affb8d7b525612804 (6794ce0 Merge branch 'agent/538-dsh-graphtraj-notice-block-display' in)
+venv: graftling 0.6.2 | graphtraj 0.1.0 | from /tmp/claude-501/rh549/base/500e1f17-6794ce02/venv/lib/python3.13/site-packages/graphtraj/__init__.py
+Create dev from ac251395bc1737b4df6b4affcf5099c392282df3? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+evidence: /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/S-20261121T165129
+== [S] the raw CallToolResults of GraphTraj's MCP server from /tmp/claude-501/rh549/base/500e1f17-6794ce02/project (no host, no model)
+server probe: 6/6 responses saved to /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/S-20261121T165129/server.json
+  agents {"action": "discover"}: isError=False content text blocks=1 structuredContent=present
+    content text (Pi, DSH, Codex card): agents.wait.description=1 (once); agents.create.description=1 (once)
+    structuredContent (Codex model, Claude Code): agents.wait.description=1 (once); agents.create.description=1 (once)
+  agents {"action": "describe", "feature": "wait"}: isError=False content text blocks=1 structuredContent=present
+    content text (Pi, DSH, Codex card): agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+    structuredContent (Codex model, Claude Code): agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  agents {"action": "describe", "feature": "wait", "schema": true}: isError=False content text blocks=1 structuredContent=present
+    content text (Pi, DSH, Codex card): agents.wait.input_schema=1 (once)
+    structuredContent (Codex model, Claude Code): agents.wait.input_schema=1 (once)
+  tasks {"action": "discover"}: isError=False content text blocks=1 structuredContent=present
+    content text (Pi, DSH, Codex card): tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+    structuredContent (Codex model, Claude Code): tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  tasks {"action": "describe", "feature": "task-delivery"}: isError=False content text blocks=1 structuredContent=present
+    content text (Pi, DSH, Codex card): tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+    structuredContent (Codex model, Claude Code): tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  tasks {"action": "describe", "feature": "task-delivery", "schema": true}: isError=False content text blocks=1 structuredContent=present
+    content text (Pi, DSH, Codex card): no marker (text starts 'input_schema:\n  type: object\n  properties: {}\n  additionalProperties: false\n')
+    structuredContent (Codex model, Claude Code): no marker (text starts '{"input_schema": {"type": "object", "properties": {}, "additionalProperties": fa')
+Pi extension: /tmp/claude-501/rh549/base/500e1f17-6794ce02/venv/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs
+== one-line prompts (model and login)
+DEEPSEEK_API_KEY: unset
+STOP: DEEPSEEK_API_KEY is unset
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+Error loading config.toml: Failed to read config file /Users/luoxiao/.codex/config.toml: Operation not permitted (os error 1)
+codex rc=1
+Warning: Invalid settings file /Users/luoxiao/.pi/agent/settings.json: EPERM: operation not permitted, mkdir '/Users/luoxiao/.pi/agent/settings.json.lock'
+Credential store read failed for deepseek: EPERM: operation not permitted, mkdir '/Users/luoxiao/.pi/agent/auth.json.lock'
+pi rc=1
+
+Node.js v26.5.0
+dsh rc=1
+READY when: the venv line, S rows with 'once' for every field, and three READY-549 lines (codex gpt-6-luna logged in; pi and dsh deepseek-flash).
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/549-mcp-describe-printed-twice/scripts/verify-549/steps.zsh X

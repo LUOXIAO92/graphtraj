@@ -1,7 +1,7 @@
 Dialog: none
 == [D] Main. Real graphtraj-mcp entry demonstration in a new scratch project under /tmp/claude-501/t556s. Dialog: none. <1 min.
 reusing /tmp/claude-501/t556s/venv-cand (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments editable; graftling aea5962d wheel)
-entry: /tmp/claude-501/t556s/venv-cand/bin/graphtraj-mcp (candidate 65adeb2fee93bbccc6a3cf5c8bd9ee3edade28e6); project: /tmp/claude-501/t556s/demo-20261122T002416
+entry: /tmp/claude-501/t556s/venv-cand/bin/graphtraj-mcp (candidate 5eaffe00d0a42e2a03fd5637efc6ce0546d9d578); project: /tmp/claude-501/t556s/demo-20261122T003747
 == 1. one call with several problems (schema and worldline_append checks together)
 {
   "event": {
@@ -52,8 +52,8 @@ entry: /tmp/claude-501/t556s/venv-cand/bin/graphtraj-mcp (candidate 65adeb2fee93
 >>> tasks {"action": "execute", "feature": "worldline_append", "arguments_file": "event.json"}
 <<< isError = False
 {
-  "event_id": "20261122T002416.918818+0900",
-  "captured_at": "2026-11-22T00:24:16.918818+09:00",
+  "event_id": "20261122T003748.526430+0900",
+  "captured_at": "2026-11-22T00:37:48.526430+09:00",
   "event": "demo-556-arguments-file",
   "caused_by_event_ids": [],
   "evidence_refs": []
@@ -78,25 +78,25 @@ entry: /tmp/claude-501/t556s/venv-cand/bin/graphtraj-mcp (candidate 65adeb2fee93
 {
   "error": {
     "code": "invalid-input",
-    "message": "request.arguments_file: escape.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002416)",
+    "message": "request.arguments_file: escape.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T003747)",
     "errors": [
       {
         "path": "request.arguments_file",
-        "reason": "escape.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002416)"
+        "reason": "escape.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T003747)"
       }
     ]
   }
 }
->>> tasks {"action": "execute", "feature": "task_graph", "arguments_file": "/tmp/claude-501/t556s/demo-20261122T002416-outside.json"}
+>>> tasks {"action": "execute", "feature": "task_graph", "arguments_file": "/tmp/claude-501/t556s/demo-20261122T003747-outside.json"}
 <<< isError = True
 {
   "error": {
     "code": "invalid-input",
-    "message": "request.arguments_file: /tmp/claude-501/t556s/demo-20261122T002416-outside.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002416)",
+    "message": "request.arguments_file: /tmp/claude-501/t556s/demo-20261122T003747-outside.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T003747)",
     "errors": [
       {
         "path": "request.arguments_file",
-        "reason": "/tmp/claude-501/t556s/demo-20261122T002416-outside.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002416)"
+        "reason": "/tmp/claude-501/t556s/demo-20261122T003747-outside.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T003747)"
       }
     ]
   }
@@ -116,8 +116,8 @@ entry: /tmp/claude-501/t556s/venv-cand/bin/graphtraj-mcp (candidate 65adeb2fee93
   }
 }
 == follow-ups (ready to paste)
-cd /tmp/claude-501/t556s/demo-20261122T002416 && /tmp/claude-501/t556s/venv-cand/bin/graphtraj worldline read | grep -n 20261122T002416.918818+0900
-cat /tmp/claude-501/t556s/demo-20261122T002416/event.json
+cd /tmp/claude-501/t556s/demo-20261122T003747 && /tmp/claude-501/t556s/venv-cand/bin/graphtraj worldline read | grep -n 20261122T003748.526430+0900
+cat /tmp/claude-501/t556s/demo-20261122T003747/event.json
 RESULT: all expectations held
 Success: step 1 isError true with 4 errors, step 2 isError false with an event_id, step 3 four refusals naming only the path, and 'RESULT: all expectations held'.
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh G   (background ~25 min; then, after it ends: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh B, then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh GR)

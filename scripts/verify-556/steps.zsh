@@ -95,7 +95,7 @@ new_runtmp() {
 }
 prepare() {  # $1 cand|base: guard + venv + imports. Sets V S RUNTMP.
   if [[ $1 == cand ]]; then
-    local dirty=$(git -C $WT status --porcelain -- src tests plugins scripts/verify-556)
+    local dirty=$(git -C $WT status --porcelain -- src tests plugins scripts/verify-556 ':!scripts/verify-556/rehearsal')
     print "uncommitted in src/tests/plugins/scripts/verify-556: ${dirty:-none}"; [[ -z $dirty ]] || { print "STOP: uncommitted changes in $WT"; return 1; }
   fi
   [[ -e $WT/src/graftling ]] && { print "STOP: $WT/src/graftling exists; GraphTraj must use the installed graftling"; return 1; }

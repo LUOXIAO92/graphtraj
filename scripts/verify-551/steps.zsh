@@ -31,6 +31,7 @@ OUT=$BASE/runs
 PARENT_MODEL=${VERIFY551_PARENT_MODEL:-claude-sonnet-5-5}
 CODEX_MODEL=gpt-6-luna; PI_PROVIDER=deepseek; PI_MODEL=deepseek-flash
 PI_SANDBOX_ENV=${VERIFY551_PI_SANDBOX_ENV:-$HOME/agents-pi-sandbox/pi-sandbox.env}   # verify-513: srt for Pi
+DSH_SESSIONS=${VERIFY551_DSH_SESSIONS:-$HOME/.dsh/sessions}   # DSH's own session logs (clean env: no DSH_HOME); read only
 STEP=${1:-}; ARG=${2:-}
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 [[ -n ${VERIFY551_STUB:-} ]] && path=($VERIFY551_STUB $path)        # rehearsal only: stub hosts first
@@ -182,8 +183,11 @@ step_00() {
   (cd $BASE && clean $BOUND 120 pi --mode json --no-tools --no-session --provider $PI_PROVIDER --model $PI_MODEL $ASK < /dev/null 2>&1 | redact > $R/pi.jsonl) || print "pi rc=$?"
   clean $CONDA -I $SD/ready551.py pi $R/pi.jsonl $PI_MODEL $PI_PROVIDER || FAILS+=(READY-pi)
   (cd $BASE && clean $BOUND 120 dsh --profile headless --permission-mode read-only --json $ASK < /dev/null 2>&1 | redact > $R/dsh.jsonl) || print "dsh rc=$?"
-  clean $CONDA -I $SD/ready551.py dsh $R/dsh.jsonl $PI_MODEL || FAILS+=(READY-dsh)
-  print -r -- "raw host outputs: $R/{claude.jsonl,codex.txt,pi.jsonl,dsh.jsonl}"
+  # DSH's --json stream names no model: read DSH's own session log by the stream's sessionId (read only, copied to
+  # $R/dsh-session), else its resolved profile (--dump-config) as a documented limit.
+  (cd $BASE && clean $BOUND 60 dsh --profile headless --dump-config < /dev/null > $R/dsh-config.yml 2>&1) || print "dsh --dump-config rc=$?"
+  clean $CONDA -I $SD/ready551.py dsh $R/dsh.jsonl $PI_MODEL - $DSH_SESSIONS $R/dsh-session $R/dsh-config.yml || FAILS+=(READY-dsh)
+  print -r -- "raw host outputs: $R/{claude.jsonl,codex.txt,pi.jsonl,dsh.jsonl,dsh-config.yml,dsh-session/}"
   build_project before || FAILS+=(build)
   say "Claude parent gate in $(project before)"
   gate before || { FAILS+=(gate); print "If gate stderr or the answer names folder trust or login: zsh $THIS U"; }

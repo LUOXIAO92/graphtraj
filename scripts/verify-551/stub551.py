@@ -31,7 +31,16 @@ def main() -> int:
                                                  'model': model, 'content': [{'type': 'text', 'text': 'READY-551 stub-pi'}]}})
         return 0
     if host == 'dsh':
-        emit({'type': 'turn', 'model': 'deepseek-flash', 'text': 'READY-551 stub-dsh (REHEARSAL STUB)'})
+        if '--dump-config' in argv:  # the shape of the real resolved profile entry (Engineer's dsh 0.2.2-alpha.2 dump)
+            print("- id: agent-default-model\n  name: '@deepseek-ai/dsh-agent-default-model'\n  config:\n"
+                  "    provider: deepseek-official\n    model: deepseek-flash\n- id: jobs")
+            return 0
+        # The real --json stream (Main's 00 run 2): no model key anywhere.
+        sid = 'session-00000000-0000-4000-8000-000000000551'
+        for value in ({'type': 'session', 'sessionId': sid, 'cwd': '/stub'}, {'type': 'status', 'status': 'running'},
+                      {'type': 'thinking', 'text': '...'}, {'type': 'text', 'text': 'READY-551 stub-dsh (REHEARSAL STUB)'},
+                      {'type': 'final', 'sessionId': sid, 'reason': 'completed', 'text': 'READY-551 stub-dsh (REHEARSAL STUB)'}):
+            emit(value)
         return 0
     text = sys.stdin.read() if not sys.stdin.isatty() else ''
     prompt = text or ' '.join(argv)

@@ -17,7 +17,8 @@ local h; for h in claude codex pi dsh; do
   print -r -- "#!/bin/sh
 exec $HOME/miniconda3/bin/python3.13 -I $SD/stub551.py $h \"\$@\"" > $R/bin/$h; chmod +x $R/bin/$h
 done
-export VERIFY551_BASE=$R/base VERIFY551_STUB=$R/bin VERIFY551_PI_SANDBOX_ENV=$R/no-pi-sandbox.env
+export VERIFY551_BASE=$R/base VERIFY551_STUB=$R/bin VERIFY551_PI_SANDBOX_ENV=$R/no-pi-sandbox.env \
+  VERIFY551_DSH_SESSIONS=$R/dsh-sessions    # empty: the stub DSH writes no session log (the NOT RECORDED path)
 cd $R
 local steps=("$@"); (( $#steps )) || steps=(00 "B claude")
 local s; for s in $steps; do

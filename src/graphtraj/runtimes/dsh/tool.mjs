@@ -38,6 +38,10 @@ async function attachMain(agent, python) {
  * its `graftling.notice_text` (title with the execution, Markdown content,
  * Facts), and the sender is the member's alias, so graftling-dsh's browser
  * module names the member rather than 'graphtraj'.
+ * Each relay goes to the next-turn inbox (545): a running turn's later steps
+ * claim only next-step input, so a notice that arrives mid-turn opens its own
+ * turn when that turn ends (one per notice), shown as a notice block rather
+ * than folded into the running turn as a context node.
  */
 export async function deliverNotices(agent, entry) {
   const pending = await entry(agent, { event: 'notices' });
@@ -47,7 +51,7 @@ export async function deliverNotices(agent, entry) {
     source: { kind: 'agent-message', form: 'relay', senderSessionId: sender, senderAgentId: sender,
       recipientAgentId: agent.session.id,
       communicationId: `graphtraj-notice:${agent.session.id}:${pending.position}:${index}` },
-  }), 'next-step', true));
+  }), 'next-turn', true));
   await entry(agent, { event: 'notices_ack', position: pending.position });
   return pending.notices;
 }

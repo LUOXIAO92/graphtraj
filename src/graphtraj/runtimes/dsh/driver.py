@@ -15,8 +15,9 @@ if TYPE_CHECKING:
 
 
 def bind_agents(turn: DshExecution, run: Run, driver: AdapterDriver) -> None:
-    """Reuse the core callback; add only GraphTraj's optional archive consumer."""
-    bind_run(turn, run)
+    """Reuse the core callback; add GraphTraj's Task-free ``tasks`` and its optional archive consumer."""
+    # The child's own tasks entry (general methods only), bound to its own Agent ID (551).
+    bind_run(turn, run, extra_tools=driver.child_tools(run))
     turn.agents_only = True
     # The child's agents tool must reach the channel bind_run serves, so its calls run in
     # this owner as the child. GraphTraj's own entry reads only GRAPHTRAJ_CLI_CONNECTION;

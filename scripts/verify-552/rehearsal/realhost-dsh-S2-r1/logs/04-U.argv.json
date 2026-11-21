@@ -1,0 +1,27 @@
+{
+ "argv": [
+  "/private/tmp/claude-501/reh552/bin/claude",
+  "-p",
+  "--output-format",
+  "stream-json",
+  "--verbose",
+  "--model",
+  "claude-fable-5-2",
+  "--setting-sources",
+  "project",
+  "--effort",
+  "high",
+  "--tools",
+  "WebSearch,WebFetch",
+  "--allowedTools",
+  "WebSearch,WebFetch",
+  "--strict-mcp-config",
+  "--mcp-config",
+  "{\"mcpServers\": {}}",
+  "--append-system-prompt",
+  "<instruction with HIDDEN, see design.md / design-552.md>",
+  "--resume",
+  "80604dda-c508-47e0-b83b-0d219d990a72"
+ ],
+ "cwd": "/private/tmp/claude-501/reh552/base/u/dsh-S2-r1"
+}

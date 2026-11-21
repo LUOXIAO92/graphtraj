@@ -1,0 +1,8 @@
+{
+  "run": "codex-S1-r1",
+  "agent": "codex",
+  "scenario": "S1",
+  "exchanges": 1,
+  "done": true,
+  "error": null
+}

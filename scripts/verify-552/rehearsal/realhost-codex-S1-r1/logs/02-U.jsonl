@@ -1,0 +1,3 @@
+{"type": "system", "subtype": "init", "session_id": "3c527db7-6620-4736-a07a-9066462f4de4", "model": "claude-fable-5-2", "tools": ["WebSearch", "WebFetch"], "apiKeySource": "stub", "cwd": "/private/tmp/claude-501/reh552/base/u/codex-S1-r1"}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Stub user reply (HIDDEN FACTS present: True; RESEARCH NOTES present: True)."}]}}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Stub user reply (HIDDEN FACTS present: True; RESEARCH NOTES present: True).", "session_id": "3c527db7-6620-4736-a07a-9066462f4de4", "usage": {}}

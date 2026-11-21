@@ -150,6 +150,29 @@ def parse_at(text: str | None) -> float | None:
         return None
 
 
+def result_fields(text: str, is_error: bool | None) -> tuple[str, str, str, str | None]:
+    """(error code, delivery, execution, agent) of one agents result: JSON first, `key: value` text as fallback."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        error = data.get('error') if isinstance(data.get('error'), dict) else {}
+        result = data.get('result') if isinstance(data.get('result'), dict) else data
+        delivery = result.get('delivery')
+        if isinstance(delivery, dict):
+            delivery = delivery.get('delivery')
+        code = str(error.get('code') or ('tool-error' if is_error else ''))
+        return code, str(delivery or ''), str(result.get('execution') or data.get('execution') or ''), \
+            result.get('agent') or data.get('agent')
+
+    def value(key: str) -> str:
+        return next((w.split(':', 1)[1].strip() for w in text.splitlines()
+                     if w.strip().startswith(key + ':') and w.split(':', 1)[1].strip()), '')
+    code = value('code') or ('tool-error' if is_error else '')
+    return code, value('delivery'), value('execution'), value('agent') or None
+
+
 def summary(project: str, out: str) -> int:
     path = Path(out) / 'main.jsonl'
     calls, agent = {}, None
@@ -171,14 +194,9 @@ def summary(project: str, out: str) -> int:
                     c.get('text', '') for c in content or [] if isinstance(c, dict))
                 feature = args.get('feature')
                 if args.get('action') == 'execute' and feature in ('create', 'send', 'wait'):
-                    code = next((w.split(':', 1)[1].strip() for w in text.splitlines() if w.strip().startswith('code:')), '')
-                    delivery = next((w.split(':', 1)[1].strip() for w in text.splitlines()
-                                     if w.strip().startswith('delivery:') and w.split(':', 1)[1].strip()), '')
-                    execution = next((w.split(':', 1)[1].strip() for w in text.splitlines()
-                                      if w.strip().startswith('execution:')), '')
-                    if feature == 'create' and agent is None:
-                        agent = next((w.split(':', 1)[1].strip() for w in text.splitlines()
-                                      if w.strip().startswith('agent:')), None)
+                    code, delivery, execution, found_agent = result_fields(text, block.get('is_error'))
+                    if feature == 'create' and agent is None and not code:
+                        agent = found_agent
                     lines.append((t0, t, feature, code, delivery, execution, text))
     print(f"Main init model: {init.get('model')} | auth source: {init.get('apiKeySource')} | "
           f"agents tool in init tools: {any('agents' in str(x) for x in init.get('tools') or [])}")
@@ -209,6 +227,17 @@ def summary(project: str, out: str) -> int:
                     elif receipt.get('delivery') == 'next-execution':
                         verdict = ('CLOSING WINDOW HIT, NOT REFUSED: delivered to the next execution '
                                    f"{receipt.get('execution')}")
+    if any(f == 'send' and c == 'runtime-input-closed' for _, _, f, c, *_ in lines) and not verdict.startswith('REPRO'):
+        verdict = 'REPRODUCED: a send result carried runtime-input-closed'
+    creates = [entry for entry in lines if entry[2] == 'create']
+    sends = [entry for entry in lines if entry[2] == 'send']
+    invalid = ('no create call' if not creates else
+               f'create error {creates[0][3]}' if creates[0][3] else
+               'create returned no agent' if agent is None else
+               'no send call' if not sends else None)
+    if invalid:
+        print(f'VERDICT 546: INVALID ({invalid})')
+        return 3
     print(f'VERDICT 546: {verdict}')
     return 0
 

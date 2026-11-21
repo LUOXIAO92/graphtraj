@@ -36,7 +36,9 @@ GL_AFTER=${VERIFY546_GL_AFTER:-$(git --git-dir=$GD rev-parse agent/546-send-afte
 GT_AFTER=$(git -C $WT rev-parse HEAD)
 RT=$H/.venv-runtime/lib/python3.13/site-packages
 CONDA=${VERIFY546_CONDA:-$HOME/miniconda3/bin/python3.13}
-MODEL=${VERIFY546_MODEL:-claude-sonnet-5-5}
+MODEL=${VERIFY546_MODEL:-claude-sonnet-5-5}   # the headless Main
+# The child role: doctor accepts only the exact claude-opus-5-5 without an explicit model connection (as verify-514).
+CHILD_MODEL=claude-opus-5-5
 KNOWN516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
 KNOWN_GL=(test_a_request_notice_returns_promptly_while_pi_holds_it)   # graftling flake, also fails on base 6794ce0 (546 validation)
 STEP=${1:-}
@@ -74,6 +76,31 @@ check_tmp() {
 case ${BASE:A}/ in ${H:A}/*) print "STOP: BASE $BASE is inside the Harness"; return 1 ;; esac
 mkdir -p $BASE $T
 
+roles() {  # $1 phase [write]: exactly one claude role (as verify-514 prep514.py), then `graphtraj doctor` -> roles: OK
+  local V=$T/venv-$1 P=$BASE/$1/project
+  if [[ ${2:-} == write ]]; then
+    (cd $P && clean $V/bin/python -I -c 'import sys, yaml, pathlib
+p = pathlib.Path(".graphtraj/roles.yml")
+want = {"roles": {"claude_member": {"runtime": "claude", "model": sys.argv[1], "worktree_access": "read",
+                                    "claude": {"permission_mode": "auto"}}},
+        "role_tree": {"claude_member": {}}}
+if yaml.safe_load(p.read_text()) != want:
+    p.write_text(yaml.safe_dump(want)); print("roles.yml written:", want)
+else:
+    print("roles.yml already holds:", want)' $CHILD_MODEL) || return 1
+  fi
+  local out claude_roles; out=$(cd $P && clean $V/bin/graphtraj doctor 2>&1)
+  # doctor also says 'roles: OK' for 'roles: {}', so the claude role is counted too (agents create needs exactly one).
+  claude_roles=$(cd $P && clean $V/bin/python -I -c 'import yaml
+r = (yaml.safe_load(open(".graphtraj/roles.yml")) or {}).get("roles") or {}
+print(",".join(n for n, v in r.items() if (v or {}).get("runtime") == "claude"))')
+  if [[ $out == *"roles: OK"* && -n $claude_roles && $claude_roles != *,* ]]; then
+    print -r -- "roles OK $1 (claude role: $claude_roles; $V/bin/graphtraj doctor in $P: roles: OK)"
+  elif [[ $out == *"roles: OK"* ]]; then
+    print -r -- "roles NOT OK $1: doctor OK but roles using runtime claude: '${claude_roles:-none}' (exactly one needed)"; return 1
+  else print -r -- "roles NOT OK $1 (doctor):"; print -r -- $out | tail -8; return 1; fi
+}
+
 build() {  # $1 phase, $2 GraphTraj commit, $3 graftling commit
   local PB=$BASE/$1 V=$T/venv-$1 P=$BASE/$1/project S=$T/src-gt-${2[1,12]} N=$T/wheels-gt-${2[1,12]} w
   if [[ -f $V/installed && $(<$V/installed) == "$2 $3" ]]; then print "$1: venv $V holds GraphTraj ${2[1,10]} + graftling ${3[1,10]}"
@@ -96,6 +123,7 @@ print(sys.argv[1], "venv:", m.version("graftling"), graftling.__file__, "| graph
       && git -c user.name=546 -c user.email=546@invalid commit -qm "Initial source") || return 1
   fi
   [[ -f $P/.graphtraj/config.yml ]] || (cd $P && print y | clean $V/bin/graphtraj setup | tail -1) || return 1
+  roles $1 write || { print "STOP: roles not OK for $1"; return 1; }
   (cd $P && clean $V/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $CLAUDE --write >/dev/null) \
     || { print "STOP: $1 claude host configuration failed"; return 1; }
   # Headless runs use --mcp-config <project>/.mcp.json --strict-mcp-config (as verify-519): no .mcp.json approval
@@ -145,6 +173,7 @@ step_P() {
   say "P: plugin gate + one agents status call (no agent) per project, B/A's flags (dialog: none)"
   mkdir -p $BASE/ready
   local ph rc=0
+  for ph in before after; do roles $ph || { print "STOP: roles not OK for $ph; rerun: zsh $THIS 00"; return 1; }; done
   for ph in before after; do
     (cd $BASE/$ph/project && clean $CONDA -I $SD/drv546.py probe $BASE/$ph/project $BASE/ready $CLAUDE $MODEL $ph) || rc=1
   done
@@ -152,26 +181,44 @@ step_P() {
   next "zsh $THIS B"
 }
 
+# Attempts live in BASE/<phase>/attempts/ (the older BASE/<phase>/runs/ of 011786de were all invalid and are kept as
+# they are): a valid attempt (create ok and at least one send) is renamed run-<n>, an invalid one invalid-<n>.
+# Only run-<n> counts toward B's limit of 5.
 run_phase() {  # $1 before|after
-  local done_runs=($BASE/$1/runs/run-*(N/)); local P=$BASE/$1/project n=$(( ${#done_runs} + 1 ))
+  local A=$BASE/$1/attempts; mkdir -p $A
+  local valid=($A/run-*(N/)) all=($A/*(N/)); local P=$BASE/$1/project n=$(( ${#all} + 1 ))
   [[ -f $T/venv-$1/installed ]] || { print "STOP: run 00 first"; return 1; }
-  local O=$BASE/$1/runs/run-$n; mkdir -p $O
-  say "$1 run $n: plugin gate first (dialog: none)"
+  local O=$A/try-$n; mkdir -p $O
+  say "$1 attempt $n (valid so far: ${#valid}; directory $A): plugin gate first (dialog: none)"
   clean $CONDA -I $SD/drv546.py gate $P $O $CLAUDE $MODEL $1 \
     || { rm -rf $O; print "STOP: plugin gate not passed for $1; nothing was run. Trust the folder: zsh $THIS Tu $1, then zsh $THIS P"; return 1; }
-  say "$1 run $n: Claude Main ($MODEL) in $P: create -> send at once -> wait (dialog: none; up to ~5 min)"
+  say "$1 attempt $n: Claude Main ($MODEL) in $P: create -> send at once -> wait (dialog: none; up to ~5 min)"
   clean $CONDA -I $SD/drv546.py main $P $O $CLAUDE $MODEL | tee $O/summary.txt
+  local rc=$?
+  if (( rc == 3 )); then
+    mv $O $A/invalid-$n
+    print -r -- "STOP: invalid attempt ($(sed -n 's/^VERDICT 546: INVALID (\(.*\))$/\1/p' $A/invalid-$n/summary.txt)); saved as $A/invalid-$n; not counted. Report to the Leader."
+    return 3
+  fi
+  mv $O $A/run-$(( ${#valid} + 1 ))
+  print -r -- "valid attempt saved as $A/run-$(( ${#valid} + 1 ))"
+  return $rc
 }
 
 step_B() {
-  run_phase before || return 1
-  if grep -q 'VERDICT 546: REPRODUCED' $BASE/before/runs/run-*/summary.txt(N); then next "zsh $THIS A"
-  else next "zsh $THIS B   (again; the window is short. After 5 runs without REPRODUCED, report to the Leader)"; fi
+  local done_b=($BASE/before/attempts/run-*(N/))
+  (( ${#done_b} < 5 )) || grep -q 'VERDICT 546: REPRODUCED' $BASE/before/attempts/run-*/summary.txt(N) \
+    || { print "STOP: 5 valid B attempts without REPRODUCED; report to the Leader (zsh $THIS C first)"; return 1; }
+  run_phase before || return $?
+  done_b=($BASE/before/attempts/run-*(N/))
+  if grep -q 'VERDICT 546: REPRODUCED' $BASE/before/attempts/run-*/summary.txt(N); then next "zsh $THIS A"
+  elif (( ${#done_b} >= 5 )); then next "zsh $THIS C   (5 valid attempts, none REPRODUCED: report to the Leader)"
+  else next "zsh $THIS B   (again: ${#done_b} of at most 5 valid attempts; the window is short)"; fi
 }
 
 step_A() {
-  run_phase after || return 1
-  local nb=($BASE/before/runs/run-*(N/)) na=($BASE/after/runs/run-*(N/))
+  run_phase after || return $?
+  local nb=($BASE/before/attempts/run-*(N/)) na=($BASE/after/attempts/run-*(N/))
   if (( ${#na} < ${#nb} )); then next "zsh $THIS A   (run ${#na} of ${#nb}; as many runs as B took)"
   else next "zsh $THIS G   (when Main's full-suite queue allows; one full suite at a time)"; fi
 }
@@ -260,12 +307,16 @@ step_C() {
   say "copy to $DEST (dialog: none)"
   mkdir -p $DEST
   local ph R=$(cat $T/G-latest 2>/dev/null)
-  for ph in before after; do [[ -d $BASE/$ph/runs ]] && { mkdir -p $DEST/$ph; cp -Rp $BASE/$ph/runs $DEST/$ph/; } done
+  for ph in before after; do
+    [[ -d $BASE/$ph/runs ]] && { mkdir -p $DEST/$ph; cp -Rp $BASE/$ph/runs $DEST/$ph/; }
+    [[ -d $BASE/$ph/attempts ]] && { mkdir -p $DEST/$ph; cp -Rp $BASE/$ph/attempts $DEST/$ph/; }
+  done
   [[ -d $BASE/ready ]] && cp -Rp $BASE/ready $DEST/
   [[ -n $R && -d $R ]] && { rm -rf $DEST/G; mkdir -p $DEST/G; cp -Rp $R/. $DEST/G/; }
-  print -r -- "copied: $(cd $DEST && print -l */runs/run-*/summary.txt(N) ready/probe-*.jsonl(N) G/*.txt(N) | tr '\n' ' ')"
-  grep -h 'VERDICT 546' $DEST/*/runs/run-*/summary.txt(N) | sort | uniq -c
-  next "Leader: read $DEST/{before,after}/runs/run-*/summary.txt, $DEST/ready/ and $DEST/G/"
+  print -r -- "copied: $(cd $DEST && print -l */runs/run-*/summary.txt(N) */attempts/*/summary.txt(N) ready/probe-*.jsonl(N) G/*.txt(N) | tr '\n' ' ')"
+  print "verdicts of attempts/ (runs/ of 011786de were invalid):"
+  local f; for f in $DEST/*/attempts/*/summary.txt(N); do print -r -- "  ${f:h:h:h:t}/${f:h:t}: $(grep -h 'VERDICT 546' $f)"; done
+  next "Leader: read $DEST/{before,after}/attempts/*/summary.txt, $DEST/ready/ and $DEST/G/"
 }
 
 case $STEP in

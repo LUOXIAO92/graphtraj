@@ -8,9 +8,10 @@
 #         `graphtraj migrate-task-definitions --preview`, then the migration, then the same command again
 #         (must report nothing left), hashes again and compares: PASS/FAIL per check. Dialog: none. ~3 min.
 #   G     Main. GraphTraj full suite of this Worktree's HEAD (6 shards, background, ~25 min) in a venv with the
-#         graftling wheel built from git archive of <Harness>/graftling v0.6.2 (production's graftling); new pytest
-#         temp root under TMPDIR=${TMPDIR:-/tmp}, outside the Harness. VERIFY563_TESTS=<files> runs plain pytest on
-#         those files instead (rehearsal of the entry).
+#         graftling wheel built from git archive of <Harness>/graftling at GCOMMIT (graftling dev paired with this
+#         GraphTraj base); new pytest temp root under TMPDIR=${TMPDIR:-/tmp}, outside the Harness.
+#         VERIFY563_PYTEST_ARGS='<args>' only appends pytest args after `-- -rA` to the same run_test_shards.py call
+#         (e.g. '-k <filter>' for a rehearsal; the whole suite is still collected).
 #   GR    Main. Read only: newest G; every FAILED/ERROR line classed known (528's accepted G, or 516's CURRENT
 #         definition read through 516's task.yml current_definition) or NEW. <10 s.
 # No step raises a native review dialog. Production is only read (demo copies it). Venvs and the demo copy are
@@ -24,7 +25,10 @@ T=${VERIFY563_T:-$H/tmp/563}
 OUT=${VERIFY563_OUT:-$H/.graphtraj/core/state/tasks/563-versioned-task-definition-files/realhost}
 PROD=${VERIFY563_PROD:-$H/.graphtraj/core/state}
 G=$H/graftling
-GCOMMIT=4a002129f8b97f32980afd59e5a1a64c428fe684   # graftling v0.6.2 = production's (528)
+# graftling dev paired with GraphTraj dev e2ff2960: graftling `Merge 545` (23:57:13), merged into GraphTraj by
+# 55939d57 (23:57:22); it has notice_text, which tests/test_current_host_events.py and test_parent_host_status.py
+# import (v0.6.2 does not, so collection fails there). Later graftling 53b96aa/9f962bc (561/546) are not in this base.
+GCOMMIT=1aa6f007857a5d029e6d49498d074cd1d96cbd5d
 SD=${0:A:h}
 THIS=${0:A}
 CONDA=$HOME/miniconda3/bin/python3.13
@@ -62,7 +66,7 @@ copy_deps() {  # production's click, yaml, websockets into venv $1 when the base
     esac || return 1
   done
 }
-g_venv() {  # sets V: venv with the graftling v0.6.2 wheel and this Worktree editable
+g_venv() {  # sets V: venv with the graftling wheel built at GCOMMIT and this Worktree editable
   local GS=${GCOMMIT[1,8]}
   local SRC=$T/graftling-$GS N=$T/wheels-gl-$GS
   V=$T/venv-g-gl-$GS
@@ -193,15 +197,12 @@ G)
   local V RUNTMP; g_common G || return 1
   local R=$OUT/G-$(git -C $WT rev-parse --short HEAD)-$(date +%Y%m%dT%H%M%S); mkdir -p $R
   { print -r -- "pytest temp root: $RUNTMP"; print -r -- "candidate: $(git -C $WT rev-parse HEAD) | graftling $GCOMMIT"; } > $R/run.txt
-  if [[ -n ${VERIFY563_TESTS:-} ]]; then
-    print "REHEARSAL: tests limited to $VERIFY563_TESTS (plain pytest, same venv, temp root and exit file)" | tee -a $R/run.txt
-    (cd $WT && TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rfE ${=VERIFY563_TESTS} > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
-  else
-    (cd $WT && TMPDIR=$RUNTMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
-  fi
+  local extra=(${=${VERIFY563_PYTEST_ARGS:-}})
+  (( $#extra )) && print -r -- "REHEARSAL: extra pytest args after -- -rA: $extra (same shard entry; whole suite collected)" | tee -a $R/run.txt
+  (cd $WT && TMPDIR=$RUNTMP nohup $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA $extra > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
   print -r -- $R > $OUT/G-latest
   print -r -- "started in the background at $(date +%T); output: $R/suite.txt (last line 'exit=N' when it ends)"
-  print "Success: the graphtraj line under $WT/src, 'graftling 0.6.2 ...', 'started in the background'."
+  print "Success: the graphtraj line under $WT/src, 'graftling <version> ...' built from $GCOMMIT, 'started in the background'."
   print -r -- "next (after G ends): zsh $THIS GR"
   ;;
 GR)

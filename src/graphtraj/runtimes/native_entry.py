@@ -12,7 +12,7 @@ import click
 import yaml
 
 from graphtraj.execution.main_finalize import (
-    bind_session, bind_checker, check_prompt, parse_check_result, session_binding,
+    bind_session, bind_checker, check_prompt, no_task_result, parse_check_result, session_binding,
 )
 from graphtraj.execution.runner_io import write_yaml_durably
 from graphtraj.execution.runner_status import process_caller_alias
@@ -26,6 +26,9 @@ def check_event(event: dict, cwd: Path, connection: dict) -> dict:
     if binding['connection'] != connection:
         raise ValueError('Native Session association is stale.')
     if event.get('event') == 'check_context':
+        # A project without a local Task is answered here; the plugin starts no checker.
+        if (empty := no_task_result(binding)) is not None:
+            return {'result': empty}
         return {'prompt': check_prompt(binding)}
     child = event.get('session')
     if not isinstance(child, str) or not child or child == binding['session']:

@@ -153,7 +153,13 @@ step_00() {
     (cd $BASE/$ph/project && clean $CONDA -I $SD/drv546.py gate $BASE/$ph/project $BASE/ready $CLAUDE $MODEL $ph) || rc=1
   done
   if (( rc )); then next "zsh $THIS Tu before   (USER, plain Terminal; then: zsh $THIS Tu after; then: zsh $THIS P)"
-  else next "zsh $THIS P   (both gates already pass; Tu not needed)"; fi
+  else
+    local done_b=($BASE/before/attempts/run-*(N/)) done_a=($(attempts_dir after)/run-*(N/))
+    print -r -- "AFTER attempts for graftling ${GL_AFTER[1,12]}: $(attempts_dir after) (${#done_a} valid so far); B: $BASE/before/attempts (${#done_b} valid)"
+    if (( ${#done_b} >= 5 )); then
+      next "zsh $THIS A   (both gates pass: same trusted project dirs, Tu not needed; B is complete; repeat A until ${#done_b} valid, then: zsh $THIS S after)"
+    else next "zsh $THIS P   (both gates already pass; Tu not needed)"; fi
+  fi
 }
 
 step_Tu() {  # $1 before|after
@@ -184,8 +190,12 @@ step_P() {
 # Attempts live in BASE/<phase>/attempts/ (the older BASE/<phase>/runs/ of 011786de were all invalid and are kept as
 # they are): a valid attempt (create ok and at least one send) is renamed run-<n>, an invalid one invalid-<n>.
 # Only run-<n> counts toward B's limit of 5.
+# AFTER attempts are keyed by the graftling candidate (attempts-<gl12>), so a new candidate never counts the attempts
+# of an earlier one (e.g. attempts/ of 7b349f0); BEFORE stays in attempts/ (its build does not change).
+attempts_dir() { [[ $1 == after ]] && print -r -- $BASE/after/attempts-${GL_AFTER[1,12]} || print -r -- $BASE/$1/attempts; }
+
 run_phase() {  # $1 before|after
-  local A=$BASE/$1/attempts; mkdir -p $A
+  local A=$(attempts_dir $1); mkdir -p $A
   local valid=($A/run-*(N/)) all=($A/*(N/)); local P=$BASE/$1/project n=$(( ${#all} + 1 ))
   [[ -f $T/venv-$1/installed ]] || { print "STOP: run 00 first"; return 1; }
   local O=$A/try-$n; mkdir -p $O
@@ -210,7 +220,7 @@ run_phase() {  # $1 before|after
 
 step_S() {  # $1 before|after: read only; re-summarize every saved valid attempt; writes only each summary.txt
   [[ ${1:-} == (before|after) ]] || { print "usage: zsh $THIS S <before|after>"; return 2; }
-  local A=$BASE/$1/attempts P=$BASE/$1/project d rc n=0 rep=() hit=0 bad=0
+  local A=$(attempts_dir $1) P=$BASE/$1/project d rc n=0 rep=() hit=0 bad=0
   say "S $1: re-summarize $A/run-* from main.jsonl + agent-record.json (copied, else live) (dialog: none)"
   for d in $A/run-*(N/on); do
     clean $CONDA -I $SD/drv546.py summary $P $d > $d/summary.txt 2>&1; rc=$?
@@ -245,7 +255,7 @@ step_B() {
 
 step_A() {
   run_phase after || return $?
-  local nb=($BASE/before/attempts/run-*(N/)) na=($BASE/after/attempts/run-*(N/))
+  local nb=($BASE/before/attempts/run-*(N/)) na=($(attempts_dir after)/run-*(N/))
   if (( ${#na} < ${#nb} )); then next "zsh $THIS A   (run ${#na} of ${#nb}; as many runs as B took)"
   else next "zsh $THIS S after"; fi
 }
@@ -336,14 +346,14 @@ step_C() {
   local ph R=$(cat $T/G-latest 2>/dev/null)
   for ph in before after; do
     [[ -d $BASE/$ph/runs ]] && { mkdir -p $DEST/$ph; cp -Rp $BASE/$ph/runs $DEST/$ph/; }
-    [[ -d $BASE/$ph/attempts ]] && { mkdir -p $DEST/$ph; cp -Rp $BASE/$ph/attempts $DEST/$ph/; }
+    local ad; for ad in $BASE/$ph/attempts*(N/); do mkdir -p $DEST/$ph; cp -Rp $ad $DEST/$ph/; done
   done
   [[ -d $BASE/ready ]] && cp -Rp $BASE/ready $DEST/
   [[ -n $R && -d $R ]] && { rm -rf $DEST/G; mkdir -p $DEST/G; cp -Rp $R/. $DEST/G/; }
-  print -r -- "copied: $(cd $DEST && print -l */runs/run-*/summary.txt(N) */attempts/*/summary.txt(N) ready/probe-*.jsonl(N) G/*.txt(N) | tr '\n' ' ')"
-  print "verdicts of attempts/ (runs/ of 011786de were invalid):"
-  local f; for f in $DEST/*/attempts/*/summary.txt(N); do print -r -- "  ${f:h:h:h:t}/${f:h:t}: $(grep -h 'VERDICT 546' $f)"; done
-  next "Leader: read $DEST/{before,after}/attempts/*/summary.txt, $DEST/ready/ and $DEST/G/"
+  print -r -- "copied: $(cd $DEST && print -l */runs/run-*/summary.txt(N) */attempts*/*/summary.txt(N) ready/probe-*.jsonl(N) G/*.txt(N) | tr '\n' ' ')"
+  print "verdicts of attempts dirs (runs/ of 011786de were invalid; after/attempts/ is graftling 7b349f0; current AFTER: after/attempts-${GL_AFTER[1,12]}):"
+  local f; for f in $DEST/*/attempts*/*/summary.txt(N); do print -r -- "  ${f:h:h:h:t}/${f:h:h:t}/${f:h:t}: $(grep -h 'VERDICT 546' $f)"; done
+  next "Leader: read $DEST/before/attempts/*, $DEST/after/attempts-${GL_AFTER[1,12]}/*, $DEST/ready/ and $DEST/G/"
 }
 
 case $STEP in

@@ -134,20 +134,33 @@ def main_run(project: str, out: str, claude: str, model: str) -> int:
     (Path(out) / 'prompt.txt').write_text(PROMPT)
     rc = run_timed([claude, *flags(model, project)], project, PROMPT, path)
     print(f'Main exit {rc}; stream {path}')
-    return summary(project, out)
+    return summary(project, out, save_record=True)
 
 
 def iso(t: float) -> str:
     return datetime.datetime.fromtimestamp(t).astimezone().isoformat(timespec='milliseconds')
 
 
-def parse_at(text: str | None) -> float | None:
-    if not text:
+def parse_at(value) -> float | None:
+    """Epoch seconds from an epoch number (agent records store floats) or an ISO string."""
+    if isinstance(value, bool) or value is None or value == '':
         return None
+    if isinstance(value, (int, float)):
+        return float(value)
     try:
-        return datetime.datetime.fromisoformat(text.replace('Z', '+00:00')).timestamp()
+        return float(value)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return datetime.datetime.fromisoformat(str(value).replace('Z', '+00:00')).timestamp()
     except ValueError:
         return None
+
+
+def shown(value) -> str:
+    """A record timestamp as local ISO, whatever form it was stored in."""
+    t = parse_at(value)
+    return iso(t) if t is not None else str(value)
 
 
 def result_fields(text: str, is_error: bool | None) -> tuple[str, str, str, str | None]:
@@ -173,7 +186,7 @@ def result_fields(text: str, is_error: bool | None) -> tuple[str, str, str, str 
     return code, value('delivery'), value('execution'), value('agent') or None
 
 
-def summary(project: str, out: str) -> int:
+def summary(project: str, out: str, save_record: bool = False) -> int:
     path = Path(out) / 'main.jsonl'
     calls, agent = {}, None
     init = {}
@@ -206,20 +219,25 @@ def summary(project: str, out: str) -> int:
               f'delivery: {delivery or "-"} | execution: {execution or "-"}')
         if code or 'next-execution' in text:
             print('    result text: ' + ' / '.join(x.strip() for x in text.splitlines() if x.strip())[:900])
-    found = list(Path(project, '.graphtraj').glob(f'**/control/agents/{agent}.json')) if agent else []
+    # The copy saved with the attempt first (S re-reads old attempts), else the live record.
+    copied = Path(out) / 'agent-record.json'
+    found = ([copied] if copied.is_file() else
+             list(Path(project, '.graphtraj').glob(f'**/control/agents/{agent}.json')) if agent else [])
     verdict = 'NOT-HIT (no send landed in the closing window; run again)'
     if found:
         record = json.loads(found[0].read_text())
-        (Path(out) / 'agent-record.json').write_text(json.dumps(record, indent=1))
+        if save_record and found[0] != copied:
+            copied.write_text(json.dumps(record, indent=1))
         print(f'agent record: {found[0]}')
         for ex in record['executions']:
             ended = parse_at(ex.get('ended_at'))
-            print(f"  execution {ex['id']} op={ex['operation']} started {ex.get('started_at')} ended "
-                  f"{ex.get('ended_at')} outcome={ex.get('outcome')} last_message={str(ex.get('last_message'))[:40]!r}")
+            print(f"  execution {ex['id']} op={ex['operation']} started {shown(ex.get('started_at'))} ended "
+                  f"{shown(ex.get('ended_at'))} outcome={ex.get('outcome')} last_message={str(ex.get('last_message'))[:40]!r}")
             for receipt in ex.get('inputs') or []:
                 at = parse_at(receipt.get('at'))
-                gap = f'{ended - at:.3f}s before this execution\'s recorded end' if at and ended else 'end unknown'
-                print(f"    input {receipt.get('at')} delivery={receipt.get('delivery')} "
+                gap = (f'{ended - at:.3f}s before this execution\'s recorded end'
+                       if at is not None and ended is not None else 'end unknown')
+                print(f"    input {shown(receipt.get('at'))} delivery={receipt.get('delivery')} "
                       f"error={(receipt.get('error') or {}).get('code')} next={receipt.get('execution', '-')} | {gap}")
                 if (receipt.get('error') or {}).get('code') == 'runtime-input-closed':
                     if receipt.get('delivery') == 'rejected':
@@ -227,6 +245,8 @@ def summary(project: str, out: str) -> int:
                     elif receipt.get('delivery') == 'next-execution':
                         verdict = ('CLOSING WINDOW HIT, NOT REFUSED: delivered to the next execution '
                                    f"{receipt.get('execution')}")
+        if verdict.startswith('NOT-HIT') and any(ex.get('operation') == 'send' for ex in record['executions']):
+            verdict = 'NOT-HIT (send after the end: it started a new send execution)'
     if any(f == 'send' and c == 'runtime-input-closed' for _, _, f, c, *_ in lines) and not verdict.startswith('REPRO'):
         verdict = 'REPRODUCED: a send result carried runtime-input-closed'
     creates = [entry for entry in lines if entry[2] == 'create']

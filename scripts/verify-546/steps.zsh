@@ -200,19 +200,46 @@ run_phase() {  # $1 before|after
     print -r -- "STOP: invalid attempt ($(sed -n 's/^VERDICT 546: INVALID (\(.*\))$/\1/p' $A/invalid-$n/summary.txt)); saved as $A/invalid-$n; not counted. Report to the Leader."
     return 3
   fi
+  if (( rc != 0 )) || ! grep -q '^VERDICT 546: ' $O/summary.txt; then
+    print -r -- "STOP: summary failed (rc=$rc); the attempt stays as $O (not labelled). Report to the Leader."
+    (( rc )) && return $rc; return 1
+  fi
   mv $O $A/run-$(( ${#valid} + 1 ))
   print -r -- "valid attempt saved as $A/run-$(( ${#valid} + 1 ))"
-  return $rc
+}
+
+step_S() {  # $1 before|after: read only; re-summarize every saved valid attempt; writes only each summary.txt
+  [[ ${1:-} == (before|after) ]] || { print "usage: zsh $THIS S <before|after>"; return 2; }
+  local A=$BASE/$1/attempts P=$BASE/$1/project d rc n=0 rep=() hit=0 bad=0
+  say "S $1: re-summarize $A/run-* from main.jsonl + agent-record.json (copied, else live) (dialog: none)"
+  for d in $A/run-*(N/on); do
+    clean $CONDA -I $SD/drv546.py summary $P $d > $d/summary.txt 2>&1; rc=$?
+    if (( rc != 0 )) || ! grep -q '^VERDICT 546: ' $d/summary.txt; then
+      bad=$(( bad + 1 )); print -r -- "  ${d:t}: summary failed (rc=$rc): $(tail -1 $d/summary.txt)"; continue
+    fi
+    n=$(( n + 1 )); print -r -- "  ${d:t}: $(grep -h '^VERDICT 546: ' $d/summary.txt)"
+    grep -h 'before this execution' $d/summary.txt | grep 'runtime-input-closed' | sed 's/^ */      /'
+    if grep -q '^VERDICT 546: REPRODUCED' $d/summary.txt; then rep+=(${d:t})
+    elif grep -q '^VERDICT 546: NOT-HIT' $d/summary.txt; then hit=$(( hit + 1 )); fi
+  done
+  local label=B; [[ $1 == after ]] && label=A
+  print -r -- "$label summary: valid $n, REPRODUCED ${#rep} (${(j:, :)rep:-none}), NOT-HIT $hit, other $(( n - ${#rep} - hit )), summary failures $bad"
+  (( bad == 0 )) || { print "STOP: a summary failed (above); report to the Leader"; return 1; }
+  if [[ $1 == before ]]; then
+    if (( ${#rep} )); then next "zsh $THIS A"
+    elif (( n >= 5 )); then next "zsh $THIS C   (5 valid attempts, none REPRODUCED: report to the Leader)"
+    else next "zsh $THIS B   ($n of at most 5 valid attempts)"; fi
+  else next "zsh $THIS G   (when Main's full-suite queue allows; one full suite at a time)"; fi
 }
 
 step_B() {
   local done_b=($BASE/before/attempts/run-*(N/))
   (( ${#done_b} < 5 )) || grep -q 'VERDICT 546: REPRODUCED' $BASE/before/attempts/run-*/summary.txt(N) \
-    || { print "STOP: 5 valid B attempts without REPRODUCED; report to the Leader (zsh $THIS C first)"; return 1; }
+    || { print "STOP: 5 valid B attempts saved; B is complete. Re-summarize them: zsh $THIS S before"; return 1; }
   run_phase before || return $?
   done_b=($BASE/before/attempts/run-*(N/))
-  if grep -q 'VERDICT 546: REPRODUCED' $BASE/before/attempts/run-*/summary.txt(N); then next "zsh $THIS A"
-  elif (( ${#done_b} >= 5 )); then next "zsh $THIS C   (5 valid attempts, none REPRODUCED: report to the Leader)"
+  if grep -q 'VERDICT 546: REPRODUCED' $BASE/before/attempts/run-*/summary.txt(N); then next "zsh $THIS S before   (then A)"
+  elif (( ${#done_b} >= 5 )); then next "zsh $THIS S before   (5 valid attempts)"
   else next "zsh $THIS B   (again: ${#done_b} of at most 5 valid attempts; the window is short)"; fi
 }
 
@@ -220,7 +247,7 @@ step_A() {
   run_phase after || return $?
   local nb=($BASE/before/attempts/run-*(N/)) na=($BASE/after/attempts/run-*(N/))
   if (( ${#na} < ${#nb} )); then next "zsh $THIS A   (run ${#na} of ${#nb}; as many runs as B took)"
-  else next "zsh $THIS G   (when Main's full-suite queue allows; one full suite at a time)"; fi
+  else next "zsh $THIS S after"; fi
 }
 
 step_G() {
@@ -323,10 +350,11 @@ case $STEP in
   00) step_00 ;;
   Tu) step_Tu ${2:-} ;;
   P) step_P ;;
+  S) step_S ${2:-} ;;
   B) step_B ;;
   A) step_A ;;
   G) step_G ;;
   GR) step_GR ;;
   C) step_C ;;
-  *) print "usage: zsh $THIS <00|Tu before|Tu after|P|B|A|G|GR|C>"; return 2 ;;
+  *) print "usage: zsh $THIS <00|Tu before|Tu after|P|B|S before|A|S after|G|GR|C>"; return 2 ;;
 esac

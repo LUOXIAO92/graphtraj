@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import app_server_peer, run_process, runner_command
+from conftest import app_server_peer, current_definition, run_process, runner_command
 from test_project_setup import install_user_skills, run_setup, setup_environment
 from test_task_graph import _change_status, _register, _revised, _task
 
@@ -155,10 +155,11 @@ def test_installed_delivery_corrects_a_split_and_delivers_the_current_graph(
         "caused_by_event_ids": [before[-1]["event_id"]],
         "evidence_refs": [str((first_round / "validation.md").relative_to(root)), str((first_round / "engineer.md").relative_to(root))],
         "tasks": [
-            _revised(first, body="Deliver render.py and settings.py together; render() returns hello."),
-            _revised(second, disposition="superseded", replaced_by=["1"],
+            _revised(first, current_definition(state, "1"),
+                     body="Deliver render.py and settings.py together; render() returns hello."),
+            _revised(second, current_definition(state, "2"), disposition="superseded", replaced_by=["1"],
                      retirement_reason="Settings must be delivered together with the renderer."),
-            _revised(dependent, dependencies=["1"]),
+            _revised(dependent, current_definition(state, "3"), dependencies=["1"]),
         ],
     }))
     revised = product("task", "revise", "--revision-file", str(revision))

@@ -1,0 +1,79 @@
+
+=============== $ zsh steps.zsh 00 ===============
+
+### [00] preflight (dialog: none). Each host prompt at most 120 s.
+script: zsh 5.9 running /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh | git version 2.50.1 (Apple Git-155)
+claude claude STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
+in-use installation (BEFORE): graphtraj 0.1.0 | graftling 0.6.2 at /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime
+Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods at f754d3a9 | BASE /private/tmp/claude-501/reh551b-214414/base
+DEEPSEEK_API_KEY: unset
+NOTE: DEEPSEEK_API_KEY unset; pi and dsh cannot answer
+Pi sandbox env /private/tmp/claude-501/reh551b-214414/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+
+### one-line prompts (model and login)
+READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
+READY-551 stub-codex (REHEARSAL STUB, no model)
+READY-551 stub-pi (REHEARSAL STUB, no model)
+READY-551 stub-dsh (REHEARSAL STUB, no model)
+
+### isolated project /private/tmp/claude-501/reh551b-214414/base/project-before with graphtraj 0.1.0 graftling 0.6.2 from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/graphtraj/__init__.py
+GraphTraj project setup complete.
+claude host configuration written: /private/tmp/claude-501/reh551b-214414/base/project-before/.mcp.json (servers: graphtraj)
+Claude isolation settings: written
+
+### child roles (inline, no connection catalog), resolved by the Task-free driver without a model
+roles file written: /private/tmp/claude-501/reh551b-214414/base/project-before/.graphtraj/roles.yml
+CHECK 551 role claude: FAIL (AgentsError: Claude Code 2.1.299 or later is required.)
+CHECK 551 role codex: FAIL (AgentsError: Codex must support filesystem sandboxing.)
+CHECK 551 role pi: FAIL (AgentsError: The configured api_key_env is missing or empty.)
+CHECK 551 role dsh: FAIL (AgentsError: The configured api_key_env is missing or empty.)
+NOTE: a role did not resolve (above); B for that Runtime will show the same refusal
+
+### probe Tasks: tasks discover + describe concept-clarification through /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/bin/graphtraj-mcp (no host, no model)
+tasks discover: 36 features; concept-clarification listed: True
+tasks describe concept-clarification: manual_ref /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/share/graphtraj/manuals/concept-clarification/guide.md
+manual first heading: '# Concept Clarification' (saved to /private/tmp/claude-501/reh551b-214414/base/heading-before.txt)
+CHECK 551 tasks probe: PASS
+
+### Claude parent gate in /private/tmp/claude-501/reh551b-214414/base/project-before
+parent model: claude-sonnet-5-5 | login source (init apiKeySource): none (stub) | answer: READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
+parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+CHECK 551 Claude parent gate: PASS
+READY when: four READY-551 lines (claude claude-sonnet-5-5, codex gpt-6-luna, pi and dsh deepseek-flash), 'CHECK 551 role <rt>: PASS' x4, 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh B all
+(exit 0)
+
+=============== $ zsh steps.zsh B claude ===============
+DEEPSEEK_API_KEY: unset
+NOTE: DEEPSEEK_API_KEY unset; the pi and dsh children cannot reach their model
+Pi sandbox env /private/tmp/claude-501/reh551b-214414/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+
+### [B claude] Claude Main (claude-sonnet-5-5, claude -p in /private/tmp/claude-501/reh551b-214414/base/project-before) creates one Task-free claude child and waits (dialog: none). At most 25 min.
+project records copied: 1 files under /private/tmp/claude-501/reh551b-214414/base/runs/B-claude-20261121T214419-21433/records
+[claude] parent create result: [{"type": "text", "text": "{\"agent\": \"agent-stub-claude\", \"state\": \"running\"}"}]
+[claude] child final message (via the parent's wait/result):
+    TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+    MCP-551: graphtraj: agents
+    TASKS-551: absent
+    DESCRIBE-551: skipped
+    READ-551: skipped
+[claude] self-report TOOLS-551: TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)
+[claude] self-report MCP-551: MCP-551: graphtraj: agents
+[claude] self-report TASKS-551: TASKS-551: absent
+[claude] self-report DESCRIBE-551: DESCRIBE-551: skipped
+[claude] self-report READ-551: READ-551: skipped
+[claude] self-report DENY-551: (none)
+[claude] self-report BEYOND-551: (none)
+[claude] RECORD init (trace.jsonl, model stub-child): tools=['Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep', 'mcp__graphtraj__agents'] mcp_servers=[('graphtraj', 'connected')]
+[claude] RECORD tool calls by name: {'Read': 1}
+[claude] RECORD tasks calls: none
+[claude] RECORD manual guide.md reads: ['Read {"file_path": "/stub/share/graphtraj/manuals/concept-clarification/guide.md"}']
+[claude] RECORD a tool result holds the manual heading '# Concept Clarification': NO
+evidence: /private/tmp/claude-501/reh551b-214414/base/runs/B-claude-20261121T214419-21433 (parent.jsonl, parent.err, records/, summary.txt)
+Read per Runtime: 'RECORD init' / 'RECORD launch flags' (what the child really got, from its own records),
+'self-report TOOLS-551/MCP-551' (the model's own list), 'RECORD tasks calls' and 'RECORD manual guide.md reads',
+'a tool result holds the manual heading: YES/NO'. A missing tasks tool shows TASKS-551: absent and no tasks call.
+
+==> next (paste as is): Leader: read /private/tmp/claude-501/reh551b-214414/base/runs/B-*/summary.txt
+(exit 0)

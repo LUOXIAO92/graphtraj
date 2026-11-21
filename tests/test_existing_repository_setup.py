@@ -512,3 +512,93 @@ def test_runner_status_discovers_the_graphtraj_configuration(
     assert status.returncode == 1
     assert "code: alias-not-found" in status.stdout
     assert "Harness Runner Config" not in status.stderr
+
+
+def _private_index_changes(repository: Path, tmp_path: Path) -> set[str]:
+    """Stage everything into a throwaway index, as DSH's change snapshot does."""
+
+    environment = {
+        **__import__("os").environ,
+        "GIT_INDEX_FILE": str(tmp_path / "private-index"),
+    }
+    for arguments in (["read-tree", "HEAD"], ["add", "--all"]):
+        subprocess.run(
+            ["git", *arguments], cwd=repository, env=environment, check=True
+        )
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "HEAD"],
+        cwd=repository,
+        env=environment,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout
+    return set(staged.split())
+
+
+def test_same_root_setup_hides_graphtraj_runtime_files_but_not_user_files(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    tmp_path: Path,
+) -> None:
+    repository = temporary_git_repository
+    assert run_setup(installed_commands, repository).returncode == 0
+    inbox = repository / ".graphtraj" / "runner" / "main-sessions" / "inbox"
+    inbox.mkdir(parents=True)
+    (inbox / "key.jsonl").write_text("{}\n", encoding="utf-8")
+    (inbox / "key.lock").write_text("", encoding="utf-8")
+    (repository / ".graphtraj" / "runner" / "main-sessions" / "continuity.jsonl").write_text("{}\n", encoding="utf-8")
+    core = repository / ".graphtraj" / "core" / "runner"
+    core.mkdir(parents=True)
+    (core / "record.jsonl").write_text("{}\n", encoding="utf-8")
+    (repository / "notes-539.txt").write_text("user note\n", encoding="utf-8")
+    (repository / "session.jsonl").write_text("user data\n", encoding="utf-8")
+
+    status = git_output(repository, "status", "--porcelain", "--untracked-files=all")
+    changes = _private_index_changes(repository, tmp_path)
+
+    for listing in (set(line[3:] for line in status.splitlines()), changes):
+        assert "notes-539.txt" in listing
+        assert "session.jsonl" in listing
+        assert ".graphtraj/config.yml" in listing
+        assert ".graphtraj/roles.yml" in listing
+        assert not {
+            path for path in listing
+            if path.startswith(".graphtraj/") and path not in {".graphtraj/config.yml", ".graphtraj/roles.yml"}
+        }
+
+
+def test_setup_registers_the_graphtraj_ignore_for_an_existing_same_root_project(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+) -> None:
+    from graphtraj.workspace.project_initialization import plan_project_setup
+
+    repository = temporary_git_repository
+    assert run_setup(installed_commands, repository).returncode == 0
+    ignore = repository / ".graphtraj" / ".gitignore"
+    ignore.unlink()  # a project set up before the rule existed
+
+    def disposition() -> str:
+        actions = plan_project_setup(repository).preflight().actions
+        (match,) = [
+            action.disposition for action in actions
+            if action.description == "Ignore GraphTraj runtime files in {0}".format(ignore)
+        ]
+        return match
+
+    assert disposition() == "REGISTER"
+    assert run_setup(installed_commands, repository).returncode == 0
+    assert ignore.is_file()
+    assert disposition() == "ALREADY CONFIGURED"
+
+
+def test_child_source_setup_leaves_the_graphtraj_directory_without_an_ignore(
+    installed_commands: InstalledCommands,
+    tmp_path: Path,
+) -> None:
+    harness = tmp_path / "harness"
+    harness.mkdir()
+    create_git_repository(harness / "source")
+    assert run_setup(installed_commands, harness).returncode == 0
+    assert not (harness / ".graphtraj" / ".gitignore").exists()

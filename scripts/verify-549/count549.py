@@ -132,7 +132,7 @@ def records(label: str, paths: list[str]) -> int:
     print(f'== {label}: {len(results)} tool results in {len(paths)} path(s)')
     seen = set()
     for f, n, cid, kind, text in results:
-        key = (cid, kind, text)
+        key = (f, cid, kind, text)  # per file: two runs' rollouts may hold equal results
         if key in seen:
             continue
         seen.add(key)

@@ -1,0 +1,76 @@
+== [X] Codex CLI mode (gpt-6-luna), two non-interactive runs in /tmp/claude-501/rh549/base/500e1f17-6794ce02/project with GraphTraj's MCP server and the user's normal Codex login: (1) human output, stdout and stderr to files; (2) --json events to a file. Dialog: none (approval never, tools approved). At most 2 x 10 min.
+evidence: /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/X-20261121T165542-95519
+== X1 codex exec --skip-git-repo-check (human output)
+[1msession id:[0m 11111111-1111-4111-8111-111111111111
+mcp: graphtraj/agents started
+mcp: graphtraj/agents (completed)
+== X2 codex exec --json
+X1 (human) session id: 11111111-1111-4111-8111-111111111111; X2 (--json) thread id: 22222222-2222-4222-8222-222222222222
+X1 rollout copied (read only): /tmp/claude-501/rhx/sessions/2026/11/21/rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl
+ready to paste (X1): codex resume 11111111-1111-4111-8111-111111111111
+X2 rollout copied (read only): /tmp/claude-501/rhx/sessions/2026/11/21/rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl
+ready to paste (X2): codex resume 22222222-2222-4222-8222-222222222222
+== codex-human-printed /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/X-20261121T165542-95519/human.stdout.txt: mcp lines 0; DONE-549 lines 1; no field marker printed
+== codex-human-printed /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/X-20261121T165542-95519/human.stderr.txt: mcp lines 2; DONE-549 lines 0; no field marker printed
+== codex-json-events: 13 tool results in 1 path(s)
+  exec.jsonl:2 call item_0: agents {"action": "discover"}
+    exec item result.content: agents.wait.description=1 (once); agents.create.description=1 (once)
+  exec.jsonl:2 call item_0: agents {"action": "discover"}
+    structured_content: agents.wait.description=1 (once); agents.create.description=1 (once)
+  exec.jsonl:3 call item_1: agents {"action": "describe", "feature": "wait"}
+    exec item result.content: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  exec.jsonl:3 call item_1: agents {"action": "describe", "feature": "wait"}
+    structured_content: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  exec.jsonl:4 call item_2: agents {"action": "describe", "feature": "wait", "schema": true}
+    exec item result.content: agents.wait.input_schema=1 (once)
+  exec.jsonl:4 call item_2: agents {"action": "describe", "feature": "wait", "schema": true}
+    structured_content: agents.wait.input_schema=1 (once)
+  exec.jsonl:5 call item_3: tasks {"action": "discover"}
+    exec item result.content: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  exec.jsonl:5 call item_3: tasks {"action": "discover"}
+    structured_content: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  exec.jsonl:6 call item_4: tasks {"action": "describe", "feature": "task-delivery"}
+    exec item result.content: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  exec.jsonl:6 call item_4: tasks {"action": "describe", "feature": "task-delivery"}
+    structured_content: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  exec.jsonl:7 call item_5: tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    exec item result.content: no marker (text starts 'input_schema:\n  type: object\n  properties: {}\n  additionalProperties: false\n')
+  exec.jsonl:7 call item_5: tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    structured_content: no marker (text starts '{"input_schema": {"type": "object", "properties": {}, "additionalProperties": fa')
+  exec.jsonl:8 call final: (the model reply, not a tool result)
+    final message (model reply): no marker (text starts 'DONE-549 ok ok ok ok ok ok')
+== codex-rollouts-model-input: 12 tool results in 1 path(s)
+  rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl:2 call c0: mcp__graphtraj__agents {"action": "discover"}
+    model: agents.wait.description=1 (once); agents.create.description=1 (once)
+  rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl:4 call c1: mcp__graphtraj__agents {"action": "describe", "feature": "wait"}
+    model: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl:6 call c2: mcp__graphtraj__agents {"action": "describe", "feature": "wait", "schema": true}
+    model: agents.wait.input_schema=1 (once)
+  rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl:8 call c3: mcp__graphtraj__tasks {"action": "discover"}
+    model: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl:10 call c4: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery"}
+    model: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl:12 call c5: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    model: no marker (text starts '{"input_schema": {"type": "object", "properties": {}, "additionalProperties": fa')
+  rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl:2 call c0: mcp__graphtraj__agents {"action": "discover"}
+    model: agents.wait.description=1 (once); agents.create.description=1 (once)
+  rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl:4 call c1: mcp__graphtraj__agents {"action": "describe", "feature": "wait"}
+    model: agents.wait.description=1 (once); agents.wait.input_schema=1 (once)
+  rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl:6 call c2: mcp__graphtraj__agents {"action": "describe", "feature": "wait", "schema": true}
+    model: agents.wait.input_schema=1 (once)
+  rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl:8 call c3: mcp__graphtraj__tasks {"action": "discover"}
+    model: tasks.task-delivery.description=1 (once); tasks.parent_status.description=1 (once)
+  rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl:10 call c4: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery"}
+    model: tasks.task-delivery.description=1 (once); tasks.task-delivery.manual_ref=1 (once)
+  rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl:12 call c5: mcp__graphtraj__tasks {"action": "describe", "feature": "task-delivery", "schema": true}
+    model: no marker (text starts '{"input_schema": {"type": "object", "properties": {}, "additionalProperties": fa')
+Read: 'codex-human-printed' = what the human CLI prints (0.171.0 prints only 'mcp: server/tool started/(completed)', never the result; the reply goes to stderr and, when stdout is not a terminal, to stdout too). 'exec item result.content' and 'structured_content' = the two copies the --json event carries. 'model' (rollout function_call_output) = what gpt-6-luna received. 'final message' = the model's own reply.
+files: /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/X-20261121T165542-95519/human.stdout.txt /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/X-20261121T165542-95519/human.stderr.txt /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/X-20261121T165542-95519/exec.jsonl /tmp/claude-501/rh549/base/500e1f17-6794ce02/runs/X-20261121T165542-95519/rollouts
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/549-mcp-describe-printed-twice/scripts/verify-549/steps.zsh P   (optional USER card check: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/549-mcp-describe-printed-twice/scripts/verify-549/steps.zsh XU)
+== rehearsal check: rollouts in sessions dir: rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl rollout-2026-11-21T17-00-03-99999999-9999-4999-8999-999999999999-decoy.jsonl ; copied (2): rollout-2026-11-21T17-00-01-11111111-1111-4111-8111-111111111111.jsonl rollout-2026-11-21T17-00-02-22222222-2222-4222-8222-222222222222.jsonl
+REHEARSAL X PASS: only the two own rollouts copied, decoy 99999999-9999-4999-8999-999999999999 not copied, both resume lines printed
+X1 (human) session id: MISSING; X2 (--json) thread id: MISSING
+STOP (X1): no session/thread id in its output, so no rollout is read for it (no fallback)
+STOP (X2): no session/thread id in its output, so no rollout is read for it (no fallback)
+REHEARSAL X-NOID PASS: both runs STOP, nothing copied (decoy present: 1)

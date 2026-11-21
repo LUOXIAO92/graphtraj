@@ -1,0 +1,16 @@
+# rehearsal: records.zsh before from an empty directory (/tmp/claude-501/545/empty3, 0 entries), 2026-11-21 21:53:10
+# env: VERIFY545_RECORDS_OUT=/tmp/claude-501/545/records (the sandbox cannot write /private/tmp/dsh-ui-545; real logs read only)
+
+== [records before] DSH_HOME /private/tmp/dsh-ui-545/before/dsh-home (read only). Dialog: none.
+-- before G (busy prompt; /tmp/claude-501/545/records/before-G-session-record.txt)
+   session /sessions/--private-tmp-dsh-ui-545-before-project--/session-85c444eb-ed19-489a-95be-946fd96a03af/session.v4.jsonl.zstd: turns 1, user inputs 1
+     relay graphtraj-notice:session-85c444eb-ed19-489a-95be-946fd96a03af:1:0 from agent-cc2c2b7faf9a41399a8c2dc2ce70622b: turn 1 step 3 -> inside a running turn
+     relays 1, opened a turn 0, inside a running turn 1, duplicate ids []
+-- before S (busy prompt; /tmp/claude-501/545/records/before-S-session-record.txt)
+   session /sessions/--private-tmp-dsh-ui-545-before-work-standalone--/session-cbcfa359-178b-405a-84ef-bd4e72279ad0/session.v4.jsonl.zstd: turns 1, user inputs 1
+     relay agents-notice:cb6fc269c4284b9b8a5f80b323eb6a16:completed from agent-c03fdcb4613a444d989ba671c03a397a: turn 1 step 3 -> inside a running turn
+     relays 1, opened a turn 0, inside a running turn 1, duplicate ids []
+Expected: before = 'inside a running turn' per relay; after = each relay 'turn >= 2 step 1 -> opened its turn', 'inside a running turn 0', 'duplicate ids []' (GI: turn 2 step 1 as well).
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/545-dsh-in-turn-notice-invisible/scripts/verify-545/records.zsh after
+exit=0

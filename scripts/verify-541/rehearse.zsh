@@ -61,6 +61,27 @@ day.mkdir(parents=True, exist_ok=True)
 )) + '\n')
 FAKE
 expect "R on synthetic records: bound Main, no checker" 0 R
+rollout_shape() {  # rewrite the synthetic Main rollout: $1 = 0171 (Codex 0.171.0 user turn) | context (no user turn)
+  $F/base/venv-cand/bin/python -I - $F/vproject $F/codex-home/sessions/2026/11/21/rollout-rehearsal-main.jsonl $1 <<'SHAPE'
+import json, sys
+from pathlib import Path
+project, path, shape = Path(sys.argv[1]).resolve(), Path(sys.argv[2]), sys.argv[3]
+# Injected context: a response_item message with role user, present in both shapes; never a user turn.
+records = [{'type': 'session_meta', 'payload': {'id': 'rehearsal-main', 'cwd': str(project)}},
+           {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+            'content': [{'type': 'input_text', 'text': '<environment_context>...</environment_context>'}]}}]
+if shape == '0171':  # as in 544's retained 0.171.0 rollout: no event_msg user_message
+    records.append({'type': 'event_msg', 'payload': {'type': 'item_completed', 'thread_id': 'rehearsal-main',
+                    'turn_id': 't1', 'item': {'type': 'UserMessage', 'id': 'u1',
+                    'content': [{'type': 'text', 'text': 'Reply with exactly one line: HELLO-541. Use no tool.'}]}}})
+path.write_text(''.join(json.dumps(r) + '\n' for r in records))
+SHAPE
+}
+rollout_shape 0171
+expect "R on a Codex 0.171.0 rollout (item_completed UserMessage, no user_message): PASS" 0 R
+rollout_shape context
+expect "R on a rollout with only injected role-user context: no user turn, FAIL" 1 R
+rollout_shape 0171
 bound=($F/vproject/.graphtraj/runner/main-sessions/finalize_*(/)); mkdir -p ${bound[1]}/checks/rehearsal-checker
 expect "R on synthetic records with a bound checker: FAIL" 1 R
 VERIFY541_TESTS="tests/test_main_finalize.py::test_project_without_tasks_ends_without_a_checker tests/test_external_session_entry.py::test_dsh_check_without_tasks_needs_no_checker tests/test_main_finalize.py::test_main_end_decision" \

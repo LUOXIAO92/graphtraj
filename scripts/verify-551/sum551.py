@@ -1,6 +1,6 @@
 """Task 551: summarize one B/A probe run from its own files (standard library only).
 
-  python -I sum551.py <step dir> <runtime> <manual heading or ->
+  python -I sum551.py <step dir> <runtime> <manual heading or -> [<AU beyond-host tool> <child permission mode>]
 
 <step dir> holds parent.jsonl (the Claude Main parent's stream-json) and records/ (the project's agents records
 and every Runtime file copied since the step's marker). Prints, for the child of <runtime>:
@@ -125,8 +125,50 @@ def records_one(file: Path):
             continue
 
 
+def au_class(step: Path, tool: str, mode: str) -> None:
+    """AU: did the child's beyond-host ask reach the user? Only a parent `agents reply` counts as yes."""
+    pending: dict[str, str] = {}
+    requests, replies = [], []
+    parent = step / 'parent.jsonl'
+    for _file, value in (records_one(parent) if parent.is_file() else ()):
+        for node in walk(value):
+            name = call_name(node)
+            if name and 'agents' in name:
+                arguments = call_input(node) or {}
+                feature = arguments.get('feature') if isinstance(arguments, dict) else None
+                pending[str(node.get('id'))] = str(feature)
+                if feature == 'reply':
+                    replies.append(json.dumps(arguments.get('arguments', arguments))[:300])
+            if node.get('type') == 'tool_result' and pending.get(str(node.get('tool_use_id'))) == 'requests':
+                requests.append(json.dumps(node.get('content'))[:400])
+    calls, outcomes = set(), []
+    for _file, value in records(step / 'records'):
+        for node in walk(value):
+            name = call_name(node)
+            if name == tool or (name or '').endswith('.' + tool):
+                calls.add(str(node.get('id') or node.get('toolCallId') or node.get('call_id')))
+    for _file, value in records(step / 'records'):
+        for node in walk(value):
+            claude = node.get('type') == 'tool_result' and str(node.get('tool_use_id')) in calls
+            pi = node.get('role') == 'toolResult' and (node.get('toolName') == tool or str(node.get('toolCallId')) in calls)
+            if claude or pi:
+                outcomes.append(('refused' if node.get('is_error') or node.get('isError') else 'ran',
+                                 json.dumps(node.get('content'))[:200]))
+    outcome = '; '.join(f'{state}: {text}' for state, text in outcomes) or f'the child did not call {tool}'
+    if replies:
+        print(f"AU CLASS: REQUEST reached the user: {requests[0] if requests else '(requests result not in the transcript)'}"
+              f" -> answered {replies} -> outcome: {outcome}")
+    else:
+        state = ('was not called' if not outcomes else
+                 'was refused' if all(state == 'refused' for state, _ in outcomes) else 'ran')
+        print(f"AU CLASS: NO REQUEST: the child's {tool} {state} without a request (permission mode {mode}); "
+              f"outcome: {outcome}")
+
+
 def main() -> int:
     step, runtime, heading = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+    if len(sys.argv) == 6:
+        au_class(step, sys.argv[4], sys.argv[5])
     created, final, requests = parent_view(step / 'parent.jsonl', runtime)
     print(f"[{runtime}] parent create result: {created}")
     final_text = final.encode().decode('unicode_escape', errors='replace') if '\\n' in final else final
@@ -221,7 +263,7 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 6):
         print(__doc__)
         sys.exit(2)
     sys.exit(main())

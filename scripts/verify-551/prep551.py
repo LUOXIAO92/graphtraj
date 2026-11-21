@@ -24,6 +24,11 @@ ROLES = {
     'codex':  {'runtime': 'codex', 'model': 'gpt-6-luna'},
     'pi':     {'runtime': 'pi', 'model': 'deepseek/deepseek-flash', 'api_key_env': 'DEEPSEEK_API_KEY'},
     'dsh':    {'runtime': 'dsh', 'model': 'deepseek-flash', 'api_key_env': 'DEEPSEEK_API_KEY'},
+    # AU claude only (create `configuration: claude_ask`): Claude's default permission mode, so a tool use the host
+    # settings do not pre-allow (WebFetch) asks through can_use_tool instead of auto mode's classifier deciding it.
+    # The role named 'claude' stays the Runtime's default for every other create.
+    'claude_ask': {'runtime': 'claude', 'model': 'claude-opus-5-5', 'reasoning_effort': 'low',
+                   'claude': {'permission_mode': 'default'}},
 }
 if os.environ.get('V551_PI_PATH'):
     ROLES['pi']['pi'] = {'sandbox_path': os.environ['V551_PI_PATH'],
@@ -43,11 +48,11 @@ def roles(project: Path, workspace: Path) -> int:
                     encoding='utf-8')
     print(f'roles file written: {path}')
     failed = 0
-    for runtime in ROLES:
+    for runtime, role in ROLES.items():
         try:
-            # The same workspace B gives every child in its create arguments.
-            prepared = AdapterDriver(project, project).prepare(runtime, Caller('verify-551', None, 'probe-551', 'claude'),
-                                                               workspace=workspace)
+            # The same workspace B gives every child in its create arguments; each role by its own name.
+            prepared = AdapterDriver(project, project).prepare(role['runtime'], Caller('verify-551', None, 'probe-551', 'claude'),
+                                                               configuration=runtime, workspace=workspace)
         except Exception as error:  # noqa: BLE001 - printed, the step decides
             print(f'CHECK 551 role {runtime}: FAIL ({type(error).__name__}: {error})')
             failed += 1

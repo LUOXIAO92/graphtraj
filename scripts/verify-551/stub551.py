@@ -29,8 +29,8 @@ def trust() -> dict:
 
 def main() -> int:
     host, argv = sys.argv[1], sys.argv[2:]
-    if '--version' in argv:
-        print(f'{host} STUB-551')
+    if '--version' in argv:  # Claude's in the real format, so the driver's version check runs as on the host
+        print('2.1.326 (Claude Code) STUB-551' if host == 'claude' else f'{host} STUB-551')
         return 0
     if host == 'codex':  # the human header codex exec prints, then the reply
         print('--------\nworkdir: /stub\nmodel: ' + argv[argv.index('-m') + 1] + '\nprovider: openai\n--------')
@@ -100,17 +100,41 @@ def main() -> int:
                                                       'content': 'File is outside the allowed directories (STUB)'}]}},
         ):
             handle.write(json.dumps(value) + '\n')
+        # AU (the parent asks the user): the child's WebFetch, refused after a request (STUB551_AU_REQUEST, set by
+        # the rehearsal wrapper while its marker exists) or run without any request (auto-mode-like).
+        user_mode = 'allow or deny?' in prompt
+        asked = bool(os.environ.get('STUB551_AU_REQUEST'))
+        if user_mode:
+            handle.write(json.dumps({'type': 'assistant', 'message': {'content': [
+                {'type': 'tool_use', 'id': 't2', 'name': 'WebFetch', 'input': {'url': 'https://example.com'}}]}}) + '\n')
+            handle.write(json.dumps({'type': 'user', 'message': {'content': [
+                {'type': 'tool_result', 'tool_use_id': 't2', 'is_error': asked,
+                 'content': 'The parent denied this tool use (STUB)' if asked else 'Example Domain (STUB)'}]}}) + '\n')
     final = ('TOOLS-551: Bash, Read, Write, Edit, Glob, Grep, mcp__graphtraj__agents (STUB)\nMCP-551: graphtraj: agents\n'
              'TASKS-551: absent\nDESCRIBE-551: skipped\nREAD-551: skipped\nWEB-551: absent')
-    emit({'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
-          'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()})
-    for call_id, feature, result in (('c1', 'create', {'agent': agent, 'state': 'running'}),
-                                     ('c2', 'wait', {'agent': agent, 'state': 'ended', 'last_message': final})):
-        emit({'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'id': call_id, 'name': 'mcp__graphtraj__agents',
-                                                            'input': {'action': 'execute', 'feature': feature}}]}})
-        emit({'type': 'user', 'message': {'content': [{'type': 'tool_result', 'tool_use_id': call_id,
-                                                       'content': [{'type': 'text', 'text': json.dumps(result)}]}]}})
-    emit({'type': 'result', 'result': f'BEGIN-CHILD\n{final}\nEND-CHILD'})
+    lines = [{'type': 'system', 'subtype': 'init', 'model': model, 'tools': ['mcp__graphtraj__agents'],
+              'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}], **trust()}]
+    steps = [('c1', 'create', {}, {'agent': agent, 'state': 'running'})]
+    if user_mode and asked:
+        steps += [('c3', 'requests', {'agent': agent}, {'requests': [{'request_token': 'r1', 'tool': 'WebFetch',
+                                                                      'text': 'can_use_tool WebFetch (STUB)'}]}),
+                  ('c4', 'reply', {'agent': agent, 'request_token': 'r1', 'response': {'decision': 'deny'}},
+                   {'reply_status': 'submitted'})]
+    steps += [('c2', 'wait', {}, {'agent': agent, 'state': 'ended', 'last_message': final})]
+    for call_id, feature, arguments, result in steps:
+        lines.append({'type': 'assistant', 'message': {'content': [{'type': 'tool_use', 'id': call_id, 'name': 'mcp__graphtraj__agents',
+                                                                    'input': {'action': 'execute', 'feature': feature,
+                                                                              'arguments': arguments}}]}})
+        lines.append({'type': 'user', 'message': {'content': [{'type': 'tool_result', 'tool_use_id': call_id,
+                                                               'content': [{'type': 'text', 'text': json.dumps(result)}]}]}})
+    lines.append({'type': 'result', 'result': f'BEGIN-CHILD\n{final}\nEND-CHILD'})
+    for value in lines:
+        emit(value)
+    # The interactive parent's transcript where AC looks for it (rehearsal: STUB551_PROJECTS), by --session-id.
+    if os.environ.get('STUB551_PROJECTS') and '--session-id' in argv:
+        folder = Path(os.environ['STUB551_PROJECTS']) / 'stub-project'
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{argv[argv.index('--session-id') + 1]}.jsonl").write_text(''.join(json.dumps(v) + '\n' for v in lines))
     return 0
 
 

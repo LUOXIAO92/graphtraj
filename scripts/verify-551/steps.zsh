@@ -39,6 +39,7 @@ PARENT_MODEL=${VERIFY551_PARENT_MODEL:-claude-sonnet-5-5}
 CODEX_MODEL=gpt-6-luna; PI_PROVIDER=deepseek; PI_MODEL=deepseek-flash
 PI_SANDBOX_ENV=${VERIFY551_PI_SANDBOX_ENV:-$HOME/agents-pi-sandbox/pi-sandbox.env}   # verify-513: srt for Pi
 DSH_SESSIONS=${VERIFY551_DSH_SESSIONS:-$HOME/.dsh/sessions}   # DSH's own session logs (clean env: no DSH_HOME); read only
+CLAUDE_PROJECTS=${VERIFY551_CLAUDE_PROJECTS:-$HOME/.claude/projects}   # AC copies only the AU parent's transcript, by id
 # AFTER = the candidate: GraphTraj $GT (this Worktree) + graftling $GL (the 551 branch of the shared clone), as wheels.
 GLREPO=${VERIFY551_GLREPO:-$WT/.graftling-551.git}; GLBRANCH=agent/551-task-free-children-reach-tasks-methods
 GT=${VERIFY551_GT:-$(git -C $WT rev-parse HEAD)}
@@ -225,7 +226,7 @@ step_00() {
   gate before; local g=$?
   (( g == 3 )) && FAILS+=("gate: folder not trusted or graphtraj-claude-host not loaded; run zsh $THIS U before, then 00 again")
   (( g != 0 && g != 3 )) && FAILS+=(gate)
-  print "READY when: 'READY-551 <host>: PASS' x4 (actual model from each host's record: claude $PARENT_MODEL, codex $CODEX_MODEL, pi $PI_PROVIDER/$PI_MODEL, dsh $PI_MODEL), 'CHECK 551 role <rt>: PASS' x4, 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'."
+  print "READY when: 'READY-551 <host>: PASS' x4 (actual model from each host's record: claude $PARENT_MODEL, codex $CODEX_MODEL, pi $PI_PROVIDER/$PI_MODEL, dsh $PI_MODEL), 'CHECK 551 role <role>: PASS' x5 (claude, codex, pi, dsh, claude_ask), 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'."
   if (( $#FAILS )); then print -r -- "
 NOT READY: ${FAILS[*]}"; return 1; fi
   print "READY: all checks passed"
@@ -334,7 +335,7 @@ sys.exit(0 if ok else 1)') || FAILS+=(dependency-direction)
   (( g != 0 && g != 3 )) && FAILS+=(gate)
   if (( $#FAILS )); then print -r -- "
 NOT READY: ${FAILS[*]}"; return 1; fi
-  print "READY: candidate installed, dependency direction PASS, roles x4, tasks probe and gate PASS"
+  print "READY: candidate installed, dependency direction PASS, roles x5, tasks probe and gate PASS"
   next "zsh $THIS A all"
 }
 
@@ -394,11 +395,24 @@ NOT COMPLETE: ${FAILS[*]}"; return 1; fi
 step_AU() {
   local rt=${ARG:-} answer=${3:-deny}
   [[ $rt == (claude|pi) && $answer == (allow|deny) ]] || { print "usage: AU <claude|pi> <deny|allow>"; return 2; }
-  local p=$(project after) extra="" args="\"workspace\": \"$(project after)/ws-551\""
+  local p=$(project after) extra="" args="\"workspace\": \"$(project after)/ws-551\"" tool=WebFetch mode=-
+  if [[ $rt == claude ]]; then
+    # Auto mode's classifier may decide WebFetch itself; role claude_ask runs the child in Claude's default mode.
+    args+=", \"configuration\": \"claude_ask\""
+    mode=$(cd $p && clean $BASE/venv-after/bin/python -I -c 'import sys
+from pathlib import Path
+from graftling import Caller
+from graphtraj.execution.agent_driver import AdapterDriver
+p = Path(sys.argv[1])
+r = AdapterDriver(p, p).prepare("claude", Caller("verify-551", None, "probe-551", "claude"), configuration="claude_ask", workspace=p / "ws-551")
+print(r["adapter_request"].get("permission_mode"))' $p 2>&1 | tail -1)
+    print -r -- "Claude child role claude_ask: resolved permission_mode $mode (expected default)"
+    [[ $mode == default ]] || { print "STOP: the child would not run in Claude's default permission mode"; return 1; }
+  fi
   if [[ $rt == pi ]]; then
     load_key || { print "STOP: DEEPSEEK_API_KEY unset"; return 1; }
     pi_sandbox
-    local tool=$(cd $BASE && $BASE/venv-after/bin/python -I -c 'import os, sys
+    tool=$(cd $BASE && $BASE/venv-after/bin/python -I -c 'import os, sys
 from pathlib import Path
 from graftling.pi.execution import host_default_tools
 host = host_default_tools(Path(os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi/agent"))
@@ -410,11 +424,14 @@ print(next((t for t in ("grep", "find", "ls") if t not in host), ""))')
   fi
   D=$OUT/AU-$rt-$answer-$(date +%Y%m%dT%H%M%S)-$$; mkdir -p $D; touch $D/marker
   parent_prompt $rt "$args" user "$extra" > $D/parent-prompt.txt
-  local S=$(uuidgen | tr A-Z a-z); print -r -- $S > $D/parent-session.txt; print -r -- "$rt $answer $p" > $D/run.txt
-  say "[AU $rt] USER, in THIS terminal (interactive Claude Main, $PARENT_MODEL, in $p). Expected: no dialog of Claude Code itself.
-When Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: $answer
-(that request is the child's beyond-host ask: $([[ $rt == claude ]] && print 'Claude Code can_use_tool for WebFetch' || print "Pi's confirm dialog 'agents: allow a tool beyond the host settings' for $tool")).
-When it has printed END-CHILD, type /exit."
+  local S=$(uuidgen | tr A-Z a-z); print -r -- $S > $D/parent-session.txt
+  print -r -- "$rt $answer $p $tool $mode" > $D/run.txt
+  say "[AU $rt] USER, in THIS terminal: an interactive Claude Main ($PARENT_MODEL) in $p.
+Dialog: none of Claude Code itself is expected (project trusted in U; the parent's agents calls are pre-allowed).
+What you type: when Claude prints 'REQUEST-551 ...' and asks 'REQUEST-551: allow or deny?', type exactly: $answer
+That request is the child's beyond-host ask: $([[ $rt == claude ]] && print "Claude Code's can_use_tool for WebFetch (child permission mode $mode)" || print "Pi's confirm dialog 'agents: allow a tool beyond the host settings' for $tool"), retained for the parent.
+If no REQUEST-551 appears, type nothing; AC will report NO REQUEST honestly.
+When Claude has printed END-CHILD, type /exit."
   (cd $p && clean claude --model $PARENT_MODEL --session-id $S \
      --mcp-config $p/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__agents "$(<$D/parent-prompt.txt)") || print "claude exit $?"
   next "zsh $THIS AC $rt"
@@ -422,16 +439,21 @@ When it has printed END-CHILD, type /exit."
 step_AC() {  # read only: the newest AU run of $ARG
   local rt=${ARG:-}; [[ $rt == (claude|pi) ]] || { print "usage: AC <claude|pi>"; return 2; }
   D=($OUT/AU-$rt-*(N/om[1])); D=${D[1]:-}; [[ -n $D ]] || { print "STOP: no AU $rt run"; return 1; }
-  local S=$(<$D/parent-session.txt) f
-  for f in $HOME/.claude/projects/*/$S.jsonl(N.); do cp $f $D/parent.jsonl && print -r -- "parent transcript (read only, by its session id): $f"; done
+  local S=$(<$D/parent-session.txt) f run=(${=$(<$D/run.txt)})
+  for f in $CLAUDE_PROJECTS/*/$S.jsonl(N.); do cp $f $D/parent.jsonl && print -r -- "parent transcript (read only, by its session id): $f"; done
   [[ -f $D/parent.jsonl ]] || print "NOTE: no Claude transcript named $S.jsonl"
   collect $(project after) $rt
-  clean $BASE/venv-after/bin/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-after.txt 2>/dev/null || print -- -)" | redact | tee $D/summary.txt
+  # run.txt: runtime, the user's instructed answer, project, beyond-host tool, child permission mode
+  clean $BASE/venv-after/bin/python -I $SD/sum551.py $D $rt "$(cat $BASE/heading-after.txt 2>/dev/null || print -- -)" \
+    ${run[4]} ${run[5]} | redact | tee $D/summary.txt
   local rc=$?
-  print -r -- "user's answer in this run: $(cut -d' ' -f2 $D/run.txt) | parent REQUEST/REPLY lines:"
+  print -r -- "the step told the user to answer: ${run[2]} | parent REQUEST/REPLY lines:"
   grep -ho 'REQUEST-551[^"\\]*\|REPLY-551[^"\\]*' $D/parent.jsonl 2>/dev/null | sort -u | head -6
   (( rc == 0 )) || { print "NOT COMPLETE: no created child or no final message in this AU run (above)"; return 1; }
-  next "zsh $THIS AU $rt allow   (the second run), then AC $rt; or G"
+  grep -q '^AU CLASS: REQUEST reached the user' $D/summary.txt \
+    && print "beyond-host evidence: YES (the request reached the user and the answer was relayed)" \
+    || print "beyond-host evidence: NO (see AU CLASS above; not counted)"
+  next "zsh $THIS AU $rt $([[ ${run[2]} == deny ]] && print allow || print deny)   (the other answer), then AC $rt; or G"
 }
 
 check_tmp() {

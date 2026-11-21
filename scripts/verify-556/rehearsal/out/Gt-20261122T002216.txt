@@ -1,0 +1,4 @@
+Dialog: none
+== [Gt] Main. Focused 556 tests via the candidate venv, foreground. Dialog: none. ~3 min.
+uncommitted in src/tests/plugins/scripts/verify-556: ?? scripts/verify-556/rehearsal/
+STOP: uncommitted changes in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments

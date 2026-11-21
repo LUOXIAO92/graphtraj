@@ -1,0 +1,123 @@
+Dialog: none
+== [D] Main. Real graphtraj-mcp entry demonstration in a new scratch project under /tmp/claude-501/t556s. Dialog: none. <1 min.
+reusing /tmp/claude-501/t556s/venv-cand (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments editable; graftling aea5962d wheel)
+entry: /tmp/claude-501/t556s/venv-cand/bin/graphtraj-mcp (candidate 7e62258372b1b0f63c33981c7d9a07581bee2be5); project: /tmp/claude-501/t556s/demo-20261122T002053
+== 1. one call with several problems (schema and worldline_append checks together)
+{
+  "event": {
+    "event": "Not plain!",
+    "caused_by_event_ids": "not-a-list",
+    "evidence_refs": [
+      "",
+      ""
+    ]
+  },
+  "note": "unexpected"
+}
+>>> tasks {"action": "execute", "feature": "worldline_append", "arguments_file": "event.json"}
+<<< isError = True
+{
+  "feature": "worldline_append",
+  "error": {
+    "code": "invalid-input",
+    "message": "arguments.note: unexpected parameter; arguments.event.event: worldline event requires a plain event; arguments.event.caused_by_event_ids: worldline event has an invalid caused_by_event_ids; arguments.event.evidence_refs: worldline event has an invalid evidence_refs",
+    "errors": [
+      {
+        "path": "arguments.note",
+        "reason": "unexpected parameter"
+      },
+      {
+        "path": "arguments.event.event",
+        "reason": "worldline event requires a plain event"
+      },
+      {
+        "path": "arguments.event.caused_by_event_ids",
+        "reason": "worldline event has an invalid caused_by_event_ids"
+      },
+      {
+        "path": "arguments.event.evidence_refs",
+        "reason": "worldline event has an invalid evidence_refs"
+      }
+    ]
+  }
+}
+== 2. the same call after fixing only the file
+{
+  "event": {
+    "event": "demo-556-arguments-file",
+    "caused_by_event_ids": [],
+    "evidence_refs": []
+  }
+}
+>>> tasks {"action": "execute", "feature": "worldline_append", "arguments_file": "event.json"}
+<<< isError = False
+{
+  "event_id": "20261122T002053.779723+0900",
+  "captured_at": "2026-11-22T00:20:53.779723+09:00",
+  "event": "demo-556-arguments-file",
+  "caused_by_event_ids": [],
+  "evidence_refs": []
+}
+== 3. refused files (only the path is named, never the content)
+>>> tasks {"action": "execute", "feature": "task_graph", "arguments_file": ".graphtraj/config.yml"}
+<<< isError = True
+{
+  "error": {
+    "code": "invalid-input",
+    "message": "request.arguments_file: .graphtraj/config.yml is in GraphTraj private state (.graphtraj)",
+    "errors": [
+      {
+        "path": "request.arguments_file",
+        "reason": ".graphtraj/config.yml is in GraphTraj private state (.graphtraj)"
+      }
+    ]
+  }
+}
+>>> tasks {"action": "execute", "feature": "task_graph", "arguments_file": "escape.json"}
+<<< isError = True
+{
+  "error": {
+    "code": "invalid-input",
+    "message": "request.arguments_file: escape.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002053)",
+    "errors": [
+      {
+        "path": "request.arguments_file",
+        "reason": "escape.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002053)"
+      }
+    ]
+  }
+}
+>>> tasks {"action": "execute", "feature": "task_graph", "arguments_file": "/tmp/claude-501/t556s/demo-20261122T002053-outside.json"}
+<<< isError = True
+{
+  "error": {
+    "code": "invalid-input",
+    "message": "request.arguments_file: /tmp/claude-501/t556s/demo-20261122T002053-outside.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002053)",
+    "errors": [
+      {
+        "path": "request.arguments_file",
+        "reason": "/tmp/claude-501/t556s/demo-20261122T002053-outside.json is outside the directory this caller may read (/private/tmp/claude-501/t556s/demo-20261122T002053)"
+      }
+    ]
+  }
+}
+>>> agents {"action": "execute", "feature": "status", "arguments_file": ".graphtraj/config.yml"}
+<<< isError = True
+{
+  "error": {
+    "code": "invalid-input",
+    "message": "request.arguments_file: .graphtraj/config.yml is in GraphTraj private state (.graphtraj)",
+    "errors": [
+      {
+        "path": "request.arguments_file",
+        "reason": ".graphtraj/config.yml is in GraphTraj private state (.graphtraj)"
+      }
+    ]
+  }
+}
+== follow-ups (ready to paste)
+cd /tmp/claude-501/t556s/demo-20261122T002053 && /tmp/claude-501/t556s/venv-cand/bin/graphtraj worldline read | grep -n 20261122T002053.779723+0900
+cat /tmp/claude-501/t556s/demo-20261122T002053/event.json
+RESULT: all expectations held
+Success: step 1 isError true with 4 errors, step 2 isError false with an event_id, step 3 four refusals naming only the path, and 'RESULT: all expectations held'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh G   (background ~25 min; then, after it ends: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh B, then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh GR)

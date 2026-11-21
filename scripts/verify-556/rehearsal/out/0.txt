@@ -1,0 +1,13 @@
+Dialog: none
+== [0] Main. Preflight + candidate venv. Dialog: none. ~1 min.
+zsh: 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh)
+Harness: /Users/luoxiao/workspace/you-are-a-product-architect-delivery | Worktree: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments | HEAD 7e62258372b1b0f63c33981c7d9a07581bee2be5 (branch agent/556-graphtraj-mcp-full-validation-json-file-arguments)
+base: e3eb76493716edb61a50258cbdb4ef9cb0c90d45 Merge commit 'd14256bfd4be8b977119a22f35ff24539734943b' into dev
+graftling: aea5962d118aa785f32878ada095862d5ec545a3 555: return every input problem at once; execute arguments from a JSON file (from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling, git archive)
+no Runtime is started and no GitHub request is made
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+built /tmp/claude-501/t556s/venv-cand: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments editable + graftling wheel from git archive aea5962d11
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/t556s/venv-cand/lib/python3.13/site-packages/graftling/__init__.py
+Success: 'pytest temp: TMPDIR=... (outside the Harness)', the graphtraj line under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/src, a graftling line under /tmp/claude-501/t556s.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh Gt

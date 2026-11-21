@@ -1,0 +1,6 @@
+{"type":"session","sessionId":"session-6dcc81c8-2ac2-48cf-9e64-d740b098e354","cwd":"/private/tmp/claude-501/t552/base/project/runs/x/ws"}
+{"type":"status","phase":"turn_start","turn":1}
+{"type":"status","phase":"step_start","turn":1,"step":1}
+{"type":"status","phase":"step_end","turn":1,"step":1}
+{"type":"status","phase":"turn_end","turn":1,"reason":{"kind":"error","error":{"message":"DeepSeek Messages transport failed","code":"TRANSPORT"}}}
+{"type":"final","sessionId":"session-6dcc81c8-2ac2-48cf-9e64-d740b098e354","reason":{"kind":"error","error":{"message":"DeepSeek Messages transport failed","code":"TRANSPORT"}},"text":""}

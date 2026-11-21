@@ -1,0 +1,3 @@
+stub sandbox-exec with Main's real ff4ed8bd /private/tmp/cc-552/logs/ready-dsh/dsh.sb, patch at the old BASE/logs path:
+dsh: /private/tmp/cc-552/logs/ready-dsh/dsh-patch.yml: Operation not permitted (stub)
+rc=1

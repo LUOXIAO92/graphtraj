@@ -1,0 +1,4 @@
+{"type": "session", "sessionId": "session-74607ea8-8e8b-4545-97e0-3e9f6e12b9a4", "cwd": "/private/tmp/claude-501/reh552/base/project/runs/dsh-S2-r1/ws"}
+{"type": "tool_call", "callId": "c1", "tool": "edit", "input": {"file_path": "/private/tmp/claude-501/reh552/base/project/runs/dsh-S2-r1/ws/glossary.md"}}
+{"type": "tool_result", "callId": "c1", "status": "completed", "result": "ok"}
+{"type": "final", "sessionId": "session-74607ea8-8e8b-4545-97e0-3e9f6e12b9a4", "reason": {"kind": "completed"}, "text": "Updated the file with the agreed meaning. (stub)\nDONE"}

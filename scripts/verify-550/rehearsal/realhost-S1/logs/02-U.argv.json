@@ -1,0 +1,22 @@
+[
+ "/private/tmp/claude-501/reh550-190754/bin/claude",
+ "-p",
+ "--output-format",
+ "stream-json",
+ "--verbose",
+ "--model",
+ "claude-fable-5-2",
+ "--setting-sources",
+ "project",
+ "--effort",
+ "high",
+ "--tools",
+ "WebSearch,WebFetch",
+ "--allowedTools",
+ "WebSearch,WebFetch",
+ "--strict-mcp-config",
+ "--mcp-config",
+ "{\"mcpServers\": {}}",
+ "--append-system-prompt",
+ "<U instruction with HIDDEN, see design.md>"
+]

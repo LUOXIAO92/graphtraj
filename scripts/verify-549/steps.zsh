@@ -19,9 +19,13 @@
 #   XU  USER, optional: the same calls in an interactive Codex; look at the card (see the step's text).
 #   C   read only: prints every summary again as one table source.
 # Production comparison: VERIFY549_GT=<GraphTraj commit> VERIFY549_GL=<graftling commit> uses its own BASE.
-# Everything real-host is under BASE=/private/tmp/codex-549/<GT>-<GL> (outside the Harness). The user's host installs,
-# ~/.codex, ~/.pi, ~/.dsh and dotfiles are never written (Codex rollouts and Pi/DSH sessions are only read or are
-# redirected into BASE). No step connects to the Harness's production MCP servers.
+# Everything the script creates is under BASE=/private/tmp/codex-549/<GT>-<GL> (outside the Harness). The script edits
+# no host install, config or dotfile. Pi sessions go to BASE (--session-dir); DSH uses DSH_HOME in BASE.
+# Codex: each `codex exec` of X (and XU) writes its own rollout into ~/.codex/sessions, which is normal Codex
+# behaviour. X reads (copies) only the two rollouts whose file names hold the session/thread ids of its own two
+# runs, never any other session's rollout. Codex also starts any other MCP servers configured in the user's global
+# ~/.codex/config.toml; only `graphtraj` is overridden (-c mcp_servers.graphtraj.*) to this BASE's venv. The MCP
+# servers the script itself starts are only that venv's graphtraj-mcp (S, X, P via the Pi extension, D via the patch).
 emulate -L zsh
 setopt err_return pipe_fail no_unset no_bg_nice extended_glob
 SD=${0:A:h}; THIS=${0:A}
@@ -35,7 +39,7 @@ P=$BASE/project; V=$BASE/venv; OUT=$BASE/runs
 CONDA=$HOME/miniconda3/bin/python3.13
 RT=${VERIFY549_RT:-$H/.venv-runtime/lib/python3.13/site-packages}   # read only: yaml, websockets, click
 CODEX_MODEL=gpt-6-luna; PI_PROVIDER=deepseek; PI_MODEL=deepseek-flash
-CODEX_SESSIONS=${CODEX_HOME:-$HOME/.codex}/sessions                 # read only
+CODEX_SESSIONS=${VERIFY549_CODEX_SESSIONS:-$HOME/.codex/sessions}  # read only; only X's own two rollouts are copied
 STEP=${1:-}
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 [[ -n ${VERIFY549_STUB:-} ]] && path=($VERIFY549_STUB $path)        # rehearsal only: stub hosts first
@@ -76,7 +80,7 @@ venv_check() {
   [[ -f $V/installed && $(<$V/installed) == "$GT $GL" ]] || { print "STOP: $V does not hold $GT + $GL; run: zsh $THIS 00"; return 1; }
 }
 begin() {  # $1 step: evidence directory and the time marker for the record scans
-  D=$OUT/$1-$(date +%Y%m%dT%H%M%S); mkdir -p $D; touch $D/marker
+  D=$OUT/$1-$(date +%Y%m%dT%H%M%S)-$$; mkdir -p $D; touch $D/marker   # $$: two runs in one second never share D
   print -r -- "GraphTraj $GT graftling $GL step $1" > $D/run.txt
   print -r -- "evidence: $D"
 }
@@ -142,17 +146,29 @@ X)
   say "X2 codex exec --json"
   (cd $P && clean $BOUND 600 codex exec --skip-git-repo-check --json -m $CODEX_MODEL ${(z)$(codex_flags)} $PROMPT < /dev/null \
      > $D/exec.jsonl 2> $D/json.stderr.txt) || print "codex (--json) rc=$? (its error is in $D/exec.jsonl type=error and $D/json.stderr.txt):"
-  grep '"type":"error"' $D/exec.jsonl | tail -2; tail -2 $D/json.stderr.txt
+  { grep '"type":"error"' $D/exec.jsonl || true; } | tail -2; tail -2 $D/json.stderr.txt   # no error line is normal
+  # Only the two runs' own rollouts: X1's id from the human stderr header 'session id:', X2's from the --json
+  # thread.started event. Other Codex sessions (e.g. the user's interactive Main) keep writing theirs; never copied.
   mkdir -p $D/rollouts
-  local f; for f in $CODEX_SESSIONS/**/rollout-*.jsonl(N.); do [[ $f -nt $D/marker ]] && cp $f $D/rollouts/; done
-  print "codex rollouts copied (read only from $CODEX_SESSIONS): $(ls $D/rollouts | wc -l | tr -d ' ')"
+  local id1 id2
+  # 0.171.0 prints 'session id: <uuid>' with a bold key (event_processor_with_human_output.rs:223-224, 487-490).
+  id1=$(sed -E $'s/\x1b\\[[0-9;]*m//g' $D/human.stderr.txt | grep -m1 -E '^session id: ' \
+    | sed -E 's/^session id: *//; s/[^0-9A-Za-z-].*$//') || id1=
+  id2=$(grep -m1 '"type":"thread.started"' $D/exec.jsonl | grep -o '"thread_id":"[^"]*"' | cut -d'"' -f4) || id2=
+  print -r -- "X1 (human) session id: ${id1:-MISSING}; X2 (--json) thread id: ${id2:-MISSING}"
+  local run id f found
+  for run id in X1 "$id1" X2 "$id2"; do
+    if [[ -z $id ]]; then print "STOP ($run): no session/thread id in its output, so no rollout is read for it (no fallback)"; continue; fi
+    found=($CODEX_SESSIONS/**/rollout-*${id}*.jsonl(N.))
+    if (( $#found == 0 )); then print "STOP ($run): no rollout named with $id under $CODEX_SESSIONS"; continue; fi
+    for f in $found; do cp $f $D/rollouts/; print -r -- "$run rollout copied (read only): $f"; done
+    print -r -- "ready to paste ($run): codex resume $id"
+  done
   { count text codex-human-printed $D/human.stdout.txt $D/human.stderr.txt
     count records codex-json-events $D/exec.jsonl
     count records codex-rollouts-model-input $D/rollouts; } | tee $D/summary.txt
   print "Read: 'codex-human-printed' = what the human CLI prints (0.171.0 prints only 'mcp: server/tool started/(completed)', never the result; the reply goes to stderr and, when stdout is not a terminal, to stdout too). 'exec item result.content' and 'structured_content' = the two copies the --json event carries. 'model' (rollout function_call_output) = what $CODEX_MODEL received. 'final message' = the model's own reply."
   print "files: $D/human.stdout.txt $D/human.stderr.txt $D/exec.jsonl $D/rollouts"
-  local thread=$(grep -o '"thread_id":"[^"]*"' $D/exec.jsonl | head -1 | cut -d'"' -f4)
-  print "codex --json thread: ${thread:-unknown}"
   next "P   (optional USER card check: zsh $THIS XU)"
   ;;
 XU)

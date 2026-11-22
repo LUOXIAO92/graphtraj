@@ -2,18 +2,20 @@
 
 usage:
   judge.py snap <root>                               agent ids recorded under <root>, one per line
-  judge.py catalog <claude> <cwd>                    Claude's own initialize model catalog: every field of every model
+  judge.py catalog <claude> <cwd> [<map.json>]       Claude's own initialize model catalog: every field of every model
                                                      entry (model metadata only), and the names (not values) of the
-                                                     other response keys
+                                                     other response keys; <map.json> gets value -> resolvedModel
   judge.py calls <stream>                            each mcp__graftling__agents call of the Main and its real result
-  judge.py case <stream> <root> <before> <expect> <model> <word>
+  judge.py case <stream> <root> <before> <expect> <model> <word> [<map.json>]
       expect old-alias   the base's failure: create accepted, the child failed RUNTIME_REQUEST_FAILED with
                          'requested model <model>, observed model claude-...'
       expect refused     refused before start: no new record, the create result is invalid-model
                          (old-full: plus 'is not a candidate of the native claude login')
       expect old-full    as refused, with the base's wording
-      expect completed   the child completed with <word>; its record keeps model <model>; for an alias the record
-                         and the status result show the resolved full model (claude-<alias>-...)
+      expect completed   the child completed with <word>; the record's selection.model and the status result's
+                         model are <model>; when Claude's catalog (<map.json>) resolves <model> to another id, the
+                         execution's process.resolved_model and the status result's resolved_model are that id,
+                         else neither is present
 Prints PASS/FAIL lines; exit 0 only when every check passed. Nothing here echoes expected text: each verdict reads
 the records under <root> and the tool results the Main actually received.
 """
@@ -68,7 +70,7 @@ def check(ok, message, results):
     results.append(bool(ok))
 
 
-def catalog(claude, cwd):
+def catalog(claude, cwd, save=None):
     command = [claude, '--print', '--verbose', '--input-format', 'stream-json', '--output-format', 'stream-json',
                '--restricted', '--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}']
     query = {'type': 'control_request', 'request_id': 'catalog', 'request': {'subtype': 'initialize'}}
@@ -85,12 +87,15 @@ def catalog(claude, cwd):
             print('initialize response keys (names only):', sorted(body))
             for item in body.get('models') or []:
                 print('  model entry:', json.dumps(item, sort_keys=True))
+            if save:  # value -> resolvedModel, for the completed verdicts
+                Path(save).write_text(json.dumps({item.get('value'): item.get('resolvedModel')
+                                                  for item in body.get('models') or []}))
             return 0
     print('FAIL: no initialize response; exit', done.returncode, 'stderr:', done.stderr[-400:])
     return 1
 
 
-def case(stream, root, before, expect, model, word):
+def case(stream, root, before, expect, model, word, catalog_map=None):
     results = []
     made = calls(stream)
     for feature, arguments, text, error in made:
@@ -130,15 +135,29 @@ def case(stream, root, before, expect, model, word):
         return results
     check(last.get('outcome') == 'completed' and word in (last.get('last_message') or '').lower(),
           f'{agent} completed with {word!r}: outcome {last.get("outcome")}, error {error[:200]}', results)
-    check(record.get('model') == model, f'the record keeps the requested model: model {record.get("model")!r}', results)
-    resolved = record.get('resolved_model')
-    status = ' '.join(text for feature, arguments, text, _ in made if feature == 'status' and arguments.get('agent'))
-    if model.startswith('claude-'):
-        check(resolved in (None, model), f'a full id resolves to itself: resolved_model {resolved!r}', results)
+    # graftling keeps the requested model in the record's selection and the started full id as the
+    # execution's process fact resolved_model; status shows both as result.model / result.resolved_model.
+    requested = (record.get('selection') or {}).get('model')
+    resolved = (last.get('process') or {}).get('resolved_model')
+    check(requested == model, f'the record keeps the requested model: selection.model {requested!r}', results)
+    status = {}
+    for feature, arguments, text, _ in made:
+        if feature == 'status' and arguments.get('agent') == agent:
+            try:
+                status = json.loads(text).get('result') or {}
+            except ValueError:
+                status = {}
+    expected = (json.loads(Path(catalog_map).read_text()).get(model) if catalog_map else None)
+    print(f'  Claude catalog resolvedModel of {model!r}: {expected!r}; record resolved_model {resolved!r}; '
+          f'status result model {status.get("model")!r}, resolved_model {status.get("resolved_model")!r}')
+    check(status.get('model') == model, f'the status result the Main received shows model {model!r}', results)
+    if expected in (None, model):
+        check(resolved is None and 'resolved_model' not in status,
+              f'no resolution recorded for an id that is its own resolution: {resolved!r}', results)
     else:
-        check(isinstance(resolved, str) and resolved.startswith(f'claude-{model}-'),
-              f'the record shows the resolved model of alias {model!r}: resolved_model {resolved!r}', results)
-        check(bool(resolved) and resolved in status, f'the status result the Main received shows {resolved!r}', results)
+        check(resolved == expected, f'the record shows the catalog resolution {expected!r}: {resolved!r}', results)
+        check(status.get('resolved_model') == expected,
+              f'the status result the Main received shows resolved_model {expected!r}', results)
     return results
 
 
@@ -148,14 +167,15 @@ def main(argv):
         print('\n'.join(records(argv[1])))
         return 0
     if mode == 'catalog':
-        return catalog(argv[1], argv[2])
+        return catalog(argv[1], argv[2], argv[3] if len(argv) > 3 else None)
     if mode == 'calls':
         for feature, arguments, text, error in calls(argv[1]):
             print(f'{feature} {json.dumps(arguments)} -> is_error={error}: {text[:800]}')
         return 0
     if mode == 'case':
         stream, root, before, expect, model, word = argv[1:7]
-        results = case(stream, root, set(Path(before).read_text().split()), expect, model, word)
+        results = case(stream, root, set(Path(before).read_text().split()), expect, model, word,
+                       argv[7] if len(argv) > 7 else None)
         return 0 if results and all(results) else 1
     print(__doc__)
     return 2

@@ -21,18 +21,23 @@
 #              Run as `VERIFY574_CLAUDE_USER_LOGIN=1 zsh <this file> repro`. Dialog: none expected. ~3-5 min.
 #   suite      Main. graftling's full suite on the FIX commit (a clean clone in ROOT/suite-src, editable install
 #              plus pytest in ROOT/venv-suite, as README says), TMPDIR=${TMPDIR:-/tmp}. No Claude login. ~5-15 min.
-#   verify     Main. The FIX commit pip-installed into ROOT/venv-fix, host for ROOT/proj-fix; three real Mains:
-#              `haiku` and `claude-haiku-5-5` each create AND wait to completion with a reply (record keeps the
-#              requested model, an alias also shows resolved_model claude-haiku-..., also in the status result), and
-#              `claude-haiku-9-9` (not a resolution of any catalog alias) is still refused invalid-model with no record.
+#   verify     Main. The FIX commit pip-installed into ROOT/venv-fix, host for ROOT/proj-fix; Claude's catalog
+#              (value -> resolvedModel) is saved for the verdicts; three real Mains: `haiku` and `claude-haiku-5-5`
+#              each create AND wait to completion with a reply (record selection.model and the status result keep the
+#              requested model; for `haiku` the execution's process.resolved_model and the status result's
+#              resolved_model equal the catalog's resolvedModel), and `claude-haiku-9-9` (no catalog entry's value
+#              or resolvedModel) is still refused invalid-model with no record.
 #              Run as `VERIFY574_CLAUDE_USER_LOGIN=1 zsh <this file> verify`. Dialog: none expected. ~4-6 min.
 # The user's Claude login (VERIFY574_CLAUDE_USER_LOGIN=1, required by preflight/repro/verify; STOP without it):
-# Claude Code reads the macOS keychain login and ~/.claude.json, and writes Session transcripts under
-# ~/.claude/projects/-private-tmp-graftling-574-*/ and a project entry per ROOT/<dir> in ~/.claude.json. The Main
-# runs with --setting-sources project,local --strict-mcp-config, so no user settings, plugins or MCP servers load.
-# Nothing else under ~/.claude is written by these steps; each step lists (names only) every ~/.claude entry that
-# changed during it, so whatever Claude Code itself touched is visible. Network: pip downloads setuptools, PyYAML,
-# websockets (and pytest for suite) from PyPI; Claude Code talks to Anthropic.
+# Claude Code reads the macOS keychain login and ~/.claude.json. Claude Code itself (the Mains and the children)
+# may write: Session transcripts under ~/.claude/projects/-private-tmp-graftling-574-*/, entries under
+# ~/.claude/sessions, its own plugin store cache ~/.claude/plugins/store, and ~/.claude.json. These steps'
+# own commands write nothing under ~/.claude or to ~/.claude.json. The Main runs with --setting-sources
+# project,local --strict-mcp-config, so no user settings or MCP servers load. Each step reports, by name only, the
+# ~/.claude/sessions and ~/.claude/projects entries it can attribute (their content names this step's Session ids
+# or ROOT), and ~/.claude/plugins/store before/after; a store change cannot be attributed to the step because other
+# Claude processes run concurrently. Network: pip downloads setuptools, PyYAML, websockets (and pytest for
+# suite) from PyPI; Claude Code talks to Anthropic.
 # VERIFY574_ROOT / VERIFY574_OUT / VERIFY574_GREPO / VERIFY574_BIN are for the Engineer's rehearsal only; a run with
 # them set (or with stubs) is a rehearsal, not acceptance evidence.
 emulate -L zsh
@@ -43,7 +48,7 @@ ROOT=${VERIFY574_ROOT:-/private/tmp/graftling-574}
 OUT=${VERIFY574_OUT:-$H/.graphtraj/core/state/tasks/574-graftling-claude-model-alias-and-candidate-mismatch/realhost}
 GREPO=${VERIFY574_GREPO:-$WT/.scratch/574/graftling}  # the Engineer's graftling clone holding BASE and FIX
 BASE=cadc419271dabc8f4a0b11da1bb46c70ef598c77      # graftling dev before 574 (v0.7.0 + 570)
-FIX=''                                              # the 574 fix commit on agent/574-...; set by the Engineer
+FIX=9adef9832ca20e4ed5348f1771613b2127a77a12      # the 574 fix commit on agent/574-... (base cadc419)
 THIS=${0:A}
 STEP=${1:-}
 PY=${VERIFY574_PYTHON:-python3}
@@ -65,15 +70,40 @@ login_gate() {
     return 1 }
   CLAUDE=$(command -v claude)
   [[ -n $CLAUDE ]] || { print "STOP: no claude on PATH"; return 1; }
-  print -r -- "VERIFY574_CLAUDE_USER_LOGIN=1: Claude Code uses the user's own login. It reads the keychain and ~/.claude.json,"
-  print -r -- "and writes Session transcripts under ~/.claude/projects/-private-tmp-graftling-574-*/ and a project entry"
-  print -r -- "per directory under $ROOT in ~/.claude.json. No settings, plugins or skills under ~/.claude are written."
+  print -r -- "VERIFY574_CLAUDE_USER_LOGIN=1: Claude Code uses the user's own login. It reads the keychain and ~/.claude.json."
+  print -r -- "Claude Code itself may write Session transcripts under ~/.claude/projects/-private-tmp-graftling-574-*/,"
+  print -r -- "entries under ~/.claude/sessions, its plugin store cache ~/.claude/plugins/store, and ~/.claude.json."
+  print -r -- "This step's own commands write nothing under ~/.claude or to ~/.claude.json."
   : > $ROOT/.claude-marker-$STEP
+  store > $ROOT/.plugins-store-before-$STEP
 }
-claude_outside() {  # names only: what changed under ~/.claude and the ~/.claude.json project keys under ROOT
-  say "what changed outside $ROOT during this step (names only; no values printed)"
-  print -r -- "~/.claude entries newer than the step start (depth 2): $(find $HOME/.claude -maxdepth 2 -newer $ROOT/.claude-marker-$STEP 2>/dev/null | sed "s|^$HOME|~|" | tr '\n' ' ')"
+store() { ls -lT $HOME/.claude/plugins/store 2>&1 | awk 'NR > 1 { print $6, $7, $8, $9, $10 }' }  # mtime + name
+claude_outside() {  # names only: what this step can attribute under ~/.claude, and what it cannot
+  say "outside $ROOT during this step (names only; no values printed)"
+  local ids=$ROOT/.session-ids-$STEP f
+  {  # this step's Session ids: each Main's init session_id and each child's record session
+    for f in $ROOT/*.jsonl(N); do [[ $f -nt $ROOT/.claude-marker-$STEP ]] && $PY -I -c 'import json, sys
+for raw in open(sys.argv[1], errors="replace"):
+    try: e = json.loads(raw)
+    except ValueError: continue
+    if e.get("type") == "system" and e.get("subtype") == "init" and e.get("session_id"): print(e["session_id"]); break' $f; done
+    for f in $ROOT/proj-*/.agents-control/control/agents/*.json(N); do
+      $PY -I -c 'import json, sys; r = json.load(open(sys.argv[1])); print("\n".join(s for s in [r.get("session"), *(r.get("sessions") or [])] if isinstance(s, str)))' $f
+    done
+    print -r -- ${ROOT:A}
+  } | sort -u | grep . > $ids
+  print -r -- "this step's Session ids and ROOT ($(wc -l < $ids | tr -d ' ') strings) are matched below"
+  local -a mine=(${(f)"$(find $HOME/.claude/sessions -type f -newer $ROOT/.claude-marker-$STEP 2>/dev/null | xargs grep -l -F -f $ids 2>/dev/null)"})
+  print -r -- "~/.claude/sessions entries changed in this step whose content names its Sessions or ROOT: ${(j: :)${mine[@]:t}}"
   print -r -- "~/.claude/projects directories naming ${ROOT:t}: $(print -l -- $HOME/.claude/projects/*${ROOT:t}*(N/:t) | tr '\n' ' ')"
+  store > $ROOT/.plugins-store-after-$STEP
+  if cmp -s $ROOT/.plugins-store-before-$STEP $ROOT/.plugins-store-after-$STEP; then
+    print -r -- "~/.claude/plugins/store: unchanged during this step"
+  else
+    print -r -- "~/.claude/plugins/store changed during this step (names and mtimes, before -> after); this cannot be"
+    print -r -- "attributed to this step: other Claude processes run concurrently."
+    diff $ROOT/.plugins-store-before-$STEP $ROOT/.plugins-store-after-$STEP | grep '^[<>]'
+  fi
   $PY -I -c 'import json, sys
 p = json.load(open(sys.argv[1])).get("projects") or {}
 print("~/.claude.json project keys under", sys.argv[2] + ":", [k for k in p if k.startswith(sys.argv[2])])' \
@@ -114,8 +144,8 @@ create_prompt() {  # model word
 Do not retry or change any argument. Then report: AGENT: the agent id or NONE; RESULT: one line with what the calls returned.'
 }
 # One real Main in project $1 creating a child with model $2; judged with expectation $3. Returns the judge's rc.
-one_case() {
-  local P=$1 model=$2 expect=$3 word=${4:-pong}
+one_case() {  # project model expect [catalog map]
+  local P=$1 model=$2 expect=$3 map=${4:-} word=pong
   local tag=${model//[^a-z0-9.-]/_} stamp=$(date +%H%M%S)
   local out=$ROOT/${P:t}-$tag-$stamp.jsonl snap=$ROOT/${P:t}-$tag-before.ids
   $PY -I $JUDGE snap $P/.agents-control > $snap
@@ -132,7 +162,7 @@ for raw in open(sys.argv[1], errors="replace"):
               "| mcp servers:", [(s.get("name"), s.get("status")) for s in e.get("mcp_servers") or []])
     if e.get("type") == "result": print("  Main result:", str(e.get("result"))[:400].replace("\n", " | "))' $out
   (( mrc == 0 )) && print "PASS: the Main exited 0" || print "FAIL: the Main exited $mrc"
-  $PY -I $JUDGE case $out $P/.agents-control $snap $expect $model $word
+  $PY -I $JUDGE case $out $P/.agents-control $snap $expect $model $word ${map:+$map}
   return $(( $? | (mrc != 0) ))
 }
 verdicts() {  # label rc ...
@@ -212,9 +242,14 @@ verify)
   install_at $ROOT/venv-fix $FIX || return 1
   local P=$ROOT/proj-fix
   host_for $ROOT/venv-fix $P || return 1
+  say "Claude's own initialize model catalog; value -> resolvedModel saved for the verdicts"
+  local map=$ROOT/catalog-verify.json
+  rm -f $map
+  (cd $P && claude_iso $PY -I $JUDGE catalog $CLAUDE $P $map)
+  [[ -s $map ]] || { print "STOP: no catalog map; the completed verdicts need Claude's resolvedModel"; return 1; }
   local a f n
-  one_case $P haiku completed; a=$?
-  one_case $P claude-haiku-5-5 completed; f=$?
+  one_case $P haiku completed $map; a=$?
+  one_case $P claude-haiku-5-5 completed $map; f=$?
   one_case $P claude-haiku-9-9 refused; n=$?
   claude_outside
   say "verdict (computed)"

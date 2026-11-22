@@ -29,6 +29,11 @@
 #   subdir        Main. The same from ROOT/proj/sub: the data root is ROOT/proj/sub/.agents-control. ~1-2 min.
 #   explicit      Main. GRAFTLING_DSH_CONFIG=ROOT/dsh-host.json: the record lands in ROOT/agents-data;
 #                 ROOT/proj/.agents-control gains none. Dialog: none. ~1-2 min.
+#   claude-alone  Main. The Claude Code half ALONE in ROOT/proj (no DSH Session), user-login flags as share: launch
+#                 (a) as share ran it, (b) the same plus --plugin-dir ROOT/proj/.claude/skills/agents-claude-host
+#                 when `claude --help` offers it (this Session only; nothing installed). Computed verdicts; the
+#                 launch that passes is kept in ROOT/claude-launch.txt for share. Run as
+#                 `VERIFY570_CLAUDE_USER_LOGIN=1 zsh <this file> claude-alone`. Dialog: none expected. ~2-4 min.
 #   share         Main. Claude Code and DSH on ROOT/proj/.agents-control at once: each creates one child, waits,
 #                 lists status. Run as `VERIFY570_CLAUDE_USER_LOGIN=1 zsh <this file> share`: the user's own Claude
 #                 login (user decision for this step); it writes only Session transcripts under
@@ -74,14 +79,14 @@ claude_iso() {
                   -u DSH_AGENT_SOURCE -u GRAFTLING_NATIVE_RUNTIME -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT)
   if [[ -n ${VERIFY570_CLAUDE_USER_LOGIN:-} ]]; then env $clean "$@"; else env $clean CLAUDE_CONFIG_DIR=$CH "$@"; fi
 }
-profiles() { print -l $HOME/.dsh/profiles/*(N:t) }
+profiles() { print -l -- $HOME/.dsh/profiles/*(N:t) }
 bundles() { python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["dsh"]["profile"]["bundles"])' \
               $1/profiles/$2/package.json 2>&1 }
-envs() { print -l $1/graftling-python/*~*.partial~*.lock(N/) }                 # environments under home $1
+envs() { print -l -- $1/graftling-python/*~*.partial~*.lock(N/) }                 # environments under home $1
 need_root() { [[ -d $ROOT/proj ]] || { print -r -- "STOP: $ROOT/proj missing; run: zsh $THIS pre"; return 1; } }
 # Every .agents-control directory under ROOT (the default data roots), and what ROOT/agents-data holds.
-roots() { print -r -- ".agents-control under $ROOT: $(print -l $ROOT/**/.agents-control(N/D) | tr '\n' ' ')"
-          print -r -- "$ROOT/agents-data holds: $(cd $ROOT/agents-data 2>/dev/null && print -l **/*(ND) | head -20 | tr '\n' ' ')" }
+roots() { print -r -- ".agents-control under $ROOT: $(print -l -- $ROOT/**/.agents-control(N/D) | tr '\n' ' ')"
+          print -r -- "$ROOT/agents-data holds: $(cd $ROOT/agents-data 2>/dev/null && print -l -- **/*(ND) | head -20 | tr '\n' ' ')" }
 # Agent records (control/agents/*.json) under directory $1, with each record's runtime and creator.
 records() { local f; for f in $1/control/agents/*.json(N); do
               python3 -c 'import json, sys; r = json.load(open(sys.argv[1]))
@@ -138,7 +143,7 @@ Then report exactly four lines: AGENT: the agent id; ANSWER: the child'"'"'s one
 JUDGE=${0:A:h}/judge.py
 DEPS=0                                              # set by create_in when the plugin asked for the deps step
 
-count() { print -l $1/control/agents/*.json(N) | grep -c . }                    # agent records under root $1
+count() { print -l -- $1/control/agents/*.json(N) | grep -c . }                    # agent records under root $1
 need_candidate() {
   need_root || return 1
   [[ $(bundles $DH headless) == *graftling-dsh* ]] || { print -r -- "STOP: run zsh $THIS install first"; return 1; }
@@ -165,8 +170,8 @@ create_in() {  # name dir root [VAR=value...]
   local ok=1
   (( SRC == 0 )) && print -r -- "PASS: the Session exited 0" || { print -r -- "FAIL: the Session exited $SRC"; ok=0; }
   python3 -I $JUDGE create $SOUT $root $snap dsh-native ready || ok=0
-  [[ -z $(print -l $DH/**/.agents-control(N/D) $DH/control(N/)) ]] && print -r -- "PASS: no data in the DSH home $DH" \
-    || { print "FAIL: data written in the DSH home: $(print -l $DH/**/.agents-control(N/D) $DH/control(N/))"; ok=0; }
+  [[ -z $(print -l -- $DH/**/.agents-control(N/D) $DH/control(N/)) ]] && print -r -- "PASS: no data in the DSH home $DH" \
+    || { print "FAIL: data written in the DSH home: $(print -l -- $DH/**/.agents-control(N/D) $DH/control(N/))"; ok=0; }
   return $(( 1 - ok ))
 }
 
@@ -179,8 +184,107 @@ evidence() {  # home: what the Session left behind
   print -r -- "log files under $home mentioning graftling: $(grep -rli graftling $home --include='*.log' --exclude-dir=node_modules --exclude-dir=graftling-python 2>/dev/null | tr '\n' ' ')"
 }
 
+# Claude Code for claude-alone and share. The generated host plugin (graftling claude/plugin.py:94-95 writes its
+# plugin.json and hooks.json {"modules": ["./host_context.mjs"]}, the same form as the marketplace plugin's
+# src/graftling/claude-plugin/hooks/hooks.json) must be loaded by Claude Code for a call to be associated.
+CFLAGS=(-p --setting-sources project,local --strict-mcp-config --model haiku)
+PLUGIN=$P/.claude/skills/agents-claude-host
+CLAUDE=''
+CPROJ=''
+claude_setup() {  # login banner, one-line check, project files; sets E, CLAUDE, CPROJ
+  local -a es=(${(f)"$(envs $DH)"})
+  (( $#es == 1 )) || { print -r -- "STOP: expected one environment under $DH/graftling-python (run start first): $es"; return 1; }
+  typeset -g E=$es[1] CLAUDE=$(command -v claude)
+  [[ -n $CLAUDE ]] || { print "STOP: no claude on PATH"; return 1; }
+  typeset -g CPROJ=$HOME/.claude/projects/${${P:A}//[\/.]/-}   # Claude Code keys a project by its real path
+  if [[ -n ${VERIFY570_CLAUDE_USER_LOGIN:-} ]]; then
+    print -r -- "VERIFY570_CLAUDE_USER_LOGIN=1: Claude Code uses the user's own login (user decision for Task 570). It reads"
+    print -r -- "the keychain and ~/.claude.json, and writes only Session transcripts under $CPROJ/"
+    print -r -- "and a project entry for $P in ~/.claude.json. No settings, plugins or skills under ~/.claude are written."
+  elif [[ -z ${ANTHROPIC_API_KEY:-} ]]; then
+    print -r -- "STOP: ANTHROPIC_API_KEY is not set, and Claude Code would run isolated in CLAUDE_CONFIG_DIR=$CH (no login)."
+    print -r -- "The user agreed to their own login for this step:  VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS $STEP"
+    print -r -- "Or, isolated: export ANTHROPIC_API_KEY=<your Anthropic API key>, then: zsh $THIS $STEP"
+    return 1
+  else
+    print -r -- "Claude Code runs isolated in CLAUDE_CONFIG_DIR=$CH with ANTHROPIC_API_KEY (${#ANTHROPIC_API_KEY} characters; not printed)."
+  fi
+  say "Claude Code one-line check with the same login and flags"
+  (cd $P && claude_iso $CLAUDE $CFLAGS "Reply in one line with the model id you are running as and nothing else." < /dev/null) 2>&1 | tail -3
+  local crc=$?; print -r -- "exit=$crc"
+  (( crc == 0 )) || { print -r -- "STOP: Claude Code did not answer; check its login, then: zsh $THIS $STEP"; return 1; }
+  say "graftling's Claude Code host configuration for $P (project files only), with $E/bin/python"
+  if [[ ! -f $P/.agents-control/claude-host.json ]]; then
+    (cd $P && claude_iso $E/bin/python -I -m graftling.claude.host configuration --project $P --claude $CLAUDE --write) \
+      || { print "STOP: configuration --write failed"; return 1; }
+    # DSH Sessions in $P must not start this server from the project's .mcp.json: keep it beside ROOT instead.
+    mv $P/.mcp.json $ROOT/claude-mcp.json || return 1
+  fi
+  print -r -- "written: $(cd $P && print -l -- .claude/**/*(N.D) .agents-control/claude-host.json(N) | tr '\n' ' ') + $ROOT/claude-mcp.json"
+}
+claude_outside() {  # what changed outside ROOT: only the two accepted places, keys and names only
+  if [[ -z ${VERIFY570_CLAUDE_USER_LOGIN:-} ]]; then print -r -- "$CH now holds: $(cd $CH && print -l -- *(ND) | tr '\n' ' ')"; return 0; fi
+  say "what changed outside ROOT (only the two accepted places; no values printed)"
+  print -r -- "~/.claude/projects directories naming ${ROOT:t}: $(print -l -- $HOME/.claude/projects/*${ROOT:t}*(N/:t) | tr '\n' ' ')"
+  print -r -- "$CPROJ: $(print -l -- $CPROJ/*(N:t) | tr '\n' ' ')"
+  python3 -I -c 'import json, sys
+d = json.load(open(sys.argv[1])); p = d.get("projects")
+print("~/.claude.json top-level keys:", sorted(d))
+print("~/.claude.json projects:", type(p).__name__, len(p or {}), "keys; keys under /private/tmp or /tmp:",
+      [k for k in (p or {}) if k.startswith(("/private/tmp", "/tmp"))])
+print("entry for", sys.argv[2] + ":", "present" if sys.argv[2] in (p or {}) else "absent")' $HOME/.claude.json ${P:A} 2>&1
+}
+claude_one() {  # variant flags...: one Claude Code Main alone creates a claude child; computed verdict
+  local name=$1; shift
+  local out=$ROOT/claude-alone-$name-$(date +%H%M%S).txt snap=$ROOT/claude-alone-$name-before.ids
+  python3 -I $JUDGE snap $P/.agents-control > $snap
+  say "variant $name: claude $* ..."
+  (cd $P && claude_iso $CLAUDE "$@" --output-format text "$(create_prompt claude claudeok haiku)" < /dev/null > $out 2>&1
+   print -r -- "exit=$?" >> $out)
+  tail -15 $out
+  print -r -- "(full output: $out)"
+  local ok=1
+  grep -q '^exit=0' $out && print "PASS: variant $name exited 0" || { print "FAIL: variant $name did not exit 0"; ok=0; }
+  python3 -I $JUDGE create $out $P/.agents-control $snap claude-native claudeok || ok=0
+  python3 -I $JUDGE listed $out $P/.agents-control claude-native || ok=0
+  return $(( 1 - ok ))
+}
+
 run_step() {
 case $STEP in
+claude-alone)
+  say "[claude-alone] Main. The Claude Code half alone in $P, no DSH Session running; launch (a) as share, (b) plus --plugin-dir. Dialog: none expected. ~2-4 min."
+  need_candidate || return 1
+  claude_setup || return 1
+  say "the generated host files Claude Code must load"
+  local f; for f in $PLUGIN/.claude-plugin/plugin.json $PLUGIN/hooks/hooks.json $P/.claude/settings.local.json $ROOT/claude-mcp.json; do
+    print -r -- "$f: $(tr -d '\n' < $f 2>&1)"; done
+  print -r -- "$PLUGIN/hooks/host_context.mjs: $(wc -c < $PLUGIN/hooks/host_context.mjs | tr -d ' ') bytes"
+  print -r -- "DSH-created records already in $P/.agents-control: $(python3 -I $JUDGE owned $P/.agents-control dsh-native | grep -c .)"
+  say "claude --help: its plugin, setting-source and MCP options"
+  local help; help=$($CLAUDE --help 2>&1)
+  print -r -- "$help" | grep -i -E 'plugin|setting-sources|mcp-config'
+  local -a base=($CFLAGS --mcp-config $ROOT/claude-mcp.json --allowedTools mcp__graftling__agents)
+  local a b=2
+  claude_one a $base; a=$?
+  if [[ $help == *--plugin-dir* ]]; then claude_one b $base --plugin-dir $PLUGIN; b=$?
+  else print "variant b: NOT RUN: claude --help offers no --plugin-dir"; fi
+  claude_outside
+  say "verdict (computed)"
+  rm -f $ROOT/claude-launch.txt
+  if (( a == 0 )); then
+    print a > $ROOT/claude-launch.txt
+    print "SUCCESS: the share launch (a) works alone, beside DSH records; share's Claude failure needs the concurrent run"
+  elif (( b == 0 )); then
+    print b > $ROOT/claude-launch.txt
+    print "SUCCESS: cause established: launch (a) does not load the generated host plugin, (b) with --plugin-dir does;"
+    print "a Claude Code create succeeded in a root that already holds DSH records. share now uses (b)."
+  else
+    print "FAIL: no launch associated the call (a and b, b=2 means not run): the generated plugin did not load in a per-Session launch"
+    return 1
+  fi
+  print -r -- "next: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share"
+  ;;
 pre)
   say "[pre] Main. Preflight in a fresh $ROOT. Dialog: none. ~30 s."
   print -r -- "zsh: $ZSH_VERSION ($THIS)"
@@ -225,7 +329,7 @@ repro)
   (( SRC == 0 )) && print "PASS: the Session exited 0" || { print -r -- "FAIL: the Session exited $SRC"; ok=0; }
   python3 -I $JUDGE tools $SOUT absent || ok=0
   [[ -z $(envs $DB) ]] && print "PASS: no Python environment was built" || { print "FAIL: an environment was built"; ok=0; }
-  [[ -z $(print -l $ROOT/**/.agents-control(N/D) $ROOT/agents-data/*(ND)) ]] && print "PASS: no data root appeared" \
+  [[ -z $(print -l -- $ROOT/**/.agents-control(N/D) $ROOT/agents-data/*(ND)) ]] && print "PASS: no data root appeared" \
     || { print "FAIL: a data root appeared (see above)"; ok=0; }
   (( ok )) || return 1
   print -r -- "next: zsh $THIS repro-control"
@@ -324,56 +428,32 @@ explicit)
   (( $(count $P/.agents-control) == proj )) && print -r -- "PASS: $P/.agents-control gained no record" \
     || { print -r -- "FAIL: $P/.agents-control gained a record"; rc=1; }
   (( rc == 0 )) && print -r -- "SUCCESS: the explicit configuration wins" && \
-    print -r -- "next: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share   (the user's own Claude login, as the user decided)"
+    print -r -- "next: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS claude-alone   (the user's own Claude login, as the user decided)"
   return $rc
   ;;
 share)
   say "[share] Main. Claude Code and DSH on $P/.agents-control at the same time. Dialog: none expected. ~2-4 min."
   need_candidate || return 1
-  local E=($(envs $DH)) claude=$(command -v claude)
-  (( $#E == 1 )) || { print -r -- "STOP: expected one environment under $DH/graftling-python (run start first): $E"; return 1; }
-  [[ -n $claude ]] || { print "STOP: no claude on PATH"; return 1; }
-  local cproj=$HOME/.claude/projects/${${P:A}//[\/.]/-}   # Claude Code keys a project by its real path
-  if [[ -n ${VERIFY570_CLAUDE_USER_LOGIN:-} ]]; then
-    print -r -- "VERIFY570_CLAUDE_USER_LOGIN=1: Claude Code uses the user's own login (user decision for Task 570). It reads"
-    print -r -- "the keychain and ~/.claude.json, and writes only Session transcripts under $cproj/"
-    print -r -- "and a project entry for $P in ~/.claude.json. No settings, plugins or skills under ~/.claude are written."
-  elif [[ -z ${ANTHROPIC_API_KEY:-} ]]; then
-    print -r -- "STOP: ANTHROPIC_API_KEY is not set, and Claude Code would run isolated in CLAUDE_CONFIG_DIR=$CH (no login)."
-    print -r -- "The user agreed to their own login for this step:  VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share"
-    print -r -- "Or, isolated: export ANTHROPIC_API_KEY=<your Anthropic API key>, then: zsh $THIS share"
-    return 1
-  else
-    print -r -- "Claude Code runs isolated in CLAUDE_CONFIG_DIR=$CH with ANTHROPIC_API_KEY (${#ANTHROPIC_API_KEY} characters; not printed)."
-  fi
-  local -a cflags=(-p --setting-sources project,local --strict-mcp-config --model haiku)
-  say "Claude Code one-line check with the same login and flags"
-  (cd $P && claude_iso $claude $cflags "Reply in one line with the model id you are running as and nothing else." < /dev/null) 2>&1 | tail -3
-  local crc=$?; print -r -- "exit=$crc"
-  (( crc == 0 )) || { print -r -- "STOP: Claude Code did not answer; check its login, then: zsh $THIS share"; return 1; }
-  say "graftling's Claude Code host configuration for $P (project files only), with $E/bin/python"
-  if [[ ! -f $P/.agents-control/claude-host.json ]]; then
-    (cd $P && claude_iso $E/bin/python -I -m graftling.claude.host configuration --project $P --claude $claude --write) \
-      || { print "STOP: configuration --write failed"; return 1; }
-    # DSH Sessions in $P must not start this server from the project's .mcp.json: keep it beside ROOT instead.
-    mv $P/.mcp.json $ROOT/claude-mcp.json || return 1
-  fi
-  print -r -- "written: $(cd $P && print -l .claude/**/*(N.D) .agents-control/claude-host.json(N) | tr '\n' ' ') + $ROOT/claude-mcp.json"
+  [[ -f $ROOT/claude-launch.txt ]] || { print -r -- "STOP: run claude-alone first: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS claude-alone"; return 1; }
+  claude_setup || return 1
+  local launch=$(<$ROOT/claude-launch.txt)
+  local -a claunch=($CFLAGS --mcp-config $ROOT/claude-mcp.json --allowedTools mcp__graftling__agents)
+  [[ $launch == b ]] && claunch+=(--plugin-dir $PLUGIN)
+  print -r -- "Claude Code launch: variant $launch from claude-alone: claude ${claunch[*]} ..."
   local sum_before=$(shasum $P/.agents-control/claude-host.json | cut -c1-12)
   local stamp=$(date +%H%M%S); local ds=$ROOT/share-dsh-$stamp.txt cs=$ROOT/share-claude-$stamp.txt snap=$ROOT/share-before.ids
   python3 -I $JUDGE snap $P/.agents-control > $snap
   local dprompt=$(create_prompt dsh dshok) cprompt=$(create_prompt claude claudeok haiku)
   say "both Mains start now: DSH ($ds) and claude -p ($cs)"
   (cd $P && iso $DH dsh --profile headless "$dprompt" < /dev/null > $ds 2>&1; print -r -- "exit=$?" >> $ds) &
-  (cd $P && claude_iso $claude $cflags --mcp-config $ROOT/claude-mcp.json --allowedTools mcp__graftling__agents \
-     --output-format text "$cprompt" < /dev/null > $cs 2>&1
+  (cd $P && claude_iso $CLAUDE $claunch --output-format text "$cprompt" < /dev/null > $cs 2>&1
    print -r -- "exit=$?" >> $cs) &
   wait
   say "DSH Main"; tail -25 $ds
   say "Claude Code Main"; tail -25 $cs
   say "evidence in $P/.agents-control"
   records $P/.agents-control
-  print -r -- "live/: $(cd $P/.agents-control && print -l live/*(ND) live/dsh-host/*(ND) | tr '\n' ' ')"
+  print -r -- "live/: $(cd $P/.agents-control && print -l -- live/*(ND) live/dsh-host/*(ND) | tr '\n' ' ')"
   print -r -- "host.log: $([[ -f $P/.agents-control/host.log ]] && tail -3 $P/.agents-control/host.log | tr '\n' ' ' || print absent)"
   print -r -- "claude-host.json: $sum_before -> $(shasum $P/.agents-control/claude-host.json | cut -c1-12)"
   say "verdict (computed)"
@@ -390,16 +470,7 @@ share)
   python3 -I $JUDGE listed $cs $P/.agents-control claude-native || rc=1
   [[ -d $P/.agents-control/live/dsh-host && -f $P/.agents-control/claude-host.json ]] \
     && print "PASS: live/dsh-host (DSH) and claude-host.json (Claude Code) side by side" || { print "FAIL: a host's files are missing"; rc=1; }
-  if [[ -n ${VERIFY570_CLAUDE_USER_LOGIN:-} ]]; then
-    say "what changed outside ROOT (only the two accepted places; no values printed)"
-    print -r -- "~/.claude/projects directories naming ${ROOT:t}: $(print -l $HOME/.claude/projects/*${ROOT:t}*(N/:t) | tr '\n' ' ')"
-    print -r -- "$cproj: $(print -l $cproj/*(N:t) | tr '\n' ' ')"
-    python3 -I -c 'import json, sys; p = json.load(open(sys.argv[1])).get("projects", {})
-print("~/.claude.json project entries naming", sys.argv[3] + ":", [k for k in p if sys.argv[3] in k],
-      "| entry for", sys.argv[2], "present" if sys.argv[2] in p else "absent")' $HOME/.claude.json ${P:A} ${ROOT:t} 2>&1
-  else
-    print -r -- "$CH now holds: $(cd $CH && print -l *(ND) | tr '\n' ' ')"
-  fi
+  claude_outside
   (( rc == 0 )) && print "SUCCESS: Claude Code and DSH shared one .agents-control; each saw only its own child" \
     && print -r -- "next: zsh $THIS off"
   return $rc
@@ -446,7 +517,7 @@ post)
   print -r -- "To remove the isolated run when you no longer need it: rm -rf $ROOT"
   print -r -- "next: report $OUT to the Leader"
   ;;
-*) print -r -- "usage: zsh $THIS pre|repro|repro-control|deps|post"; return 2 ;;
+*) print -r -- "usage: zsh $THIS pre|repro|repro-control|deps|push|pre2|install|start|subdir|explicit|claude-alone|share|off|post"; return 2 ;;
 esac
 }
 

@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
-"""Rehearsal stand-in for claude (Task 570): --version, a one-line prompt, and the share step's create prompt,
-which writes one completed claude-native agent record under ./.agents-control as graftling's Claude Code host
-would. STUB570_FAIL=1: the tool call fails with invalid-input and nothing is written."""
+"""Rehearsal stand-in for claude (Task 570): --version, --help, a one-line prompt, and a create prompt, which
+writes one completed claude-native agent record under ./.agents-control as graftling's Claude Code host would.
+STUB570_FAIL=1: the tool call fails with invalid-input and nothing is written.
+STUB570_NEED_PLUGIN_DIR=1: without --plugin-dir the call is refused as in Main's real share run (authority-denied).
+STUB570_NO_PLUGIN_DIR=1: --help offers no --plugin-dir."""
 import json, os, re, sys, uuid
 from pathlib import Path
 
 args = sys.argv[1:]
 if args == ['--version']:
     print('2.1.999 (Claude Code stub)'); sys.exit(0)
+if args == ['--help']:
+    print('  --mcp-config <configs...>  Load MCP servers\n  --setting-sources <sources>  Comma-separated list')
+    if not os.environ.get('STUB570_NO_PLUGIN_DIR'):
+        print('  --plugin-dir <paths...>  Load plugins from directories for this session only')
+    sys.exit(0)
 prompt = args[-1]
 if '"feature":"create"' not in prompt:
     print('claude-haiku-5-5 (stub)'); sys.exit(0)
 if os.environ.get('STUB570_FAIL'):
     print('ERROR: {"error": {"code": "invalid-input"}}'); sys.exit(0)
+if os.environ.get('STUB570_NEED_PLUGIN_DIR') and '--plugin-dir' not in args:
+    print('ERROR: {"error": {"code": "authority-denied", "message": "No matching current native call association."}}')
+    sys.exit(0)
 word = re.search(r'one word: (\w+)', prompt).group(1)
 root = Path.cwd() / '.agents-control'
 agent = f'agent-{uuid.uuid4().hex}'

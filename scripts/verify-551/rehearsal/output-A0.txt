@@ -1,0 +1,47 @@
+
+=============== $ zsh steps.zsh A0 ===============
+
+### [A0] candidate installation (dialog: none): GraphTraj c54dcc7e243851c17c477893267496d2d56102ae + graftling 68f89c8a49c7d87515ec5d1941685d802e5393cb (branch agent/551-task-free-children-reach-tasks-methods of /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/.graftling-551.git, base 6794ce02b6210ec88837437affb8d7b525612804)
+graftling 68f89c8a49c7d87515ec5d1941685d802e5393cb descends from dev 6794ce02b6210ec88837437affb8d7b525612804
+graftling commits since dev: 68f89c8 Pi and DSH children: tools and disallowed_tools in their native terms (551);05e52af Refuse Codex tool filters for servers the captured settings lack (551);d995850 Pi and DSH children reach the host's extra tools beside agents (551);7e145ee Children keep the host's tools unless create or a preset chooses them (551);1db68a2 Test: graftling never imports, runs, declares or requires GraphTraj (551);8380121 Serve host tools beside agents to independent children (551);
+GraphTraj commits since dev f754d3a9: 10
+candidate venv: graphtraj 0.1.0 from /private/tmp/claude-501/reh551k-222058/base/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py | graftling 0.6.2 from /private/tmp/claude-501/reh551k-222058/base/venv-after/lib/python3.13/site-packages/graftling/__init__.py
+manuals in the candidate: /private/tmp/claude-501/reh551k-222058/base/venv-after/share/graphtraj/manuals
+
+### dependency direction (required result 4): graftling's wheel alone in a clean venv, GraphTraj NOT installed
+graftling wheel Requires-Dist: ['PyYAML<7,>=6', 'websockets<17,>=15']
+graphtraj installed in this venv: False
+graftling modules imported: 72 | failed: none | graphtraj modules loaded: []
+CHECK 551 dependency direction: PASS
+DEEPSEEK_API_KEY: unset
+Pi sandbox (srt) from /tmp/claude-501/fake-pi-sandbox.env: python /Users/luoxiao/miniconda3/bin/python3.13, path /stub/srt/bin
+
+### isolated project /private/tmp/claude-501/reh551k-222058/base/project-after with graphtraj 0.1.0 graftling 0.6.2 from /private/tmp/claude-501/reh551k-222058/base/venv-after/lib/python3.13/site-packages/graphtraj/__init__.py
+GraphTraj project setup complete.
+claude host configuration written: /private/tmp/claude-501/reh551k-222058/base/project-after/.mcp.json (servers: graphtraj)
+Claude isolation settings: written
+
+### child roles (inline, no connection catalog), resolved by the Task-free driver without a model, each with
+workspace /private/tmp/claude-501/reh551k-222058/base/project-after/ws-551 (every child, all four Runtimes alike: the Pi driver refuses a Worktree containing the
+project's .graphtraj/state, an existing isolation guard)
+roles file written: /private/tmp/claude-501/reh551k-222058/base/project-after/.graphtraj/roles.yml
+CHECK 551 role claude: FAIL (AgentsError: Claude Code 2.1.299 or later is required.)
+CHECK 551 role codex: FAIL (AgentsError: Cannot verify Codex permission controls: '/private/tmp/claude-501/reh551k-222058/bin/codex exec --help' exited with status 1: ValueError: '-m' is not in list)
+CHECK 551 role pi: FAIL (AgentsError: The configured api_key_env is missing or empty.)
+CHECK 551 role dsh: FAIL (AgentsError: The configured api_key_env is missing or empty.)
+
+### probe Tasks: tasks discover + describe concept-clarification through /private/tmp/claude-501/reh551k-222058/base/venv-after/bin/graphtraj-mcp (no host, no model)
+tasks discover: 36 features; concept-clarification listed: True
+tasks describe concept-clarification: manual_ref /private/tmp/claude-501/reh551k-222058/base/venv-after/share/graphtraj/manuals/concept-clarification/guide.md
+manual first heading: '# Concept Clarification' (saved to /private/tmp/claude-501/reh551k-222058/base/heading-after.txt)
+CHECK 551 tasks probe: PASS
+
+### Claude parent gate in /private/tmp/claude-501/reh551k-222058/base/project-after
+parent model (init): claude-sonnet-5-5 | login source (init apiKeySource): none = no API key: Claude Code logged in with its OAuth (claude.ai subscription) login | answer (self-report): READY-551 claude-sonnet-5-5 (REHEARSAL STUB)
+parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__graphtraj__agents', 'mcp__graphtraj__tasks']
+parent init plugin_warnings: []
+parent init plugins: [{"name": "graphtraj-claude-host", "path": "./.claude/skills/graphtraj-claude-host"}] | graphtraj-claude-host loaded: True
+CHECK 551 Claude parent gate: PASS
+
+NOT READY: DEEPSEEK_API_KEY roles
+(exit 1)

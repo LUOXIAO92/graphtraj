@@ -114,7 +114,8 @@ def test_a_graphtraj_dsh_childs_tool_uses_the_channel_it_is_bound_to() -> None:
                            archive=None)
     run = SimpleNamespace(call=lambda request: None, settings={}, archive=None, agent='agent-x',
                           events=SimpleNamespace(receive_children=lambda receive: None))
-    bind_agents(turn, run, SimpleNamespace(root=Path('.')))
+    # 551: the driver also supplies the child's own tasks tools; none here.
+    bind_agents(turn, run, SimpleNamespace(root=Path('.'), child_tools=lambda run: []))
 
     assert turn.connection_env == 'GRAFTLING_CONNECTION'
     assert turn.request['mcp']['args'] == ['-I', '-m', 'graftling.mcp']

@@ -1,5 +1,5 @@
 {
- "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and graftling installed editable from base commit 33c7adb (git worktree add --detach 33c7adb). Task 412 then removed api_key_env and unauthenticated from each process spec and added the name-only auth.json to the overlay of key routes; policies, argv and environments stay as captured. Task 429 then added the Git common directory to allowRead and GIT_CONFIG_GLOBAL to the environment of the write and base-url-with-key scenarios. Task 480 then added each scenario's assigned report file to allowWrite, taken from a tests/pi_parity_scenarios.py capture; nothing else changed.",
+ "_provenance": "Captured by tests/pi_parity_scenarios.py run under a venv with graphtraj and graftling installed editable from base commit 33c7adb (git worktree add --detach 33c7adb). Task 412 then removed api_key_env and unauthenticated from each process spec and added the name-only auth.json to the overlay of key routes; policies, argv and environments stay as captured. Task 429 then added the Git common directory to allowRead and GIT_CONFIG_GLOBAL to the environment of the write and base-url-with-key scenarios. Task 480 then added each scenario's assigned report file to allowWrite, taken from a tests/pi_parity_scenarios.py capture; nothing else changed. Task 551 then added GRAFTLING_MCP_SERVER=graphtraj to the environment of agents-member, the only independent (Task-free agents child) scenario, so the child reaches agents and tasks as mcp__graphtraj__*; the Runner member scenarios are unchanged.",
  "agents-member": {
   "argv": [
    "<python>",
@@ -9,6 +9,7 @@
   "environment": {
    "changed": {
     "GRAFTLING_CONNECTION": "<tmp>/agents-member/data/native/agents-member/agents-socket",
+    "GRAFTLING_MCP_SERVER": "graphtraj",
     "GRAFTLING_PYTHON": "<python>",
     "PATH": "<python-bin>:/usr/bin:/bin:<tmp>/agents-member/user-agent/bin",
     "PI_ASB_NO_ALIAS_PROMPT": "1",

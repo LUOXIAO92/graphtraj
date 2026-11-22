@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 // The installed graftling distribution (the range in pyproject.toml), wherever it is.
 import { graftlingModule } from '../graftling.mjs';
 
-const { loadHostSdk, registerAgents, registerAgentDisplay, registerNoticeDisplay, sessionEnvironment, startAgentHost } =
-  graftlingModule('pi/extension.mjs');
+const { childServer, loadHostSdk, registerAgents, registerAgentDisplay, registerNoticeDisplay, sessionEnvironment,
+  startAgentHost } = graftlingModule('pi/extension.mjs');
 export { loadHostSdk, registerAgentDisplay, sessionEnvironment, startAgentHost };
 // The custom message type of a GraphTraj Main notice.
 const NOTICE_TYPE = 'graphtraj:main-notice';
@@ -124,8 +124,9 @@ export default function graphtraj(pi) {
   const sessions = new WeakMap();
   const collectors = new WeakMap();
   // Members reach agents through GraphTraj's own MCP server as well; `agents`
-  // names it in Sessions started before 514. An independent child keeps graftling's server.
-  const agents = registerAgents(pi, { displayServers: ['graphtraj', 'agents'] });
+  // names it in Sessions started before 514. An independent child registers the
+  // server its owner named (GraphTraj's children: graphtraj, 551), as graftling's own extension does.
+  const agents = registerAgents(pi, { server: childServer?.(), displayServers: ['graphtraj', 'agents'] });
   const independent = agents.independent;
   // One notice loop for the Session currently associated as Main; a later
   // session_start or shutdown ends the earlier loop.

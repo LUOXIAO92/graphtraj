@@ -16,5 +16,6 @@ def test_a_member_tells_graftling_the_graphtraj_server(module: str, cls: str, fl
     execution = object.__new__(getattr(import_module(module), cls))
     setattr(execution, flag, False)
     assert execution.mcp_server == 'graphtraj'
+    # Since 551 an agents child registers GraphTraj's name too, so it sees mcp__graphtraj__tasks.
     setattr(execution, flag, True)
-    assert execution.mcp_server == 'graftling'
+    assert execution.mcp_server == 'graphtraj'

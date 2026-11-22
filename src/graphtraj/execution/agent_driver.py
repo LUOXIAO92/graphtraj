@@ -41,6 +41,56 @@ def _native_error(error: RuntimeAdapterError) -> AgentsError:
     return AgentsError(error.code, error.message)
 
 
+def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> None:
+    """Apply a create's ``tools``/``disallowed_tools`` (551) to a child's launch request.
+
+    Omitted at create, the child keeps the host's own tool settings. Claude
+    takes them as native flags (``ClaudeExecution.tool_arguments``); Codex
+    maps what it can express (``graftling.codex.apply_tools``). Pi
+    takes ``--tools``/``--exclude-tools`` and asks the parent before a
+    built-in beyond the host's settings; DSH chooses installed agent-preset
+    tool rows and refuses enabling a host-disabled one.
+    """
+    if runtime == 'claude':
+        request['tools'] = tools['tools']
+        request['disallowed_tools'] = list(tools['disallowed_tools'])
+    elif runtime == 'codex':
+        from graftling.codex import apply_tools
+        from graphtraj.interfaces.task_free import TASK_FREE_TOOL_NAMES
+        from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
+
+        # The child's own agents/tasks are never mapped or refused here: a disallowed
+        # one is dropped at start (CodexDriver, from the settings' disallowed_tools).
+        apply_tools(request['session_parameters']['config'], tools,
+                    own_server=CodexManagedExecution.mcp_server, own_tools=TASK_FREE_TOOL_NAMES)
+    elif runtime == 'pi':
+        # Pi's --tools / --exclude-tools; a built-in beyond the host's settings asks the parent first.
+        # An entry Pi provably does not know refuses the create; the child's own tools are mcp__graphtraj__*.
+        from graftling.pi import apply_tools
+        from graphtraj.runtimes.pi.managed_session import PiManagedExecution
+
+        apply_tools(request, tools, own_server=PiManagedExecution.mcp_server)
+    elif runtime == 'dsh':
+        # DSH agent-preset tool rows; unknown -> unavailable, a host-disabled row -> authorization-required.
+        from graftling.dsh import apply_tools
+
+        apply_tools(request, tools)
+    else:
+        raise AgentsError('unavailable', f'Setting a child\'s tools is not available for {runtime!r} yet.')
+
+
+def report_unverified_tools(run: Run) -> None:
+    """Tell the parent which create tool entries the Pi child's Runtime could not check before start (551).
+
+    Pi resolves extension tools only at start, so with host extensions loaded an unknown name cannot be
+    refused at create (graftling.pi.apply_tools). It is not ignored either: it becomes the
+    child's ``tool_check`` (``unverified``), which agents ``status`` reports, as Claude's unapplied entries do.
+    """
+    unverified = (run.settings.get('adapter_request') or {}).get('unverified_tools')
+    if unverified:
+        run.events.process(tool_check={'unverified': list(unverified)})
+
+
 def _git_common_directory(cwd: Path) -> Path:
     """Return the Git common directory of ``cwd``, or ``cwd/.git`` outside Git."""
     try:
@@ -98,7 +148,16 @@ class AdapterDriver:
         from graftling.codex import CodexDriver
         from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 
-        self.codex = CodexDriver(execution=CodexManagedExecution)
+        self.codex = CodexDriver(execution=CodexManagedExecution, extra_tools=self.child_tools)
+
+    def child_tools(self, run: Run) -> list:
+        """Return the tools a Task-free child gets beside ``agents``: GraphTraj's ``tasks`` entry.
+
+        It is bound to the child's own Agent ID, never to its parent's identity.
+        """
+        from graphtraj.interfaces.task_free import task_free_tools
+
+        return task_free_tools(self.root, run.agent)
 
     def _ancestor_worktree(self, agent: str) -> Path | None:
         """Return the Worktree of the Task member ``agent`` descends from, if any."""
@@ -133,7 +192,7 @@ class AdapterDriver:
         return Path(worktree)
 
     def prepare(self, runtime: str, caller: Caller, *, configuration: str | None = None,
-                workspace: Path | None = None) -> dict:
+                workspace: Path | None = None, tools: Mapping[str, Any] | None = None) -> dict:
         """Resolve the Runtime's role preset and freeze its launch settings.
 
         An explicit configuration selects an existing preset, not an identity.
@@ -184,6 +243,8 @@ class AdapterDriver:
             raise _native_error(error) from None
         request  = prepared.launch_document()["adapter_request"]
         evidence = prepared.evidence_document()
+        if tools is not None:
+            apply_child_tools(runtime, request, tools)
         # Record what launches: the frozen request (or its evidence) first,
         # then the preset; Codex keeps effort under its native key.
         model    = request.get("model") or evidence.get("model") or getattr(preset, "model", None)
@@ -196,6 +257,9 @@ class AdapterDriver:
             "connection":      prepared.launch_document().get("connection", {}),
             "evidence":        evidence,
             "applied":         {"configuration": name, "model": model, "reasoning_effort": effort},
+            # Codex drops a disallowed owner tool (tasks) at start (551).
+            **({"disallowed_tools": list(tools.get("disallowed_tools") or ())}
+               if tools is not None and runtime == 'codex' else {}),
         }
 
     def start(self, run: Run) -> None:
@@ -262,7 +326,10 @@ class AdapterDriver:
             turn.configure_independent(
                 archive=run.archive, agents_callback=callback,
                 extra_fields=graphtraj_fields(str(turn.request['harness_root']), turn.directory.name,
-                                              extra_fields=run.extra_fields))
+                                              extra_fields=run.extra_fields),
+                extra_tools=self.child_tools(run))
+            # Tool entries the child's Claude did not apply reach the parent's status (551).
+            turn.tool_report = lambda check: run.events.process(tool_check=check)
         if run.runtime == 'dsh':
             from graphtraj.runtimes.dsh.driver import bind_agents
 
@@ -270,6 +337,8 @@ class AdapterDriver:
         if run.runtime == 'pi':
             from graftling import read_config
             from graftling.sessions import SessionArchive
+
+            report_unverified_tools(run)
 
             root = run.directory.parent.parent
             choices = read_config(root)
@@ -283,6 +352,10 @@ class AdapterDriver:
             turn.extra_fields = graphtraj_fields(str(turn.request['harness_root']), run.agent,
                                                  extra_fields=run.extra_fields)
             turn.agent_call = getattr(run, 'call', None)
+            from graftling import extra_tool_table
+
+            # The child's tasks entry beside agents (551); PiExecution serves it.
+            turn.extra_tools = extra_tool_table(self.child_tools(run))
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]
         with _TURNS_LOCK:

@@ -167,7 +167,35 @@ Worktree on all four Runtimes, and the result and record report that path as
 `workspace`. Descendants inherit it and may only narrow it; the caller's working
 directory no longer sets it. Main's children and Task-free Agents keep the host's
 directory. If the member's record is unreadable or its Worktree is gone, `create`
-fails with `workspace-denied` rather than starting wider. `codex.unix_sockets` and
+fails with `workspace-denied` rather than starting wider.
+
+Every child created through `agents` in a GraphTraj project also gets a `tasks`
+tool beside `agents`, on all four Runtimes under GraphTraj's server name, as
+`mcp__graphtraj__agents` and `mcp__graphtraj__tasks` like a Task member's. The
+child's server is its owner's alone: a Claude child loads no other MCP
+configuration, and a Codex child's entry replaces any captured one of that name. It offers only the general methods (`setup-project`,
+`task-breakdown`, `task-delivery`, `research`, `concept-clarification`) through
+the same discover/describe as Task members: `describe` returns the installed
+manual's `manual_ref`, which Claude members and children may read (a read-only
+grant of that one directory). This is a deliberate limit: no execution feature
+(`submit_result`, `decide_result`, `swarm`, `task_graph` and the rest) is
+offered to such a child, and each answers `Unknown feature`; calls run as the
+child's own Agent, never as Main or its parent. `task_graph` stays out because
+some of its revision branches would not provably refuse a Task-free caller.
+
+A child's tools follow its own Runtime's configuration on this machine (that
+Runtime's local settings, not the parent's) unless `create` (or a
+`config.yml` preset) names `tools` or `disallowed_tools`. Names are each
+Runtime's own; there is no shared tool model: Claude `WebSearch`, Codex
+`web_search`, MCP tools `mcp__<server>__<tool>`, Pi `bash`, DSH its `tool-web`
+preset rows. A name the child's Runtime does not know is refused at `create`
+(Codex, DSH) or, for Claude, whose tool set depends on its version, reported
+in the child's `status` as `tool_check` after start; it is never silently
+ignored. Calling `tasks` needs no approval unless `disallowed_tools` names it; Task members keep
+their fixed Claude tool list. What each Runtime can express, and how a use
+beyond the host's settings is approved, is in Graftling's
+[`PUBLIC_API.md`](https://github.com/LUOXIAO92/graftling/blob/main/src/graftling/PUBLIC_API.md)
+section 2 (Tools). `codex.unix_sockets` and
 `local_websocket.worktrees` match the exact working directory, so an entry for a
 member's Codex child must name the Worktree, not the project root.
 

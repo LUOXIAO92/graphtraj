@@ -17,6 +17,18 @@ from graftling.claude import ClaudeExecution as NativeClaudeExecution
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, record_runtime_process
 
 
+def installed_manuals() -> list[Path]:
+    """Return the installed general-method manuals directory, if this installation has one.
+
+    The one switch for granting it: Task members and agents children read the
+    same installed guides that ``tasks describe`` names (551).
+    """
+    from graphtraj.interfaces.task_free import manuals_directory
+
+    directory = manuals_directory().resolve()
+    return [directory] if directory.is_dir() else []
+
+
 class ClaudeExecution(NativeClaudeExecution):
     """Supply project resources and Runner services to the same native transport.
 
@@ -28,10 +40,9 @@ class ClaudeExecution(NativeClaudeExecution):
     # A Runner execution's member reaches the hosted CLI, not graftling's own owner.
     connection_env = 'GRAPHTRAJ_CLI_CONNECTION'
 
-    @property
-    def mcp_server(self) -> str:
-        """Name a member's own server ``graphtraj`` (mcp__graphtraj__*); agents alone keeps graftling's."""
-        return super().mcp_server if self.independent else 'graphtraj'
+    # Members and agents children alike reach agents and tasks as mcp__graphtraj__* (551).
+    # A child's --strict-mcp-config loads no other server, so no host entry can share the name.
+    mcp_server = 'graphtraj'
 
     def __init__(self, *arguments) -> None:
         """Bind the project archive and its GraphTraj header fields to a Runner execution."""
@@ -50,6 +61,13 @@ class ClaudeExecution(NativeClaudeExecution):
 
         return notify_direct_parent(self.directory, message, details)
 
+    # A Task member's fixed native tools, unchanged by 551.
+    MEMBER_TOOLS = 'Bash,Read,Write,Edit,Glob,Grep'
+
+    def tool_arguments(self) -> list[str]:
+        """Keep a Task member's fixed tools; an agents child keeps the host's or its create's choice."""
+        return super().tool_arguments() if self.independent else ['--tools', self.MEMBER_TOOLS]
+
     def record_process(self, pid: int, outcome: dict | None = None) -> None:
         """Publish native process evidence through the existing Runner binding."""
         record_runtime_process(pid, outcome)
@@ -67,6 +85,9 @@ class ClaudeExecution(NativeClaudeExecution):
         # and the native sandbox profile grow with every associated Session.
         explicit = [Path(path).resolve() for path in request['resources']]
         resources.extend(explicit)
+        # The general methods' installed manuals, which ``tasks describe``
+        # names by manual_ref: read-only like every other resource (551).
+        resources.extend(path for path in installed_manuals() if path not in resources)
         # Project development records stay readable for diagnosis across
         # Agents; control channels, Runtime homes and credentials stay denied.
         records = [request['state_directory'], str(project_runner_directory(root))]

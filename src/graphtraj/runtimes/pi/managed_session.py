@@ -15,6 +15,9 @@ class PiManagedExecution(PiExecution):
     native connection; Runner executions keep GraphTraj's hosted CLI.
     """
 
+    # An agents child reaches agents and tasks as mcp__graphtraj__* like members (551).
+    mcp_server = 'graphtraj'
+
     def __init__(self, *arguments) -> None:
         """Default to a Runner execution that may read the GraphTraj package.
 

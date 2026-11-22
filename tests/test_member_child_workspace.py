@@ -33,6 +33,9 @@ GATEWAY = 'graphtraj-gateway'
 class RecordingTurn:
     """A native owner that keeps what the driver would start the Runtime with."""
 
+    # Every native owner names the MCP server it serves as (Codex and Pi drivers read it, 551).
+    mcp_server = 'graphtraj'
+
     # Set by the fixture for one test.
     started: list[RecordingTurn] = []
     release = threading.Event()

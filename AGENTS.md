@@ -120,8 +120,10 @@ are for the authorized test executors when source changes require them.
 - Use `python -m compileall -q src tests` for a syntax pass and
   `git diff --check` for patch hygiene.
 - A change that adds or alters a GraphTraj import from `graftling` uses only
-  the names in `src/graftling/PUBLIC_API.md` section 1.3 and runs
-  `tests/test_graphtraj_public_agents_api.py`.
+  the names in graftling's `PUBLIC_API.md` section 1.3 (the graftling
+  repository root; the installed package ships it as `graftling/PUBLIC_API.md`)
+  and runs `tests/test_graphtraj_public_agents_api.py`, which reads the
+  installed copy.
 
 ## Working constraints
 

@@ -19,13 +19,15 @@
 #            .graphtraj state; FAIL on any authority-denied or a missing effect. Dialog: none. ~2 min.
 #   foreign  Candidate. Real Claude Main A holds the project's host (it runs `sleep 150` through Bash); meanwhile a
 #            second real Claude Session B in the same project calls tasks worldline_append with arguments_file.
-#            PASS only when B's call is refused, B's event name is absent from the project state, and A ended normally.
-#            Dialog: none. ~3 min.
-#            LIMIT (stated for the report): NativeCalls' own refusal of another Session's association inside ONE host
-#            (the 'already pending' / 'No matching' branches) cannot be operated through the real entry: one Claude
-#            Code process launches its own host and serves one Session at a time, so a real second Session always
-#            reaches the project through a second Claude process, which this step shows is refused. The in-host
-#            branch has unit tests only (tests/test_claude_arguments_file_575.py), which are not acceptance evidence.
+#            PASS only when B's result carries error code host-busy (graftling require_free_channel: B's own host is
+#            refused at start because A holds the channel; seen either as the host's JSON error or as the mod's
+#            permission-check reason "host-busy: ..."), B's event name is absent from the project state, and A ended
+#            normally. Any other error, or a success, is FAIL with B's result printed. Dialog: none. ~3 min.
+#            WHAT IT SHOWS: a second real Claude Session in the project is refused at host start (host-busy) while
+#            Main A holds the host. WHAT IT DOES NOT SHOW: NativeCalls' in-host refusal of another Session's
+#            association (the 'already pending' / 'No matching' branches) cannot be operated through the real entry:
+#            one Claude Code process launches its own host and serves one Session at a time. That branch is
+#            unit-tested only (tests/test_claude_arguments_file_575.py) and is reported UNACCEPTED.
 #   suite    GraphTraj full suite of this Worktree's HEAD (6 shards, background, ~25 min) in a venv under <Harness>/tmp/575
 #            with graftling built from v0.7.0; pytest temp root under TMPDIR=${TMPDIR:-/tmp} (outside the Harness).
 #            Dialog: none. VERIFY575_PYTEST_ARGS='<args>' only appends pytest args after `-- -rA` (rehearsal).
@@ -262,7 +264,9 @@ after) out_dir after
 
 foreign) out_dir foreign
   print "[foreign] candidate host; real Main A holds the host (Bash sleep 150); a second real Session B calls tasks with"
-  print "arguments_file meanwhile. Dialog: none. ~3 min. See LIMIT in this script's header."
+  print "arguments_file meanwhile. Dialog: none. ~3 min."
+  print "Shows: a second real Claude Session in the project is refused at host start (host-busy) while Main A holds the host."
+  print "Does not show: NativeCalls' in-host other-Session refusal; unit-tested only, reported UNACCEPTED."
   need_login || return 1
   [[ -f $CAND/installed ]] || { print "STOP: $CAND missing; run: zsh $THIS pre"; return 1; }
   configure $CAND/bin/python || return 1
@@ -286,11 +290,12 @@ foreign) out_dir foreign
   judge calls $D/b.jsonl
   print -r -- "-- verdict"
   local rc=0
-  judge expect $D/b.jsonl b-write=tasks:worldline_append:file:refused || rc=1
+  judge expect $D/b.jsonl b-write=tasks:worldline_append:file:code=host-busy || rc=1
   local found=$(in_state $tag)
   print -r -- "B's event $tag in $P/.graphtraj: ${found:-ABSENT}"; [[ -z $found ]] || rc=1
   (( arc == 0 )) && grep -q 'DONE-A' $D/a.jsonl || { print "A did not end normally -> FAIL"; rc=1; }
-  print "foreign verdict: $( (( rc == 0 )) && print PASS || print FAIL ) (a second real Session's arguments_file call is refused)"
+  print "foreign verdict: $( (( rc == 0 )) && print PASS || print FAIL ) (B refused with host-busy, no write, A ended normally;"
+  print "the in-host other-Session refusal remains unit-tested only and UNACCEPTED)"
   next "zsh $THIS suite"
   return $rc ;;
 

@@ -5,7 +5,8 @@ usage:
       Print every mcp__graphtraj__* tool call of the Session: its input and its tool result (first 400 chars).
   judge575.py expect <stream.jsonl> <label>=<tool>:<feature>:<mode>:<outcome> ...
       ``mode`` is ``file`` (the input names arguments_file) or ``inline`` (it does not). ``outcome`` is ``ok`` (a
-      result without an error), ``denied`` (an error with code authority-denied) or ``refused`` (any error). Each
+      result without an error), ``denied`` (an error with code authority-denied), ``refused`` (any error) or
+      ``code=<code>`` (an error carrying exactly that code: the host's JSON error or the mod's "<code>: " reason). Each
       label is judged on the LAST matching call of the Session; a label without a matching call is MISSING.
       Exit 0 only when every label has its outcome.
 
@@ -66,6 +67,27 @@ def outcome(call: dict) -> str:
     return 'ok'
 
 
+def carries_code(call: dict, code: str) -> str | None:
+    """Which form of a refusal with error ``code`` the failed call carries, or None.
+
+    A refused host answers a call with ``{"error": {"code": ...}}``; when the
+    mod's permission check is refused first, Claude Code shows its reason,
+    which ``report_missing_host`` writes as ``<code>: <message>``.
+    """
+    if not call['is_error'] and 'error' not in call['text']:
+        return None
+    try:
+        document = json.loads(call['text'])
+    except ValueError:
+        document = None
+    error = document.get('error') if isinstance(document, dict) else None
+    if isinstance(error, dict) and error.get('code') == code:
+        return 'host result {"error": {"code": "%s"}}' % code
+    if f'{code}: ' in call['text']:
+        return f'permission check reason "{code}: ..."'
+    return None
+
+
 def main(argv: list[str]) -> int:
     """Run one subcommand; see the module docstring."""
     command, stream = argv[0], Path(argv[1])
@@ -96,8 +118,14 @@ def main(argv: list[str]) -> int:
             print(f'{label}: MISSING (no {tool} {feature} call with mode {mode}) -> FAIL')
             failed += 1
             continue
-        got  = outcome(matching[-1])
-        good = got == expected or (expected == 'refused' and got in {'denied', 'error'})
+        if expected.startswith('code='):
+            # Only the named refusal passes; any other error or a success fails.
+            form = carries_code(matching[-1], expected[len('code='):])
+            got  = f'refused with {form}' if form else f'{outcome(matching[-1])} (not {expected})'
+            good = form is not None
+        else:
+            got  = outcome(matching[-1])
+            good = got == expected or (expected == 'refused' and got in {'denied', 'error'})
         failed += not good
         print(f"{label}: {tool} {feature} ({mode}) -> {got}; expected {expected} -> {'PASS' if good else 'FAIL'}")
         print(f"  result: {matching[-1]['text'][:300]}")

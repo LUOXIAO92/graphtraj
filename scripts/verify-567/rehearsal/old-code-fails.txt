@@ -1,0 +1,9 @@
+old code: src/graphtraj/workspace/definition_migration.py from 4c701316 placed at src/ (pyproject pythonpath=src; installed_commands builds its wheel from src); new tests from 801953cb; TMPDIR=$TMPDIR/pt567old; venv $TMPDIR/v567/venv-g-gl-ef7c37db
+pytest -p no:cacheprovider -q -rfE tests/test_task_definition_migration.py -k unreadable
+E               AssertionError: Error: [Errno 13] Permission denied: '$TMPDIR/pt567old/pytest-of-luoxiao/pytest-0/test_unreadable_directory_stop0/.graphtraj/state/tasks/2-revised/teams/1/rounds/1/realhost/definition.md'
+E               AssertionError: (('--preview',), "tasks: 2
+E               assert 0 == 1
+FAILED tests/test_task_definition_migration.py::test_unreadable_directory_stops_before_any_change[listable-not-searchable]
+FAILED tests/test_task_definition_migration.py::test_unreadable_directory_stops_before_any_change[unlistable]
+2 failed, 4 deselected in 4.15s
+(pytest result: 2 failed; old 0o444 run prints only Errno 13, old 0o000 run exits 0 because os.walk skipped the unlistable directory and the link inside it)

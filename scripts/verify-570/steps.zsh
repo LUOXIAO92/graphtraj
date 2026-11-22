@@ -454,13 +454,23 @@ share)
   local sum_before=$(shasum $P/.agents-control/claude-host.json | cut -c1-12)
   local stamp=$(date +%H%M%S); local ds=$ROOT/share-dsh-$stamp.txt cs=$ROOT/share-claude-$stamp.txt snap=$ROOT/share-before.ids
   python3 -I $JUDGE snap $P/.agents-control > $snap
-  # Archiving on for this run: config.yml in the data root (PUBLIC_API 3, README 'Archive') with only
-  # save_normalized_sessions: true; archives at <data root>/sessions/<sha256 of the Session ID>/session.jsonl
-  # (PUBLIC_API 1.5). Both hosts read it at start (require_connections) and when they archive.
+  # config.yml for this run (PUBLIC_API 3, README 'Archive' and 'Connections'): archiving on, archives at
+  # <data root>/sessions/<sha256 of the Session ID>/session.jsonl (PUBLIC_API 1.5), and one claude connection
+  # whose `models` lists the candidate id (an id string; without `models` agents asks the Runtime). It names no
+  # api_key_env, so the child keeps the Runtime's own login (README 'What a child's environment holds').
+  # create has no `connection` argument (its schema: runtime, configuration, preset, model, ...): with exactly one
+  # claude connection declared, create selects it (graftling control.py:941-946). Both hosts check every
+  # declared connection at start (require_connections, control.py:1029-1046).
   local cfg=$P/.agents-control/config.yml bak=$ROOT/config.yml.before-share-$stamp archived=$ROOT/share-archives-before.txt
   if [[ -e $cfg ]]; then cp -p $cfg $bak && print -r -- "existing $cfg backed up to $bak"; else print -r -- "no existing $cfg"; fi
-  print -r -- 'save_normalized_sessions: true' > $cfg
-  print -r -- "$cfg now: $(<$cfg)"
+  print -r -- "save_normalized_sessions: true
+connections:
+  claude-haiku:
+    runtime: claude
+    models:
+      - $CMODEL" > $cfg
+  print -r -- "$cfg now:"; cat $cfg
+  local refusal_before=$(ls -l $P/.agents-control/host-refusal.json 2>/dev/null) log_before=$(wc -l < $P/.agents-control/host.log 2>/dev/null || print 0)
   print -l -- $P/.agents-control/sessions/*(N/:t) > $archived
   print -r -- "archives before: $(grep -c . $archived)"
   local dprompt=$(create_prompt dsh dshok) cprompt=$(create_prompt claude claudeok $CMODEL)
@@ -488,15 +498,29 @@ share)
   (( d == 0 && c == 0 )) || rc=1
   [[ -d $P/.agents-control/live/dsh-host && -f $P/.agents-control/claude-host.json ]] \
     && print "PASS: files: live/dsh-host (DSH) and claude-host.json (Claude Code) side by side" || { print "FAIL: files: a host's files are missing"; rc=1; }
-  say "verdict (computed): config.yml and archives"
-  if (( !(d & 1) && !(c & 1) )) && ! grep -q -i 'invalid-config\|config\.yml:' $ds $cs; then
-    print -r -- "PASS: config.yml: both hosts started with $cfg (each Main's child was created; no config refusal in either output)"
+  say "verdict (computed): config.yml with a connection: did each host start or refuse at start?"
+  local codes='runtime-unavailable|unsupported-runtime|invalid-config|invalid-model'
+  local dref=$(grep -E "$codes" $ds | head -3) cref=$(grep -E "$codes" $cs | head -3)
+  local hlog=$(tail -n +$(( log_before + 1 )) $P/.agents-control/host.log 2>/dev/null | grep -E "$codes" | head -3)
+  [[ $(ls -l $P/.agents-control/host-refusal.json 2>/dev/null) != $refusal_before ]] \
+    && cref+=" host-refusal.json: $(cat $P/.agents-control/host-refusal.json 2>&1)"
+  [[ -n $hlog ]] && cref+=" host.log: $hlog"
+  if [[ -z $dref ]] && (( !(d & 9) )); then print -r -- "PASS: config.yml with a connection: the DSH host started (its child was created)"
   else
-    print -r -- "FAIL: config.yml: a host refused or did not create its child with $cfg"; rc=1
+    print -r -- "FAIL: config.yml with a connection: the DSH host did not start or did not create its child"; rc=1
+    [[ -n $dref ]] && print -r -- "REAL FINDING: the DSH host refused at start with the claude connection declared; a connection the other host cannot run stops its start (documented): $dref"
   fi
+  if [[ -z $cref ]] && (( !(c & 9) )); then print -r -- "PASS: config.yml with a connection: the Claude Code host started (its child was created through claude-haiku)"
+  else
+    print -r -- "FAIL: config.yml with a connection: the Claude Code host did not start or did not create its child"; rc=1
+    [[ -n $cref ]] && print -r -- "REAL FINDING: the Claude Code host refused at start or failed the create with this config.yml: $cref"
+  fi
+  say "verdict (computed): archives"
   print "Archived, per PUBLIC_API 1.5/3: every execution of every Runtime, so each child's Session; a Main Session is no execution and is not expected."
   local -a kids=(${(f)"$(python3 -I $JUDGE owned $P/.agents-control dsh-native | grep -v -x -F -f $snap)"} \
                  ${(f)"$(python3 -I $JUDGE owned $P/.agents-control claude-native | grep -v -x -F -f $snap)"})
+  (( $#kids == 2 )) && print -r -- "PASS: archives: two new children to look for: $kids" \
+    || { print -r -- "FAIL: archives: expected the DSH child and the Claude child, found ${#kids}: $kids"; rc=1; }
   python3 -I $JUDGE archives $P/.agents-control $archived $kids || rc=1
   if [[ -e $bak ]]; then mv $bak $cfg && print -r -- "restored $cfg from $bak"; else rm -f $cfg && print -r -- "removed $cfg (none before)"; fi
   claude_outside

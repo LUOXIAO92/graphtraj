@@ -46,6 +46,9 @@ if 'name of the model' in prompt:
 if not tool:
     print('TOOLS: NONE\nNO AGENTS TOOL'); sys.exit(0)
 root = Path(json.loads(Path(config).read_text())['root']) if config else Path.cwd() / '.agents-control'
+if os.environ.get('STUB570_DSH_REFUSE') and 'connections:' in ((root / 'config.yml').read_text() if (root / 'config.yml').is_file() else ''):
+    print('dsh: {"error": {"code": "runtime-unavailable", "message": "Connection \'claude-haiku\': Claude Code is not logged in (stub)"}}')
+    sys.exit(1)
 (root / 'live' / 'dsh-host').mkdir(parents=True, exist_ok=True)
 if os.environ.get('STUB570_FAIL'):
     print('TOOLS: mcp__graftling__agents\nERROR: {"error": {"code": "invalid-input", "message": "request.action: expected one of"}}')

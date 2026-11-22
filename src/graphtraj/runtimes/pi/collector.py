@@ -495,7 +495,9 @@ def collect_stdio() -> None:
                           private_paths=attachment_private_paths(configuration.harness_root))
     print(json.dumps({'ready': True}), flush=True)
     try:
-        for line in sys.stdin:
+        # readline, not `for line in sys.stdin`: click 8.2.x's CliRunner stdin turns the end of input into
+        # EOFError in __next__; readline returns '' at the end under every click version.
+        while line := sys.stdin.readline():
             event = json.loads(line)
             native = event.pop('piNative', None)
             collector.receive(event)

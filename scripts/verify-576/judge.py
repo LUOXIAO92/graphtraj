@@ -200,6 +200,20 @@ def child_facts(root, agent: str) -> dict:
     return facts
 
 
+def probed_set(root, model):
+    """(cache file, tools) of graftling's probed default set for MODEL under data root ROOT, or None."""
+    from pathlib import Path
+    found = []
+    for path in sorted(Path(root).rglob('claude-default-tools/*.json')):
+        try:
+            data = json.loads(path.read_text())
+        except ValueError:
+            continue
+        if data.get('model') == model and isinstance(data.get('tools'), list):
+            found.append((str(path), data['tools']))
+    return found[-1] if found else None
+
+
 def accept(mode: str, root: str, snapshot: str, parent: str) -> int:
     before = set(open(snapshot).read().split())
     children = parent_children(parent)
@@ -244,8 +258,17 @@ def accept(mode: str, root: str, snapshot: str, parent: str) -> int:
             else:
                 ok = has_bash and facts['bash_output_seen']
                 print(f'   {"PASS" if ok else "FAIL"}: {label}: Bash in system/init tools: {has_bash}; a Bash call'
-                      f' returned exactly-containing {BASH_TEXT!r}: {facts["bash_output_seen"]};'
+                      f' returned output containing {BASH_TEXT!r}: {facts["bash_output_seen"]};'
                       f' state {facts.get("state")}, outcome {facts.get("outcome")}')
+                failed += not ok
+            if mode == 'check':
+                probed = probed_set(root, facts.get('init_model'))
+                builtin = [name for name in tools if not name.startswith('mcp__')]
+                ok = probed is not None and set(builtin) == set(probed[1])
+                print(f'   probed default set ({probed and probed[0]}): {json.dumps(probed and probed[1])}')
+                print(f'   {"PASS" if ok else "FAIL"}: (iv) the no-tools child\'s built-in init tools equal the probed set'
+                      + ('' if probed is None else f'; only in init: {sorted(set(builtin) - set(probed[1]))};'
+                         f' only probed: {sorted(set(probed[1]) - set(builtin))}'))
                 failed += not ok
         else:
             ok = not has_bash and (marker != 'R576-II.' or 'Read' in tools)

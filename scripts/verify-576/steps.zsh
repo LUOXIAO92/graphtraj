@@ -20,6 +20,14 @@
 #   push      Main, after asking the user. Pushes the candidate branch from the Engineer's bundle
 #             (.scratch/576/graftling-576.bundle) to LUOXIAO92/graftling. Dialog: none expected; git uses your usual
 #             GitHub login. ~30 s.
+#   probe     Main. DIAGNOSIS ONLY, NOT ACCEPTANCE. Installs the CANDIDATE wheel (from GitHub, after push) into
+#             ROOT/venv and runs its probe function graftling.claude.execution.probe_default_tools against the
+#             installed claude, as a child launch would (model CMODEL, permission mode auto, the CLAUDE_CODE_*
+#             variables graftling sets). No model call and no login: the probe removes ANTHROPIC_API_KEY,
+#             ANTHROPIC_AUTH_TOKEN and CLAUDE_CODE_OAUTH_TOKEN, uses ANTHROPIC_BASE_URL=http://127.0.0.1:9 and an
+#             empty CLAUDE_CONFIG_DIR under ROOT/probe-state (removed after), and stops at system/init. Prints the
+#             probe argv, the set, its cache file, and for comparison the same argv plus --safe-mode. Writes only
+#             under ROOT (venv, src-cand, wheels-cand, proj, probe-state). Dialog: none. ~1-2 min.
 #   repro     Main. The premise on the BASE (graftling dev cadc419 = 0.7.0): clone at BASE from GitHub, build and
 #             install the wheel into ROOT/venv-base, `configuration --write` into ROOT/proj-base, then one `claude -p`
 #             parent there creates three claude children (model CMODEL): (i) no tools, asked to run
@@ -29,7 +37,10 @@
 #             (-p shows none). ~3-5 min.
 #   check     Main. The same on the CANDIDATE (GCOMMIT, from GitHub after push) in ROOT/venv and ROOT/proj.
 #             Verdicts: (i) Bash PRESENT in the recorded system/init tools AND its Bash call returned output
-#             containing `r576-bash`; (ii) Bash absent, Read present; (iii) Bash absent. Dialog: none. ~3-5 min.
+#             containing `r576-bash`; (iv) the (i) child's built-in init tools equal the probed set graftling
+#             cached in the data root (printed); (ii) Bash absent, Read present; (iii) Bash absent.
+#             Dialog: none. ~3-5 min.
+# Order: diagnose (done), pre, push, probe, repro, check.
 # Login for pre/repro/check: by default Claude Code runs isolated in CLAUDE_CONFIG_DIR=ROOT/claude-home with
 # ANTHROPIC_API_KEY (STOP if unset). With VERIFY576_CLAUDE_USER_LOGIN=1 (Main asks the user first) it uses the user's
 # own login: it READS the keychain login, ~/.claude.json and the user's ~/.claude settings, plugins and CLAUDE.md as
@@ -52,7 +63,7 @@ path=(${VERIFY576_BIN:+$VERIFY576_BIN} $path)
 URL=${VERIFY576_URL:-https://github.com/LUOXIAO92/graftling.git}
 BASE=cadc419271dabc8f4a0b11da1bb46c70ef598c77      # graftling dev = 0.7.0 + 570 (the production behaviour)
 BRANCH=agent/576-claude-agents-child-without-tools-has-no-bash
-GCOMMIT=${VERIFY576_GCOMMIT:-}                      # the graftling candidate; set when the fix is committed
+GCOMMIT=4adcd2112a12a7fe42cd746fd1b433f35e6d6968   # the graftling candidate (base: dev cadc419)
 BUNDLE=$WT/.scratch/576/graftling-576.bundle        # the candidate branch, from the base
 CH=$ROOT/claude-home                                # isolated CLAUDE_CONFIG_DIR (default login mode)
 CMODEL=${VERIFY576_CHILD_MODEL:-claude-haiku-5-5}   # children: the cheapest model
@@ -296,13 +307,13 @@ for line in open(sys.argv[1], errors="replace"):
   changed_claude $mark
   (( rc == 0 )) || { print -r -- "STOP: Claude Code did not answer with this login; fix the login, then: rm -rf $ROOT/proj $ROOT/proj-base && zsh $THIS pre"; return 1; }
   print "Success: a model id, its login source and exit=0."
-  print -r -- "next: zsh $THIS repro   (same login variables)"
+  print -r -- "next: (after asking the user) zsh $THIS push; then zsh $THIS probe; zsh $THIS repro (same login variables)"
   ;;
 push)
   say "[push] Main, after the user agreed. Push $BRANCH (${GCOMMIT:-unset}) to $URL from $BUNDLE. Dialog: none expected. ~30 s."
   [[ -n $GCOMMIT ]] || { print "STOP: GCOMMIT is not set in this script; ask the Engineer"; return 1; }
   local G=${TMPDIR:-/tmp}/graftling-576-push.git
-  [[ $(git ls-remote $URL refs/heads/$BRANCH | cut -f1) == $GCOMMIT ]] && { print "already on GitHub"; print -r -- "next: zsh $THIS check"; return 0; }
+  [[ $(git ls-remote $URL refs/heads/$BRANCH | cut -f1) == $GCOMMIT ]] && { print "already on GitHub"; print -r -- "next: zsh $THIS probe"; return 0; }
   [[ -f $BUNDLE ]] || { print -r -- "STOP: $BUNDLE missing; ask the Engineer"; return 1; }
   rm -rf $G && git clone -q --bare $URL $G || return 1
   git -C $G fetch -q $BUNDLE "${BRANCH}:${BRANCH}" || return 1
@@ -312,7 +323,46 @@ push)
   print -r -- "on GitHub now: $(git ls-remote $URL refs/heads/$BRANCH)"
   rm -rf $G
   print "Success: the GitHub line above shows $GCOMMIT."
-  print -r -- "next: zsh $THIS check"
+  print -r -- "next: zsh $THIS probe"
+  ;;
+probe)
+  say "[probe] Main. DIAGNOSIS, not acceptance: the candidate's probe against the installed claude. Dialog: none. ~1-2 min."
+  [[ -n $GCOMMIT ]] || { print "STOP: GCOMMIT is not set in this script; ask the Engineer"; return 1; }
+  [[ $(git ls-remote $URL refs/heads/$BRANCH | cut -f1) == $GCOMMIT ]] || { print -r -- "STOP: $GCOMMIT is not on GitHub; run: zsh $THIS push"; return 1; }
+  install_wheel cand $GCOMMIT || return 1
+  local exe=${$(command -v claude):A} version; version=$(env -i HOME=$HOME PATH=$PATH CLAUDE_CONFIG_DIR=$ROOT/probe-version $exe --version 2>&1)
+  rm -rf $ROOT/probe-version $ROOT/probe-state
+  print -r -- "executable $exe; version $version; model $CMODEL; permission mode auto"
+  say "probe_default_tools (state $ROOT/probe-state)"
+  claude_env CLAUDE_CODE_SDK_READS_SESSION_STATE=1 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 \
+    $V/bin/python -I -c 'import json, os, sys, time
+from pathlib import Path
+from graftling.claude.execution import (probe_default_tools, read_init_tools, tool_probe_argv,
+                                        tool_probe_environment, tool_probe_key)
+exe, version, model, state = sys.argv[1], sys.argv[2], sys.argv[3], Path(sys.argv[4])
+env = dict(os.environ)
+print("probe argv:", json.dumps(tool_probe_argv(exe, model, "auto")))
+started = time.monotonic()
+try:
+    tools = probe_default_tools(exe, version, model, "auto", env, state)
+except Exception as error:
+    print("STOP: the probe failed:", type(error).__name__, error); sys.exit(1)
+print("probed set (%d, %.1f s): %s" % (len(tools), time.monotonic() - started, json.dumps(tools)))
+for name in ("Bash", "WebFetch", "Glob", "Grep", "Read", "Edit", "Write"):
+    print("  %s: %s" % (name, "present" if name in tools else "absent"))
+key = tool_probe_key(exe, version, model, "auto", env)
+cache = state / "claude-default-tools" / (key + ".json")
+print("cache file:", cache, "exists" if cache.exists() else "MISSING")
+print("left in", state / "claude-default-tools", ":", sorted(p.name for p in (state / "claude-default-tools").iterdir()))
+scratch = state / "safe-mode"; (scratch / "home").mkdir(parents=True); (scratch / "cwd").mkdir()
+safe, cause = read_init_tools(tool_probe_argv(exe, model, "auto") + ["--safe-mode"],
+                              tool_probe_environment(env, scratch / "home"), scratch / "cwd")
+print("for comparison, + --safe-mode:", json.dumps(safe), "" if safe else cause)
+if safe is not None:
+    print("  only without --safe-mode:", sorted(set(tools) - set(safe)), "only with:", sorted(set(safe) - set(tools)))
+' $exe "$version" $CMODEL $ROOT/probe-state || return 1
+  print "Success: the probe read a set without a model call."
+  print -r -- "next: zsh $THIS repro"
   ;;
 repro)
   say "[repro] Main. The premise on the BASE $BASE through the real entry. Dialog: none. ~3-5 min."
@@ -332,7 +382,7 @@ check)
   print "Success: the child without tools ran Bash; tools [Read] and disallowed [Bash] still have no Bash."
   print -r -- "next: report $OUT to the Leader"
   ;;
-*) print -r -- "usage: zsh $THIS diagnose|pre|push|repro|check"; return 2 ;;
+*) print -r -- "usage: zsh $THIS diagnose|pre|push|probe|repro|check"; return 2 ;;
 esac
 }
 

@@ -322,7 +322,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         assert descriptors['tasks']['inputSchema'] == gateway.INPUT_SCHEMA
         assert descriptor["inputSchema"] == gateway.INPUT_SCHEMA
         assert set(descriptor["inputSchema"]["properties"]) == {
-            "action", "query", "feature", "arguments", "schema",
+            "action", "query", "feature", "arguments", "arguments_file", "schema",
         }
 
         # discover and describe are reached through the same single tool.
@@ -341,7 +341,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         })["result"]
         description = described["structuredContent"]
         assert description["feature"] == "task_graph"
-        assert set(description) == {"feature", "description", "manual_ref"}
+        assert set(description) == {"feature", "description", "manual_ref", "arguments_file"}
         reference = Path(description["manual_ref"])
         assert reference.is_absolute() and reference.read_text(encoding="utf-8")
         parameters = server.request("tools/call", {
@@ -529,7 +529,7 @@ def test_installed_mcp_server_reports_invalid_input_and_unknown_requests(
     )
     assert cli.returncode == 2
     assert rejected["isError"] is True
-    assert "required" in rejected["structuredContent"]["error"]
+    assert "required" in rejected["structuredContent"]["error"]["message"]
     assert rejected["content"][0]["text"]
     assert unknown_tool["error"]["code"] == -32602
     assert unknown_feature["isError"] is True

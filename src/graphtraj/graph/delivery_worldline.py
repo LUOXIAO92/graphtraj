@@ -180,22 +180,40 @@ def _read_shards(
     return shards, events
 
 
-def _validate_supplied_event(event: Mapping[str, Any]) -> None:
+def supplied_event_errors(event: Any, path: str) -> list[dict[str, str]]:
+    """Return every problem of one supplied event as ``{"path", "reason"}``.
+
+    Only the event itself is checked; whether its causes exist needs the
+    recorded Worldline and stays with the append (556).
+    """
     if not isinstance(event, Mapping):
-        raise ValueError("worldline event must be a mapping")
+        return [{"path": path, "reason": "worldline event must be a mapping"}]
+
+    errors = []
     if _ASSIGNED_FIELDS.intersection(event):
-        raise ValueError("worldline event contains assigned fields")
+        errors.append({"path": path, "reason": "worldline event contains assigned fields"})
     event_name = event.get("event")
     if not isinstance(event_name, str) or _KIND.fullmatch(event_name) is None:
-        raise ValueError("worldline event requires a plain event")
-    if event_name in _NON_FACT_KINDS:
-        raise ValueError("operation does not introduce a new durable fact")
-    _validate_string_list(event, "caused_by_event_ids")
-    _validate_string_list(event, "evidence_refs")
+        errors.append({"path": f"{path}.event", "reason": "worldline event requires a plain event"})
+    elif event_name in _NON_FACT_KINDS:
+        errors.append({"path": f"{path}.event", "reason": "operation does not introduce a new durable fact"})
+    for field in ("caused_by_event_ids", "evidence_refs"):
+        try:
+            _validate_string_list(event, field)
+        except ValueError as error:
+            errors.append({"path": f"{path}.{field}", "reason": str(error)})
     try:
         json.dumps(event, ensure_ascii=False)
-    except (TypeError, ValueError) as error:
-        raise ValueError("worldline event must be JSON serializable") from error
+    except (TypeError, ValueError):
+        errors.append({"path": path, "reason": "worldline event must be JSON serializable"})
+    return errors
+
+
+def _validate_supplied_event(event: Mapping[str, Any]) -> None:
+    """Raise one ``ValueError`` naming every problem of a supplied event."""
+    errors = supplied_event_errors(event, "event")
+    if errors:
+        raise ValueError("; ".join(error["reason"] for error in errors))
 
 
 def _validate_string_list(event: Mapping[str, Any], field: str) -> list[str]:

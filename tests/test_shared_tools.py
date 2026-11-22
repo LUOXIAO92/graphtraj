@@ -104,5 +104,5 @@ def test_both_transports_preserve_handler_input_rejection(
     document = response['result']
     assert result['structuredContent'] == document
     assert document['feature'] == 'task_members'
-    assert 'summary_task_id' in document['error']
+    assert document['error']['errors'] == [{'path': 'arguments.summary_task_id', 'reason': 'expected string'}]
     assert 'summary_task_id' in result['content'][0]['text']

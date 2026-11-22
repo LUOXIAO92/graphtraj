@@ -106,7 +106,7 @@ def test_agent_reads_project_activity_but_cannot_forge_path(tmp_path: Path) -> N
             handle_request({'action': 'execute', 'feature': 'desktop_activity', 'arguments': {}}, cwd=tmp_path)
     refused = bind(tmp_path, desktop_observer=True)({'action': 'execute', 'feature': 'desktop_activity',
         'arguments': {'task_id': '148', 'path': '/private/elsewhere'}})
-    assert refused.failed and 'unexpected parameter' in refused.document['error']
+    assert refused.failed and 'unexpected parameter' in refused.document['error']['message']
     with pytest.raises(ValueError, match='actual member'):
         query(tmp_path, alias='other@x1')
 

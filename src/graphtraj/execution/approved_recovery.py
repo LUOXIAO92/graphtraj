@@ -32,6 +32,37 @@ from graphtraj.runtimes.replacement import caller_runtime
 from graphtraj.workspace.runner_project import discover_project
 
 
+def recovery_input_errors(arguments: Any) -> list[dict[str, str]]:
+    """Return every problem of the recovery arguments themselves, as ``{"path", "reason"}``.
+
+    These depend only on the caller's own arguments, never on project state,
+    so the gateway reports them together with schema errors (556). Values of
+    the wrong type are left to the schema.
+    """
+    if not isinstance(arguments, dict):
+        return []
+
+    errors = []
+    if arguments.get('retry_event_id'):
+        if set(arguments) != {'alias', 'retry_event_id'}:
+            errors.append({'path': 'arguments', 'reason': 'Retry accepts only alias and retry_event_id.'})
+        return errors
+
+    for field in ('reason', 'instruction', 'allowed_scope', 'forbidden_scope'):
+        if not isinstance(arguments.get(field), str) or not arguments[field].strip():
+            errors.append({'path': f'arguments.{field}', 'reason': 'must be explicit nonempty text'})
+    causes = arguments.get('caused_by_event_ids', [])
+    if isinstance(causes, list) and (not causes or len(set(map(str, causes))) != len(causes)):
+        errors.append({'path': 'arguments.caused_by_event_ids',
+                       'reason': 'Recovery requires unique authority event references.'})
+    minutes = arguments.get('additional_minutes', 0)
+    if (isinstance(minutes, bool) or not isinstance(minutes, (int, float))
+            or not math.isfinite(minutes) or minutes < 0):
+        errors.append({'path': 'arguments.additional_minutes',
+                       'reason': 'must be a finite nonnegative increment'})
+    return errors
+
+
 def approved_recovery(arguments: dict, cwd: Path) -> dict:
     """Prepare a reviewable repair, or retry continuation of an applied repair.
 
@@ -48,10 +79,11 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
 
     if alias in superseded_resolvers(read_worldline(project.state_directory, project.harness_root), mapping['task_id']):
         raise RunnerError('authority-denied', SUPERSEDED_RESOLVER)
+    errors = recovery_input_errors(arguments)
+    if errors:
+        raise RunnerError('invalid-input', '; '.join(f"{error['path']}: {error['reason']}" for error in errors))
     retry = arguments.get('retry_event_id')
     if retry:
-        if set(arguments) != {'alias', 'retry_event_id'}:
-            raise RunnerError('invalid-input', 'Retry accepts only alias and retry_event_id.')
         events = read_worldline(project.state_directory, project.harness_root)
         applied = next((event for event in events if event['event_id'] == retry
                         and event['event'] == 'recovery-applied' and event.get('alias') == alias), None)
@@ -59,17 +91,9 @@ def approved_recovery(arguments: dict, cwd: Path) -> dict:
             raise RunnerError('invalid-input', 'Retry must identify this Session\'s applied recovery.')
         return _resume(project, applied)
 
-    for field in ('reason', 'instruction', 'allowed_scope', 'forbidden_scope'):
-        if not isinstance(arguments.get(field), str) or not arguments[field].strip():
-            raise RunnerError('invalid-input', f'{field} must be explicit nonempty text.')
     causes = tuple(arguments.get('caused_by_event_ids', ()))
-    if not causes or len(set(causes)) != len(causes):
-        raise RunnerError('invalid-input', 'Recovery requires unique authority event references.')
     _require_project_events(cwd, causes)
     minutes = arguments.get('additional_minutes', 0)
-    if (isinstance(minutes, bool) or not isinstance(minutes, (int, float))
-            or not math.isfinite(minutes) or minutes < 0):
-        raise RunnerError('invalid-input', 'additional_minutes must be a finite nonnegative increment.')
     request = {**arguments, 'additional_minutes': minutes,
                'restore_active': arguments.get('restore_active', False),
                'resume': arguments.get('resume', True)}

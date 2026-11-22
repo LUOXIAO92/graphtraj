@@ -1,0 +1,33 @@
+Dialog: none
+== [D] Main. Real graphtraj-mcp entry demonstration in a new scratch project under /tmp/claude-501/t556s. Dialog: none. <1 min.
+reusing /tmp/claude-501/t556s/venv-cand (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments editable; graftling aea5962d wheel)
+entry: /tmp/claude-501/t556s/venv-cand/bin/graphtraj-mcp (candidate 7e62258372b1b0f63c33981c7d9a07581bee2be5); project: /tmp/claude-501/t556s/demo-20261122T002041
+== 1. one call with several problems (schema and worldline_append checks together)
+{
+  "event": {
+    "event": "Not plain!",
+    "caused_by_event_ids": "not-a-list",
+    "evidence_refs": [
+      "",
+      ""
+    ]
+  },
+  "note": "unexpected"
+}
+>>> tasks {"action": "execute", "feature": "worldline_append", "arguments_file": "event.json"}
+<<< isError = True
+[
+  {
+    "type": "text",
+    "text": "Agent Runner must be invoked from the Harness Project Root or this Session's Worktree."
+  }
+]
+Traceback (most recent call last):
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/demo556.py", line 84, in <module>
+    sys.exit(main(sys.argv[1], Path(sys.argv[2])))
+             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/demo556.py", line 51, in main
+    errors = failed['structuredContent']['error']['errors']
+             ~~~~~~^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'structuredContent'
+STOP: an expectation failed (above)

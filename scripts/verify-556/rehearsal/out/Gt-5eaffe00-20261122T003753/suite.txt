@@ -1,0 +1,84 @@
+........................................................................ [ 41%]
+........................................................................ [ 83%]
+.................ssFss.s....                                             [100%]
+=================================== FAILURES ===================================
+_ test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics __
+
+installed_commands = InstalledCommands(product=PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/installed-environment0...r=PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/installed-environment0/venv/bin/agent-runner'))
+mcp_executable = PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/installed-environment0/venv/bin/graphtraj-mcp')
+temporary_git_repository = PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/test_installed_mcp_server_cont0/target-project')
+fake_codex = FakeCodex(executable=PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/test_installed_mcp_server_c...PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/test_installed_mcp_server_cont0/fake-codex.log'))
+tmp_path = PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/test_installed_mcp_server_cont0')
+
+    def test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics(
+        installed_commands: InstalledCommands,
+        mcp_executable: Path,
+        temporary_git_repository: Path,
+        fake_codex: FakeCodex,
+        tmp_path: Path,
+    ) -> None:
+        """The dispatch stop and the explicit continue are the existing D.3 path."""
+    
+        from test_execution_budgets import _budget_body
+        from test_session_alias_control import _register_ready_task
+    
+        harness, _, _, environment = configure_harness(
+            installed_commands, temporary_git_repository, fake_codex, tmp_path,
+        )
+        _register_ready_task(installed_commands, harness, body=_budget_body(total=1))
+        clock = tmp_path / "mcp-continue-clock"
+        clock.write_text(str(time.time()), encoding="utf-8")
+        environment, protocol = _controlled_budget_server(
+            installed_commands, fake_codex, harness, environment, tmp_path,
+            BUDGET_CLOCK=str(clock), FAKE_CODEX_FINAL_LEADER_CLOCK=str(clock),
+            FAKE_CODEX_CAPTURE_STDIN="1",
+        )
+        task_directory = harness / ".graphtraj/state/tasks/76-session-alias-control"
+    
+        with _started_mcp(mcp_executable, harness, environment) as server:
+            stopped = server.call("swarm", {"tasks": [{
+                "task_id":   "76",
+                "task_name": "session-alias-control",
+                "role":        "coding-team.team-leader",
+            }]}, thread_id="thread-main")["result"]
+            assert stopped["isError"] is False, stopped
+            _await_retained_stop(task_directory)
+>           _assert_native_budget_stop(protocol, task_directory, "thread-main")
+
+tests/test_mcp_host_tools.py:957: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+protocol = PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/test_installed_mcp_server_cont0/mcp-main-protocol.jsonl')
+task_directory = PosixPath('/private/tmp/claude-501/verify-556-cand-20261122T003753/bt/test_installed_mcp_server_cont0/.graphtraj/state/tasks/76-session-alias-control')
+thread_id = 'thread-main'
+
+    def _assert_native_budget_stop(
+        protocol: Path,
+        task_directory: Path,
+        thread_id: str,
+    ) -> list[dict]:
+        """Check one retained stop and its receipt on the actual parent's native route."""
+        # The awaited stop can return before the separate parent receipt is retained.
+        # A poll, not a latency claim: the full suite's load delayed it past 10 s (368).
+        deadline = time.monotonic() + 30
+        while True:
+            usage = yaml.safe_load((task_directory / "execution-budget.yml").read_text())
+            if all(notice["delivered"] for notice in usage["parent_notices"]):
+                break
+>           assert time.monotonic() < deadline, usage
+E           AssertionError: {'started_at': 1795275490.467028, 'budget': {'difficulty': 'high', 'difficulty_reason': 'Runtime work crosses the Team...'sessions': {'team_leader': 1, 'engineer': 1, 'standards_reviewer': 1, 'spec_reviewer': 1, ...}, 'corrections': 0, ...}
+E           assert 285441.341807833 < 285441.339821583
+E            +  where 285441.341807833 = <built-in function monotonic>()
+E            +    where <built-in function monotonic> = time.monotonic
+
+tests/test_mcp_host_tools.py:1486: AssertionError
+=============================== warnings summary ===============================
+tests/test_cli_projection.py: 37 warnings
+  /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/src/graphtraj/interfaces/cli/projection.py:103: DeprecationWarning: 'click.utils.make_default_short_help' is deprecated and will be removed in Click 9.0.
+    return click.utils.make_default_short_help(TOOLS[self.feature].description, limit)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+1 failed, 166 passed, 5 skipped, 37 warnings in 147.76s (0:02:27)
+exit=1

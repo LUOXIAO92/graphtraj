@@ -123,6 +123,17 @@ def _tool_call_response(
             request_id, INVALID_PARAMS, "Tool arguments must be an object."
         )
     try:
+        # This server runs in its caller's own workspace (the project for
+        # Main, a member's Worktree), which bounds the arguments file it reads.
+        arguments = gateway.read_arguments_file(arguments, Path.cwd())
+    except gateway.ValidationErrors as error:
+        document = gateway.invalid_input(error.errors).document
+        return _result_response(request_id, {
+            "content": [{"type": "text", "text": yaml.safe_dump(document, sort_keys=False, allow_unicode=True)}],
+            "structuredContent": document,
+            "isError": True,
+        })
+    try:
         # Keep the selected entry's scope before forwarding into the already
         # authenticated host. The host still owns feature authorization.
         if name == 'tasks' and arguments.get('action') != 'discover':

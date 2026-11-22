@@ -1,0 +1,12 @@
+venv: /tmp/claude-501/t556s/venv-cand (graftling aea5962d wheel; candidate editable)
+cmd: TMPDIR=/tmp/claude-501/pt <venv>/bin/python -m pytest -p no:cacheprovider -q -rfE tests/test_team_correction.py
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments
+configfile: pyproject.toml
+plugins: anyio-4.10.0
+collected 6 items
+
+tests/test_team_correction.py ......                                     [100%]
+
+============================== 6 passed in 8.38s ===============================

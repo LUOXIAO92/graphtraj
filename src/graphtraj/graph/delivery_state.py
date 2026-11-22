@@ -63,6 +63,50 @@ def current_result_rework_cause(
     return None
 
 
+# Fields each Delivery State request phase carries.
+_PHASE_FIELDS = {
+    "start": _COMMON | {"worktree", "branch", "members"},
+    "member": _COMMON | {"member", "role", "session_ref"},
+    "final": _COMMON | {"candidate", "decision", "submission_id", "reason"},
+    "rework": _COMMON,
+    "retiring": _COMMON | {"actor"},
+    "retired": _COMMON | {"session_ref", "trace_ref"},
+    "retire-member": _COMMON | {"member", "session_ref"},
+    "replace-member": _COMMON | {"member", "role", "session_ref"},
+}
+
+
+def delivery_request_errors(request: Any, facts: Any, path: str) -> list[dict[str, str]]:
+    """Return every problem of a Delivery State request itself as ``{"path", "reason"}`` (556).
+
+    ``path`` names the arguments object holding ``request`` and ``facts``.
+    Nothing here reads Task or Team state.
+    """
+    if not isinstance(request, dict):
+        return [{"path": f"{path}.request", "reason": "must be a mapping"}]
+
+    errors = []
+    if request != facts:
+        errors.append({"path": f"{path}.facts", "reason": "Delivery State request differs from authoritative facts"})
+    phase = request.get("phase")
+    if not isinstance(phase, str) or phase not in _PHASE_FIELDS:
+        errors.append({"path": f"{path}.request.phase", "reason": f"must be one of {sorted(_PHASE_FIELDS)}"})
+    else:
+        for field in sorted(_PHASE_FIELDS[phase] - set(request)):
+            errors.append({"path": f"{path}.request.{field}", "reason": f"required for phase {phase}"})
+        for field in sorted(set(request) - _PHASE_FIELDS[phase]):
+            errors.append({"path": f"{path}.request.{field}", "reason": f"not valid for phase {phase}"})
+    for field in ("caused_by_event_ids", "evidence_refs"):
+        if field not in request:
+            continue
+        try:
+            _validate_string_list(request, field, empty=False)
+        except ValueError:
+            errors.append({"path": f"{path}.request.{field}",
+                           "reason": "must be a nonempty list of unique nonempty strings"})
+    return errors
+
+
 def apply_delivery_state_request(
     state_directory: Path,
     harness_root: Path,

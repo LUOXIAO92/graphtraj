@@ -78,7 +78,7 @@ def test_disclosure_reads_only_selected_material(
     described = gateway.handle_request({"action": "describe", "feature": "alias_status"}, cwd=tmp_path)
     assert not described.failed
     assert Path(described.document["manual_ref"]).read_text() == "Selected fixture manual"
-    assert set(described.document) == {"feature", "description", "manual_ref"}
+    assert set(described.document) == {"feature", "description", "manual_ref", "arguments_file"}
     assert Path(described.document["manual_ref"]).is_absolute()
     assert reads == [tmp_path / "manual.txt", tmp_path / "manual.txt"]
     reads.clear()
@@ -123,7 +123,8 @@ def test_selected_validation_rejects_wrong_types_and_context(
     """Model arguments cannot smuggle trusted context or bypass selected types."""
     result = gateway.handle_request({"action": "execute", "feature": "alias_status", "arguments": arguments})
     assert result.failed
-    assert field in result.document["error"]
+    assert field in result.document["error"]["message"]
+    assert result.document["error"]["code"] == "invalid-input"
     assert set(result.document) == {"feature", "error"}
     assert feature == []
 
@@ -160,7 +161,7 @@ def test_real_selected_constraints(name: str, arguments: dict, field: str) -> No
     """Nested, required, enum, const and cardinality constraints reject before execution."""
     result = gateway.handle_request({"action": "execute", "feature": name, "arguments": arguments})
     assert result.failed
-    assert field in result.document["error"]
+    assert field in result.document["error"]["message"]
 
 
 def test_missing_manual_does_not_gate_direct_core_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -200,7 +201,7 @@ def test_delivered_guide_resolution_is_independent_of_the_process_directory(
     )
     assert described.failed
     assert "manual_ref" not in described.document
-    assert set(described.document) <= {"feature", "description", "manual_ref", "error"}
+    assert set(described.document) <= {"feature", "description", "manual_ref", "arguments_file", "error"}
     assert "Cannot read manual manuals/task-breakdown/guide.md" in described.document["error"]
 
     refused = gateway.handle_request(
@@ -240,7 +241,7 @@ def test_method_only_rows_use_guide_names_and_frontmatter_descriptions(
         described = gateway.handle_request({"action": "describe", "feature": name})
         assert not described.failed
         assert Path(described.document["manual_ref"]).read_text(encoding="utf-8") == guide.read_text(encoding="utf-8")
-        assert set(described.document) <= {"feature", "description", "manual_ref", "error"}
+        assert set(described.document) <= {"feature", "description", "manual_ref", "arguments_file", "error"}
         assert gateway.handle_request(
             {"action": "execute", "feature": name, "arguments": {}}).failed
 
@@ -250,7 +251,7 @@ def test_unknown_method_only_and_host_restriction(tmp_path: Path, monkeypatch: p
     monkeypatch.setitem(tools.TOOLS, "fixture_method", replace(tools.TOOLS["alias_status"], name="fixture_method", handler=None))
     described = gateway.handle_request({"action": "describe", "feature": "fixture_method"}, cwd=tmp_path)
     assert not described.failed
-    assert set(described.document) <= {"feature", "description", "manual_ref", "error"}
+    assert set(described.document) <= {"feature", "description", "manual_ref", "arguments_file", "error"}
     for name in ("unknown", "fixture_method"):
         result = gateway.handle_request({"action": "execute", "feature": name, "arguments": {}})
         assert result.failed
@@ -339,9 +340,9 @@ def test_outer_schema_is_fixed_and_describe_accepts_absolute_manual(
     discovered = gateway.handle_request({"action": "discover", "query": "fixture_added"})
     assert discovered.document["features"][0]["feature"] == "fixture_added"
     assert gateway.INPUT_SCHEMA == initial
-    assert set(initial["properties"]) == {"action", "query", "feature", "arguments", "schema"}
+    assert set(initial["properties"]) == {"action", "query", "feature", "arguments", "arguments_file", "schema"}
     assert initial["properties"]["feature"] == {"type": "string"}
-    assert initial["properties"]["arguments"] == {"type": "object"}
+    assert initial["properties"]["arguments"]["type"] == "object"
     described = gateway.handle_request({"action": "describe", "feature": "fixture_added"})
     assert Path(described.document["manual_ref"]).read_text() == "Selected fixture manual"
     assert feature == []
@@ -358,5 +359,5 @@ def test_unsupported_schema_constraint_fails_closed(
         "action": "execute", "feature": "alias_status", "arguments": {},
     })
     assert result.failed
-    assert "schema constraint" in result.document["error"]
+    assert "schema constraint" in result.document["error"]["message"]
     assert feature == []

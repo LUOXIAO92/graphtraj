@@ -16,15 +16,19 @@ from graphtraj.execution.runner_control import (
     submit_session_report,
 )
 from graphtraj.execution.runner_launch import launch_swarm, launch_swarm_file
-from graphtraj.graph.delivery_state import apply_delivery_state_request
+from graphtraj.graph.delivery_state import apply_delivery_state_request, delivery_request_errors
 from graphtraj.graph.delivery_worldline import (
     append_project_worldline_event,
     read_worldline,
+    supplied_event_errors,
 )
 from graphtraj.graph.task_graph import (
     read_graph,
     register_task,
     revise_tasks,
+    revision_errors,
+    state_change_errors,
+    completion_errors,
     update_task_state,
     complete_task,
 )
@@ -41,6 +45,7 @@ from graphtraj.graph.task_protocol import (
     REGISTER_SCHEMA as _ISSUE_SCHEMA,
     REVISION_SCHEMA as _REVISION_SCHEMA,
     COMPLETE_SCHEMA,
+    definition_errors,
     TASK_SCHEMA,
     STATE_CHANGE_SCHEMA as _STATE_CHANGE_SCHEMA,
 )
@@ -138,7 +143,9 @@ class Tool:
     ``manual_ref`` identifies caller-managed text; registering or executing an
     operation does not read it. A ``None`` handler marks a method-only feature:
     it carries guidance and no executable action. ``examples`` holds structured
-    argument examples.
+    argument examples. ``check`` returns the feature's own problems with its
+    arguments as ``{"path", "reason"}`` items; it reads no project state, so
+    the gateway reports them with schema errors in one answer (556).
     """
 
     name: str
@@ -149,6 +156,7 @@ class Tool:
     examples: tuple[dict[str, Any], ...] = ()
     cli_path: tuple[str, ...] = ()
     cli_parameters: dict[str, tuple[str, str]] = field(default_factory=dict)
+    check: Callable[[Any], list[dict[str, str]]] | None = None
 
 
 TOOLS: dict[str, Tool] = {}
@@ -161,9 +169,10 @@ def register_tool(
     *,
     manual_ref: str | None = None,
     examples: tuple[dict[str, Any], ...] = (),
+    check: Callable[[Any], list[dict[str, str]]] | None = None,
 ) -> None:
-    """Bind an operation and optional manual reference/examples to its schema."""
-    TOOLS[name] = Tool(name, description, input_schema, handler, manual_ref, examples)
+    """Bind an operation and optional manual reference/examples/check to its schema."""
+    TOOLS[name] = Tool(name, description, input_schema, handler, manual_ref, examples, check=check)
 
 
 def read_current_graph(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
@@ -468,6 +477,23 @@ def launch_swarm_tool(
     return ToolResult(response.document, failed=not response.succeeded)
 
 
+def _continuation_errors(arguments: Any) -> list[dict[str, str]]:
+    """Return continue's own argument problems (556); the Task's state is checked later."""
+    from graphtraj.execution.runner_batch import valid_task_id
+
+    if not isinstance(arguments, dict):
+        return []
+    errors = []
+    if isinstance(arguments.get("task_id"), str) and not valid_task_id(arguments["task_id"]):
+        errors.append({"path": "arguments.task_id", "reason": "must be a Task ID"})
+    causes = arguments.get("caused_by_event_ids")
+    if isinstance(causes, list) and (not causes or len(set(map(str, causes))) != len(causes)
+                                     or any(not event_id for event_id in causes)):
+        errors.append({"path": "arguments.caused_by_event_ids",
+                       "reason": "Continuation requires unique causal Project Worldline event IDs."})
+    return errors
+
+
 def continue_task_execution(
     arguments: Mapping[str, Any], *, cwd: Path | None = None,
 ) -> ToolResult:
@@ -594,6 +620,7 @@ register_tool(
             "dependencies": [],
         },
     ),
+    check=lambda arguments: definition_errors(arguments, "arguments"),
 )
 register_tool(
     "task_revise",
@@ -602,6 +629,7 @@ register_tool(
     _REVISION_SCHEMA,
     revise_current_tasks,
     manual_ref="manuals/task-breakdown/guide.md",
+    check=lambda arguments: revision_errors(arguments, "arguments"),
 )
 register_tool(
     "task_complete",
@@ -609,6 +637,7 @@ register_tool(
     COMPLETE_SCHEMA,
     complete_current_task,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: completion_errors(arguments, "arguments"),
 )
 register_tool(
     "task_update",
@@ -617,6 +646,7 @@ register_tool(
     _STATE_CHANGE_SCHEMA,
     update_current_task_state,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: state_change_errors(arguments, "arguments"),
 )
 register_tool(
     "task_backup",
@@ -665,6 +695,8 @@ register_tool(
     _WORLDLINE_APPEND_SCHEMA,
     append_worldline_event,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: (supplied_event_errors(arguments["event"], "arguments.event")
+                             if isinstance(arguments, dict) and "event" in arguments else []),
 )
 register_tool(
     "worldline_read",
@@ -689,6 +721,8 @@ register_tool(
     _DELIVERY_STATE_SCHEMA,
     apply_state_request,
     manual_ref="manuals/task-delivery/guide.md",
+    check=lambda arguments: (delivery_request_errors(arguments["request"], arguments.get("facts"), "arguments")
+                             if isinstance(arguments, dict) and "request" in arguments else []),
 )
 register_tool(
     "task_integrate",
@@ -719,6 +753,7 @@ register_tool(
     _CONTINUE_SCHEMA,
     continue_task_execution,
     manual_ref="manuals/task-delivery/guide.md",
+    check=_continuation_errors,
     examples=(
         {
             "task_id":           "paper-1",
@@ -729,6 +764,13 @@ register_tool(
 )
 
 
+
+
+def _recovery_input_errors(arguments: Any) -> list[dict[str, str]]:
+    """Return approved_recovery's own argument problems (imported on use)."""
+    from graphtraj.execution.approved_recovery import recovery_input_errors
+
+    return recovery_input_errors(arguments)
 
 
 def recover_execution(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> ToolResult:
@@ -761,6 +803,7 @@ register_tool(
         'retry_event_id': {'type': 'string', 'description': 'Applied recovery event; retry continuation without another repair.'},
     }, 'required': ['alias'], 'additionalProperties': False},
     recover_execution, manual_ref='manuals/task-delivery/guide.md',
+    check=_recovery_input_errors,
 )
 
 

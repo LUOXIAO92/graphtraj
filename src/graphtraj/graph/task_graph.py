@@ -49,16 +49,42 @@ def _validate_revision(revision: Any) -> None:
     from graphtraj.interfaces.gateway import _validate
 
     _validate(revision, protocol.REVISION_SCHEMA, "revision")
-    _validate_string_list(revision, "caused_by_event_ids", allow_empty=True)
-    _validate_string_list(revision, "evidence_refs", allow_empty=False)
-    if "reopen_task_ids" in revision:
-        _validate_string_list(revision, "reopen_task_ids", allow_empty=True)
+    errors = revision_errors(revision, "revision")
+    if errors:
+        raise ValueError("; ".join(error["reason"] for error in errors))
+
+
+def revision_errors(revision: Any, path: str) -> list[dict[str, str]]:
+    """Return every definition-level problem of a revision as ``{"path", "reason"}``.
+
+    Schema problems are the schema's; this adds the checks the schema cannot
+    express, one per list field and one per Task definition, so a caller sees
+    them all in one answer (556). Nothing here reads project state.
+    """
+    if not isinstance(revision, dict):
+        return []
+
+    errors = []
+    for field, allow_empty in (("caused_by_event_ids", True), ("evidence_refs", False),
+                               ("reopen_task_ids", True)):
+        if field in revision:
+            try:
+                _validate_string_list(revision, field, allow_empty=allow_empty)
+            except ValueError as error:
+                errors.append({"path": f"{path}.{field}", "reason": str(error)})
+
     identifiers = []
-    for definition in revision["tasks"]:
-        _validate_issue({key: definition[key] for key in protocol.TASK_PROPERTIES})
+    tasks = revision.get("tasks")
+    for index, definition in enumerate(tasks if isinstance(tasks, list) else []):
+        # A definition missing fields is reported by the schema.
+        if not isinstance(definition, dict) or not set(protocol.TASK_PROPERTIES) <= set(definition):
+            continue
+        errors += protocol.definition_errors(
+            {key: definition[key] for key in protocol.TASK_PROPERTIES}, f"{path}.tasks[{index}]")
         identifiers.append(definition["task_id"])
-    if len(identifiers) != len(set(identifiers)):
-        raise ValueError("Task revision repeats a Task")
+    if len(identifiers) != len(set(map(str, identifiers))):
+        errors.append({"path": f"{path}.tasks", "reason": "Task revision repeats a Task"})
+    return errors
 
 
 def _validate_string_list(
@@ -101,6 +127,59 @@ def _validate_state_change(change: Any) -> None:
         )
     ):
         raise ValueError("Task state change is invalid")
+
+
+def _list_errors(
+    document: dict[str, Any],
+    fields: tuple[tuple[str, bool], ...],
+    path: str,
+) -> list[dict[str, str]]:
+    """Return one error per present field that is not a list of unique nonempty strings."""
+    errors = []
+    for field, allow_empty in fields:
+        if field in document:
+            try:
+                _validate_string_list(document, field, allow_empty=allow_empty)
+            except ValueError:
+                errors.append({"path": f"{path}.{field}", "reason": "must be a list of unique nonempty strings"
+                               + ("" if allow_empty else " with at least one item")})
+    return errors
+
+
+def state_change_errors(change: Any, path: str) -> list[dict[str, str]]:
+    """Return every invalid field of one Task state change as ``{"path", "reason"}`` (556).
+
+    Missing fields and wrong types are the schema's; nothing here reads state.
+    """
+    if not isinstance(change, dict):
+        return []
+
+    errors = _list_errors(change, (("caused_by_event_ids", True), ("evidence_refs", False)), path)
+    if "task_id" in change and (not isinstance(change["task_id"], str)
+                                or _TASK_ID.fullmatch(change["task_id"]) is None):
+        errors.append({"path": f"{path}.task_id", "reason": "must be a Task ID"})
+    ordinal = change.get("active_team_ordinal")
+    if ordinal is not None and (isinstance(ordinal, bool) or not isinstance(ordinal, int) or ordinal < 1):
+        errors.append({"path": f"{path}.active_team_ordinal", "reason": "must be a positive integer or null"})
+    for field in ("worktree", "branch"):
+        value = change.get(field)
+        if value is not None and (not isinstance(value, str) or not value):
+            errors.append({"path": f"{path}.{field}", "reason": "must be nonempty text or null"})
+    candidate = change.get("current_candidate")
+    if candidate is not None and (not isinstance(candidate, str) or _COMMIT.fullmatch(candidate) is None):
+        errors.append({"path": f"{path}.current_candidate", "reason": "must be a full 40-character commit or null"})
+    return errors
+
+
+def completion_errors(request: Any, path: str) -> list[dict[str, str]]:
+    """Return every invalid field of a task_complete request (556); reads no state."""
+    if not isinstance(request, dict):
+        return []
+
+    errors = _list_errors(request, (("evidence_refs", False), ("caused_by_event_ids", True)), path)
+    if isinstance(request.get("reason"), str) and not request["reason"].strip():
+        errors.append({"path": f"{path}.reason", "reason": "must be the task's own nonempty acceptance reason"})
+    return errors
 
 
 def register_task(state: Path, harness_root: Path, issue: dict[str, Any]) -> Path:

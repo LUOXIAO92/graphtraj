@@ -1,0 +1,16 @@
+Dialog: none
+== [Gt] Main. Focused 556 tests via the candidate venv, foreground. Dialog: none. ~3 min.
+uncommitted in src/tests/plugins/scripts/verify-556: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-556-cand-20261122T004119
+reusing /tmp/claude-501/t556s/venv-cand (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments editable; graftling aea5962d wheel)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/t556s/venv-cand/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+cand: 5eaffe00d0a42e2a03fd5637efc6ce0546d9d578 | graftling wheel from git archive aea5962d118aa785f32878ada095862d5ec545a3
+files: tests/test_arguments_file_556.py tests/test_gateway.py tests/test_shared_tools.py tests/test_local_tool.py tests/test_cli_projection.py tests/test_graphtraj_public_agents_api.py tests/test_mcp_host_tools.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+167 passed, 5 skipped, 37 warnings in 98.09s (0:01:38)
+exit=0
+(no FAILED/ERROR lines)
+Success: 'N passed' with exit=0 and '(no FAILED/ERROR lines)'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/556-graphtraj-mcp-full-validation-json-file-arguments/scripts/verify-556/steps.zsh D

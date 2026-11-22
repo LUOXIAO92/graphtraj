@@ -308,7 +308,7 @@ def test_installed_tool_reads_the_delivered_guide_from_another_directory(
         "task-breakdown"
     ]
     described = replies[1]["result"]
-    assert set(described) == {"feature", "description", "manual_ref"}
+    assert set(described) == {"feature", "description", "manual_ref", "arguments_file"}
     assert Path(described["manual_ref"]).read_text(encoding="utf-8") == (
         Path(__file__).resolve().parents[1] / "manuals/task-breakdown/guide.md"
     ).read_text(encoding="utf-8")

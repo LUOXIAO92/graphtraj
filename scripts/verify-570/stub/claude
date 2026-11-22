@@ -20,15 +20,11 @@ if '"feature":"create"' not in prompt:
     print('claude-haiku-5-5 (stub)'); sys.exit(0)
 if os.environ.get('STUB570_FAIL'):
     print('ERROR: {"error": {"code": "invalid-input"}}'); sys.exit(0)
-if os.environ.get('STUB570_NEED_PLUGIN_DIR') and '--plugin-dir' not in args:
+if os.environ.get('STUB570_DENY') or (os.environ.get('STUB570_NEED_PLUGIN_DIR') and '--plugin-dir' not in args):
     print('ERROR: {"error": {"code": "authority-denied", "message": "No matching current native call association."}}')
     sys.exit(0)
 word = re.search(r'one word: (\w+)', prompt).group(1)
 root = Path.cwd() / '.agents-control'
-agent = f'agent-{uuid.uuid4().hex}'
-(root / 'control' / 'agents').mkdir(parents=True, exist_ok=True)
 (root / 'live').mkdir(parents=True, exist_ok=True)
-(root / 'control' / 'agents' / f'{agent}.json').write_text(json.dumps({
-    'agent': agent, 'runtime': 'claude', 'creator': {'host': 'claude-native', 'session': 'stub'},
-    'executions': [{'state': 'ended', 'outcome': 'completed', 'last_message': word}]}))
-print(f'AGENT: {agent}\nANSWER: {word}\nSTATUS: standby; delivered\nLISTED: {agent}')
+import stubrecord
+print(stubrecord.write(root, 'claude', 'claude-native', word))

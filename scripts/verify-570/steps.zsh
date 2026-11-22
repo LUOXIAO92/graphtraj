@@ -34,7 +34,10 @@
 #                 when `claude --help` offers it (this Session only; nothing installed). Computed verdicts; the
 #                 launch that passes is kept in ROOT/claude-launch.txt for share. Run as
 #                 `VERIFY570_CLAUDE_USER_LOGIN=1 zsh <this file> claude-alone`. Dialog: none expected. ~2-4 min.
-#   share         Main. Claude Code and DSH on ROOT/proj/.agents-control at once: each creates one child, waits,
+#   share         Main. Launch (b) (--plugin-dir), child model claude-haiku-5-5, and config.yml
+#                 'save_normalized_sessions: true' written for this run only (backed up / removed after).
+#                 Verdicts per Main: association, child outcome, visibility; then config.yml and archives.
+#                 Claude Code and DSH on ROOT/proj/.agents-control at once: each creates one child, waits,
 #                 lists status. Run as `VERIFY570_CLAUDE_USER_LOGIN=1 zsh <this file> share`: the user's own Claude
 #                 login (user decision for this step); it writes only Session transcripts under
 #                 ~/.claude/projects/-private-tmp-graftling-570-proj/ and a project entry in ~/.claude.json, and
@@ -187,7 +190,10 @@ evidence() {  # home: what the Session left behind
 # Claude Code for claude-alone and share. The generated host plugin (graftling claude/plugin.py:94-95 writes its
 # plugin.json and hooks.json {"modules": ["./host_context.mjs"]}, the same form as the marketplace plugin's
 # src/graftling/claude-plugin/hooks/hooks.json) must be loaded by Claude Code for a call to be associated.
-CFLAGS=(-p --setting-sources project,local --strict-mcp-config --model haiku)
+# claude-haiku-5-5: the id the one-line check reported. A child's requested model must equal the observed one
+# (graftling claude/execution.py:1068-1071), so the alias 'haiku' failed the child.
+CMODEL=claude-haiku-5-5
+CFLAGS=(-p --setting-sources project,local --strict-mcp-config --model $CMODEL)
 PLUGIN=$P/.claude/skills/agents-claude-host
 CLAUDE=''
 CPROJ=''
@@ -239,15 +245,21 @@ claude_one() {  # variant flags...: one Claude Code Main alone creates a claude 
   local out=$ROOT/claude-alone-$name-$(date +%H%M%S).txt snap=$ROOT/claude-alone-$name-before.ids
   python3 -I $JUDGE snap $P/.agents-control > $snap
   say "variant $name: claude $* ..."
-  (cd $P && claude_iso $CLAUDE "$@" --output-format text "$(create_prompt claude claudeok haiku)" < /dev/null > $out 2>&1
+  (cd $P && claude_iso $CLAUDE "$@" --output-format text "$(create_prompt claude claudeok $CMODEL)" < /dev/null > $out 2>&1
    print -r -- "exit=$?" >> $out)
   tail -15 $out
   print -r -- "(full output: $out)"
-  local ok=1
-  grep -q '^exit=0' $out && print "PASS: variant $name exited 0" || { print "FAIL: variant $name did not exit 0"; ok=0; }
-  python3 -I $JUDGE create $out $P/.agents-control $snap claude-native claudeok || ok=0
-  python3 -I $JUDGE listed $out $P/.agents-control claude-native || ok=0
-  return $(( 1 - ok ))
+  local bits=0
+  grep -q '^exit=0' $out && print "PASS: variant $name: the Main exited 0" || { print "FAIL: variant $name: the Main did not exit 0"; bits=8; }
+  python3 -I $JUDGE pair $out $P/.agents-control $snap claude-native claudeok
+  return $(( bits | $? ))   # bits: 1 association, 2 child outcome, 4 visibility, 8 Main exit
+}
+# The verdict lines for one judged Main from its bits (see claude_one / judge.py pair).
+summary() {  # label bits
+  local label=$1 bits=$2 group bit
+  for group bit in association 1 'child outcome' 2 visibility 4 'Main exit' 8; do
+    (( bits & bit )) && print -r -- "FAIL: $label: $group" || print -r -- "PASS: $label: $group"
+  done
 }
 
 run_step() {
@@ -270,19 +282,20 @@ claude-alone)
   if [[ $help == *--plugin-dir* ]]; then claude_one b $base --plugin-dir $PLUGIN; b=$?
   else print "variant b: NOT RUN: claude --help offers no --plugin-dir"; fi
   claude_outside
-  say "verdict (computed)"
-  rm -f $ROOT/claude-launch.txt
-  if (( a == 0 )); then
-    print a > $ROOT/claude-launch.txt
-    print "SUCCESS: the share launch (a) works alone, beside DSH records; share's Claude failure needs the concurrent run"
-  elif (( b == 0 )); then
-    print b > $ROOT/claude-launch.txt
-    print "SUCCESS: cause established: launch (a) does not load the generated host plugin, (b) with --plugin-dir does;"
-    print "a Claude Code create succeeded in a root that already holds DSH records. share now uses (b)."
+  say "verdict (computed), per variant"
+  summary 'variant a' $a
+  if [[ $help == *--plugin-dir* ]]; then summary 'variant b' $b; else print "NOT RUN: variant b (no --plugin-dir)"; fi
+  # Association decides the launch question; the child outcome and visibility are reported on their own.
+  if (( !(a & 1) )); then
+    print "FINDING: launch (a) associates the call by itself."
+  elif [[ $help == *--plugin-dir* ]] && (( !(b & 1) )); then
+    print "FINDING: launch (a) does not associate the call and (b) with --plugin-dir does: the launch was the cause;"
+    print "a Claude Code create was associated in a root that already holds DSH records."
   else
-    print "FAIL: no launch associated the call (a and b, b=2 means not run): the generated plugin did not load in a per-Session launch"
-    return 1
+    print "FINDING: no launch associated the call: the generated plugin did not load in a per-Session launch."
   fi
+  (( a == 0 || b == 0 )) || return 1
+  print "SUCCESS: a variant passed association, child outcome, visibility and Main exit"
   print -r -- "next: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share"
   ;;
 pre)
@@ -428,22 +441,29 @@ explicit)
   (( $(count $P/.agents-control) == proj )) && print -r -- "PASS: $P/.agents-control gained no record" \
     || { print -r -- "FAIL: $P/.agents-control gained a record"; rc=1; }
   (( rc == 0 )) && print -r -- "SUCCESS: the explicit configuration wins" && \
-    print -r -- "next: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS claude-alone   (the user's own Claude login, as the user decided)"
+    print -r -- "next: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share   (the user's own Claude login, as the user decided)"
   return $rc
   ;;
 share)
   say "[share] Main. Claude Code and DSH on $P/.agents-control at the same time. Dialog: none expected. ~2-4 min."
   need_candidate || return 1
-  [[ -f $ROOT/claude-launch.txt ]] || { print -r -- "STOP: run claude-alone first: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS claude-alone"; return 1; }
   claude_setup || return 1
-  local launch=$(<$ROOT/claude-launch.txt)
-  local -a claunch=($CFLAGS --mcp-config $ROOT/claude-mcp.json --allowedTools mcp__graftling__agents)
-  [[ $launch == b ]] && claunch+=(--plugin-dir $PLUGIN)
-  print -r -- "Claude Code launch: variant $launch from claude-alone: claude ${claunch[*]} ..."
+  # Launch (b): Main's claude-alone run (realhost/claude-alone.txt) associated the call only with --plugin-dir.
+  local -a claunch=($CFLAGS --mcp-config $ROOT/claude-mcp.json --allowedTools mcp__graftling__agents --plugin-dir $PLUGIN)
+  print -r -- "Claude Code launch (b): claude ${claunch[*]} ..."
   local sum_before=$(shasum $P/.agents-control/claude-host.json | cut -c1-12)
   local stamp=$(date +%H%M%S); local ds=$ROOT/share-dsh-$stamp.txt cs=$ROOT/share-claude-$stamp.txt snap=$ROOT/share-before.ids
   python3 -I $JUDGE snap $P/.agents-control > $snap
-  local dprompt=$(create_prompt dsh dshok) cprompt=$(create_prompt claude claudeok haiku)
+  # Archiving on for this run: config.yml in the data root (PUBLIC_API 3, README 'Archive') with only
+  # save_normalized_sessions: true; archives at <data root>/sessions/<sha256 of the Session ID>/session.jsonl
+  # (PUBLIC_API 1.5). Both hosts read it at start (require_connections) and when they archive.
+  local cfg=$P/.agents-control/config.yml bak=$ROOT/config.yml.before-share-$stamp archived=$ROOT/share-archives-before.txt
+  if [[ -e $cfg ]]; then cp -p $cfg $bak && print -r -- "existing $cfg backed up to $bak"; else print -r -- "no existing $cfg"; fi
+  print -r -- 'save_normalized_sessions: true' > $cfg
+  print -r -- "$cfg now: $(<$cfg)"
+  print -l -- $P/.agents-control/sessions/*(N/:t) > $archived
+  print -r -- "archives before: $(grep -c . $archived)"
+  local dprompt=$(create_prompt dsh dshok) cprompt=$(create_prompt claude claudeok $CMODEL)
   say "both Mains start now: DSH ($ds) and claude -p ($cs)"
   (cd $P && iso $DH dsh --profile headless "$dprompt" < /dev/null > $ds 2>&1; print -r -- "exit=$?" >> $ds) &
   (cd $P && claude_iso $CLAUDE $claunch --output-format text "$cprompt" < /dev/null > $cs 2>&1
@@ -456,22 +476,31 @@ share)
   print -r -- "live/: $(cd $P/.agents-control && print -l -- live/*(ND) live/dsh-host/*(ND) | tr '\n' ' ')"
   print -r -- "host.log: $([[ -f $P/.agents-control/host.log ]] && tail -3 $P/.agents-control/host.log | tr '\n' ' ' || print absent)"
   print -r -- "claude-host.json: $sum_before -> $(shasum $P/.agents-control/claude-host.json | cut -c1-12)"
-  say "verdict (computed)"
-  local rc=0
-  grep -q '^exit=0' $ds && print "PASS: the DSH Main exited 0" || { print "FAIL: the DSH Main did not exit 0"; rc=1; }
-  grep -q '^exit=0' $cs && print "PASS: the Claude Code Main exited 0" || { print "FAIL: the Claude Code Main did not exit 0"; rc=1; }
-  # Each Main's own child: one new record by its host (the other host's records count as 'before'), completed
-  # with its word; the ids each Main's status LISTED are only its own.
+  say "verdict (computed): each Main's association, child outcome and visibility"
+  local rc=0 d=0 c=0
+  grep -q '^exit=0' $ds || d=8; grep -q '^exit=0' $cs || c=8
+  # Each Main's own child: one new record by its host (the other host's records count as 'before').
   { cat $snap; python3 -I $JUDGE owned $P/.agents-control claude-native; } > $snap.dsh
   { cat $snap; python3 -I $JUDGE owned $P/.agents-control dsh-native; } > $snap.claude
-  python3 -I $JUDGE create $ds $P/.agents-control $snap.dsh dsh-native dshok || rc=1
-  python3 -I $JUDGE create $cs $P/.agents-control $snap.claude claude-native claudeok || rc=1
-  python3 -I $JUDGE listed $ds $P/.agents-control dsh-native || rc=1
-  python3 -I $JUDGE listed $cs $P/.agents-control claude-native || rc=1
+  say "DSH Main"; python3 -I $JUDGE pair $ds $P/.agents-control $snap.dsh dsh-native dshok; d=$(( d | $? ))
+  say "Claude Code Main"; python3 -I $JUDGE pair $cs $P/.agents-control $snap.claude claude-native claudeok; c=$(( c | $? ))
+  summary 'DSH Main' $d; summary 'Claude Code Main' $c
+  (( d == 0 && c == 0 )) || rc=1
   [[ -d $P/.agents-control/live/dsh-host && -f $P/.agents-control/claude-host.json ]] \
-    && print "PASS: live/dsh-host (DSH) and claude-host.json (Claude Code) side by side" || { print "FAIL: a host's files are missing"; rc=1; }
+    && print "PASS: files: live/dsh-host (DSH) and claude-host.json (Claude Code) side by side" || { print "FAIL: files: a host's files are missing"; rc=1; }
+  say "verdict (computed): config.yml and archives"
+  if (( !(d & 1) && !(c & 1) )) && ! grep -q -i 'invalid-config\|config\.yml:' $ds $cs; then
+    print -r -- "PASS: config.yml: both hosts started with $cfg (each Main's child was created; no config refusal in either output)"
+  else
+    print -r -- "FAIL: config.yml: a host refused or did not create its child with $cfg"; rc=1
+  fi
+  print "Archived, per PUBLIC_API 1.5/3: every execution of every Runtime, so each child's Session; a Main Session is no execution and is not expected."
+  local -a kids=(${(f)"$(python3 -I $JUDGE owned $P/.agents-control dsh-native | grep -v -x -F -f $snap)"} \
+                 ${(f)"$(python3 -I $JUDGE owned $P/.agents-control claude-native | grep -v -x -F -f $snap)"})
+  python3 -I $JUDGE archives $P/.agents-control $archived $kids || rc=1
+  if [[ -e $bak ]]; then mv $bak $cfg && print -r -- "restored $cfg from $bak"; else rm -f $cfg && print -r -- "removed $cfg (none before)"; fi
   claude_outside
-  (( rc == 0 )) && print "SUCCESS: Claude Code and DSH shared one .agents-control; each saw only its own child" \
+  (( rc == 0 )) && print "SUCCESS: Claude Code and DSH shared one .agents-control with archiving on; each saw only its own child" \
     && print -r -- "next: zsh $THIS off"
   return $rc
   ;;

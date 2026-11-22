@@ -53,9 +53,5 @@ if os.environ.get('STUB570_FAIL'):
 if '"feature":"create"' not in prompt:
     print('TOOLS: mcp__graftling__agents\nRESULT: {"result": {"agents": []}}'); sys.exit(0)
 word = re.search(r'one word: (\w+)', prompt).group(1)
-agent = f'agent-{uuid.uuid4().hex}'
-(root / 'control' / 'agents').mkdir(parents=True, exist_ok=True)
-(root / 'control' / 'agents' / f'{agent}.json').write_text(json.dumps({
-    'agent': agent, 'runtime': 'dsh', 'creator': {'host': 'dsh-native', 'session': 'session-stub'},
-    'executions': [{'state': 'ended', 'outcome': 'completed', 'last_message': word}]}))
-print(f'AGENT: {agent}\nANSWER: {word}\nSTATUS: standby; delivered\nLISTED: {agent}')
+import stubrecord
+print(stubrecord.write(root, 'dsh', 'dsh-native', word))

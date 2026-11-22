@@ -30,8 +30,7 @@ Copied from `scripts/adopt-532/` (unchanged there) with every 503/515/525/528/53
 | 00 preflight | Main | none | `answer check (expect clean): OK`; `CHECK 560 Codex answers CODEX-560-OK …: PASS`; `TMPDIR=… (outside the Harness)`; `markers expected absent: PASS (6/6)`; `isolation: OK`; MAIN=<id> |
 | rel graftling release | Main | none | `CHECK 560 v0.6.3 peels to ef7c37db…: PASS`; `CHECK 560 graftling dev == main == v0.6.3: PASS`; `CHECK 560 v0.6.3 is annotated with the noreply tagger: PASS` |
 | rp push (only after the USER's explicit yes) | Main | none | remote lists dev, main and v0.6.3 at ef7c37db |
-| integrate this Task's branch into GraphTraj dev | Main | — | (B checks it) |
-| B wheels | Main | none | `CHECK 560 GraphTraj dev product = candidate 8949caff: PASS`; `RESULT 560 layout: PASS` (5 layout CHECKs); both Requires-Dist CHECKs; both `… wheel equals git archive …: PASS`; `markers expected present: PASS (6/6)`; `leaked: 0` |
+| B wheels | Main | none | `product guard: PASS` (the wheel is `git archive 8949caff`; `GraphTraj dev: … dev contains 8949caff: …` is information only, Correction 1); `RESULT 560 layout: PASS` (5 layout CHECKs); both Requires-Dist CHECKs; both `… wheel equals git archive …: PASS`; `markers expected present: PASS (6/6)`; `leaked: 0` |
 | GR full suite (read only) | Main | none | `CHECK 560 G record (… + v0.6.3) no new failure: PASS`; `CHECK 560 GR (guard + G record): PASS` |
 | G (only if the Leader asks for a rerun) | Main | none | background; then `ADOPT560_GREC=<dir> … GR` |
 | V pre-install | Main | none | `CHECK 560 candidate plugin changes only hooks/host_context.mjs (533): PASS`; MCP tools/list and two Codex hooks CHECKs; 563 demo: `CHECK 560 563 second run renames nothing: PASS`, `RESULT: PASS`, `CHECK 560 563 migration: … hash-equal: PASS`; markers both ways |
@@ -44,7 +43,8 @@ Copied from `scripts/adopt-532/` (unchanged there) with every 503/515/525/528/53
 | M, Mp, Mps, inbox | Main | none | M[b] also reads task_graph (migrated state) |
 | Nw, N, Nr, Nt | Main | none | as 532 (one advisor member creates `n560`) |
 | done | Main | none | both versions and direct_urls; `graftling 0.6.2 dist-info left: 0`; `Task state now: task.md 0`; real entries PASS |
-| T (after the Leader accepts 560) | Main | none | as 532 |
+| integrate this Task's branch into GraphTraj dev, with the AGENTS.md lines 122-124 replacement (engineer.md) — after the Leader accepts 560 | Main | — | task_integrate succeeds |
+| T (after the Leader accepts 560 and the integration) | Main | none | as 532 |
 | Im (only if I stopped before the migration) | **USER** | none | as I's migration lines |
 | R rollback | **USER** | none (at resume the old plugin may bring the trust dialog once more) | venv and plugin SAME; `CHECK 560 graftling restored …: PASS`; `CHECK 560 graphtraj restored …: PASS`; `CHECK 560 Task state after R equals the pre-migration copy …: PASS` |
 
@@ -82,9 +82,9 @@ in 532. `proddiff.py` fixes the inherited leftover-dist-info check (it split at 
 ## Rehearsal
 
 `zsh scripts/adopt-560/rehearse.zsh` writes its checks to stdout (kept in `rehearsal-output.txt`). Fake production
-under `$TMPDIR`, a scratch graftling clone for rel, a scratch GraphTraj clone whose dev holds the candidate, stub
+under `$TMPDIR`, a scratch graftling clone for rel, a scratch GraphTraj clone whose dev is 3b9c2af7 without the candidate (B passes), stub
 `claude`/`codex`/`ps`; the MCP server and the Codex hooks entry are real. Negatives: B before rel, dev moved, a wrong
-existing v0.6.3, a tag peeling elsewhere, a wrong target commit, dev without the candidate, an uncommitted src change,
+existing v0.6.3, a tag peeling elsewhere, a wrong target commit, an uncommitted src change,
 GR with an unknown failure / a known test failing elsewhere / another graftling commit / Miniconda's click / a nonzero
 exit, a tampered definition (hash compare FAIL), graftling 0.6.2's dist-info left (proddiff LEFTOVER), markers both
 ways, a member Worker under the venv (guard BLOCKING, no backup), I without GR PASS; then R restores both packages and

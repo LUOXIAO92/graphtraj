@@ -2,7 +2,7 @@
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 560 — graftling 0.6.3 release and production adoption of the paired GraphTraj candidate.
 # graftling: v0.6.3 = $GCOMMIT, the release branch agent/560-graftling-0.6.3 (two commits on graftling dev 9f962bc:
-# a5a04cc conventional layout, 6a2ad9d version 0.6.3), carried as scripts/adopt-560/graftling-0.6.3.bundle. Step rel
+# 10dd56b5 conventional layout, ef7c37db version 0.6.3), carried as scripts/adopt-560/graftling-0.6.3.bundle. Step rel
 # (Main) fetches it by exact SHA, fast-forwards graftling dev and main to it and creates the annotated tag v0.6.3; rp
 # (Main, after the USER confirms) pushes. From 0.6.3 the wheel builds from the archive ROOT (`pip wheel <archive>`).
 # graphtraj: production a7b20447 (532) -> a wheel built from `git archive $TARGET` (GraphTraj dev 3b9c2af7 + 560's
@@ -20,10 +20,12 @@
 # never signals, rerun right before pip, Claude Code version at 00, no key value in raw output, timers listed only,
 # .mcp.json only graphtraj, plugin bytes compared).
 #   zsh <absolute path>/steps.zsh <step>
-# Order: 00 → rel → [rp after USER confirms] → [Main integrates the GraphTraj candidate into dev] → B → GR → V
+# Order: 00 → rel → [rp after USER confirms] → B → GR → V
 #        → Vu (USER once, only if Vc asks) → Vc → Mpre → [USER /exit Main] → I (USER)
 #        → [USER: cd <Harness> && claude --continue] → M → Mp → Mps → inbox → Nw → N → Nr → Nt → done
-#        → [Leader accepts 560] → T.  Rollback: R.  Timer listing at any time: timers.
+#        → [Leader accepts 560] → [Main integrates this Task's branch into GraphTraj dev, with the AGENTS.md lines
+#        122-124 replacement from engineer.md] → T.  Rollback: R.  Timer listing at any time: timers.
+# B does not need the candidate on dev (Correction 1): it builds from `git archive $TARGET` behind product_guard.
 # Restart: Main's tasks/agents calls run inside its host process `graphtraj.runtimes.claude.host serve`, which keeps
 # the graphtraj and graftling modules it loaded (a7b20447 + 0.6.2) until it restarts. Its Task reads after I would also
 # meet migrated state with old code. So Main is exited (USER /exit) before I and resumes with `claude --continue` only
@@ -544,11 +546,11 @@ step_B() {
   say "the Worktree carries no product change beyond $C8 (only scripts/ differ)"
   product_guard || return 1
   rm -rf $SRC $GSRC $GOLDSRC $N $GOLDW; mkdir -p $SRC $GSRC $GOLDSRC $N $GOLDW   # this commit's own directories only
-  say "GraphTraj dev after Main's integration: its src/tests/plugins/pyproject must equal the candidate $C8"
-  local dv=$(git -C $WT rev-parse -q --verify refs/heads/dev 2>/dev/null) dd
-  dd=$(git -C $WT diff --name-only $TARGET ${dv:-missing} -- $GUARDED 2>&1)
-  print -r -- "GraphTraj dev: ${dv:-NOT FOUND} | git diff $C8 dev -- ${GUARDED[*]}: ${${dd//$'\n'/ }:-empty} | dev contains $C8: $(git -C $WT merge-base --is-ancestor $TARGET ${dv:-missing} 2>/dev/null && print yes || print no)"
-  [[ -n $dv && -z $dd ]] && print "CHECK 560 GraphTraj dev product = candidate $C8: PASS" || { print "CHECK 560 GraphTraj dev product = candidate $C8: FAIL (STOP: integrate this Task's candidate into GraphTraj dev first, or dev has moved: Main asks the Leader)"; return 1; }
+  # Correction 1: information only. GraphTraj integration comes after the Leader accepts 560 (just before T); the
+  # candidate's identity is guarded by product_guard and `git archive $TARGET`, so production installs exactly $C8.
+  say "GraphTraj dev (information only; integration follows the Leader's acceptance, before T)"
+  local dv=$(git -C $WT rev-parse -q --verify refs/heads/dev 2>/dev/null)
+  print -r -- "GraphTraj dev: ${dv:-NOT FOUND} | dev contains $C8: $(git -C $WT merge-base --is-ancestor $TARGET ${dv:-missing} 2>/dev/null && print yes || print no) | the wheel is built from git archive $TARGET"
   say "product diff production ${OLD[1,8]} -> $C8 (information; the 560 markers below are the gate)"
   print -r -- "git diff --stat ${OLD[1,8]} $C8 -- src plugins pyproject.toml: $(git -C $WT diff --shortstat $OLD $TARGET -- src plugins pyproject.toml)"
   say "graftling repository $G (read only here): tag $GTAG, dev, main"
@@ -1109,7 +1111,7 @@ step_G() {
 }
 
 case $STEP in
-help) print "顺序: 00 → rel（graftling 发布：dev/main 快进到 $GTAG，建注释 tag）→ [rp 推送：仅在 USER 明确确认后] → [Main 把本 Task 的 GraphTraj 候选集成进 dev] → B → GR（只读：已提交的全套测试记录）→ V（含 563 迁移演示）→ Vc（若要求则先 USER 做 Vu）→ Mpre → USER /exit Main → I（USER：安装两个 wheel 并迁移 Task 状态）→ USER: cd $H && claude --continue → M → Mp → Mps → inbox → Nw → N → Nr → Nt → done → [Leader 接受 560] → T；任何时候列计时器: timers；备份完成后可回退: R（两个包与迁移前的 Task 状态）。"
+help) print "顺序: 00 → rel（graftling 发布：dev/main 快进到 $GTAG，建注释 tag）→ [rp 推送：仅在 USER 明确确认后] → B → GR（只读：已提交的全套测试记录）→ V（含 563 迁移演示）→ Vc（若要求则先 USER 做 Vu）→ Mpre → USER /exit Main → I（USER：安装两个 wheel 并迁移 Task 状态）→ USER: cd $H && claude --continue → M → Mp → Mps → inbox → Nw → N → Nr → Nt → done → [Leader 接受 560] → [Main 把本 Task 的分支集成进 GraphTraj dev，并替换 AGENTS.md 第 122-124 行（见 engineer.md）] → T；任何时候列计时器: timers；备份完成后可回退: R（两个包与迁移前的 Task 状态）。"
   print "USER 只做: rp 的确认（对外推送）、Vu（仅当 Vc 要求；信任框 'Yes, proceed'）、/exit Main、I、claude --continue（可能出现一个插件/hooks 信任框，见 V），失败时 R。其余都由 Main 运行。"
   next "zsh $THIS 00" ;;
 
@@ -1118,8 +1120,8 @@ rel) cv; print "[rel] Main. graftling 0.6.3 发布：从 $BUNDLE 按 SHA 取 $GB
     summary rel "$(grep -E '^(dev:|already|CHECK|version at|.*= $GCOMMIT)' $R/rel.txt)"
     print "成功: 三行 CHECK 560 PASS（$GTAG peels to $GCOMMIT；dev == main == $GTAG；annotated, noreply tagger）；version at $GTAG: __version__ = \"0.6.3\"；root pyproject: yes。"
     print "\n推送是对外操作，单独一步：Main 先问 USER，USER 明确同意后才运行 rp（528 发布时没有推送步骤）。"
-    print "GraphTraj 集成（Main，按集成流程）: 把本 Task 的分支 $(git -C $WT rev-parse --abbrev-ref HEAD) 集成进 GraphTraj dev；其 src/tests/plugins/pyproject 必须等于 $C8（B 检查）。另：AGENTS.md 第 123 行的修改见 engineer.md（Engineer 的会话无权改该文件）。"
-    next "（USER 确认推送后）ADOPT560_PUSH_CONFIRMED=yes zsh $THIS rp   ；集成后: zsh $THIS B"
+    print "B 不需要候选在 GraphTraj dev 上（它从 git archive $C8 构建）。GraphTraj 集成在 Leader 接受 560 之后、T 之前。"
+    next "zsh $THIS B   （rp 另行：USER 确认推送后 ADOPT560_PUSH_CONFIRMED=yes zsh $THIS rp）"
   else print "\nrel STOP（见上）。把 $R/rel.txt 交给 Main/Leader。"; exit 1; fi ;;
 
 rp) cv; print "[rp] Main，仅在 USER 明确确认之后。对外推送 graftling dev、main 与 $GTAG 到它的 remote（只快进，不 force）。对话框: 无（git 凭据由用户的 git 配置提供）。"
@@ -1141,9 +1143,9 @@ G) cv; print "[G] Main（只在 Leader 要求重跑全套测试时）。本 Work
 B) cv; print "[B] Main. 两个 wheel：graphtraj（git archive $C8）与 graftling（git -C $G archive $GTAG，从 archive 根目录构建）；I 两个一起装。不联网、不改 graftling 仓库和生产。对话框: 无。< 2 分钟。"
   if logged $R/B.txt step_B; then
     summary B "$(grep -E '\.whl$|leaked|peels|annotated|tagger|author|^main:|\^\{commit\}|product guard|GraphTraj dev|archive root|wheel version|Requires-Dist|CHECK|markers expected|carries|RESULT' $R/B.txt)"
-    print "成功: 'product guard: PASS'；'CHECK 560 GraphTraj dev product = candidate $C8: PASS'；'$GTAG peels to $GCOMMIT: yes' 与 'annotated … yes'；'archive root pyproject.toml: yes | src/graftling/pyproject.toml: absent'；$N 有 graphtraj-0.1.0 与 graftling-$GVERSION 两个 wheel；六行 'CHECK 560 layout …: PASS' 与 'RESULT 560 layout: PASS'；'CHECK 560 Requires-Dist … satisfied by $GVERSION: PASS' 与 '… NOT satisfied by $GOLDVERSION: PASS'；两行 'CHECK 560 … wheel equals git archive …: PASS'；'markers expected present: PASS (6/6)'；carries graftling/: 0；leaked: 0。"
+    print "成功: 'product guard: PASS'；'GraphTraj dev: … dev contains $C8: …' 只是信息；'$GTAG peels to $GCOMMIT: yes' 与 'annotated … yes'；'archive root pyproject.toml: yes | src/graftling/pyproject.toml: absent'；$N 有 graphtraj-0.1.0 与 graftling-$GVERSION 两个 wheel；六行 'CHECK 560 layout …: PASS' 与 'RESULT 560 layout: PASS'；'CHECK 560 Requires-Dist … satisfied by $GVERSION: PASS' 与 '… NOT satisfied by $GOLDVERSION: PASS'；两行 'CHECK 560 … wheel equals git archive …: PASS'；'markers expected present: PASS (6/6)'；carries graftling/: 0；leaked: 0。"
     next "zsh $THIS GR"
-  else print "\nB 失败。把 $R/B.txt 交给 Main（product guard / GraphTraj dev STOP: 候选未集成或 dev 已变；'peels' 或 'annotated' 失败: 先运行 rel，或交 Leader）。"; exit 1; fi ;;
+  else print "\nB 失败。把 $R/B.txt 交给 Main（product guard STOP: Worktree 的 src/tests/plugins/pyproject 不等于 $C8；'peels' 或 'annotated' 失败: 先运行 rel，或交 Leader）。"; exit 1; fi ;;
 
 GR) cv; print "[GR] Main. 只读：已提交的全套测试记录 ${GREC}（本 Worktree 候选 + $GTAG wheel，由 Engineer 运行）。检查守卫、候选与 $C8 的产品文件相同、graftling 提交 = $GCOMMIT、总数与 exit、FAILED 行（已知：516 当前定义）。对话框: 无。< 10 秒。"
   [[ -e $R/GR.txt ]] && cp -p $R/GR.txt $R/GR-$(date +%Y%m%dT%H%M%S).txt   # earlier GR results are kept
@@ -1381,7 +1383,8 @@ done) print "[done] Main. 结束状态。对话框: 无。只读。"; cv | tee -
     ls -la $R; } 2>&1 | tee -a $R/done.txt
   summary done "$(grep -E '^PASS|^FAIL|^Version|CHECK|direct_url|dist-info left|Task state now|markers expected|layout:|mcp.json servers|enabledMcpjsonServers|^GR/Mp|^REPORT|archives=|containing an exported key' $R/done.txt)"
   print "成功: PASS n FAIL 0（两个 wheel）；Version 0.1.0 与 $GVERSION；两个 direct_url 指向 wheels-$C8；'graftling $GOLDVERSION dist-info left: 0'；'Task state now: task.md 0'；markers expected present: PASS (6/6)；'503 layout: PASS' 与两行 node resolves PASS；MCP tools/list 与两行 Codex hooks CHECK 为 PASS；'CHECK 515 .mcp.json …: PASS'；I 的 CHECK 560 都是 PASS；GR/Mp/Nr 的 CHECK 都是 PASS；raw files containing an exported key value: 0。把 $R 的路径交给 Main。$R_HINT"
-  next "（Leader 接受 560 之后，Main）zsh $THIS T" ;;
+  print "\nLeader 接受 560 之后（Main，按集成流程）: 把本 Task 的分支 $(git -C $WT rev-parse --abbrev-ref HEAD)（产品 = $C8）集成进 GraphTraj dev，同时按 engineer.md 替换 AGENTS.md 第 122-124 行；然后运行 T。"
+  next "（Leader 接受 560 并集成之后，Main）zsh $THIS T" ;;
 
 Im) need_main; print "[Im] USER（只在 I 安装后因有进程开始而没有迁移时）。等待成员结束后只运行 563 迁移与核对。对话框: 无。Main 必须仍已退出。"; cv
   [[ -e $BK/INSTALL-STARTED && -e $BK/state/links.tsv ]] || { print "没有 I 的安装或迁移前副本：先运行 I。"; exit 1; }

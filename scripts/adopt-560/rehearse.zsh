@@ -2,7 +2,8 @@
 # Rehearsal of adopt-560/steps.zsh from an EMPTY base against a fake production tree in $TMPDIR (modelled on adopt-532's).
 # Starts no real host and never touches production, <Harness>/graftling or GraphTraj dev:
 # - graftling: a scratch clone of <Harness>/graftling (dev = 9f962bc as at dispatch); rel fetches the bundle into it.
-# - GraphTraj: a scratch clone of this Worktree whose local dev holds the candidate (Main's integration simulated).
+# - GraphTraj: a scratch clone of this Worktree whose local dev is 3b9c2af7 WITHOUT the candidate (Correction 1:
+#   integration comes after the Leader's acceptance; B must not depend on it).
 # - fake production: graphtraj wheel of a7b20447 + graftling wheel of the real v0.6.2 (git archive, read only), click,
 #   yaml and websockets copied from production .venv-runtime (read only), and a copy (APFS clone) of production's Task
 #   state: every Task's task.yml, task.md, definitions/, the Worldline and the task index (read only).
@@ -29,7 +30,7 @@ GBASE=9f962bcff91c37fc2aef177b4ab1457f3de5680b
 NEW=8949caff74156d14625f45d7d6b762a04cef87eb
 OLD=a7b20447ce9c4ffeee62aba026265f6a1e0f10d2
 FG=$F/graftling          # scratch graftling repository
-FWT=$F/wt                # scratch GraphTraj clone (dev = candidate)
+FWT=$F/wt                # scratch GraphTraj clone (dev = 3b9c2af7, without the candidate)
 export ADOPT560_H=$FH ADOPT560_BASE=$FB ADOPT560_RT=$FRT ADOPT560_PNPM_SHIM=$F/no-shim ADOPT560_STUB=$F/stub ADOPT560_WT=$FWT ADOPT560_PROJECTS=$F/projects/-fake ADOPT560_WAIT=1 ADOPT560_OLDBASE=$OB ADOPT560_G=$FG ADOPT560_VPROJECT=$FB/vproject
 export PATH=$F/stub:$PATH
 unset GRAPHTRAJ_CLI_CONNECTION AGENT_SWARM_CONNECTION GRAFTLING_CONNECTION GRAPHTRAJ_PARENT_CONNECTION GRAPHTRAJ_PARENT_REGISTRATION GRAFTLING_CLAUDE_HOST_CONFIG
@@ -48,11 +49,15 @@ for z in $SD/*.zsh; do zsh -n $z; check "zsh -n ${z:t}" [ $? -eq 0 ]; done
 check "base $FB absent before 00" [ ! -e $FB ]
 print "Worktree HEAD $(git -C $WT rev-parse HEAD) | candidate $NEW | graftling repository read only: $REALG (dev $(git -C $REALG rev-parse dev), main $(git -C $REALG rev-parse main))"
 
-head1 "setup: scratch graftling clone (dev = $GBASE, main = v0.6.2), scratch GraphTraj clone (dev = candidate)"
-git clone -q --no-hardlinks $REALG $FG && git -C $FG checkout -q main && git -C $FG branch -q -f dev $GBASE
+head1 "setup: scratch graftling clone (dev = $GBASE, main = v0.6.2), scratch GraphTraj clone (dev = 3b9c2af7, without the candidate)"
+# The real repository may already be released (Main ran rel): the scratch clone is put back to the state before rel
+# (dev = 9f962bc, main = v0.6.2, no v0.6.3, no release branch). The real refs are recorded and compared at the end.
+git -C $REALG for-each-ref --format='%(objectname) %(refname)' refs/heads refs/tags > $F/realg-refs-before.txt
+git clone -q --no-hardlinks $REALG $FG && git -C $FG checkout -q --detach && git -C $FG branch -q -f main 4a002129f8b97f32980afd59e5a1a64c428fe684 && git -C $FG checkout -q main && git -C $FG branch -q -f dev $GBASE
+git -C $FG tag -d v0.6.3 > /dev/null 2>&1; git -C $FG branch -q -D agent/560-graftling-0.6.3 > /dev/null 2>&1; true
 git -C $FG config user.name rehearsal; git -C $FG config user.email rehearsal@invalid
 print "scratch graftling: dev $(git -C $FG rev-parse dev) main $(git -C $FG rev-parse main) v0.6.3 $(git -C $FG rev-parse -q --verify refs/tags/v0.6.3 || print absent)"
-git clone -q --shared --no-checkout $WT $FWT && git -C $FWT checkout -q -b cand $(git -C $WT rev-parse HEAD) && git -C $FWT branch -q -f dev $NEW
+git clone -q --shared --no-checkout $WT $FWT && git -C $FWT checkout -q -b cand $(git -C $WT rev-parse HEAD) && git -C $FWT branch -q -f dev 3b9c2af758dd7ff29d7482a03ebb4dec1477ddd1
 print "scratch GraphTraj: HEAD $(git -C $FWT rev-parse HEAD) dev $(git -C $FWT rev-parse dev)"
 
 head1 "setup: fake production = graphtraj $OLD + graftling v0.6.2, plugin, configuration, production Task state copy"
@@ -162,7 +167,7 @@ check "rp without the USER's confirmation refuses (no push)" sh -c "[ $RP -ne 0 
 head1 "B: wheels from git archive v0.6.3 (archive root) and of the candidate; layout proof; requirement pairs"
 steps B > $F/B.out 2>&1; BRC=$?; check "B exit 0" [ $BRC -eq 0 ]
 grep -E 'whl|leaked|peels|annotated|archive root|CHECK|RESULT|markers expected|GraphTraj dev' $F/B.out
-check "B: GraphTraj dev product = candidate; v0.6.3 annotated, peels to $GC" sh -c "grep -q 'CHECK 560 GraphTraj dev product = candidate ${NEW[1,8]}: PASS' $F/B.out && grep -q 'v0.6.3 peels to $GC: yes' $F/B.out && grep -q 'v0.6.3 is an annotated tag (cat-file -t: tag): yes' $F/B.out"
+check "B: GraphTraj dev reported as information only; v0.6.3 annotated, peels to $GC" sh -c "grep -q 'dev contains ${NEW[1,8]}: no' $F/B.out && ! grep -q 'GraphTraj dev product = candidate' $F/B.out && grep -q 'v0.6.3 peels to $GC: yes' $F/B.out && grep -q 'v0.6.3 is an annotated tag (cat-file -t: tag): yes' $F/B.out"
 check "B: root layout and the six layout CHECKs PASS" sh -c "grep -q 'archive root pyproject.toml: yes | src/graftling/pyproject.toml: absent' $F/B.out && [ \$(grep '^CHECK 560 layout .*: PASS' $F/B.out | sort -u | wc -l) -eq 5 ] && grep -q '^RESULT 560 layout: PASS' $F/B.out"
 check "B: Requires-Dist satisfied by 0.6.3 and NOT by 0.6.2" sh -c "grep -q 'CHECK 560 Requires-Dist graftling<0.7,>=0.6.3 satisfied by 0.6.3: PASS' $F/B.out && grep -q 'CHECK 560 Requires-Dist graftling<0.7,>=0.6.3 NOT satisfied by 0.6.2: PASS' $F/B.out"
 check "B: both wheels = their archives; markers present 6/6; leaked 0" sh -c "grep -q 'CHECK 560 graphtraj wheel equals git archive ${NEW[1,8]}: PASS' $F/B.out && grep -q 'CHECK 560 graftling wheel equals git archive v0.6.3: PASS' $F/B.out && grep -q 'markers expected present: PASS (6/6)' $F/B.out && grep -q '^leaked: 0' $F/B.out"
@@ -171,10 +176,8 @@ VERIFY560_GCOMMIT=$GBASE steps B > $F/B-tag.out 2>&1; BT=$?
 check "B negative: a tag that does not peel to the expected commit STOPs" sh -c "[ $BT -ne 0 ] && grep -q 'STOP: v0.6.3^{commit} is $GC, not $GBASE' $F/B-tag.out"
 VERIFY560_TARGET=$OLD steps B > $F/B-commit.out 2>&1; BC=$?
 check "B negative: a wrong GraphTraj target commit STOPs at the guard" sh -c "[ $BC -ne 0 ] && grep -q 'STOP: the Worktree.s src tests plugins pyproject.toml differ from ${OLD[1,8]}' $F/B-commit.out"
-git -C $FWT branch -q -f dev $OLD
 steps B > $F/B-dev.out 2>&1; BDV=$?
-check "B negative: GraphTraj dev without the candidate STOPs" sh -c "[ $BDV -ne 0 ] && grep -q 'CHECK 560 GraphTraj dev product = candidate ${NEW[1,8]}: FAIL' $F/B-dev.out"
-git -C $FWT branch -q -f dev $NEW
+check "B positive (Correction 1): GraphTraj dev without the candidate does not gate B; it prints 'dev contains ${NEW[1,8]}: no'" sh -c "[ $BDV -eq 0 ] && grep -q 'dev contains ${NEW[1,8]}: no' $F/B-dev.out && grep -q '^RESULT 560 layout: PASS' $F/B-dev.out"
 print '# drift' >> $FWT/src/graphtraj/execution/runner_worker.py
 steps B > $F/B-dirty.out 2>&1; BD=$?
 check "guard negative: an uncommitted src change STOPs" sh -c "[ $BD -ne 0 ] && grep -q 'STOP: uncommitted changes in the Worktree.s src tests plugins pyproject.toml' $F/B-dirty.out"
@@ -294,7 +297,8 @@ check "R: Task state equals the pre-migration copy; task.md files back" sh -c "g
 check "R: production graftling 0.6.2 and markers absent again" sh -c "$FRT/bin/python -m pip show graftling 2>/dev/null | grep -q 'Version: 0.6.2' && $CONDA -I $SD/markers.py $D absent > /dev/null"
 check "R: the old code reads the restored state (task graph loads)" sh -c "cd $FH && $FRT/bin/python -I -c 'from pathlib import Path; from graphtraj.graph.task_graph import read_graph; g = read_graph(Path(\"$FS\"), view=\"full\"); print(\"old code task graph:\", len(g[\"tasks\"]))'"
 check "532's backup under tmp/532 unchanged" sh -c "cd $FH && shasum -a 256 -c --quiet $F/evidence0.sha256"
-check "real <Harness>/graftling untouched by the rehearsal (dev 9f962bc, main 4a00212, no v0.6.3)" sh -c "[ \$(git -C $REALG rev-parse dev) = $GBASE ] && [ \$(git -C $REALG rev-parse main) = 4a002129f8b97f32980afd59e5a1a64c428fe684 ] && ! git -C $REALG rev-parse -q --verify refs/tags/v0.6.3 > /dev/null"
+git -C $REALG for-each-ref --format='%(objectname) %(refname)' refs/heads refs/tags > $F/realg-refs-after.txt
+check "real <Harness>/graftling untouched by the rehearsal (every branch and tag as at the start)" cmp -s $F/realg-refs-before.txt $F/realg-refs-after.txt
 
 head1 "information (not a rehearsal check): GR's verdict on the committed record $SD/G-record"
 [[ -f $SD/G-record/run.txt ]] && { ADOPT560_GREC=$SD/G-record steps GR 2>&1 | grep -E '^(candidate|graftling commit|test interpreter click|totals|  known|  NEW|failed tests|CHECK)'; } || print "no committed record"

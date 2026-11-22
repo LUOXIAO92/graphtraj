@@ -152,7 +152,7 @@ GR)
     classify $g/suite.txt $g/shards/*(N.)
   else print -r -- "no G result yet; run: zsh $THIS G"; fi
   if [[ -f $OUT/Gt.txt ]]; then
-    print -r -- "---- Gt $OUT/Gt.txt"; grep -E '^(PASSED|FAILED|ERROR) |^pytest rc=|^=+ .* in [0-9.]+s' $OUT/Gt.txt
+    print -r -- "---- Gt $OUT/Gt.txt"; grep -E '^candidate: |::test_a_model_cannot_ask_for_a_key|^(FAILED|ERROR) |^pytest rc=|^=+ .* in [0-9.]+s' $OUT/Gt.txt
     classify $OUT/Gt.txt
   else print -r -- "no Gt result yet; run: zsh $THIS Gt"; fi
   print "Success: G 'exit=0' or only 'known' lines; Gt 'pytest rc=0'; no 'NEW' line."

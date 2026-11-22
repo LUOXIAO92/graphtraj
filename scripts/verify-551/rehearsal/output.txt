@@ -54,7 +54,7 @@ parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__grapht
 parent init plugin_warnings: [{"type": "project-scope-suppressed-untrusted", "message": "1 project-scope directory under ./.claude/skills/ was skipped because this workspace was not trusted (STUB)"}]
 parent init plugins: [] | graphtraj-claude-host loaded: False
 CHECK 551 Claude parent gate: NOT PASSED (folder not trusted: run U)
-gate stderr: 
+gate stderr:
 READY when: 'READY-551 <host>: PASS' x4 (actual model from each host's record: claude claude-sonnet-5-5, codex gpt-6-luna, pi deepseek/deepseek-flash, dsh deepseek-flash), 'CHECK 551 role <rt>: PASS' x4, 'CHECK 551 tasks probe: PASS', 'CHECK 551 Claude parent gate: PASS'.
 
 NOT READY: DEEPSEEK_API_KEY roles gate: folder not trusted or graphtraj-claude-host not loaded; run zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh U before, then 00 again
@@ -71,7 +71,7 @@ parent init mcp_servers: [('graphtraj', 'connected')] | mcp tools: ['mcp__grapht
 parent init plugin_warnings: [{"type": "project-scope-suppressed-untrusted", "message": "1 project-scope directory under ./.claude/skills/ was skipped because this workspace was not trusted (STUB)"}]
 parent init plugins: [] | graphtraj-claude-host loaded: False
 CHECK 551 Claude parent gate: NOT PASSED (folder not trusted: run U)
-gate stderr: 
+gate stderr:
 NOT READY: folder not trusted or graphtraj-claude-host not loaded: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh U before, then B again
 (exit 1)
 

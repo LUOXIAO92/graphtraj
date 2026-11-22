@@ -63,7 +63,7 @@ path=(${VERIFY576_BIN:+$VERIFY576_BIN} $path)
 URL=${VERIFY576_URL:-https://github.com/LUOXIAO92/graftling.git}
 BASE=cadc419271dabc8f4a0b11da1bb46c70ef598c77      # graftling dev = 0.7.0 + 570 (the production behaviour)
 BRANCH=agent/576-claude-agents-child-without-tools-has-no-bash
-GCOMMIT=4adcd2112a12a7fe42cd746fd1b433f35e6d6968   # the graftling candidate (base: dev cadc419)
+GCOMMIT=e17ccd09a3c74587f9cf207baf23a9594bbe4c0c   # the graftling candidate (base: dev cadc419)
 BUNDLE=$WT/.scratch/576/graftling-576.bundle        # the candidate branch, from the base
 CH=$ROOT/claude-home                                # isolated CLAUDE_CONFIG_DIR (default login mode)
 CMODEL=${VERIFY576_CHILD_MODEL:-claude-haiku-5-5}   # children: the cheapest model

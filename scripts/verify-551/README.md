@@ -24,7 +24,10 @@ Round 3 integration correction (graftling v0.6.3): the graftling branch was reba
 moved to the root `PUBLIC_API.md` (`src/graftling/PUBLIC_API.md` is dev's symlink to it), and
 `tests/test_no_graphtraj_dependency.py` reads the root `pyproject.toml`. The order is therefore
 `pre` → `A0` → `G` → `GR`: A0's next line names G, and AX/A are not needed again. After A, the next line is
-`G`. `AU`/`AC` are optional: their Round-2 evidence is retained.
+`G`. `AU`/`AC` are optional: their Round-2 evidence is retained. Rehearsals of this pairing from empty
+directories: `rehearsal/output-G-v063.txt` (`G waitG GR`, limited, including the `built_wheel` tests) and
+`rehearsal/output-A0-v063.txt` (`trusted A0`: the wheel builds from the archive root and the dependency direction
+passes; the Codex, Pi and DSH roles fail only because of stub limits and the missing DeepSeek key).
 G's limited rehearsal (`VERIFY551_TESTS`, `VERIFY551_GL_TESTS`) runs through the same `zsh steps.zsh G` / `GR`;
 Round 3's output is `rehearsal/output-G-round3.txt` (it includes `built_wheel` tests) and `rehearsal/output-pre-round3.txt`.
 

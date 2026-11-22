@@ -335,6 +335,16 @@ SR)
     if grep -qF -- "${t##*::}" $K; then print -r -- "known (516): $line"; else print -r -- "NEW: $line"; new=1; fi
   done
   (( any )) || print "(no FAILED/ERROR lines)"
+  # A shard ending other than by test failures (exit 1) is a failure of the run itself; exit 5 (nothing collected)
+  # is only expected when a rehearsal filter was given.
+  for line in ${(f)"$(grep -E '^ABNORMAL .*: exit [0-9]+' $g/suite.txt)"}; do
+    case ${line##*exit } in
+      1) ;;
+      5) grep -q '^REHEARSAL' $g/run.txt && print -r -- "rehearsal filter, nothing collected: $line" \
+           || { print -r -- "ABNORMAL shard: $line"; new=1; } ;;
+      *) print -r -- "ABNORMAL shard: $line"; new=1 ;;
+    esac
+  done
   print "SR verdict: $( (( new == 0 )) && print 'PASS (no NEW failure)' || print 'FAIL (NEW lines above)')"
   return $new ;;
 

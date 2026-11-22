@@ -1,0 +1,44 @@
+== [P] Main. Preview on a copy with unreadable directories; then with u+x. Dialog: none. ~1 min.
+pytest temp: TMPDIR=$TMPDIR (outside the Harness)
+reusing $TMPDIR/v567/venv-g-gl-ef7c37db (graftling ef7c37db; this Worktree editable)
+== copying from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state (read only) to $TMPDIR/v567/p/h/.graphtraj/core/state: Worldline, task index, every Task's task.yml, task.md, definitions/
+copy: 474 initial definitions put back at task.md (145 current_definition reset); 474 rename mappings read
+copy: 475 Task directories, 474 task.md, 418 realhost entries: 7 + 2
+before.json: 1912 files and links recorded
+copy modes now: dr--r--r-- tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/1/realhost dr--r--r-- tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost 
+== preview (public entry) with the two directories at r--r--r--
+rc=1
+Error: The migration must read every directory under the state directory to find links to task.md, but cannot list or examine these directories:
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/1/realhost
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost/diag-1
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost/rerun-3a95423a
+Grant read and execute permission (chmod u+rx) on these directories, or move them out of the state directory, then run the migration again. Nothing was changed.
+PASS: preview exit 1
+PASS: preview names rounds/1/realhost
+PASS: preview names rounds/2/realhost
+PASS: preview states the remedy and that nothing changed
+PASS: preview shows no Errno
+== migration without --preview, same directories
+rc=1
+PASS: migrate exit 1
+PASS: migrate names rounds/1/realhost
+PASS: migrate names rounds/2/realhost
+PASS: migrate states the remedy and that nothing changed
+PASS: migrate shows no Errno
+after u+x: dr-xr--r-- tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/1/realhost dr-xr--r-- tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost 
+after.json: 1912 files and links recorded
+PASS: nothing under the copy's state changed (every file and link)
+PASS: no backup directory
+== preview again after u+x (must proceed)
+rc=0
+tasks: 475
+unchanged: 1
+links: []
+preview: true
+planned renames: 474
+PASS: preview proceeds after u+x
+kept: $TMPDIR/v567/p/{refused-preview.out,refused-migrate.out,before.json,after.json,preview.yml}
+RESULT 567 P: PASS
+Success: every line PASS and 'RESULT 567 P: PASS'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error/scripts/verify-567/steps.zsh F

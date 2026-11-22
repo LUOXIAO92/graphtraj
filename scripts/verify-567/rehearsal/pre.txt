@@ -1,0 +1,12 @@
+== [pre] Main. Preflight. Dialog: none. <10 s.
+zsh: 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error/scripts/verify-567/steps.zsh)
+Harness: /Users/luoxiao/workspace/you-are-a-product-architect-delivery | Worktree: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error (ca7f19eb) | T=$TMPDIR/v567 | OUT=$TMPDIR/v567/out | PROD=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state (read only)
+pytest temp: TMPDIR=$TMPDIR (outside the Harness)
+production Task directories: 475 (read only)
+Task 418 evidence directories (P copies them): 2 of 2
+516 current definition (from task.yml): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+560 G record (seen-before list): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error/scripts/adopt-560/G-record/failures.txt
+graftling ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 (v0.6.3) present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
+uncommitted in src/tests/plugins/scripts: none
+Success: 'pytest temp: ... outside the Harness', '2 of 2', the 516 path ends in definitions/<time>.md, 'uncommitted ...: none'.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error/scripts/verify-567/steps.zsh P

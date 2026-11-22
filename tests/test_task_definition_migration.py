@@ -132,3 +132,44 @@ def test_unsupported_layout_stops_before_any_change(
     assert "Task 2" in result.stderr or "Task 3" in result.stderr or "2-revised" in result.stderr
     assert _snapshot(tmp_path) == before
     assert not (tmp_path / ".graphtraj/backups").exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads every directory regardless of its mode")
+@pytest.mark.parametrize("mode", [0o444, 0o000], ids=["listable-not-searchable", "unlistable"])
+def test_unreadable_directory_stops_before_any_change(
+    installed_commands: InstalledCommands, tmp_path: Path, mode: int,
+) -> None:
+    """A directory the walk cannot examine is named with the remedy; nothing changes.
+
+    No directory is skipped: the one refused here holds the only link to a
+    renamed task.md, which is retargeted once permission is restored.
+    """
+    state    = _retired_layout(tmp_path)
+    task     = state / "tasks/2-revised"
+    evidence = task / "teams/1/rounds/1/realhost"
+    evidence.mkdir(parents=True)
+    (evidence / "04-both.txt").write_text("Evidence.\n", encoding="utf-8")
+    (evidence / "definition.md").symlink_to(os.path.relpath(task / "task.md", evidence))
+    shown  = ".graphtraj/state/tasks/2-revised/teams/1/rounds/1/realhost"
+    text   = (task / "task.md").read_bytes()
+    before = _snapshot(tmp_path)
+
+    evidence.chmod(mode)
+    try:
+        for options in (("--preview",), ()):
+            result = _migrate(installed_commands, tmp_path, *options)
+            assert result.returncode == 1, (options, result.stdout, result.stderr)
+            assert shown in result.stderr and "chmod u+rx" in result.stderr, result.stderr
+            assert "Nothing was changed" in result.stderr and "Errno" not in result.stderr
+            assert result.stdout == ""
+    finally:
+        evidence.chmod(0o755)
+
+    assert _snapshot(tmp_path) == before
+    assert not (tmp_path / ".graphtraj/backups").exists()
+
+    applied = _migrate(installed_commands, tmp_path)
+    assert applied.returncode == 0, applied.stderr
+    assert yaml.safe_load(applied.stdout)["links"] == [shown + "/definition.md"]
+    assert (evidence / "definition.md").read_bytes() == text
+    assert os.readlink(evidence / "definition.md").startswith("../../../../../definitions/")

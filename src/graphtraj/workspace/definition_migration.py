@@ -55,8 +55,9 @@ def migrate_task_definitions(cwd: Path, *, preview: bool = False) -> dict[str, A
     Raises
     ------
     ValueError
-        When any Task has a layout this migration does not support. Nothing is
-        changed in that case.
+        When any Task has a layout this migration does not support, or a
+        directory under state cannot be listed or examined. Nothing is changed
+        in that case.
     """
     configuration = load_project_configuration(cwd)
     harness       = configuration.harness_root
@@ -86,7 +87,7 @@ def rename_initial_definitions(
     lock = _lock(tasks, exclusive=True)
     try:
         plan, unchanged = _plan(state, harness)
-        links           = _links_to_renamed(state, plan)
+        links           = _links_to_renamed(state, harness, plan)
         report = {
             "tasks":     len(plan) + unchanged,
             "unchanged": unchanged,
@@ -236,18 +237,53 @@ def _versions(directory: Path) -> list[str]:
     return names
 
 
-def _links_to_renamed(state: Path, plan: list[dict[str, Any]]) -> list[tuple[Path, Path]]:
-    """Return each link in state that reads a renamed ``task.md`` and its new target."""
+def _links_to_renamed(state: Path, harness: Path, plan: list[dict[str, Any]]) -> list[tuple[Path, Path]]:
+    """Return each link in state that reads a renamed ``task.md`` and its new target.
+
+    Any directory under state may hold such a link, so none is skipped: a
+    directory that cannot be listed, or whose entries cannot be examined,
+    stops the migration before any change, naming every such directory.
+    """
+    if not plan:
+        return []    # nothing is renamed, so no link can need a new target
     targets = {item["directory"] / RETIRED_NAME: item["directory"] / item["new"] for item in plan}
-    links = []
-    for root, directories, files in os.walk(state):
+    links: list[tuple[Path, Path]] = []
+    unreadable: set[Path] = set()
+
+    def refused(error: OSError) -> None:
+        # os.walk would otherwise skip a directory it cannot list.
+        unreadable.add(Path(error.filename))
+
+    for root, directories, files in os.walk(state, onerror=refused):
         for name in directories + files:
             path = Path(root) / name
-            if path.is_symlink():
+            try:
+                if not path.is_symlink():
+                    continue
                 target = Path(os.path.abspath(path.parent / os.readlink(path)))
-                if target in targets:
-                    links.append((path, targets[target]))
+            except OSError:
+                unreadable.add(Path(root))
+                continue
+            if target in targets:
+                links.append((path, targets[target]))
+    if unreadable:
+        listed = sorted({_shown(path, harness) for path in unreadable})
+        raise ValueError(
+            "The migration must read every directory under the state directory to find links to"
+            " task.md, but cannot list or examine these directories:\n"
+            + "".join("  {0}\n".format(path) for path in listed)
+            + "Grant read and execute permission (chmod u+rx) on these directories, or move them out"
+            " of the state directory, then run the migration again. Nothing was changed."
+        )
     return links
+
+
+def _shown(path: Path, harness: Path) -> str:
+    """Return ``path`` relative to the Harness root where it lies inside it."""
+    try:
+        return path.relative_to(harness).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _backup(

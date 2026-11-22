@@ -1,0 +1,6 @@
+Error: The migration must read every directory under the state directory to find links to task.md, but cannot list or examine these directories:
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/1/realhost
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost/diag-1
+  .graphtraj/core/state/tasks/418-agents-claude-code-marketplace-package/teams/1/rounds/2/realhost/rerun-3a95423a
+Grant read and execute permission (chmod u+rx) on these directories, or move them out of the state directory, then run the migration again. Nothing was changed.

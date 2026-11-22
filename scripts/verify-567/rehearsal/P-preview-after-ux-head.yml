@@ -1,0 +1,30 @@
+tasks: 475
+unchanged: 1
+renamed:
+- task_id: '100'
+  from: .graphtraj/core/state/tasks/100-early-lifecycle/task.md
+  to: .graphtraj/core/state/tasks/100-early-lifecycle/definitions/20260912T225630.948467+0900.md
+  current_definition_updated: false
+- task_id: '101'
+  from: .graphtraj/core/state/tasks/101-upstream-handoff/task.md
+  to: .graphtraj/core/state/tasks/101-upstream-handoff/definitions/20260913T005730.809278+0900.md
+  current_definition_updated: false
+- task_id: '102'
+  from: .graphtraj/core/state/tasks/102-leader-retirement/task.md
+  to: .graphtraj/core/state/tasks/102-leader-retirement/definitions/20260913T014135.939121+0900.md
+  current_definition_updated: false
+- task_id: '103'
+  from: .graphtraj/core/state/tasks/103-remove-dead-code/task.md
+  to: .graphtraj/core/state/tasks/103-remove-dead-code/definitions/20260913T024522.818526+0900.md
+  current_definition_updated: false
+- task_id: '104'
+  from: .graphtraj/core/state/tasks/104-remove-recovery-gates/task.md
+  to: .graphtraj/core/state/tasks/104-remove-recovery-gates/definitions/20260913T024523.110313+0900.md
+  current_definition_updated: false
+- task_id: '105'
+  from: .graphtraj/core/state/tasks/105-align-skill-resolution/task.md
+  to: .graphtraj/core/state/tasks/105-align-skill-resolution/definitions/20260913T024523.396573+0900.md
+  current_definition_updated: false
+- task_id: '106'
+  from: .graphtraj/core/state/tasks/106-shared-core-and-runtime/task.md
+  to: .graphtraj/core/state/tasks/106-shared-core-and-runtime/definitions/20261013T001013.916596+0900.md

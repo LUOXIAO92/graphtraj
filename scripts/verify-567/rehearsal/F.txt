@@ -1,0 +1,14 @@
+== [F] Main. Focused tests (definition migration and its Ticket-conversion caller). Dialog: none. ~3 min.
+uncommitted in src/tests/plugins: none
+pytest temp: TMPDIR=$TMPDIR (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): $TMPDIR/verify-567-F-20261122T230527
+reusing $TMPDIR/v567/venv-g-gl-ef7c37db (graftling ef7c37db; this Worktree editable)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error/src/graphtraj/__init__.py
+graftling 0.6.3 $TMPDIR/v567/venv-g-gl-ef7c37db/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+candidate: 801953cb3b6c9edd02a9e1b115a68c300555d612 | graftling wheel from git archive ef7c37db15f4e6318fd5b6bf5bd79321b876eac5
+pytest -p no:cacheprovider -q -rfE tests/test_task_definition_migration.py tests/test_task_migration.py 
+...................                                                      [100%]
+19 passed in 10.70s
+exit=0
+Success: 'exit=0' with every test passed (none skipped unless run as root).
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error/scripts/verify-567/steps.zsh G  (background ~25 min; then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/567-definition-migration-unreadable-directory-error/scripts/verify-567/steps.zsh GR)

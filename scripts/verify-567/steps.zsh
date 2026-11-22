@@ -157,6 +157,7 @@ P)
   rm -rf $T/p && mkdir -p $S/tasks || return 1
   say "copying from $PROD (read only) to $S: Worldline, task index, every Task's task.yml, task.md, definitions/"
   cp -Rp $PROD/worldline $S/ && cp -p $PROD/task-index.json(N) $S/ || { print "STOP: copy failed"; return 1; }
+  cp -p $PROD/tasks/.lock $S/tasks/ || { print "STOP: copy of the empty Task-state lock file failed"; return 1; }  # every locked run creates it
   for d in $PROD/tasks/[^.]*(N/); do
     mkdir $S/tasks/$d:t && cp -p $d/task.yml $d/task.md(N) $S/tasks/$d:t/ || { print -r -- "STOP: copy of $d failed"; return 1; }
     [[ -d $d/definitions ]] && { cp -Rp $d/definitions $S/tasks/$d:t/ || { print -r -- "STOP: copy of $d failed"; return 1; } }

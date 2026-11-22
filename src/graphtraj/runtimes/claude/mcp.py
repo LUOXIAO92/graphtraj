@@ -86,8 +86,12 @@ def serve(
         if params.get('name') not in [item['name'] for item in descriptors()] or not isinstance(params.get('arguments', {}), dict):
             return mcp_error_response(identity, -32602, 'Expected agents and object arguments.')
         try:
-            # The trusted host directory bounds the caller's arguments file.
-            arguments = read_arguments_file(params.get('arguments', {}), cwd)
+            # A native association matches Claude Code's exact tool input, so
+            # the native backend reads the arguments file for the call it runs
+            # (575). Otherwise the trusted host directory bounds the file here.
+            arguments = params.get('arguments', {})
+            if native_call is None:
+                arguments = read_arguments_file(arguments, cwd)
             # Only a verified native Main host's own call reaches this reviewer;
             # an operation without review never invokes it.
             reviewer = (functools.partial(review, feature=arguments.get('feature'))

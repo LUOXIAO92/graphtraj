@@ -15,7 +15,7 @@ const source = path.dirname(desktop);
 // graftling is its own distribution (https://github.com/LUOXIAO92/graftling); its wheel is built
 // from a checkout of that repository at a version in pyproject.toml's declared range.
 const graftlingSource = process.env.GRAFTLING_SOURCE;
-assert.ok(graftlingSource && path.isAbsolute(graftlingSource), 'Set GRAFTLING_SOURCE to the src/graftling directory of a graftling checkout');
+assert.ok(graftlingSource && path.isAbsolute(graftlingSource), 'Set GRAFTLING_SOURCE to the directory holding pyproject.toml in a graftling checkout (the root from 0.6.3, src/graftling before)');
 const output = path.resolve(process.argv[2] || path.join(desktop, 'test-results/linux-package'));
 const stage = path.join(output, 'stage');
 const install = path.join(stage, 'opt/graphtraj-desktop');

@@ -20,7 +20,7 @@ Choose a GraphTraj tag or commit to install, replacing `<tag-or-commit>`, and a
 declares, replacing `<graftling-tag>`:
 
 ```sh
-uv tool install --with "graftling @ git+https://github.com/LUOXIAO92/graftling.git@<graftling-tag>#subdirectory=src/graftling" \
+uv tool install --with "graftling @ git+https://github.com/LUOXIAO92/graftling.git@<graftling-tag>" \
   "git+https://github.com/LUOXIAO92/graphtraj.git@<tag-or-commit>"
 cd /path/to/your-project
 graphtraj setup
@@ -29,10 +29,10 @@ graphtraj task graph
 ```
 
 GraphTraj and `graftling` are separate distributions from separate repositories.
-GraphTraj declares the `graftling` versions it supports (currently `>=0.5.2,<0.6`).
+GraphTraj declares the `graftling` versions it supports (currently `>=0.6.3,<0.7`).
 From checkouts of both repositories, build both wheels with
-`python -m pip wheel --no-deps -w dist /path/to/graftling/src/graftling .` (run in
-the GraphTraj checkout), then install both wheels in your dedicated environment. The independent distribution can also
+`python -m pip wheel --no-deps -w dist /path/to/graftling .` (run in
+the GraphTraj checkout; graftling before 0.6.3 builds from its `src/graftling`), then install both wheels in your dedicated environment. The independent distribution can also
 be installed on its own; see [Independent agents](#independent-agents-without-graphtraj).
 
 Setup shows its plan and asks before creating the `dev` branch. It creates or
@@ -55,10 +55,11 @@ with a separate source repository, or other project conventions, see the
 The `graftling` distribution (Graftling) lets the main Agent of Claude Code, Codex, Pi or DSH
 create and control child Agents through one `agents` tool. No GraphTraj installation,
 project, Task or Git repository is needed. Its installation, configuration and
-capability table are in the [Graftling README](https://github.com/LUOXIAO92/graftling/blob/main/src/graftling/README.md), with one note
+capability table are in the [Graftling README](https://github.com/LUOXIAO92/graftling/blob/main/README.md), with one note
 per host. Its stable interface and version rules are in
-[`PUBLIC_API.md`](https://github.com/LUOXIAO92/graftling/blob/main/src/graftling/PUBLIC_API.md) and its history in the
-[changelog](https://github.com/LUOXIAO92/graftling/blob/main/src/graftling/CHANGELOG.md). The wheel contains all of them.
+[`PUBLIC_API.md`](https://github.com/LUOXIAO92/graftling/blob/main/PUBLIC_API.md) and its history in the
+[changelog](https://github.com/LUOXIAO92/graftling/blob/main/CHANGELOG.md). The wheel ships `PUBLIC_API.md`
+beside its code; the other documents stay in the repository.
 
 ## Use it with your Agent
 
@@ -158,7 +159,7 @@ Child Agents can use different Runtimes without changing your main Agent's host.
 | --- | --- |
 | Codex (`codex`) | An installed, authenticated Codex CLI. Native permissions and approvals remain in effect. |
 | Claude Code (`claude`) | Official CLI 2.1.299 or later, authenticated separately. Uses structured CLI input/output, native permission prompts and mandatory native sandboxing. Finds `claude` on PATH or `~/.local/bin/claude`. |
-| Pi (`pi`) | An installed Pi backend, existing Pi configuration, a Python that has `agent_sandbox`, and `srt`, `node` and ripgrep on the child's PATH; see [what a Pi child needs](https://github.com/LUOXIAO92/graftling/blob/main/src/graftling/README.md#what-a-pi-child-needs). The role's optional `pi.sandbox_python`, `pi.sandbox_path` and `pi.agent_dir` select those locations. |
+| Pi (`pi`) | An installed Pi backend, existing Pi configuration, a Python that has `agent_sandbox`, and `srt`, `node` and ripgrep on the child's PATH; see [what a Pi child needs](https://github.com/LUOXIAO92/graftling/blob/main/README.md#what-a-pi-child-needs). The role's optional `pi.sandbox_python`, `pi.sandbox_path` and `pi.agent_dir` select those locations. |
 | DeepSeek Harness (`dsh`) | DSH `0.2.0-rc.2` or later for child members and a host that supports its native subprocess sandbox. Members ignore `DEEPSEEK_BASE_URL` and `DEEPSEEK_SEARCH_BASE_URL` in the environment; declare `base_url` on the connection to use another endpoint. With `DEEPSEEK_API_KEY` as that connection's key, web search goes to the same endpoint. Native replacement and recovery approval routes are unavailable; its native file tools can read outside the task worktree. |
 
 A Task member's `create` without `workspace` starts the child in the member's

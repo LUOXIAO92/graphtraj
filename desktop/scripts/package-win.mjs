@@ -17,7 +17,7 @@ assert.ok(python && path.isAbsolute(python), 'Set GRAPHTRAJ_BUILD_PYTHON to the 
 // graftling is its own distribution (https://github.com/LUOXIAO92/graftling); its wheel is built
 // from a checkout of that repository at a version in pyproject.toml's declared range.
 const graftlingSource = process.env.GRAFTLING_SOURCE;
-assert.ok(graftlingSource && path.isAbsolute(graftlingSource), 'Set GRAFTLING_SOURCE to the src/graftling directory of a graftling checkout');
+assert.ok(graftlingSource && path.isAbsolute(graftlingSource), 'Set GRAFTLING_SOURCE to the directory holding pyproject.toml in a graftling checkout (the root from 0.6.3, src/graftling before)');
 const run = (exe, args, cwd = source) => execFileSync(exe, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }).trim();
 const commit = run('git', ['rev-parse', 'HEAD']);
 assert.equal(run('git', ['status', '--porcelain', '--untracked-files=no']), '', 'Commit tracked changes before packaging');

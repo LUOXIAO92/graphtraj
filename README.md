@@ -59,7 +59,7 @@ capability table are in the [Graftling README](https://github.com/LUOXIAO92/graf
 per host. Its stable interface and version rules are in
 [`PUBLIC_API.md`](https://github.com/LUOXIAO92/graftling/blob/main/PUBLIC_API.md) and its history in the
 [changelog](https://github.com/LUOXIAO92/graftling/blob/main/CHANGELOG.md). The wheel ships `PUBLIC_API.md`
-beside its code; the other documents stay in the repository.
+and the install guides beside its code; the README and changelog stay in the repository.
 
 ## Use it with your Agent
 

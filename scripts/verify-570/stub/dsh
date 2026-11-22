@@ -4,10 +4,13 @@
 plugin --profile P add SPEC     profile package.json with bundle graftling-dsh (and STUB570_PLUGIN's files)
 plugin --profile P remove NAME  the bundle removed
 --profile P --dump-config       one line naming agents-host while the bundle is there
---profile P PROMPT              a canned answer; a create prompt writes one agent record where the real host would
+--profile P PROMPT              a canned answer in the shape the prompts ask for; a create prompt writes one
+                                completed agent record where the real host would
 --version                       a version line
+STUB570_INERT_WITHOUT_CONFIG=1: no agents tool without GRAFTLING_DSH_CONFIG (the base's behaviour).
+STUB570_FAIL=1: the tool call fails with invalid-input and nothing is written.
 """
-import json, os, shutil, sys, uuid
+import json, os, re, shutil, sys, uuid
 from pathlib import Path
 
 args = sys.argv[1:]
@@ -36,16 +39,23 @@ if '--dump-config' in args:
     print('  - id: agents-host  name: graftling-dsh' if 'graftling-dsh' in bundles else '  (no plugins)')
     sys.exit(0)
 prompt = args[-1]
-if 'graftling-dsh' not in bundles or 'Create one child' not in prompt:
-    print('mcp__ tools: NONE\nNO AGENTS TOOL' if 'graftling-dsh' not in bundles else
-          'deepseek-flash' if 'name of the model' in prompt else 'mcp__graftling__agents; status: no agents')
-    sys.exit(0)
 config = os.environ.get('GRAFTLING_DSH_CONFIG')
+tool = 'graftling-dsh' in bundles and (config or not os.environ.get('STUB570_INERT_WITHOUT_CONFIG'))
+if 'name of the model' in prompt:
+    print('deepseek-flash (stub)'); sys.exit(0)
+if not tool:
+    print('TOOLS: NONE\nNO AGENTS TOOL'); sys.exit(0)
 root = Path(json.loads(Path(config).read_text())['root']) if config else Path.cwd() / '.agents-control'
+(root / 'live' / 'dsh-host').mkdir(parents=True, exist_ok=True)
+if os.environ.get('STUB570_FAIL'):
+    print('TOOLS: mcp__graftling__agents\nERROR: {"error": {"code": "invalid-input", "message": "request.action: expected one of"}}')
+    sys.exit(0)
+if '"feature":"create"' not in prompt:
+    print('TOOLS: mcp__graftling__agents\nRESULT: {"result": {"agents": []}}'); sys.exit(0)
+word = re.search(r'one word: (\w+)', prompt).group(1)
 agent = f'agent-{uuid.uuid4().hex}'
 (root / 'control' / 'agents').mkdir(parents=True, exist_ok=True)
-(root / 'live' / 'dsh-host').mkdir(parents=True, exist_ok=True)
 (root / 'control' / 'agents' / f'{agent}.json').write_text(json.dumps({
     'agent': agent, 'runtime': 'dsh', 'creator': {'host': 'dsh-native', 'session': 'session-stub'},
-    'executions': [{'state': 'ended'}]}))
-print(f'- Child agent id: {agent}\n- One-word answer: ready\n- Status: standby; delivered\nstatus lists: {agent}')
+    'executions': [{'state': 'ended', 'outcome': 'completed', 'last_message': word}]}))
+print(f'AGENT: {agent}\nANSWER: {word}\nSTATUS: standby; delivered\nLISTED: {agent}')

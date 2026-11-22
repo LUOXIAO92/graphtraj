@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """Rehearsal stand-in for claude (Task 570): --version, a one-line prompt, and the share step's create prompt,
-which writes one claude-native agent record under ./.agents-control as the graftling Claude Code host would."""
-import json, sys, uuid
+which writes one completed claude-native agent record under ./.agents-control as graftling's Claude Code host
+would. STUB570_FAIL=1: the tool call fails with invalid-input and nothing is written."""
+import json, os, re, sys, uuid
 from pathlib import Path
 
 args = sys.argv[1:]
 if args == ['--version']:
     print('2.1.999 (Claude Code stub)'); sys.exit(0)
-if 'Create one child' not in args[-1]:
+prompt = args[-1]
+if '"feature":"create"' not in prompt:
     print('claude-haiku-5-5 (stub)'); sys.exit(0)
+if os.environ.get('STUB570_FAIL'):
+    print('ERROR: {"error": {"code": "invalid-input"}}'); sys.exit(0)
+word = re.search(r'one word: (\w+)', prompt).group(1)
 root = Path.cwd() / '.agents-control'
 agent = f'agent-{uuid.uuid4().hex}'
 (root / 'control' / 'agents').mkdir(parents=True, exist_ok=True)
 (root / 'live').mkdir(parents=True, exist_ok=True)
 (root / 'control' / 'agents' / f'{agent}.json').write_text(json.dumps({
     'agent': agent, 'runtime': 'claude', 'creator': {'host': 'claude-native', 'session': 'stub'},
-    'executions': [{'state': 'ended'}]}))
-print(f'Child {agent} answered claude-ok; status lists: {agent}')
+    'executions': [{'state': 'ended', 'outcome': 'completed', 'last_message': word}]}))
+print(f'AGENT: {agent}\nANSWER: {word}\nSTATUS: standby; delivered\nLISTED: {agent}')

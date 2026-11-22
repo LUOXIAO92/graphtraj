@@ -30,10 +30,13 @@
 #   explicit      Main. GRAFTLING_DSH_CONFIG=ROOT/dsh-host.json: the record lands in ROOT/agents-data;
 #                 ROOT/proj/.agents-control gains none. Dialog: none. ~1-2 min.
 #   share         Main. Claude Code and DSH on ROOT/proj/.agents-control at once: each creates one child, waits,
-#                 lists status. Claude Code runs isolated in CLAUDE_CONFIG_DIR=ROOT/claude-home with
-#                 ANTHROPIC_API_KEY (STOP if unset). VERIFY570_CLAUDE_USER_LOGIN=1 uses your own Claude login
-#                 instead: Main, ask the user before setting it (it writes in ~/.claude and ~/.claude.json, as
-#                 the step prints). Dialog: none expected. ~2-4 min.
+#                 lists status. Run as `VERIFY570_CLAUDE_USER_LOGIN=1 zsh <this file> share`: the user's own Claude
+#                 login (user decision for this step); it writes only Session transcripts under
+#                 ~/.claude/projects/-private-tmp-graftling-570-proj/ and a project entry in ~/.claude.json, and
+#                 prints both afterwards. Without the variable Claude Code runs isolated in
+#                 CLAUDE_CONFIG_DIR=ROOT/claude-home with ANTHROPIC_API_KEY (STOP if unset). It starts with a
+#                 one-line claude -p check using the same flags. Dialog: none expected (-p shows no trust or
+#                 onboarding dialog). ~2-4 min.
 #   off           Main, last. `dsh plugin --profile headless remove graftling-dsh` in ROOT/home, then a Session:
 #                 no agents tool, no new data. Dialog: none. ~1 min.
 #   post          Main. ~/.dsh's profile list again, compared with pre's; how to remove ROOT. <5 s.
@@ -118,9 +121,22 @@ verdict() {
   iso $1 python3 -I $script $1
 }
 
-TOOLS='First list the names of all tools available to you whose names start with mcp__ (one line, comma separated; write NONE if there are none). Then, if a tool named mcp__graftling__agents exists, call it with action status and report its result in one line; if it does not exist, write exactly: NO AGENTS TOOL.'
+# The prompts spell out the agents tool's input (action discover|describe|execute, feature, arguments; the argument
+# names are create's runtime/instruction/model, wait's agent/timeout_seconds, status's agent), so no call is guessed.
+TOOLS='List the names of all tools available to you whose names start with mcp__ on one line prefixed TOOLS: (write TOOLS: NONE if there are none). If mcp__graftling__agents is among them, call it exactly once with the input {"action":"execute","feature":"status","arguments":{}} and print its result verbatim on one line prefixed RESULT:. If it is not among them, write exactly: NO AGENTS TOOL.'
 
-CREATE='Use the agents tool (mcp__graftling__agents), not DSH'"'"'s own subagents. Create one child with runtime dsh whose task is: Answer with exactly one word: ready. Then call wait for that child, then call status for it. Report three lines: the child agent id; its one-word answer; the state and last_result.notification that status shows.'
+# The create/wait/status prompt for runtime $1, answer word $2, optional model $3.
+create_prompt() {
+  local model=${3:+,\"model\":\"$3\"}
+  print -r -- 'Use the tool mcp__graftling__agents, not your own subagents. Its input is {"action":"execute","feature":<name>,"arguments":{...}}. Make exactly these calls in order:
+1) {"action":"execute","feature":"create","arguments":{"runtime":"'$1'","instruction":"Answer with exactly one word: '$2'."'$model'}}
+2) {"action":"execute","feature":"wait","arguments":{"agent":"<the agent id that create returned>","timeout_seconds":240}}
+3) {"action":"execute","feature":"status","arguments":{"agent":"<that agent id>"}}
+4) {"action":"execute","feature":"status","arguments":{}}
+Then report exactly four lines: AGENT: the agent id; ANSWER: the child'"'"'s one-word answer; STATUS: the state and last_result.notification from call 3; LISTED: every agent id that call 4 lists. If any call returns an error, also print it verbatim on a line prefixed ERROR:.'
+}
+JUDGE=${0:A:h}/judge.py
+DEPS=0                                              # set by create_in when the plugin asked for the deps step
 
 count() { print -l $1/control/agents/*.json(N) | grep -c . }                    # agent records under root $1
 need_candidate() {
@@ -137,18 +153,20 @@ asks_deps() {  # step-to-rerun
 # A candidate Session that creates one dsh child; checks that its record landed in data root $3 only.
 create_in() {  # name dir root [VAR=value...]
   local name=$1 dir=$2 root=$3; shift 3
-  local before=$(count $root) proj_before=$(count $P/.agents-control) data_before=$(count $ROOT/agents-data)
-  session $DH $dir $name "$CREATE" "$@"
-  asks_deps $STEP && return 0
+  local snap=$ROOT/$name-before.ids proj_before=$(count $P/.agents-control) data_before=$(count $ROOT/agents-data)
+  python3 -I $JUDGE snap $root > $snap
+  session $DH $dir $name "$(create_prompt dsh ready)" "$@"
+  asks_deps $STEP && { DEPS=1; return 1; }
   say "evidence"
-  print -r -- "agent records: $root $before -> $(count $root); $P/.agents-control $proj_before -> $(count $P/.agents-control); $ROOT/agents-data $data_before -> $(count $ROOT/agents-data)"
+  print -r -- "agent records: $root $(wc -l < $snap | tr -d ' ') -> $(count $root); $P/.agents-control $proj_before -> $(count $P/.agents-control); $ROOT/agents-data $data_before -> $(count $ROOT/agents-data)"
   records $root
   roots
-  print -r -- ".agents-control or control/ under the DSH home $DH: $(print -l $DH/**/.agents-control(N/D) $DH/control(N/) | tr '\n' ' ')"
+  say "verdict (computed)"
   local ok=1
-  (( SRC == 0 )) || { print -r -- "FAIL: the Session exited $SRC"; ok=0; }
-  (( $(count $root) > before )) || { print -r -- "FAIL: no new agent record under $root"; ok=0; }
-  [[ -z $(print -l $DH/**/.agents-control(N/D) $DH/control(N/)) ]] || { print "FAIL: data written in the DSH home"; ok=0; }
+  (( SRC == 0 )) && print -r -- "PASS: the Session exited 0" || { print -r -- "FAIL: the Session exited $SRC"; ok=0; }
+  python3 -I $JUDGE create $SOUT $root $snap dsh-native ready || ok=0
+  [[ -z $(print -l $DH/**/.agents-control(N/D) $DH/control(N/)) ]] && print -r -- "PASS: no data in the DSH home $DH" \
+    || { print "FAIL: data written in the DSH home: $(print -l $DH/**/.agents-control(N/D) $DH/control(N/))"; ok=0; }
   return $(( 1 - ok ))
 }
 
@@ -202,10 +220,14 @@ repro)
   (cd $ROOT/proj && iso $DB dsh --profile headless --dump-config 2>&1) | grep -n -i 'agents-host\|graftling' | head
   session $DB $ROOT/proj repro "$TOOLS"
   evidence $DB
-  print "What it means: the premise holds when the Session exits 0, its answer says NO AGENTS TOOL (no"
-  print "mcp__graftling__agents among its tools), no Python environment was built and no .agents-control or"
-  print "agents-data content appeared, although the plugin is registered (dump-config shows agents-host)."
-  (( SRC == 0 )) || { print -r -- "FAIL: the Session exited $SRC; see its output above"; return 1; }
+  say "verdict (computed): the premise holds when every line below is PASS"
+  local ok=1
+  (( SRC == 0 )) && print "PASS: the Session exited 0" || { print -r -- "FAIL: the Session exited $SRC"; ok=0; }
+  python3 -I $JUDGE tools $SOUT absent || ok=0
+  [[ -z $(envs $DB) ]] && print "PASS: no Python environment was built" || { print "FAIL: an environment was built"; ok=0; }
+  [[ -z $(print -l $ROOT/**/.agents-control(N/D) $ROOT/agents-data/*(ND)) ]] && print "PASS: no data root appeared" \
+    || { print "FAIL: a data root appeared (see above)"; ok=0; }
+  (( ok )) || return 1
   print -r -- "next: zsh $THIS repro-control"
   ;;
 repro-control)
@@ -220,9 +242,13 @@ repro-control)
     return 0
   fi
   evidence $DB
-  print "What it means: with only GRAFTLING_DSH_CONFIG added, the Session lists mcp__graftling__agents and its"
-  print "status answers (no agents yet), and $ROOT/agents-data gains live/ (the host's endpoint directory)."
-  (( SRC == 0 )) || { print -r -- "FAIL: the Session exited $SRC; see its output above"; return 1; }
+  say "verdict (computed): with only GRAFTLING_DSH_CONFIG added, every line below is PASS"
+  local ok=1
+  (( SRC == 0 )) && print "PASS: the Session exited 0" || { print -r -- "FAIL: the Session exited $SRC"; ok=0; }
+  python3 -I $JUDGE tools $SOUT present || ok=0
+  [[ -d $ROOT/agents-data/live/dsh-host ]] && print -r -- "PASS: $ROOT/agents-data/live/dsh-host exists (the host ran there)" \
+    || { print -r -- "FAIL: no $ROOT/agents-data/live/dsh-host"; ok=0; }
+  (( ok )) || return 1
   print -r -- "next: zsh $THIS push   (Main: ask the user first; it pushes the candidate branch to GitHub)"
   ;;
 push)
@@ -253,15 +279,7 @@ pre2)
   (cd $P && iso $DH dsh --profile headless "Reply in one line with the name of the model you are and nothing else." < /dev/null) 2>&1 | tail -5
   local rc=$?; print -r -- "exit=$rc"
   (( rc == 0 )) || { print -r -- "STOP: DSH could not answer in $DH; check DEEPSEEK_API_KEY and the network, then: zsh $THIS pre2"; return 1; }
-  if [[ -n ${ANTHROPIC_API_KEY:-} ]]; then
-    say "one-line claude -p in CLAUDE_CONFIG_DIR=$CH (login: ANTHROPIC_API_KEY, ${#ANTHROPIC_API_KEY} characters; not printed)"
-    (cd $P && claude_iso claude -p --setting-sources project,local --strict-mcp-config --model haiku \
-       "Reply in one line with the model id you are running as and nothing else." < /dev/null) 2>&1 | tail -5
-    print -r -- "exit=$?"
-  else
-    print -r -- "ANTHROPIC_API_KEY is not set: the share step will STOP (export it first, or see share's VERIFY570_CLAUDE_USER_LOGIN)."
-  fi
-  print "Success: a DeepSeek model name and exit=0 (and a Claude model id when ANTHROPIC_API_KEY is set)."
+  print "Success: a DeepSeek model name and exit=0. (Claude Code's one-line check is at the head of the share step.)"
   print -r -- "next: zsh $THIS install"
   ;;
 install)
@@ -277,11 +295,12 @@ install)
 start)
   say "[start] Main. Candidate, GRAFTLING_DSH_CONFIG unset, Session in $P. Dialog: none. ~1-3 min."
   need_candidate || return 1
+  local data=$(count $ROOT/agents-data)
   create_in start $P $P/.agents-control; local rc=$?
-  [[ -f $OUT/start.deps ]] && rm -f $OUT/start.deps
-  print "Success: exit=0; the reply names the child, 'ready', standby (or completed) and delivered; a new dsh record"
-  print -r -- "under $P/.agents-control; $ROOT/agents-data unchanged; nothing in $DH."
-  (( rc == 0 )) && print -r -- "PASS: the default data root is $P/.agents-control" && print -r -- "next: zsh $THIS subdir"
+  (( DEPS )) && { print -r -- "NOT JUDGED: run deps first, then this step again (see next above)"; return 0; }
+  (( $(count $ROOT/agents-data) == data )) && print -r -- "PASS: $ROOT/agents-data gained no record" \
+    || { print -r -- "FAIL: $ROOT/agents-data gained a record"; rc=1; }
+  (( rc == 0 )) && print -r -- "SUCCESS: the default data root is $P/.agents-control" && print -r -- "next: zsh $THIS subdir"
   return $rc
   ;;
 subdir)
@@ -289,10 +308,11 @@ subdir)
   need_candidate || return 1
   local proj=$(count $P/.agents-control)
   create_in subdir $P/sub $P/sub/.agents-control; local rc=$?
-  (( $(count $P/.agents-control) == proj )) || { print -r -- "FAIL: $P/.agents-control gained a record"; rc=1; }
-  print -r -- "Success: a new record under $P/sub/.agents-control and none under $P/.agents-control: the project"
-  print "directory is the directory dsh was started in (headless)."
-  (( rc == 0 )) && print -r -- "PASS: the Session cwd $P/sub chose the data root" && print -r -- "next: zsh $THIS explicit"
+  (( DEPS )) && { print -r -- "NOT JUDGED: run deps first, then this step again (see next above)"; return 0; }
+  (( $(count $P/.agents-control) == proj )) && print -r -- "PASS: $P/.agents-control gained no record" \
+    || { print -r -- "FAIL: $P/.agents-control gained a record"; rc=1; }
+  (( rc == 0 )) && print -r -- "SUCCESS: headless takes the directory dsh started in ($P/sub) as the project" \
+    && print -r -- "next: zsh $THIS explicit"
   return $rc
   ;;
 explicit)
@@ -300,9 +320,11 @@ explicit)
   need_candidate || return 1
   local proj=$(count $P/.agents-control)
   create_in explicit $P $ROOT/agents-data GRAFTLING_DSH_CONFIG=$ROOT/dsh-host.json; local rc=$?
-  (( $(count $P/.agents-control) == proj )) || { print -r -- "FAIL: $P/.agents-control gained a record"; rc=1; }
-  print -r -- "Success: a new record under $ROOT/agents-data; $P/.agents-control unchanged."
-  (( rc == 0 )) && print -r -- "PASS: the explicit configuration wins" && print -r -- "next: zsh $THIS share"
+  (( DEPS )) && { print -r -- "NOT JUDGED: run deps first, then this step again (see next above)"; return 0; }
+  (( $(count $P/.agents-control) == proj )) && print -r -- "PASS: $P/.agents-control gained no record" \
+    || { print -r -- "FAIL: $P/.agents-control gained a record"; rc=1; }
+  (( rc == 0 )) && print -r -- "SUCCESS: the explicit configuration wins" && \
+    print -r -- "next: VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share   (the user's own Claude login, as the user decided)"
   return $rc
   ;;
 share)
@@ -311,18 +333,24 @@ share)
   local E=($(envs $DH)) claude=$(command -v claude)
   (( $#E == 1 )) || { print -r -- "STOP: expected one environment under $DH/graftling-python (run start first): $E"; return 1; }
   [[ -n $claude ]] || { print "STOP: no claude on PATH"; return 1; }
+  local cproj=$HOME/.claude/projects/${${P:A}//[\/.]/-}   # Claude Code keys a project by its real path
   if [[ -n ${VERIFY570_CLAUDE_USER_LOGIN:-} ]]; then
-    print -r -- "VERIFY570_CLAUDE_USER_LOGIN=1: Claude Code uses YOUR login. Main: this needs the user's agreement. It reads"
-    print -r -- "the keychain and ~/.claude.json, and writes ~/.claude/projects/-private-tmp-graftling-570-proj/ and a project"
-    print -r -- "entry for $P in ~/.claude.json. No settings, plugins or skills under ~/.claude are written."
+    print -r -- "VERIFY570_CLAUDE_USER_LOGIN=1: Claude Code uses the user's own login (user decision for Task 570). It reads"
+    print -r -- "the keychain and ~/.claude.json, and writes only Session transcripts under $cproj/"
+    print -r -- "and a project entry for $P in ~/.claude.json. No settings, plugins or skills under ~/.claude are written."
   elif [[ -z ${ANTHROPIC_API_KEY:-} ]]; then
-    print -r -- "STOP: ANTHROPIC_API_KEY is not set. Claude Code runs isolated in CLAUDE_CONFIG_DIR=$CH, which holds no login."
-    print -r -- "Fix: export ANTHROPIC_API_KEY=<your Anthropic API key> in this shell, then: zsh $THIS share"
-    print -r -- "Or, only after the user agrees (it writes ~/.claude/projects/-private-tmp-graftling-570-proj/ and a project"
-    print -r -- "entry for $P in ~/.claude.json; reads the keychain and ~/.claude.json):"
-    print -r -- "  VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share"
+    print -r -- "STOP: ANTHROPIC_API_KEY is not set, and Claude Code would run isolated in CLAUDE_CONFIG_DIR=$CH (no login)."
+    print -r -- "The user agreed to their own login for this step:  VERIFY570_CLAUDE_USER_LOGIN=1 zsh $THIS share"
+    print -r -- "Or, isolated: export ANTHROPIC_API_KEY=<your Anthropic API key>, then: zsh $THIS share"
     return 1
+  else
+    print -r -- "Claude Code runs isolated in CLAUDE_CONFIG_DIR=$CH with ANTHROPIC_API_KEY (${#ANTHROPIC_API_KEY} characters; not printed)."
   fi
+  local -a cflags=(-p --setting-sources project,local --strict-mcp-config --model haiku)
+  say "Claude Code one-line check with the same login and flags"
+  (cd $P && claude_iso $claude $cflags "Reply in one line with the model id you are running as and nothing else." < /dev/null) 2>&1 | tail -3
+  local crc=$?; print -r -- "exit=$crc"
+  (( crc == 0 )) || { print -r -- "STOP: Claude Code did not answer; check its login, then: zsh $THIS share"; return 1; }
   say "graftling's Claude Code host configuration for $P (project files only), with $E/bin/python"
   if [[ ! -f $P/.agents-control/claude-host.json ]]; then
     (cd $P && claude_iso $E/bin/python -I -m graftling.claude.host configuration --project $P --claude $claude --write) \
@@ -332,13 +360,13 @@ share)
   fi
   print -r -- "written: $(cd $P && print -l .claude/**/*(N.D) .agents-control/claude-host.json(N) | tr '\n' ' ') + $ROOT/claude-mcp.json"
   local sum_before=$(shasum $P/.agents-control/claude-host.json | cut -c1-12)
-  local ds=$ROOT/share-dsh-$(date +%H%M%S).txt cs=$ROOT/share-claude-$(date +%H%M%S).txt
-  local dprompt='Use the agents tool (mcp__graftling__agents), not DSH'"'"'s own subagents. Create one child with runtime dsh whose task is: Answer with exactly one word: dsh-ok. Call wait for it, then call status with no agent. Report: the child agent id, its answer, and every agent id that status lists.'
-  local cprompt='Use the tool mcp__graftling__agents. Create one child with runtime claude and model haiku whose task is: Answer with exactly one word: claude-ok. Call wait for it, then call status with no agent. Report: the child agent id, its answer, and every agent id that status lists.'
+  local stamp=$(date +%H%M%S); local ds=$ROOT/share-dsh-$stamp.txt cs=$ROOT/share-claude-$stamp.txt snap=$ROOT/share-before.ids
+  python3 -I $JUDGE snap $P/.agents-control > $snap
+  local dprompt=$(create_prompt dsh dshok) cprompt=$(create_prompt claude claudeok haiku)
   say "both Mains start now: DSH ($ds) and claude -p ($cs)"
   (cd $P && iso $DH dsh --profile headless "$dprompt" < /dev/null > $ds 2>&1; print -r -- "exit=$?" >> $ds) &
-  (cd $P && claude_iso $claude -p --setting-sources project,local --strict-mcp-config --mcp-config $ROOT/claude-mcp.json \
-     --allowedTools mcp__graftling__agents --model haiku --output-format text "$cprompt" < /dev/null > $cs 2>&1
+  (cd $P && claude_iso $claude $cflags --mcp-config $ROOT/claude-mcp.json --allowedTools mcp__graftling__agents \
+     --output-format text "$cprompt" < /dev/null > $cs 2>&1
    print -r -- "exit=$?" >> $cs) &
   wait
   say "DSH Main"; tail -25 $ds
@@ -348,30 +376,32 @@ share)
   print -r -- "live/: $(cd $P/.agents-control && print -l live/*(ND) live/dsh-host/*(ND) | tr '\n' ' ')"
   print -r -- "host.log: $([[ -f $P/.agents-control/host.log ]] && tail -3 $P/.agents-control/host.log | tr '\n' ' ' || print absent)"
   print -r -- "claude-host.json: $sum_before -> $(shasum $P/.agents-control/claude-host.json | cut -c1-12)"
-  # Which host created each agent id a reply names: each Main must name only its own.
-  python3 -I - $P/.agents-control $ds $cs <<'EOF'
-import json, re, sys
-from pathlib import Path
-root, dsh, claude = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-owner = {}
-for path in (root / 'control' / 'agents').glob('*.json'):
-    record = json.loads(path.read_text())
-    owner[record['agent']] = (record.get('creator') or {}).get('host')
-ok = True
-for name, path, host in (('DSH', dsh, 'dsh-native'), ('Claude Code', claude, 'claude-native')):
-    ids = sorted(set(re.findall(r'agent-[0-9a-f]{32}', Path(path).read_text())))
-    hosts = {i: owner.get(i, 'not in this root') for i in ids}
-    print(f'{name} reply names: {hosts}')
-    if not ids or any(h != host for h in hosts.values()):
-        ok = False
-print('PASS: each Main named only its own children, all in one root' if ok else 'FAIL: see the names above')
-sys.exit(0 if ok else 1)
-EOF
-  local rc=$?
-  grep -q '^exit=0' $ds && grep -q '^exit=0' $cs || { print "FAIL: a Main did not exit 0 (see above)"; rc=1; }
-  print "Success: both exit=0; each reply names its own child (dsh-ok / claude-ok) and lists only it; both records"
-  print "under one .agents-control; live/ holds channel.json (Claude Code, while it ran) and dsh-host/ apart."
-  (( rc == 0 )) && print -r -- "next: zsh $THIS off"
+  say "verdict (computed)"
+  local rc=0
+  grep -q '^exit=0' $ds && print "PASS: the DSH Main exited 0" || { print "FAIL: the DSH Main did not exit 0"; rc=1; }
+  grep -q '^exit=0' $cs && print "PASS: the Claude Code Main exited 0" || { print "FAIL: the Claude Code Main did not exit 0"; rc=1; }
+  # Each Main's own child: one new record by its host (the other host's records count as 'before'), completed
+  # with its word; the ids each Main's status LISTED are only its own.
+  { cat $snap; python3 -I $JUDGE owned $P/.agents-control claude-native; } > $snap.dsh
+  { cat $snap; python3 -I $JUDGE owned $P/.agents-control dsh-native; } > $snap.claude
+  python3 -I $JUDGE create $ds $P/.agents-control $snap.dsh dsh-native dshok || rc=1
+  python3 -I $JUDGE create $cs $P/.agents-control $snap.claude claude-native claudeok || rc=1
+  python3 -I $JUDGE listed $ds $P/.agents-control dsh-native || rc=1
+  python3 -I $JUDGE listed $cs $P/.agents-control claude-native || rc=1
+  [[ -d $P/.agents-control/live/dsh-host && -f $P/.agents-control/claude-host.json ]] \
+    && print "PASS: live/dsh-host (DSH) and claude-host.json (Claude Code) side by side" || { print "FAIL: a host's files are missing"; rc=1; }
+  if [[ -n ${VERIFY570_CLAUDE_USER_LOGIN:-} ]]; then
+    say "what changed outside ROOT (only the two accepted places; no values printed)"
+    print -r -- "~/.claude/projects directories naming ${ROOT:t}: $(print -l $HOME/.claude/projects/*${ROOT:t}*(N/:t) | tr '\n' ' ')"
+    print -r -- "$cproj: $(print -l $cproj/*(N:t) | tr '\n' ' ')"
+    python3 -I -c 'import json, sys; p = json.load(open(sys.argv[1])).get("projects", {})
+print("~/.claude.json project entries naming", sys.argv[3] + ":", [k for k in p if sys.argv[3] in k],
+      "| entry for", sys.argv[2], "present" if sys.argv[2] in p else "absent")' $HOME/.claude.json ${P:A} ${ROOT:t} 2>&1
+  else
+    print -r -- "$CH now holds: $(cd $CH && print -l *(ND) | tr '\n' ' ')"
+  fi
+  (( rc == 0 )) && print "SUCCESS: Claude Code and DSH shared one .agents-control; each saw only its own child" \
+    && print -r -- "next: zsh $THIS off"
   return $rc
   ;;
 off)
@@ -384,12 +414,14 @@ off)
   session $DH $P off "$TOOLS"
   evidence $DH
   print -r -- "agent records in $P/.agents-control: $before -> $(count $P/.agents-control)"
+  say "verdict (computed)"
   local ok=1
-  [[ $(bundles $DH headless) != *graftling-dsh* ]] || { print "FAIL: graftling-dsh is still a bundle"; ok=0; }
-  grep -q 'NO AGENTS TOOL' $SOUT || { print "FAIL: the reply does not say NO AGENTS TOOL"; ok=0; }
-  (( SRC == 0 && $(count $P/.agents-control) == before )) || { print "FAIL: exit or new records"; ok=0; }
-  print "Success: removal exit 0, no graftling-dsh bundle, the reply says NO AGENTS TOOL, no new records."
-  (( ok )) && print -r -- "PASS: removing the plugin turns it off" && print -r -- "next: zsh $THIS post"
+  [[ $(bundles $DH headless) != *graftling-dsh* ]] && print "PASS: graftling-dsh is no longer a bundle" \
+    || { print "FAIL: graftling-dsh is still a bundle"; ok=0; }
+  (( SRC == 0 )) && print "PASS: the Session exited 0" || { print -r -- "FAIL: the Session exited $SRC"; ok=0; }
+  python3 -I $JUDGE tools $SOUT absent || ok=0
+  (( $(count $P/.agents-control) == before )) && print "PASS: no new agent record" || { print "FAIL: new records"; ok=0; }
+  (( ok )) && print -r -- "SUCCESS: removing the plugin turns it off" && print -r -- "next: zsh $THIS post"
   return $(( 1 - ok ))
   ;;
 deps)

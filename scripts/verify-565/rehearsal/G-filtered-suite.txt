@@ -1,0 +1,16 @@
+test run id: 2d1c8d2a28184b5a (shard n carries PYTEST_GRAPHTRAJ_RUN=2d1c8d2a28184b5a-<n>)
+shard 0: 38 files -> /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-0.log
+shard 1: 38 files -> /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-1.log
+shard 2: 40 files -> /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-2.log
+shard 3: 40 files -> /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-3.log
+shard 4: 39 files -> /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-4.log
+shard 5: 40 files -> /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-5.log
+leftover processes of run 2d1c8d2a28184b5a: before=0 after-shards=0 stopped=0 remaining=0
+ABNORMAL /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-1.log: exit 5
+ABNORMAL /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-2.log: exit 5
+ABNORMAL /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-3.log: exit 5
+ABNORMAL /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-4.log: exit 5
+ABNORMAL /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-5.log: exit 5
+1 passed, 3702 deselected
+logs: /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards
+exit=1

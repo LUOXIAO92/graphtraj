@@ -1,0 +1,18 @@
+== [G] Main. GraphTraj full suite of the Worktree HEAD (6 shards, --timeout 1500, -rA, background ~25 min), click c850. Dialog: none. Run nothing else meanwhile.
+sysctl: sysctl fmt -1 1024 1: Operation not permitted
+load average: 
+quiet:2: operation not permitted: ps
+uncommitted in src/tests/plugins: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-565-G-20261122T230545
+reusing /tmp/claude-501/565/venv-c850-gl-ef7c37db
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/565-pi-collector-stdin-eof-under-click-8-2/src/graphtraj/__init__.py
+graftling 0.6.3 /tmp/claude-501/565/venv-c850-gl-ef7c37db/lib/python3.13/site-packages/graftling/__init__.py | click 8.5.0 | pytest 9.1.1
+pytest temp root: /private/tmp/claude-501/verify-565-G-20261122T230545
+candidate: 46572474d7f30a1b1ea15ee17a960a43c127e423 | graftling wheel from git archive ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 (v0.6.3)
+python /tmp/claude-501/565/venv-c850-gl-ef7c37db/bin/python | click.__version__ 8.5.0 /tmp/claude-501/565/venv-c850-gl-ef7c37db/lib/python3.13/site-packages/click/__init__.py
+graftling 0.6.3 /tmp/claude-501/565/venv-c850-gl-ef7c37db/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL: extra pytest args after -- -rA: -k test_graphtraj_collection_entry_protects_its_directory_and_declares_it (same shard entry; whole suite collected)
+started in the background at 23:05:46; output: /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/suite.txt (last line 'exit=N' when it ends)
+Success: the graphtraj line under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/565-pi-collector-stdin-eof-under-click-8-2/src, 'graftling 0.6.3 ...', 'click 8.5.0' (or 8.2.1 with '821'), 'started in the background'.
+next (after G ends): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/565-pi-collector-stdin-eof-under-click-8-2/scripts/verify-565/steps.zsh GR

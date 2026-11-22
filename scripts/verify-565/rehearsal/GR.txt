@@ -1,0 +1,17 @@
+== [GR] Main. Read only. Newest G; FAILED/ERROR lines classed known (560 accepted G, 516 current definition) or NEW. <10 s.
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+516 current definition: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+560 accepted G: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/G-8949caff-20261122T214834/suite.txt
+---- G /tmp/claude-501/565/out/G-46572474-c850-20261122T230545
+pytest temp root: /private/tmp/claude-501/verify-565-G-20261122T230545
+candidate: 46572474d7f30a1b1ea15ee17a960a43c127e423 | graftling wheel from git archive ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 (v0.6.3)
+python /tmp/claude-501/565/venv-c850-gl-ef7c37db/bin/python | click.__version__ 8.5.0 /tmp/claude-501/565/venv-c850-gl-ef7c37db/lib/python3.13/site-packages/click/__init__.py
+graftling 0.6.3 /tmp/claude-501/565/venv-c850-gl-ef7c37db/lib/python3.13/site-packages/graftling/__init__.py
+REHEARSAL: extra pytest args after -- -rA: -k test_graphtraj_collection_entry_protects_its_directory_and_declares_it (same shard entry; whole suite collected)
+ABNORMAL /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards/shard-5.log: exit 5
+1 passed, 3702 deselected
+logs: /tmp/claude-501/565/out/G-46572474-c850-20261122T230545/shards
+exit=1
+(no FAILED/ERROR lines)
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line.
+next: report /tmp/claude-501/565/out/GR.txt to the Leader

@@ -1,0 +1,20 @@
+== [GR] Main. Read only. Newest G; FAILED/ERROR lines classed known (560 accepted G, 516 current definition) or NEW. <10 s.
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+516 current definition: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+560 accepted G: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/G-8949caff-20261122T214834/suite.txt
+---- G /tmp/claude-501/565/out-cls/G-fake
+fake
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent] - AssertionError: x
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main] - AssertionError: x
+FAILED tests/test_x.py::test_made_up - boom
+exit=1
+known (560 accepted G, production pair): FAILED tests/test_child_env_own_key.py::test_a_model_cannot_ask_for_a_key
+known (560 accepted G, production pair): FAILED tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+known (560 accepted G, production pair): FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-independent]
+known (560 accepted G, production pair): FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-main]
+known (560 accepted G, production pair): FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent]
+known (560 accepted G, production pair): FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main]
+NEW: FAILED tests/test_x.py::test_made_up
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line.
+next: report /tmp/claude-501/565/out-cls/GR.txt to the Leader
+(output kept in /tmp/claude-501/565/out-cls/GR.txt; rc=0)

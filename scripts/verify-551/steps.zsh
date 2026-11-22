@@ -4,6 +4,11 @@
 # Claude, Codex, Pi and DSH, and can it open a GraphTraj general method (`tasks` discover/describe) and read the
 # installed manual (manual_ref)?        zsh scripts/verify-551/steps.zsh <STEP> [ARG]   (Main's Bash, this Worktree)
 # Order: 00 -> (U only if 00 says so) -> B all -> (later, once the Leader names the commits) A0 -> A all -> G -> GR
+# Correction round (Round 3): pre -> A0 -> AX -> (A all only if A0 says the candidate changed) -> G -> GR.
+#   pre short preflight (dialog: none): zsh, resolved GraphTraj and graftling heads, TMPDIR outside the Harness,
+#       516's current definition (through 516's task.yml current_definition), each host answers one line with its
+#       configured model and login, then the in-use installation's isolated project with the probe Tasks
+#       (tasks discover + describe concept-clarification, manual_ref readable). No paid child run.
 #   00  versions; each host (claude, codex gpt-6-luna, pi and dsh deepseek-flash) answers one line with its model and
 #       login; builds BASE/project-before with the IN-USE installation (.venv-runtime, read only): own git,
 #       `graphtraj setup`, Claude host configuration, four inline child roles resolved by the Task-free driver
@@ -14,7 +19,9 @@
 #       .mcp.json) creates ONE Task-free child of that Runtime with agents create, waits for it, and prints the
 #       child's final message. The child lists its tools and MCP servers, calls tasks discover/describe
 #       concept-clarification and reads the manual_ref. sum551.py judges from the child's own records too.
-#   A0  candidate: wheels of GraphTraj $GT (this Worktree HEAD) + graftling $GL (551 branch of <Worktree>/.graftling-551.git)
+#   A0  candidate: wheels of GraphTraj $GT (this Worktree HEAD) + graftling $GL (551 branch of the clone
+#       <Worktree>/.scratch/551/graftling.git, ignored through info/exclude /.scratch; Round 3 moved it there from
+#       <Worktree>/.graftling-551, whose untracked directory broke the built_wheel fixture)
 #       into BASE/venv-after; dependency direction (graftling wheel alone in a clean venv: no GraphTraj requirement,
 #       GraphTraj absent, every graftling module imports); project-after (needs its own U after), roles, tasks, gate.
 #   A   per Runtime, headless (dialog: none): plain, one manual deny (claude WebSearch, codex web_search, pi bash,
@@ -41,15 +48,18 @@ PI_SANDBOX_ENV=${VERIFY551_PI_SANDBOX_ENV:-$HOME/agents-pi-sandbox/pi-sandbox.en
 DSH_SESSIONS=${VERIFY551_DSH_SESSIONS:-$HOME/.dsh/sessions}   # DSH's own session logs (clean env: no DSH_HOME); read only
 CLAUDE_PROJECTS=${VERIFY551_CLAUDE_PROJECTS:-$HOME/.claude/projects}   # AC copies only the AU parent's transcript, by id
 # AFTER = the candidate: GraphTraj $GT (this Worktree) + graftling $GL (the 551 branch of the shared clone), as wheels.
-GLREPO=${VERIFY551_GLREPO:-$WT/.graftling-551.git}; GLBRANCH=agent/551-task-free-children-reach-tasks-methods
+GLREPO=${VERIFY551_GLREPO:-$WT/.scratch/551/graftling.git}; GLBRANCH=agent/551-task-free-children-reach-tasks-methods
 GT=${VERIFY551_GT:-$(git -C $WT rev-parse HEAD)}
 GL=${VERIFY551_GL:-$(git --git-dir=$GLREPO rev-parse $GLBRANCH 2>/dev/null || print -- missing)}
-GLBASE=6794ce02b6210ec88837437affb8d7b525612804                 # graftling dev the branch starts from
+GLBASE=9f962bcff91c37fc2aef177b4ab1457f3de5680b                 # graftling dev the branch starts from (Round 3)
+GTBASE=3b9c2af758dd7ff29d7482a03ebb4dec1477ddd1                 # GraphTraj dev this Worktree's branch starts from (Round 3)
 T=${VERIFY551_T:-$H/tmp/551}                                     # G's venvs (Task: test directory Harness tmp/551)
 RTSP=$RT/lib/python3.13/site-packages                            # click, yaml, websockets copied from here (read only)
 PYTEST_TMP=${TMPDIR:-/tmp}
 KNOWN528=$H/.graphtraj/core/state/tasks/528-production-adoption-graftling-0-6-2/adoption/G-8267f9e5-20261119T235550/suite.txt
-KNOWN516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.md
+# 516's CURRENT definition, the file its task.yml names in current_definition (as verify-563 reads it).
+D516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests
+KNOWN516=$D516/${${${(M)${(f)"$(<$D516/task.yml 2>/dev/null)"}:#current_definition: *}#current_definition: }//[\'\"]/}
 STEP=${1:-}; ARG=${2:-}
 path=(/opt/homebrew/bin $HOME/.local/bin $path)
 [[ -n ${VERIFY551_STUB:-} ]] && path=($VERIFY551_STUB $path)        # rehearsal only: stub hosts first
@@ -204,21 +214,17 @@ host_versions() {
   print -r -- "host versions for this step: $HOSTV"
 }
 HOSTV=unknown; DSHV=unknown
+heads() {  # the resolved candidate heads and the dev bases they must descend from
+  print -r -- "GraphTraj: $WT at $(git -C $WT rev-parse HEAD) (GT=$GT; dev base $GTBASE: $(git -C $WT merge-base --is-ancestor $GTBASE $GT && print descends || print NOT an ancestor))"
+  print -r -- "graftling: $GLREPO branch $GLBRANCH at $GL (dev base $GLBASE: $(git --git-dir=$GLREPO merge-base --is-ancestor $GLBASE $GL 2>/dev/null && print descends || print NOT an ancestor))"
+}
 rt_list() { if [[ $1 == all ]]; then print claude codex pi dsh; elif [[ $1 == (claude|codex|pi|dsh) ]]; then print $1; else return 1; fi; }
 
 [[ -d $H/.graphtraj || -n ${VERIFY551_H:-} ]] || { print "STOP: $H is not the Harness root"; return 1; }
 case ${BASE:A}/ in ${H:A}/*) print "STOP: BASE $BASE is inside the Harness"; return 1 ;; esac
 mkdir -p $OUT
 
-step_00() {
-  say "[00] preflight (dialog: none). Each host prompt at most 120 s."
-  print -r -- "script: zsh $ZSH_VERSION running $THIS | $(git --version)"
-  print -r -- "claude $(claude --version 2>&1 | head -1) | codex $(codex --version 2>&1 | tail -1) | pi $(pi --version 2>&1 | tail -1) | dsh $(dsh --version 2>&1 | tail -1)"
-  print -r -- "in-use installation (BEFORE): $(cd $BASE && $RT/bin/python -I -c 'import importlib.metadata as m; print("graphtraj", m.version("graphtraj"), "| graftling", m.version("graftling"))') at $RT"
-  print -r -- "Worktree $WT at $(git -C $WT rev-parse --short HEAD) | BASE $BASE"
-  local FAILS=()
-  load_key || { print "NOTE: DEEPSEEK_API_KEY unset; pi and dsh cannot answer"; FAILS+=(DEEPSEEK_API_KEY); }
-  pi_sandbox
+ready_hosts() {  # each host answers one line; its model and login are judged from its own record. Appends to FAILS.
   say "one-line prompts; each host's model is judged from its OWN record (the reply is only a self-report)"
   local ASK='Reply with one line: READY-551 and your exact model name. Use no tool.' R=$OUT/ready; mkdir -p $R
   # Claude: prompt on stdin (--mcp-config is variadic and would swallow a positional prompt).
@@ -235,6 +241,39 @@ step_00() {
   (cd $BASE && clean $BOUND 60 dsh --profile headless --dump-config < /dev/null > $R/dsh-config.yml 2>&1) || print "dsh --dump-config rc=$?"
   clean $CONDA -I $SD/ready551.py dsh $R/dsh.jsonl $PI_MODEL - $DSH_SESSIONS $R/dsh-session $R/dsh-config.yml || FAILS+=(READY-dsh)
   print -r -- "raw host outputs: $R/{claude.jsonl,codex.txt,pi.jsonl,dsh.jsonl,dsh-config.yml,dsh-session/}"
+}
+
+step_pre() {
+  say "[pre] short preflight (dialog: none). Each host prompt at most 120 s; no paid child run."
+  print -r -- "script: zsh $ZSH_VERSION running $THIS | $(git --version)"
+  heads
+  local FAILS=()
+  [[ $GL != missing ]] || FAILS+=(graftling-branch)
+  check_tmp || FAILS+=(TMPDIR)
+  print -r -- "516 current definition (from 516's task.yml current_definition): $KNOWN516"
+  [[ -f $KNOWN516 && $KNOWN516 == */definitions/*.md ]] || FAILS+=(516-definition)
+  host_versions
+  load_key || { print "NOTE: DEEPSEEK_API_KEY unset; pi and dsh cannot answer"; FAILS+=(DEEPSEEK_API_KEY); }
+  pi_sandbox
+  ready_hosts
+  build_project before || FAILS+=(build)
+  print "READY when: 'READY-551 <host>: PASS' x4 (each with its configured model and login), 'CHECK 551 role <role>: PASS' x5, 'CHECK 551 tasks probe: PASS', both heads 'descends', the 516 path ends in definitions/<time>.md."
+  if (( $#FAILS )); then print -r -- "
+NOT READY: ${FAILS[*]}"; return 1; fi
+  print "READY: all checks passed"
+  next "zsh $THIS A0"
+}
+
+step_00() {
+  say "[00] preflight (dialog: none). Each host prompt at most 120 s."
+  print -r -- "script: zsh $ZSH_VERSION running $THIS | $(git --version)"
+  print -r -- "claude $(claude --version 2>&1 | head -1) | codex $(codex --version 2>&1 | tail -1) | pi $(pi --version 2>&1 | tail -1) | dsh $(dsh --version 2>&1 | tail -1)"
+  print -r -- "in-use installation (BEFORE): $(cd $BASE && $RT/bin/python -I -c 'import importlib.metadata as m; print("graphtraj", m.version("graphtraj"), "| graftling", m.version("graftling"))') at $RT"
+  print -r -- "Worktree $WT at $(git -C $WT rev-parse --short HEAD) | BASE $BASE"
+  local FAILS=()
+  load_key || { print "NOTE: DEEPSEEK_API_KEY unset; pi and dsh cannot answer"; FAILS+=(DEEPSEEK_API_KEY); }
+  pi_sandbox
+  ready_hosts
   build_project before || FAILS+=(build)
   say "Claude parent gate in $(project before)"
   gate before; local g=$?
@@ -303,11 +342,12 @@ one() { local found=($1/$~2(N)); (( $#found == 1 )) && print -r -- $found || { p
 step_A0() {
   local FAILS=()
   say "[A0] candidate installation (dialog: none): GraphTraj $GT + graftling $GL (branch $GLBRANCH of $GLREPO, base $GLBASE)"
+  heads
   [[ $GL != missing ]] || { print "STOP: no graftling branch $GLBRANCH in $GLREPO"; return 1; }
   git --git-dir=$GLREPO merge-base --is-ancestor $GLBASE $GL && print "graftling $GL descends from dev $GLBASE" \
     || FAILS+=(graftling-base)
   print -r -- "graftling commits since dev: $(git --git-dir=$GLREPO log --oneline $GLBASE..$GL | tr '\n' ';')"
-  print -r -- "GraphTraj commits since dev f754d3a9: $(git -C $WT log --oneline f754d3a9..$GT | wc -l | tr -d ' ')"
+  print -r -- "GraphTraj commits since dev ${GTBASE[1,8]}: $(git -C $WT log --oneline $GTBASE..$GT | wc -l | tr -d ' ')"
   local V=$BASE/venv-after W=$BASE/wheels-after
   if [[ ! -f $V/installed || $(<$V/installed) != "$GT $GL" ]]; then
     rm -rf $W; mkdir -p $W
@@ -350,7 +390,7 @@ sys.exit(0 if ok else 1)') || FAILS+=(dependency-direction)
   if (( $#FAILS )); then print -r -- "
 NOT READY: ${FAILS[*]}"; return 1; fi
   print "READY: candidate installed, dependency direction PASS, roles x5, tasks probe and gate PASS"
-  next "zsh $THIS A all"
+  next "zsh $THIS AX   (then zsh $THIS A all only for a Runtime whose candidate paths changed; then zsh $THIS G)"
 }
 
 # A's headless probes per Runtime: plain, one manual deny, and (Codex, DSH) the beyond-host requests that have no
@@ -486,6 +526,7 @@ step_AX() {
   if (( $#FAILS )); then print -r -- "
 NOT COMPLETE: ${FAILS[*]}"; return 1; fi
   print "COMPLETE"
+  next "zsh $THIS G   (or zsh $THIS A <claude|codex|pi|dsh|all> first, when needed)"
 }
 
 # AU: the beyond-host request reaches the USER. An interactive Claude Main parent creates the child; the child's
@@ -591,6 +632,7 @@ g_venv() {  # G's venv: conda --system-site-packages + production click/yaml/web
 step_G() {
   say "[G] GraphTraj full suite of this Worktree ($(git -C $WT rev-parse --short HEAD); 6 shards, background) with graftling $GL,
 then graftling's own suite at $GL (git archive, editable). Dialog: none. Run nothing else meanwhile."
+  heads
   local dirty=$(git -C $WT status --porcelain -- src tests plugins)
   [[ -z $dirty ]] || { print -r -- "STOP: uncommitted changes in $WT: $dirty"; return 1; }
   [[ $GL != missing ]] || { print "STOP: no graftling branch"; return 1; }
@@ -632,6 +674,7 @@ classify() {  # FAILED/ERROR lines of files $@ as known (528's accepted G, 516) 
 }
 step_GR() {
   say "[GR] read only: newest G; FAILED/ERROR lines classed known (528 accepted G, 516) or NEW. Dialog: none."
+  print -r -- "516 current definition (from 516's task.yml current_definition): $KNOWN516"
   local g=$(cat $OUT/G-latest 2>/dev/null)
   [[ -n $g && -f $g/suite.txt ]] || { print -r -- "no G result yet; run: zsh $THIS G"; return 1; }
   cat $g/run.txt
@@ -641,9 +684,11 @@ step_GR() {
   (( done )) || { print "NOT COMPLETE: G still running (no exit= line yet); GR again later"; return 1; }
   if classify $g/suite.txt $g/shards/*(N.) $g/graftling-suite.txt | grep -q '^NEW'; then print "NOT COMPLETE: NEW failures (above)"; return 1; fi
   print "COMPLETE: no NEW failure in either suite"
+  next "Leader: read $g/suite.txt and $g/graftling-suite.txt (GR output above)"
 }
 
 case $STEP in
+  pre) step_pre ;;
   00) step_00 ;;
   U) step_U ;;
   B) step_B ;;
@@ -654,5 +699,5 @@ case $STEP in
   AC) step_AC ;;
   G) step_G ;;
   GR) step_GR ;;
-  *) print "usage: zsh $THIS <00|U [before|after]|B <rt|all>|A0|A <rt|all>|AX|AU <claude|pi> <deny|allow>|AC <claude|pi>|G|GR>"; return 2 ;;
+  *) print "usage: zsh $THIS <pre|00|U [before|after]|B <rt|all>|A0|A <rt|all>|AX|AU <claude|pi> <deny|allow>|AC <claude|pi>|G|GR>"; return 2 ;;
 esac

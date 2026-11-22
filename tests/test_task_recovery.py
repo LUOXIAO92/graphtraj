@@ -11,7 +11,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, app_server_peer, run_process, runner_command, wait_for_file
+from conftest import (
+    FakeCodex, InstalledCommands, app_server_peer, current_definition, run_process, runner_command, wait_for_file,
+)
 from runner_fixtures import configure_harness
 from test_task_budget_control import BODY, sample_stop
 from test_task_graph import _change_status, _register, _task
@@ -455,7 +457,8 @@ def test_cancelled_task_is_neither_recoverable_nor_cleanable(
         # A revision names the definition it replaces and cancels through its
         # disposition (b069acf, Task 302).
         definition.update(body=BODY + definition['body'], disposition='cancelled', replaced_by=[],
-                          retirement_reason='Cancelled before recovery.', current_definition='task.md')
+                          retirement_reason='Cancelled before recovery.',
+                          current_definition=current_definition(root, '154'))
         revision = root / 'cancel.yml'
         revision.write_text(yaml.safe_dump({
             'product_preserving': True, 'tasks': [definition],
@@ -532,7 +535,7 @@ def test_failed_first_creation_can_continue_budget_before_ordinary_launch(
     before = yaml.safe_load((task_directory / 'execution-budget.yml').read_text())
     assert before['stopped'] and sum(before['sessions'].values()) == 0
 
-    definition.update(disposition='active', replaced_by=[], current_definition='task.md')
+    definition.update(disposition='active', replaced_by=[], current_definition=current_definition(root, '160'))
     definition['body'] = definition['body'].replace('total: 10', 'total: 35').replace(
         'execution_budget:\n',
         'execution_budget:\n  revision_reason: Authorized recovery after failed creation\n',
@@ -618,7 +621,8 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
     if cancelled:
         _change_status(installed_commands, root, '160', 'ready')
         definition.update(disposition='cancelled', replaced_by=[],
-                          retirement_reason='Cancelled before its first Session.', current_definition='task.md')
+                          retirement_reason='Cancelled before its first Session.',
+                          current_definition=current_definition(root, '160'))
         revision = root / 'cancel.yml'
         revision.write_text(yaml.safe_dump({
             'product_preserving': True, 'tasks': [definition],

@@ -95,7 +95,8 @@ test('native desktop bridge isolates projects, persists preferences and reconnec
     product_preserving: true, caused_by_event_ids: [], evidence_refs: ['evidence.txt'],
     tasks: [
       { ...task('2', 'dependent', ['1']), title: 'Historical dependency', disposition: 'superseded',
-        replaced_by: ['3'], retirement_reason: 'Replaced by successor.', current_definition: 'task.md' },
+        replaced_by: ['3'], retirement_reason: 'Replaced by successor.',
+        current_definition: original.tasks.find(t => t.task_id === '2').current_definition },
       { ...task('3', 'successor', ['1']), current_definition: null },
     ],
   });

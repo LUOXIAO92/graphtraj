@@ -1,0 +1,15 @@
+== [GR] Main. Read only. Newest G; FAILED/ERROR lines classed known (528 accepted G, 516 current definition) or NEW. <10 s.
+516 current definition: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+---- G /tmp/claude-501/v563/out/G-c20b9487-20261122T032557
+pytest temp root: /private/tmp/claude-501/verify-563-G-20261122T032557
+candidate: c20b9487e8ea63cb7366e7ac751cfe95886d3d56 | graftling 1aa6f007857a5d029e6d49498d074cd1d96cbd5d
+REHEARSAL: extra pytest args after -- -rA: -k test_task_definition_migration or test_command_surface or test_graphtraj_mcp_server_name or test_packaged_skills or test_parent_notice_redelivery or test_worker_import_isolation (same shard entry; whole suite collected)
+shard 4: 39 files -> /tmp/claude-501/v563/out/G-c20b9487-20261122T032557/shards/shard-4.log
+shard 5: 39 files -> /tmp/claude-501/v563/out/G-c20b9487-20261122T032557/shards/shard-5.log
+leftover processes of run 0dcbf00f645245bd: before=0 after-shards=0 stopped=0 remaining=0
+12 passed, 3681 deselected
+logs: /tmp/claude-501/v563/out/G-c20b9487-20261122T032557/shards
+exit=0
+(no FAILED/ERROR lines)
+Success: G 'exit=0' or only 'known' lines; no 'NEW' line.
+next: report /tmp/claude-501/v563/out/GR.txt to the Leader

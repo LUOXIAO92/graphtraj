@@ -1,0 +1,10 @@
+candidate 3d9efcdb (src/tests identical in the evidence commit); TMPDIR=$TMPDIR/pt563d; venv $TMPDIR/v563/venv-g-gl-4a002129 (graftling 0.6.2 wheel from 4a002129, this Worktree editable)
+pytest -p no:cacheprovider -q -rfE tests/test_task_definition_migration.py tests/test_task_graph.py tests/test_task_index.py tests/test_shared_operations.py tests/test_task_migration.py tests/test_migration_snapshot.py tests/test_release_low_bundle.py tests/test_accepted_result_rework.py tests/test_team_round.py tests/test_task_node_protocol.py tests/test_dispatch_crash_dead_launch.py
+121 passed, 1 skipped in 388.78s (0:06:28)
+exit=0
+
+targeted rerun of earlier failures (batch4):
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+2 failed, 12 passed in 177.65s (0:02:57)
+exit=1

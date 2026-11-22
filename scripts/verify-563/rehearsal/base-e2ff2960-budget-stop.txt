@@ -1,0 +1,4 @@
+=========================== short test summary info ============================
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics
+2 failed in 87.05s (0:01:27)

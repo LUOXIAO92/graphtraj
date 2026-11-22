@@ -9,9 +9,18 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from conftest import FakeCodex, InstalledCommands
+from conftest import FakeCodex, InstalledCommands, current_definition
 from graphtraj.interfaces.cli.graphtraj import main
 from test_task_graph import _configure, _task, _write
+
+
+def _same_tasks(graph: dict) -> dict:
+    """Return a graph without current_definition, which each project names by its own event."""
+    tasks = []
+    for task in graph["tasks"]:
+        assert task["current_definition"].startswith("definitions/")
+        tasks.append({key: value for key, value in task.items() if key != "current_definition"})
+    return {**graph, "tasks": tasks}
 
 
 def test_python_and_cli_register_validate_and_read_the_same_graph(
@@ -38,7 +47,7 @@ def test_python_and_cli_register_validate_and_read_the_same_graph(
     assert Path(result.stdout.strip()).relative_to(cli_root) == directory.relative_to(python_root)
     graph = runner.invoke(main, ["task", "graph"])
     assert graph.exit_code == 0, graph.output
-    assert yaml.safe_load(graph.stdout) == read_graph(state)
+    assert _same_tasks(yaml.safe_load(graph.stdout)) == _same_tasks(read_graph(state))
     node = read_graph(state)["tasks"][0]
     expected = {
         "task_id": "73", "task_name": "shared-graph", "status": "pending",
@@ -57,7 +66,7 @@ def test_python_and_cli_register_validate_and_read_the_same_graph(
         # The CLI shares the tool's field-level check for an invalid definition (556).
         assert (str(error.value) if invalid is issue else "arguments.task_id: must be a Task ID") in failed.stderr
         assert read_graph(state) == before
-        assert yaml.safe_load(runner.invoke(main, ["task", "graph"]).stdout) == before
+        assert _same_tasks(yaml.safe_load(runner.invoke(main, ["task", "graph"]).stdout)) == _same_tasks(before)
 
 
 @pytest.mark.parametrize("separated", [False, True])
@@ -150,7 +159,8 @@ def test_python_and_cli_revise_and_transition_with_the_same_validation(
     revision = {
         "product_preserving": True, "caused_by_event_ids": [],
         "evidence_refs": ["evidence.md"],
-        "tasks": [{**issue, "body": "Deliver the revised definition.", "current_definition": "task.md"}],
+        "tasks": [{**issue, "body": "Deliver the revised definition.",
+                   "current_definition": current_definition(state, "73")}],
     }
     change = {
         "task_id": "73", "status": "ready", "active_team_ordinal": None,

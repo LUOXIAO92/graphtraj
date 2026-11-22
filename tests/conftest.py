@@ -258,6 +258,24 @@ def run_process(
     )
 
 
+def current_definition(root: Path, task_id: str) -> str:
+    """Return the observed ``current_definition`` of one registered Task.
+
+    ``root`` is the state directory or any directory above it, such as the
+    Harness root of a test project.
+    """
+    import yaml
+
+    pattern = "tasks/{0}-*/task.yml".format(task_id)
+    (record,) = list(root.glob(pattern)) or list(root.rglob(pattern))
+    return yaml.safe_load(record.read_text(encoding="utf-8"))["current_definition"]
+
+
+def initial_definition(directory: Path) -> Path:
+    """Return a Task directory's initial definition, the oldest version by name."""
+    return sorted(directory.glob("definitions/*.md"))[0]
+
+
 def wait_for_file(path: Path, timeout: float = 5.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

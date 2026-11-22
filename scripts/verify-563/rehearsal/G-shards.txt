@@ -1,0 +1,15 @@
+== [G] Main. GraphTraj full suite of the Worktree HEAD (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. Run nothing else meanwhile.
+sysctl: sysctl fmt -1 1024 1: Operation not permitted
+load average: 
+quiet:2: operation not permitted: ps
+uncommitted in src/tests/plugins: none
+pytest temp: TMPDIR=/tmp/claude-501 (outside the Harness)
+pytest temp root (new for this run; outside the Harness, no Harness marker above): /private/tmp/claude-501/verify-563-G-20261122T032557
+reusing /tmp/claude-501/v563/venv-g-gl-1aa6f007 (graftling 1aa6f007; this Worktree editable)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files/src/graphtraj/__init__.py
+graftling 0.6.2 /tmp/claude-501/v563/venv-g-gl-1aa6f007/lib/python3.13/site-packages/graftling/__init__.py | pytest 9.1.1
+candidate: c20b9487e8ea63cb7366e7ac751cfe95886d3d56 | graftling wheel from git archive 1aa6f007857a5d029e6d49498d074cd1d96cbd5d
+REHEARSAL: extra pytest args after -- -rA: -k test_task_definition_migration or test_command_surface or test_graphtraj_mcp_server_name or test_packaged_skills or test_parent_notice_redelivery or test_worker_import_isolation (same shard entry; whole suite collected)
+started in the background at 03:25:57; output: /tmp/claude-501/v563/out/G-c20b9487-20261122T032557/suite.txt (last line 'exit=N' when it ends)
+Success: the graphtraj line under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files/src, 'graftling <version> ...' built from 1aa6f007857a5d029e6d49498d074cd1d96cbd5d, 'started in the background'.
+next (after G ends): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/563-versioned-task-definition-files/scripts/verify-563/steps.zsh GR

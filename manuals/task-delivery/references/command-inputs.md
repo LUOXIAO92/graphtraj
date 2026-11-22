@@ -48,8 +48,13 @@ for Main, and folds completed history into summaries. Use `--view full` to list
 all Tasks, `--task-id <id>` to select another scope, or `--details <id>` to include
 full definitions and execution facts.
 Children, progress and `active` are derived. Existing Tasks use their
-`current_definition`; `task.md` is the immutable initial
-definition. Do not register an existing Task again.
+`current_definition`. Every definition version, including the initial text, is
+a read-only file `definitions/<event_id>.md` in the Task directory, named by the
+Worldline event that recorded it (`task-registered` for the initial text,
+`task-graph-revised` for a revision). Event IDs are capture times such as
+`20261122T021401.150004+0900`, so names sort oldest to newest. Read the current
+version through `current_definition` in `task.yml` or `task_graph --details`,
+never by choosing a file name. Do not register an existing Task again.
 
 For a project retaining the old Ticket format, complete the explicit migration
 before adopting the Task interfaces. Keep the old installation with its old data
@@ -76,6 +81,23 @@ If an old definition lacks required relationship facts, resolve those facts from
 the retained evidence and record them through the old installation's public
 revision operation before conversion. Migration must report unresolved IDs and
 leave the old data usable rather than inventing parents or treating them as roots.
+The conversion also gives each converted first definition its versioned name
+as described below.
+
+### Rename unversioned Task definitions
+
+State written before versioned names keeps each Task's initial text in
+`task.md`; Task reads refuse such a Task and name this command. Run
+`graphtraj migrate-task-definitions --preview` from the Harness Project Root,
+then the same command without `--preview` after project writers stop. Each
+`task.md` moves unchanged and read-only to `definitions/<event_id>.md`, using
+the Worldline event that created the Task, and `current_definition` is updated
+where it named `task.md`. One `task-definitions-renamed` event maps each old path
+to its new path, so earlier events that cite `task.md` still resolve. Changed
+files and the Worldline are first copied under `.graphtraj/backups`. Running it
+again after success reports that nothing remains. A Task without a matching
+creation event, with irregular definition files or links, or without
+`task.yml`, stops the command before any change.
 
 ## Record readiness
 

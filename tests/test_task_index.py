@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from conftest import current_definition
 from test_task_graph import _configure, _task
 
 
@@ -39,7 +40,7 @@ def _complete(state: Path, root: Path, task_id: str, cancelled: dict | None = No
     from graphtraj.graph.task_graph import complete_task
 
     complete_task(state, root, {
-        "task_id": task_id, "current_definition": "task.md", "reason": "Accepted.",
+        "task_id": task_id, "current_definition": current_definition(state, task_id), "reason": "Accepted.",
         "cancelled_scope": cancelled or {}, "caused_by_event_ids": [],
         "evidence_refs": ["evidence.md"],
     })
@@ -77,7 +78,7 @@ def test_hot_read_uses_the_index_and_native_writes_advance_it(tmp_path: Path) ->
     assert not [path for path in opened if path.endswith((".md", "task.yml"))]
 
     _status(state, root, "2", "blocked")
-    revised = {**_child("2", "1"), "title": "Renamed", "current_definition": "task.md"}
+    revised = {**_child("2", "1"), "title": "Renamed", "current_definition": current_definition(state, "2")}
     revise_tasks(state, root, {"tasks": [revised], "caused_by_event_ids": [],
                                "evidence_refs": ["evidence.md"], "product_preserving": True})
     graphs: list[dict] = []
@@ -157,10 +158,10 @@ def test_current_view_expands_scope_and_folds_history(tmp_path: Path) -> None:
         _complete(state, root, task_id)
     _status(state, root, "7", "blocked")
     cancelled = {**_child("8", "4"), "disposition": "cancelled",
-                 "retirement_reason": "Withdrawn.", "current_definition": "task.md"}
+                 "retirement_reason": "Withdrawn.", "current_definition": current_definition(state, "8")}
     replacement = {**_child("11", "4"), "current_definition": None}
     superseded = {**_child("9", "4"), "disposition": "superseded", "replaced_by": ["11"],
-                  "retirement_reason": "Merged.", "current_definition": "task.md"}
+                  "retirement_reason": "Merged.", "current_definition": current_definition(state, "9")}
     revise_tasks(state, root, {"tasks": [cancelled, superseded, replacement],
                                "caused_by_event_ids": [], "evidence_refs": ["evidence.md"],
                                "product_preserving": True})

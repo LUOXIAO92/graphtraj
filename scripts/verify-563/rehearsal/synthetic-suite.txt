@@ -1,0 +1,7 @@
+FAILED tests/test_generic_role_execution.py::test_configured_parent_dispatch_and_ordinary_resume_keep_actual_authority[coding-team.engineer-analyst-True-mcp] - ValueError: invalid literal for int() with base 10: ''
+FAILED tests/test_team_replacement.py::test_interrupt_returns_after_slow_terminal_record - TimeoutError
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop - AssertionError
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_continues_a_stopped_task_with_unchanged_semantics - AssertionError
+FAILED tests/test_claude_runner.py::test_child_registration_follows_its_owning_execution - KeyError: 'last_outcome'
+FAILED tests/test_synthetic_563.py::test_not_listed_anywhere - AssertionError
+exit=1

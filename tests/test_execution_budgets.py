@@ -13,7 +13,9 @@ from pathlib import Path
 
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import (
+    FakeCodex, InstalledCommands, current_definition, initial_definition, run_process, wait_for_file,
+)
 from graphtraj.execution.execution_budget import execution_budget_monitor
 from runner_fixtures import configure_harness, engineer_probe
 from test_session_alias_control import _register_ready_task
@@ -699,7 +701,7 @@ def test_installed_runner_stops_final_leader_before_acceptance(
                         "disposition": "active",
                         "replaced_by": [],
                         "retirement_reason": None,
-                        "current_definition": "task.md",
+                        "current_definition": current_definition(harness / ".graphtraj/state", "76"),
                     }
                 ],
             },
@@ -895,7 +897,7 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
                     "disposition": "active",
                     "replaced_by": [],
                     "retirement_reason": None,
-                    "current_definition": "task.md",
+                    "current_definition": current_definition(harness / ".graphtraj/state", "82"),
                 }
             ],
         }
@@ -944,7 +946,7 @@ def test_installed_runner_uses_a_revised_budget_while_its_worker_is_running(
         assert state["current_definition"].startswith("definitions/")
         # Each definition keeps the native task envelope before the authored
         # body (b069acf); the authored body keeps its budget front matter.
-        assert (task / "task.md").read_text(encoding="utf-8").split("---\n", 2)[2].startswith(
+        assert initial_definition(task).read_text(encoding="utf-8").split("---\n", 2)[2].startswith(
             _budget_body(total=5).split("\n\n", 1)[0]
         )
         current = task / state["current_definition"]
@@ -1037,7 +1039,7 @@ def test_installed_send_notifies_its_caller_while_a_budgeted_resume_runs(
                         "disposition": "active",
                         "replaced_by": [],
                         "retirement_reason": None,
-                        "current_definition": "task.md",
+                        "current_definition": current_definition(harness / ".graphtraj/state", "76"),
                     }
                 ],
             },

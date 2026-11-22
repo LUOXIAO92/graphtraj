@@ -175,6 +175,13 @@ def migrate_project(cwd: Path, *, preview: bool = False) -> dict[str, Any]:
                 counts.add("worktree_links")
         # A pre-cutover cache must never hide converted definitions or delivery facts.
         (state / "task-index.json").unlink(missing_ok=True)
+        # The converted first definition still has the retired unversioned
+        # name; the backup above already covers this rename.
+        from graphtraj.workspace.definition_migration import rename_initial_definitions
+
+        renamed = rename_initial_definitions(state, harness)["renamed"]
+        if renamed:
+            counts["definitions_renamed"] = len(renamed)
         from graphtraj.graph.task_graph import read_graph
 
         graph = read_graph(state, view="full")

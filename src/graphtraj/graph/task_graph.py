@@ -44,6 +44,21 @@ _TRANSITIONS = {
 }
 
 
+def definition_name(event_id: str) -> str:
+    """Return the Task-relative file name of one definition version.
+
+    Every version, including the initial text, is stored as
+    ``definitions/<event_id>.md``, named by the Worldline event that recorded
+    it. Event IDs are capture times, so names sort in version order.
+
+    Examples
+    --------
+    >>> definition_name("20261122T021401.150004+0900")
+    'definitions/20261122T021401.150004+0900.md'
+    """
+    return "definitions/{0}.md".format(event_id)
+
+
 def _validate_revision(revision: Any) -> None:
     """Validate the shared schema and definition semantics before any write."""
     from graphtraj.interfaces.gateway import _validate
@@ -195,9 +210,11 @@ def register_task(state: Path, harness_root: Path, issue: dict[str, Any]) -> Pat
         raise ValueError("Task {0} is already registered".format(issue["task_id"]))
     if tasks.is_dir() and any(tasks.glob("{0}-*".format(issue["task_id"]))):
         raise ValueError("Task {0} is already registered".format(issue["task_id"]))
+    # The initial definition is named by its registration event, assigned
+    # when the event is appended; this placeholder only passes graph checks.
     state_record = {
         **issue,
-        "current_definition": "task.md",
+        "current_definition": None,
         "active": issue["disposition"] == "active",
         "status": "pending",
         "active_team_ordinal": None,
@@ -218,24 +235,25 @@ def register_task(state: Path, harness_root: Path, issue: dict[str, Any]) -> Pat
         proposed[issue["task_id"]] = state_record
         _validate_graph(proposed)
         _require_reopened_ancestors(proposed, {key: record for key, (_, record) in current.items()})
-        snapshot_path = directory / "task.md"
 
-        def mutation(_: dict[str, Any]):
+        def mutation(recorded: dict[str, Any]):
+            state_record["current_definition"] = definition_name(recorded["event_id"])
             try:
                 _create_task_directory(directory, snapshot, state_record)
             except Exception:
                 _remove_task_directory(directory)
                 raise
+            snapshot_path = directory / state_record["current_definition"]
+            recorded["evidence_refs"] = [snapshot_path.relative_to(harness_root).as_posix()]
             return lambda: _remove_task_directory(directory)
 
-        evidence = snapshot_path.relative_to(harness_root).as_posix()
         append_project_worldline_event(
             state,
             harness_root,
             {
                 "event": "task-registered",
                 "caused_by_event_ids": [],
-                "evidence_refs": [evidence],
+                "evidence_refs": [],
                 "task_id": issue["task_id"],
                 "dependencies": issue["dependencies"],
             },
@@ -312,7 +330,8 @@ def revise_tasks(
                 record = {
                     "task_id": task_id,
                     "task_name": definition["task_name"],
-                    "current_definition": "task.md",
+                    # Named by the revision event when it is appended.
+                    "current_definition": None,
                     "active": definition["disposition"] == "active",
                     "replaced_by": definition["replaced_by"],
                     "dependencies": definition["dependencies"],
@@ -387,10 +406,8 @@ def revise_tasks(
                 for task_id, definition in revised.items():
                     if task_id in current:
                         directory, old = current[task_id]
-                        definition_path = (
-                            directory
-                            / "definitions"
-                            / "{0}.md".format(recorded["event_id"])
+                        definition_path = directory / definition_name(
+                            recorded["event_id"]
                         )
                         definition_path.parent.mkdir(exist_ok=True)
                         state_path = directory / "task.yml"
@@ -409,7 +426,12 @@ def revise_tasks(
                         directory = tasks / "{0}-{1}".format(
                             task_id, definition["task_name"]
                         )
-                        definition_path = directory / "task.md"
+                        proposed[task_id]["current_definition"] = definition_name(
+                            recorded["event_id"]
+                        )
+                        definition_path = (
+                            directory / proposed[task_id]["current_definition"]
+                        )
                         state_path = directory / "task.yml"
                         _create_task_directory(
                             directory, _render_definition(definition), proposed[task_id]
@@ -840,18 +862,20 @@ def _load_state(path: Path) -> tuple[str, dict[str, Any]]:
     if not isinstance(record, dict) or set(record) != protocol.EXECUTION_FIELDS:
         raise ValueError("Task state is invalid")
     task_id = record["task_id"]
+    if os.path.lexists(path.parent / "task.md"):
+        raise ValueError(
+            "Task {0} keeps a definition in the retired unversioned task.md; "
+            "run `graphtraj migrate-task-definitions` first".format(task_id)
+        )
     definition = (
         Path(record["current_definition"])
         if isinstance(record["current_definition"], str)
         else None
     )
     valid_definition = (
-        definition == Path("task.md")
-        or (
-            definition is not None
-            and definition.parent == Path("definitions")
-            and _EVENT_DEFINITION.fullmatch(definition.name) is not None
-        )
+        definition is not None
+        and definition.parent == Path("definitions")
+        and _EVENT_DEFINITION.fullmatch(definition.name) is not None
     )
     definition_path = path.parent / definition if definition is not None else path
     if valid_definition and definition_path.is_file() and not definition_path.is_symlink():
@@ -1068,7 +1092,8 @@ def _create_task_directory(
     try:
         built = staging / directory.name
         built.mkdir()
-        snapshot = built / "task.md"
+        snapshot = built / state_record["current_definition"]
+        snapshot.parent.mkdir()
         snapshot.write_text(definition, encoding="utf-8")
         snapshot.chmod(0o444)
         _write_yaml(built / "task.yml", state_record)
@@ -1081,8 +1106,7 @@ def _create_task_directory(
 
 def _remove_task_directory(directory: Path) -> None:
     if directory.exists():
-        snapshot = directory / "task.md"
-        if snapshot.exists():
+        for snapshot in directory.glob("definitions/*.md"):
             snapshot.chmod(0o644)
         shutil.rmtree(directory)
 

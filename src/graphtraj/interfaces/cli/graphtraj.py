@@ -173,6 +173,24 @@ def migrate_tickets_command(preview: bool, restore: Path | None, snapshot: Path 
     click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
 
 
+@main.command("migrate-task-definitions")
+@click.option("--preview", is_flag=True, help="List the planned renames without changing state.")
+def migrate_task_definitions_command(preview: bool) -> None:
+    """Rename each Task's unversioned task.md to definitions/<event_id>.md.
+
+    The name is the Worldline event that created the Task. Stop project
+    writers first. Changed files and the Worldline are copied to
+    .graphtraj/backups before writing; running again after success changes
+    nothing. An unsupported Task layout is reported before any change."""
+    from graphtraj.workspace.definition_migration import migrate_task_definitions
+
+    try:
+        result = migrate_task_definitions(Path.cwd(), preview=preview)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        raise click.ClickException(str(error)) from error
+    click.echo(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), nl=False)
+
+
 @main.command("connections", cls=OperationCommand, feature="runtime_connections")
 @click.option("--action", type=click.Choice(["read", "preview", "save", "discover"]), default="read")
 @click.option("--catalog-file", type=click.Path(path_type=Path, exists=True, dir_okay=False))

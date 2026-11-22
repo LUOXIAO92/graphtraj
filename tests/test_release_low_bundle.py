@@ -183,7 +183,7 @@ def test_a_running_team_is_told_where_a_later_revision_of_its_definition_is(
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """A revision after dispatch leaves ``.state/task.md`` alone; the prompt's path reaches the new text."""
+    """A revision after dispatch leaves the initial definition alone; the prompt's path reaches the new text."""
     root, _, _, environment = configure_harness(installed_commands, temporary_git_repository, fake_codex, tmp_path)
     _register_ready_inline_task(root, installed_commands.product)
     roles_file = root / '.graphtraj/roles.yml'
@@ -203,18 +203,24 @@ def test_a_running_team_is_told_where_a_later_revision_of_its_definition_is(
     assert '`.state/task.yml`' in prompt and '`current_definition`' in prompt
 
     definition = yaml.safe_load((root / 'task.yml').read_text())
+    [state] = (root / '.graphtraj').rglob('tasks/75-inline-specialist')
+    initial = yaml.safe_load((state / 'task.yml').read_text())['current_definition']
     revision = root / 'revision.yml'
     revision.write_text(yaml.safe_dump({
         'product_preserving': True, 'caused_by_event_ids': [], 'evidence_refs': ['readiness.md'],
-        'tasks': [{**definition, 'body': 'Revised after dispatch.', 'current_definition': 'task.md'}]}))
+        'tasks': [{**definition, 'body': 'Revised after dispatch.', 'current_definition': initial}]}))
     revised = run_process([str(installed_commands.product), 'task', 'revise', '--revision-file', str(revision)],
                           cwd=root)
     assert revised.returncode == 0, revised.stderr
-    [state] = (root / '.graphtraj').rglob('tasks/75-inline-specialist')
     record = yaml.safe_load((state / 'task.yml').read_text())
-    assert (root / record['worktree'] / '.state').resolve() == state.resolve()
-    assert 'Revised after dispatch.' not in (state / 'task.md').read_text()
-    assert 'Revised after dispatch.' in (state / record['current_definition']).read_text()
+    view = root / record['worktree'] / '.state'
+    assert view.resolve() == state.resolve()
+    # Through the member's view both versions are definitions/<event_id>.md; the newer one sorts last.
+    assert sorted(path.name for path in (view / 'definitions').iterdir()) == [
+        initial.split('/')[-1], record['current_definition'].split('/')[-1]]
+    assert not (view / 'task.md').exists()
+    assert 'Revised after dispatch.' not in (view / initial).read_text()
+    assert 'Revised after dispatch.' in (view / record['current_definition']).read_text()
 
 
 CONNECTIONS = {'version': 1, 'runtimes': {'claude': {'runtime': 'claude', 'providers': {'anthropic': {'models': {

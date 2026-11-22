@@ -666,7 +666,9 @@ async function main() {
   fixtures.operate(first, 'task_revise', { product_preserving: true, caused_by_event_ids: [],
     evidence_refs: ['evidence.md'], tasks: [
       { ...fixtures.task('2', 'dependent', ['1']), disposition: 'superseded', replaced_by: ['3'],
-        retirement_reason: 'Replaced by successor.', current_definition: 'task.md' },
+        retirement_reason: 'Replaced by successor.',
+        current_definition: fixtures.operate(first, 'task_graph', { view: 'full' }).tasks
+          .find(t => t.task_id === '2').current_definition },
       { ...fixtures.task('3', 'successor', ['1']), current_definition: null },
     ] });
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');

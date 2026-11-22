@@ -190,6 +190,8 @@ def task_signatures(state: Path) -> dict[str, str]:
     paths += list((state / 'tickets').glob('*/definitions/*.md'))
     paths += list((state / 'worldline').glob('*.jsonl'))
     paths += list((state / 'tasks').glob('*/task.yml'))
+    # Unversioned task.md exists only in state not yet run through
+    # migrate-task-definitions; a copy of such state must still match.
     paths += list((state / 'tasks').glob('*/task.md'))
     paths += list((state / 'tasks').glob('*/definitions/*.md'))
     paths += list((state / 'tasks').glob('*/teams/*/team.yml'))

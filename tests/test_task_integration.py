@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import FakeCodex, InstalledCommands, current_definition, run_process, wait_for_file
 from test_existing_repository_setup import run_setup
 from runner_fixtures import configure_harness, retained_state
 from test_task_graph import _change_status, _register, _task
@@ -1004,7 +1004,7 @@ def test_v2_file_delivery_keeps_acceptance_and_enables_summary_completion(
     request = root / "complete.yml"
     for task_id in ("83", "82"):
         request.write_text(yaml.safe_dump({
-            "task_id": task_id, "current_definition": "task.md",
+            "task_id": task_id, "current_definition": current_definition(root, task_id),
             "reason": "Accept the defined result", "cancelled_scope": {},
             "caused_by_event_ids": [], "evidence_refs": ["delivery-evidence.md"],
         }))

@@ -33,7 +33,7 @@ def test_public_state_rejects_obsolete_candidate_and_correction(
             '--facts-file', str(request_file),
         ], cwd=tmp_path)
         assert result.returncode == 1, result.stdout + result.stderr
-        assert 'invalid schema' in result.stderr
+        assert 'request.phase' in result.stderr
     assert (team.parents[2] / 'task.yml').read_bytes() == original
     assert read_worldline(tmp_path / 'state', tmp_path) == before
 

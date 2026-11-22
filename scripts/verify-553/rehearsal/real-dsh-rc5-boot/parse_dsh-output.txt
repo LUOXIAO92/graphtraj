@@ -1,0 +1,2 @@
+parse_dsh: tools ['create_goal', 'edit', 'get_goal', 'glob', 'grep', 'list_mcp_resource_templates', 'list_mcp_resources', 'mcp__graphtraj__tasks', 'read', 'read_image', 'read_mcp_resource', 'todo_write', 'update_goal', 'working_directory', 'write']
+model deepseek-flash effort high session session-096e9a83-b597-4fe1-98f4-b1af91caff1e is_error True ['request/header.tools of 1 request(s)']

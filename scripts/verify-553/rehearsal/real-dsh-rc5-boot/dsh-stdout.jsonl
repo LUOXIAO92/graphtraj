@@ -1,0 +1,6 @@
+{"type":"session","sessionId":"session-096e9a83-b597-4fe1-98f4-b1af91caff1e","cwd":"/private/tmp/claude-501/try553/base/project/runs/dsh-boot/ws"}
+{"type":"status","phase":"turn_start","turn":1}
+{"type":"status","phase":"step_start","turn":1,"step":1}
+{"type":"status","phase":"step_end","turn":1,"step":1}
+{"type":"status","phase":"turn_end","turn":1,"reason":{"kind":"error","error":{"message":"DeepSeek Messages transport failed","code":"TRANSPORT"}}}
+{"type":"final","sessionId":"session-096e9a83-b597-4fe1-98f4-b1af91caff1e","reason":{"kind":"error","error":{"message":"DeepSeek Messages transport failed","code":"TRANSPORT"}},"text":""}

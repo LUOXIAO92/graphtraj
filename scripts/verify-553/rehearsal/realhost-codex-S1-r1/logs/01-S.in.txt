@@ -1,0 +1,4 @@
+You are the agent working in this project directory. Before doing anything else, open the project's concept-clarification method: call the `tasks` tool with action `describe` and feature `concept-clarification`, then follow the guide it returns. Work only with the files in this directory.
+The user's request:
+Please clean up the terminology in handoff.md so it uses our project's language, and make sure 'done' means one thing in that file. Edit handoff.md directly.
+When you need something from the user, end your turn with your question(s); the user's reply will come as your next message. When the request is complete, end your final message with a line containing only `DONE`.

@@ -1,0 +1,27 @@
+{
+ "argv": [
+  "/private/tmp/claude-501/reh553b/bin/claude",
+  "-p",
+  "--output-format",
+  "stream-json",
+  "--verbose",
+  "--model",
+  "claude-sonnet-5-5",
+  "--setting-sources",
+  "project",
+  "--effort",
+  "medium",
+  "--tools",
+  "Read,Glob,Grep",
+  "--allowedTools",
+  "Read,Glob,Grep",
+  "--disallowedTools",
+  "Bash,Edit,Write,WebSearch,WebFetch",
+  "--strict-mcp-config",
+  "--mcp-config",
+  "{\"mcpServers\": {}}",
+  "--settings",
+  "{\"permissions\": {\"blockReadsOutsideWorkingDirectories\": true}}"
+ ],
+ "cwd": "/private/tmp/claude-501/reh553b/base/audit/codex-S1-r1"
+}

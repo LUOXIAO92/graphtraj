@@ -1,0 +1,3 @@
+{"type": "system", "subtype": "init", "session_id": "cd300945-9e99-4930-b940-71f15b1545ae", "model": "claude-fable-5-2", "tools": ["WebSearch", "WebFetch"], "apiKeySource": "stub", "cwd": "/private/tmp/claude-501/reh553b/base/u/dsh-S2-r1"}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "Stub user reply (HIDDEN FACTS present: True; RESEARCH NOTES present: True)."}]}}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Stub user reply (HIDDEN FACTS present: True; RESEARCH NOTES present: True).", "session_id": "cd300945-9e99-4930-b940-71f15b1545ae", "usage": {}}

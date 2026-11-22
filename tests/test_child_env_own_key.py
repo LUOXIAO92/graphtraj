@@ -414,7 +414,9 @@ def test_a_model_cannot_ask_for_a_key(tmp_path: Path) -> None:
     result = bind(AgentControl(tmp_path, {'pi': driver}), Caller('h', None))(
         {'action': 'create', 'runtime': 'pi', 'instruction': 'x', 'pass_env': [UNRELATED]})
 
-    assert result.document['error'] == {'code': 'invalid-input', 'message': 'request.pass_env: unexpected parameter'}
+    assert result.document['error'] == {
+        'code': 'invalid-input', 'message': 'request.pass_env: unexpected parameter',
+        'errors': [{'path': 'request.pass_env', 'reason': 'unexpected parameter'}]}
     assert driver.settings is None
 
 

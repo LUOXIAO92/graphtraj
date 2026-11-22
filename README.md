@@ -29,7 +29,7 @@ graphtraj task graph
 ```
 
 GraphTraj and `graftling` are separate distributions from separate repositories.
-GraphTraj declares the `graftling` versions it supports (currently `>=0.6.4,<0.7`).
+GraphTraj declares the `graftling` versions it supports (currently `>=0.7.0,<0.8`).
 From checkouts of both repositories, build both wheels with
 `python -m pip wheel --no-deps -w dist /path/to/graftling .` (run in
 the GraphTraj checkout; graftling before 0.6.3 builds from its `src/graftling`), then install both wheels in your dedicated environment. The independent distribution can also

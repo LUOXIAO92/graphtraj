@@ -70,16 +70,19 @@ copy_deps() {  # yaml, websockets from production into venv $1 when the base Pyt
 wheel() {  # sets WHL: graftling wheel built from git archive GCOMMIT (archive root)
   local GS=${GCOMMIT[1,8]}; local SRC=$T/graftling-$GS N=$T/wheels-gl-$GS
   WHL=($N/graftling-*.whl(N))
-  (( $#WHL )) && { WHL=$WHL[1]; return 0; }
+  (( $#WHL )) && { WHL=$WHL[1]; print -r -- "reusing $WHL"; return 0; }
   git -C $G cat-file -e $GCOMMIT^{commit} || { print "STOP: graftling $GCOMMIT is not in $G"; return 1; }
   rm -rf $SRC $N && mkdir -p $SRC && git -C $G archive $GCOMMIT | tar -x -C $SRC || { print "STOP: cannot extract graftling"; return 1; }
   $CONDA -m pip wheel -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
     -w $N $SRC >/dev/null || return 1
-  WHL=$N/graftling-*.whl(N[1])
+  WHL=($N/graftling-*.whl(N)); WHL=${WHL[1]:-}
+  [[ -f $WHL ]] || { print "STOP: no graftling wheel in $N"; return 1; }
 }
-# venv $1 (c821: Miniconda's click; c850: production's click copied in), graftling wheel, this Worktree editable. Sets V.
+# venv $1 (c821: Miniconda's click; c850: production's click copied in), graftling wheel, checkout $2 (default this
+# Worktree) editable; $3 prefixes the venv name. Sets V.
 mkvenv() {
-  V=$T/venv-$1-gl-${GCOMMIT[1,8]}
+  local CO=${2:-$WT}
+  V=$T/venv-${3:-}$1-gl-${GCOMMIT[1,8]}
   if [[ -x $V/bin/python && -f $V/installed ]]; then print "reusing $V"
   else
     local WHL; wheel || return 1
@@ -90,7 +93,7 @@ mkvenv() {
     fi
     $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $WHL || return 1
     $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation \
-      -e $WT 2>&1 | grep -vi cache
+      -e $CO 2>&1 | grep -vi cache
     print -r -- $GCOMMIT > $V/installed
   fi
 }
@@ -163,11 +166,12 @@ C)
     (( rc == 0 )) && res+=("PASS: candidate $v ($(versions $V | head -1 | awk '{print $5}'))") || res+=("FAIL: candidate $v rc=$rc")
   done
   say "red before green: base $BASE (old loop) test file under c821; its pyproject pythonpath=src imports its own src"
-  V=$T/venv-c821-gl-${GCOMMIT[1,8]}
   rm -rf $B && mkdir -p $B && git -C $WT archive $BASE | tar -x -C $B || { print "STOP: cannot extract base"; return 1; }
+  mkvenv c821 $B base- || return 1
+  versions $V || return 1
   print -r -- "base collector loop: $(grep -n 'for line in sys.stdin' $B/src/graphtraj/runtimes/pi/collector.py)"
-  local o=$(cd $B && TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rf tests/test_pi_attachment_private_paths.py 2>&1); rc=$?
-  print -l -- ${(M)${(f)o}:#((FAILED|ERROR)*|*passed*|*failed*|*Aborted*)}
+  local o; o=$(cd $B && TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rf tests/test_pi_attachment_private_paths.py 2>&1); rc=$?
+  print -l -- ${(M)${(f)o}:#((FAILED|ERROR)*|<->\ (passed|failed)*|*Aborted*)}
   if (( rc != 0 )) && [[ $o == *'FAILED tests/test_pi_attachment_private_paths.py::test_graphtraj_collection_entry_protects_its_directory_and_declares_it'* && $o == *'1 failed'* ]]
   then res+=("PASS: base $BASE fails under c821 only in the collection-entry test (red before green; rc=$rc)")
   else res+=("FAIL: base $BASE under c821 did not fail as expected (rc=$rc)"); fi

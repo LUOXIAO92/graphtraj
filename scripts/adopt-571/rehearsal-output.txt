@@ -1,23 +1,23 @@
 
 ======== empty base: /private/tmp/claude-501/adopt571-rehearsal removed; zsh -n of every zsh file
-/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/571-graftling-0-6-4-release-and-production-adoption/scripts/adopt-571/rehearse.zsh:268: nice(5) failed: operation not permitted
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/571-graftling-0-6-4-release-and-production-adoption/scripts/adopt-571/rehearse.zsh:269: nice(5) failed: operation not permitted
 REHEARSAL PASS: zsh -n rehearse.zsh
 REHEARSAL PASS: zsh -n steps.zsh
 REHEARSAL PASS: base /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571 absent before 00
-Worktree HEAD 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 | candidate 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 | graftling repository read only: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (dev 00778d17a543f35d49e218de5f9ede061f977dac, main ef7c37db15f4e6318fd5b6bf5bd79321b876eac5)
+Worktree HEAD 98125982e0d3edbcd11af6de46320524cfc80a56 | candidate 98125982e0d3edbcd11af6de46320524cfc80a56 | graftling repository read only: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (dev 00778d17a543f35d49e218de5f9ede061f977dac, main ef7c37db15f4e6318fd5b6bf5bd79321b876eac5)
 
 ======== setup: scratch graftling (dev = 00778d17 in a linked worktree, main = v0.6.3, origin = scratch bare), scratch GraphTraj (dev = 11f84ed6)
-scratch graftling: dev 00778d17a543f35d49e218de5f9ede061f977dac main ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 v0.6.4 absent | origin /private/tmp/claude-501/adopt571-rehearsal/remote.git | worktrees: 2
-scratch GraphTraj: HEAD 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 dev 11f84ed6328b96c72d5749a738ec7a02f40b7499
+scratch graftling: dev 00778d17a543f35d49e218de5f9ede061f977dac main ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 v0.7.0 absent | origin /private/tmp/claude-501/adopt571-rehearsal/remote.git | worktrees: 2
+scratch GraphTraj: HEAD 98125982e0d3edbcd11af6de46320524cfc80a56 dev 11f84ed6328b96c72d5749a738ec7a02f40b7499
 
 ======== setup: fake production = graphtraj 8949caff + graftling v0.6.3, plugin, configuration; stubs
 graftling-0.6.3-py3-none-any.whl
 graphtraj-0.1.0-py3-none-any.whl
-Create dev from 698bb69d8ac8bac6bf3be10e9b35e93a65599279? [y/N]: Created Integration Worktree on dev.
+Create dev from f23d41f2fe7d84ec70b5ed28318fdc654c39a53e? [y/N]: Created Integration Worktree on dev.
 GraphTraj project setup complete.
   state: .graphtraj/core/state
 fake production .mcp.json servers: ['graphtraj']
-fake production Task state: 479 Task directories (copied, read only)
+fake production Task state: 480 Task directories (copied, read only)
 
 ======== 00 (Claude and Codex answer; TMPDIR outside; 571 markers absent in production; Task state left alone)
 isolation: OK
@@ -25,10 +25,10 @@ Claude Code installed: 2.1.325 (stub Claude Code)
 answer check (expect clean): OK
 codex: /private/tmp/claude-501/adopt571-rehearsal/stub/codex -> /private/tmp/claude-501/adopt571-rehearsal/stub/codex | version: codex-cli 0.171.0 (stub)
 codex exec rc=0 (142 = 180 s timeout)
-codex configured /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-956c6ff9/00-codex.err:model: gpt-5.5-codex (stub configured model)
+codex configured /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-98125982/00-codex.err:model: gpt-5.5-codex (stub configured model)
 CHECK 571 Codex answers CODEX-571-OK (configured model, logged in): PASS
 TMPDIR=/tmp/claude-501 (outside the Harness)
-Task directories: 479 | task.md: 0 (expect 0) | definitions/*.md: 1378
+Task directories: 480 | task.md: 0 (expect 0) | definitions/*.md: 1380
 Version: 0.1.0
 Version: 0.6.3
 560 backup COMPLETE marker: present
@@ -39,10 +39,10 @@ Claude Code installed: 2.1.325 (stub Claude Code)
 answer check (expect clean): OK
 codex: /private/tmp/claude-501/adopt571-rehearsal/stub/codex -> /private/tmp/claude-501/adopt571-rehearsal/stub/codex | version: codex-cli 0.171.0 (stub)
 codex exec rc=0 (142 = 180 s timeout)
-codex configured /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-956c6ff9/00-codex.err:model: gpt-5.5-codex (stub configured model)
+codex configured /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-98125982/00-codex.err:model: gpt-5.5-codex (stub configured model)
 CHECK 571 Codex answers CODEX-571-OK (configured model, logged in): PASS
 TMPDIR=/tmp/claude-501 (outside the Harness)
-Task directories: 479 | task.md: 0 (expect 0) | definitions/*.md: 1378
+Task directories: 480 | task.md: 0 (expect 0) | definitions/*.md: 1380
 Version: 0.1.0
 Version: 0.6.3
 560 backup COMPLETE marker: present
@@ -55,177 +55,178 @@ REHEARSAL PASS: 00: 571 markers absent in production (8/8), graftling 0.6.3
 REHEARSAL PASS: 00: task.md counted 0 with count() (no 'print -l | wc -l' miscount)
 REHEARSAL PASS: 00 next is rel
 
-======== B before rel (no v0.6.4 tag yet) refuses
-REHEARSAL PASS: B negative: without rel, v0.6.4 is missing -> STOP
+======== B before rel (no v0.7.0 tag yet) refuses
+REHEARSAL PASS: B negative: without rel, v0.7.0 is missing -> STOP
 
-======== rel negatives: dev without the base; a wrong existing v0.6.4
+======== rel negatives: dev without the base; a wrong existing v0.7.0
 REHEARSAL PASS: rel negative: dev does not contain 00778d17 -> STOP, nothing changed
-REHEARSAL PASS: rel negative: an existing v0.6.4 at another commit -> STOP
+REHEARSAL PASS: rel negative: an existing v0.7.0 at another commit -> STOP
 
-======== rel with dev moved by 570 (clean): merge d5b334981e42eed43a27382447df6aeea06f4e8e into dev as the noreply identity
-dev: 4caee4e9c314e7812e02de0bf89deebd113f0039 | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.6.4: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved
-### dev moved since dispatch (00778d17a543f35d49e218de5f9ede061f977dac -> 4caee4e9c314e7812e02de0bf89deebd113f0039: 1 commits, e.g. 570): merge d5b334981e42eed43a27382447df6aeea06f4e8e into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
-dev: merged, now 31126b3ab61a152ee486781bf57f0aab03e161fe (parents: 4caee4e9c314e7812e02de0bf89deebd113f0039 d5b334981e42eed43a27382447df6aeea06f4e8e) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
-CHECK 571 v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: PASS
-CHECK 571 graftling main == v0.6.4: PASS
-CHECK 571 graftling dev == v0.6.4 (fast-forward) or a noreply merge containing it: PASS (merge 31126b3ab61a152ee486781bf57f0aab03e161fe)
-CHECK 571 v0.6.4 is annotated with the noreply tagger: PASS
-version at v0.6.4: __version__ = "0.6.4" | root package.json: "version":"0.6.4" | version on dev: __version__ = "0.6.4"
-dev: 4caee4e9c314e7812e02de0bf89deebd113f0039 | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.6.4: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved
-dev: merged, now 31126b3ab61a152ee486781bf57f0aab03e161fe (parents: 4caee4e9c314e7812e02de0bf89deebd113f0039 d5b334981e42eed43a27382447df6aeea06f4e8e) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
-CHECK 571 v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: PASS
-CHECK 571 graftling main == v0.6.4: PASS
-CHECK 571 graftling dev == v0.6.4 (fast-forward) or a noreply merge containing it: PASS (merge 31126b3ab61a152ee486781bf57f0aab03e161fe)
-CHECK 571 v0.6.4 is annotated with the noreply tagger: PASS
-version at v0.6.4: __version__ = "0.6.4" | root package.json: "version":"0.6.4" | version on dev: __version__ = "0.6.4"
-成功: 四行 CHECK 571 PASS（v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e；main == v0.6.4；dev == v0.6.4 (fast-forward) 或含它的 noreply 合并；annotated, noreply tagger）；version at v0.6.4: __version__ = "0.6.4"；root package.json: "version":"0.6.4"。
+======== rel with dev moved by 570 (clean): merge 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca into dev as the noreply identity
+dev: cecb717c99fa1fcb374d974e8448225ecbd7167a | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.7.0: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved
+### dev moved since dispatch (00778d17a543f35d49e218de5f9ede061f977dac -> cecb717c99fa1fcb374d974e8448225ecbd7167a: 1 commits, e.g. 570): merge 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+dev: merged, now b7b7e04372fc1f7b5f5b7abd49da1cac5aa9a7ee (parents: cecb717c99fa1fcb374d974e8448225ecbd7167a 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 571 v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: PASS
+CHECK 571 graftling main == v0.7.0: PASS
+CHECK 571 graftling dev == v0.7.0 (fast-forward) or a noreply merge containing it: PASS (merge b7b7e04372fc1f7b5f5b7abd49da1cac5aa9a7ee)
+CHECK 571 v0.7.0 is annotated with the noreply tagger: PASS
+version at v0.7.0: __version__ = "0.7.0" | root package.json: "version":"0.7.0" | version on dev: __version__ = "0.7.0"
+dev: cecb717c99fa1fcb374d974e8448225ecbd7167a | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.7.0: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/gmoved
+dev: merged, now b7b7e04372fc1f7b5f5b7abd49da1cac5aa9a7ee (parents: cecb717c99fa1fcb374d974e8448225ecbd7167a 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 571 v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: PASS
+CHECK 571 graftling main == v0.7.0: PASS
+CHECK 571 graftling dev == v0.7.0 (fast-forward) or a noreply merge containing it: PASS (merge b7b7e04372fc1f7b5f5b7abd49da1cac5aa9a7ee)
+CHECK 571 v0.7.0 is annotated with the noreply tagger: PASS
+version at v0.7.0: __version__ = "0.7.0" | root package.json: "version":"0.7.0" | version on dev: __version__ = "0.7.0"
+成功: 四行 CHECK 571 PASS（v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca；main == v0.7.0；dev == v0.7.0 (fast-forward) 或含它的 noreply 合并；annotated, noreply tagger）；version at v0.7.0: __version__ = "0.7.0"；root package.json: "version":"0.7.0"。
 REHEARSAL PASS: rel dev moved: exit 0, four CHECK PASS
-REHEARSAL PASS: rel dev moved: dev is a merge (parents 4caee4e9 + d5b33498) by 89069722+LUOXIAO92@users.noreply.github.com; main = v0.6.4 = d5b334981e42eed43a27382447df6aeea06f4e8e; worktree clean
-REHEARSAL PASS: rel dev moved, dev checked out nowhere: merge-tree + commit-tree merge by 89069722+LUOXIAO92@users.noreply.github.com (parents 04538f16 + d5b33498), four CHECK PASS
+REHEARSAL PASS: rel dev moved: dev is a merge (parents cecb717c + 6a1f18be) by 89069722+LUOXIAO92@users.noreply.github.com; main = v0.7.0 = 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca; worktree clean
+REHEARSAL PASS: rel dev moved, dev checked out nowhere: merge-tree + commit-tree merge by 89069722+LUOXIAO92@users.noreply.github.com (parents 744530c6 + 6a1f18be), four CHECK PASS
 
 ======== rel with a conflicting dev (CHANGELOG edited by 570): worktree path and no-worktree path STOP with nothing changed
-[rel] Main. graftling 0.6.4 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/571-graftling-0-6-4-release-and-production-adoption/scripts/adopt-571/graftling-0.6.4.bundle 按 SHA 取 agent/571-graftling-0.6.4（d5b334981e42eed43a27382447df6aeea06f4e8e，父提交 00778d17a543f35d49e218de5f9ede061f977dac），dev 到 d5b334981e42eed43a27382447df6aeea06f4e8e（dev 仍为 00778d17 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 d5b334981e42eed43a27382447df6aeea06f4e8e，建注释 tag v0.6.4（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt571-rehearsal/gconf-worktree 的 dev、main、agent/571-graftling-0.6.4 与 tag。
-### dev moved since dispatch (00778d17a543f35d49e218de5f9ede061f977dac -> 5e9a189b319a594c9a4f6d118a762fdf7a65ed4e: 1 commits, e.g. 570): merge d5b334981e42eed43a27382447df6aeea06f4e8e into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+[rel] Main. graftling 0.7.0 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/571-graftling-0-6-4-release-and-production-adoption/scripts/adopt-571/graftling-0.7.0.bundle 按 SHA 取 agent/571-graftling-0.7.0（6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca，父提交 00778d17a543f35d49e218de5f9ede061f977dac），dev 到 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca（dev 仍为 00778d17 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca，建注释 tag v0.7.0（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt571-rehearsal/gconf-worktree 的 dev、main、agent/571-graftling-0.7.0 与 tag。
+### dev moved since dispatch (00778d17a543f35d49e218de5f9ede061f977dac -> ccb256fb8d61f8a99b6e3061e9cda0f5d03460ba: 1 commits, e.g. 570): merge 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
 conflicted files: CHANGELOG.md 
-REHEARSAL PASS: rel conflict (worktree): STOP; dev still 5e9a189b, main still v0.6.3, no v0.6.4
-[rel] Main. graftling 0.6.4 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/571-graftling-0-6-4-release-and-production-adoption/scripts/adopt-571/graftling-0.6.4.bundle 按 SHA 取 agent/571-graftling-0.6.4（d5b334981e42eed43a27382447df6aeea06f4e8e，父提交 00778d17a543f35d49e218de5f9ede061f977dac），dev 到 d5b334981e42eed43a27382447df6aeea06f4e8e（dev 仍为 00778d17 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 d5b334981e42eed43a27382447df6aeea06f4e8e，建注释 tag v0.6.4（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt571-rehearsal/gconf-plain 的 dev、main、agent/571-graftling-0.6.4 与 tag。
-### dev moved since dispatch (00778d17a543f35d49e218de5f9ede061f977dac -> a8c3500d842f47d02d249ef6ef507a5daabf58cc: 1 commits, e.g. 570): merge d5b334981e42eed43a27382447df6aeea06f4e8e into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
-merge-tree: exit 1 | c3e37adbb9d9bc9054abfc954786aa3e471a6ab4 | 100644 cac1031aa5a7399df347aaeb78dc3e92c71fd72b 1	CHANGELOG.md | 100644 965fd63f188690bce112a526342c645417237375 2	CHANGELOG.md | 100644 48e38d264480d147abeb5a8be2b31b95578ae42d 3	CHANGELOG.md |  | Auto-merging CHANGELOG.md | CONFLICT (content): Merge conflict in CHANGELOG.md
-REHEARSAL PASS: rel conflict (plain): STOP; dev still a8c3500d, main still v0.6.3, no v0.6.4
+REHEARSAL PASS: rel conflict (worktree): STOP; dev still ccb256fb, main still v0.6.3, no v0.7.0
+[rel] Main. graftling 0.7.0 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/571-graftling-0-6-4-release-and-production-adoption/scripts/adopt-571/graftling-0.7.0.bundle 按 SHA 取 agent/571-graftling-0.7.0（6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca，父提交 00778d17a543f35d49e218de5f9ede061f977dac），dev 到 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca（dev 仍为 00778d17 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca，建注释 tag v0.7.0（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt571-rehearsal/gconf-plain 的 dev、main、agent/571-graftling-0.7.0 与 tag。
+### dev moved since dispatch (00778d17a543f35d49e218de5f9ede061f977dac -> 2af5e12f4ef7eb9db1af4620651d2c3133729e55: 1 commits, e.g. 570): merge 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+merge-tree: exit 1 | bbb888fe5d39fef50e71e82ce99c5adf6550b83e | 100644 cac1031aa5a7399df347aaeb78dc3e92c71fd72b 1	CHANGELOG.md | 100644 965fd63f188690bce112a526342c645417237375 2	CHANGELOG.md | 100644 8df821b0a9a0d616222bacd83dc46e958b8e4eb8 3	CHANGELOG.md |  | Auto-merging CHANGELOG.md | CONFLICT (content): Merge conflict in CHANGELOG.md
+REHEARSAL PASS: rel conflict (plain): STOP; dev still 2af5e12f, main still v0.6.3, no v0.7.0
 REHEARSAL PASS: rel conflict (plain): dev checked out nowhere, so rel used git merge-tree (no worktree touched)
 REHEARSAL PASS: rel conflict (worktree): the merge was aborted, dev's worktree clean
 
 ======== rel (scratch graftling, dev = base): fetch the bundle, dev and main fast-forward, annotated noreply tag
-dev: 00778d17a543f35d49e218de5f9ede061f977dac | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.6.4: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling
-### dev: fast-forward 00778d17a543f35d49e218de5f9ede061f977dac -> d5b334981e42eed43a27382447df6aeea06f4e8e
-dev: fast-forwarded to d5b334981e42eed43a27382447df6aeea06f4e8e
-CHECK 571 v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: PASS
-CHECK 571 graftling main == v0.6.4: PASS
-CHECK 571 graftling dev == v0.6.4 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
-CHECK 571 v0.6.4 is annotated with the noreply tagger: PASS
-version at v0.6.4: __version__ = "0.6.4" | root package.json: "version":"0.6.4" | version on dev: __version__ = "0.6.4"
-dev: 00778d17a543f35d49e218de5f9ede061f977dac | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.6.4: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling
-dev: fast-forwarded to d5b334981e42eed43a27382447df6aeea06f4e8e
-CHECK 571 v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: PASS
-CHECK 571 graftling main == v0.6.4: PASS
-CHECK 571 graftling dev == v0.6.4 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
-CHECK 571 v0.6.4 is annotated with the noreply tagger: PASS
-version at v0.6.4: __version__ = "0.6.4" | root package.json: "version":"0.6.4" | version on dev: __version__ = "0.6.4"
-成功: 四行 CHECK 571 PASS（v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e；main == v0.6.4；dev == v0.6.4 (fast-forward) 或含它的 noreply 合并；annotated, noreply tagger）；version at v0.6.4: __version__ = "0.6.4"；root package.json: "version":"0.6.4"。
+dev: 00778d17a543f35d49e218de5f9ede061f977dac | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.7.0: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling
+### dev: fast-forward 00778d17a543f35d49e218de5f9ede061f977dac -> 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca
+dev: fast-forwarded to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca
+CHECK 571 v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: PASS
+CHECK 571 graftling main == v0.7.0: PASS
+CHECK 571 graftling dev == v0.7.0 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
+CHECK 571 v0.7.0 is annotated with the noreply tagger: PASS
+version at v0.7.0: __version__ = "0.7.0" | root package.json: "version":"0.7.0" | version on dev: __version__ = "0.7.0"
+dev: 00778d17a543f35d49e218de5f9ede061f977dac | main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | v0.7.0: absent | dev checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling-dev | main checked out in: /private/tmp/claude-501/adopt571-rehearsal/graftling
+dev: fast-forwarded to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca
+CHECK 571 v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: PASS
+CHECK 571 graftling main == v0.7.0: PASS
+CHECK 571 graftling dev == v0.7.0 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
+CHECK 571 v0.7.0 is annotated with the noreply tagger: PASS
+version at v0.7.0: __version__ = "0.7.0" | root package.json: "version":"0.7.0" | version on dev: __version__ = "0.7.0"
+成功: 四行 CHECK 571 PASS（v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca；main == v0.7.0；dev == v0.7.0 (fast-forward) 或含它的 noreply 合并；annotated, noreply tagger）；version at v0.7.0: __version__ = "0.7.0"；root package.json: "version":"0.7.0"。
 REHEARSAL PASS: rel exit 0 with four CHECK PASS
-REHEARSAL PASS: rel: v0.6.4 = dev = main = d5b334981e42eed43a27382447df6aeea06f4e8e (dev's linked worktree too), tagger noreply, version 0.6.4
+REHEARSAL PASS: rel: v0.7.0 = dev = main = 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca (dev's linked worktree too), tagger noreply, version 0.7.0
 REHEARSAL PASS: rel: prints the push as a separate step after the USER's yes, then gh, and the GraphTraj integration
 REHEARSAL PASS: rel again: already released, nothing to do
 
 ======== rp: refused without the USER's yes; with it, pushes to the scratch bare origin (never GitHub)
-REHEARSAL PASS: gh negative: before rp the remote main is not d5b334981e42eed43a27382447df6aeea06f4e8e -> STOP, nothing installed
+REHEARSAL PASS: gh negative: before rp the remote main is not 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca -> STOP, nothing installed
 REHEARSAL PASS: rp without the USER's confirmation refuses (no push)
 REHEARSAL PASS: rp target is the scratch bare repository
-[rp] Main，仅在 USER 明确确认之后。对外推送 graftling dev、main 与 v0.6.4 到它的 remote（只快进，不 force）。对话框: 无（git 凭据由用户的 git 配置提供；若 git 要登录，用用户平常的 GitHub 登录）。< 30 秒。
-CHECK 571 v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: PASS
-CHECK 571 graftling main == v0.6.4: PASS
-CHECK 571 graftling dev == v0.6.4 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
-CHECK 571 v0.6.4 is annotated with the noreply tagger: PASS
+[rp] Main，仅在 USER 明确确认之后。对外推送 graftling dev、main 与 v0.7.0 到它的 remote（只快进，不 force）。对话框: 无（git 凭据由用户的 git 配置提供；若 git 要登录，用用户平常的 GitHub 登录）。< 30 秒。
+CHECK 571 v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: PASS
+CHECK 571 graftling main == v0.7.0: PASS
+CHECK 571 graftling dev == v0.7.0 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
+CHECK 571 v0.7.0 is annotated with the noreply tagger: PASS
 remote origin: /private/tmp/claude-501/adopt571-rehearsal/remote.git
 remote before: 00778d17a543f35d49e218de5f9ede061f977dac	refs/heads/dev ef7c37db15f4e6318fd5b6bf5bd79321b876eac5	refs/heads/main 
 To /private/tmp/claude-501/adopt571-rehearsal/remote.git
-remote now: d5b334981e42eed43a27382447df6aeea06f4e8e	refs/heads/dev d5b334981e42eed43a27382447df6aeea06f4e8e	refs/heads/main d5b334981e42eed43a27382447df6aeea06f4e8e	refs/tags/v0.6.4^{}
-CHECK 571 remote main and v0.6.4 = d5b334981e42eed43a27382447df6aeea06f4e8e, remote dev = local dev: PASS
-成功: 'CHECK 571 remote main and v0.6.4 = d5b334981e42eed43a27382447df6aeea06f4e8e, remote dev = local dev: PASS'。
-REHEARSAL PASS: rp confirmed: remote main and v0.6.4 = d5b334981e42eed43a27382447df6aeea06f4e8e, remote dev = local dev
+remote now: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca	refs/heads/dev 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca	refs/heads/main 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca	refs/tags/v0.7.0^{}
+CHECK 571 remote main and v0.7.0 = 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca, remote dev = local dev: PASS
+成功: 'CHECK 571 remote main and v0.7.0 = 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca, remote dev = local dev: PASS'。
+REHEARSAL PASS: rp confirmed: remote main and v0.7.0 = 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca, remote dev = local dev
 
-======== gh (result 4): the bare address installs graftling-dsh 0.6.4 in an isolated DSH home (dsh stub)
-GitHub main (/private/tmp/claude-501/adopt571-rehearsal/remote.git): d5b334981e42eed43a27382447df6aeea06f4e8e | = v0.6.4 (d5b334981e42eed43a27382447df6aeea06f4e8e): yes
+======== gh (result 4): the bare address installs graftling-dsh 0.7.0 in an isolated DSH home (dsh stub)
+GitHub main (/private/tmp/claude-501/adopt571-rehearsal/remote.git): 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | = v0.7.0 (6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca): yes
 exit=0
 ERR_PNPM_IGNORED_BUILDS lines: 0 | bundles: ['@deepseek-ai/dsh-base', 'graftling-dsh']
 dependency saved: {"dsh": {"profile": {"bundles": ["@deepseek-ai/dsh-base", "graftling-dsh"]}}, "dependencies": {"graftling-dsh": "/private/tmp/claude-501/adopt571-rehearsal/remote.git"}} 
-installed /private/tmp/claude-501/adopt571-rehearsal/ghroot/home/profiles/gh571/node_modules/graftling-dsh/package.json: version 0.6.4 | plugin_python.py: yes | __init__ __version__ = "0.6.4"
+installed /private/tmp/claude-501/adopt571-rehearsal/ghroot/home/profiles/gh571/node_modules/graftling-dsh/package.json: version 0.7.0 | plugin_python.py: yes | __init__ __version__ = "0.7.0"
 CHECK 571 gh: bare /private/tmp/claude-501/adopt571-rehearsal/remote.git registers graftling-dsh as a profile bundle: PASS
-CHECK 571 gh: installed graftling-dsh package.json says 0.6.4: PASS
+CHECK 571 gh: installed graftling-dsh package.json says 0.7.0: PASS
 CHECK 571 gh: ~/.dsh profiles unchanged: PASS
-GitHub main (/private/tmp/claude-501/adopt571-rehearsal/remote.git): d5b334981e42eed43a27382447df6aeea06f4e8e | = v0.6.4 (d5b334981e42eed43a27382447df6aeea06f4e8e): yes
+GitHub main (/private/tmp/claude-501/adopt571-rehearsal/remote.git): 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | = v0.7.0 (6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca): yes
 exit=0
 ERR_PNPM_IGNORED_BUILDS lines: 0 | bundles: ['@deepseek-ai/dsh-base', 'graftling-dsh']
 dependency saved: {"dsh": {"profile": {"bundles": ["@deepseek-ai/dsh-base", "graftling-dsh"]}}, "dependencies": {"graftling-dsh": "/private/tmp/claude-501/adopt571-rehearsal/remote.git"}} 
-installed /private/tmp/claude-501/adopt571-rehearsal/ghroot/home/profiles/gh571/node_modules/graftling-dsh/package.json: version 0.6.4 | plugin_python.py: yes | __init__ __version__ = "0.6.4"
+installed /private/tmp/claude-501/adopt571-rehearsal/ghroot/home/profiles/gh571/node_modules/graftling-dsh/package.json: version 0.7.0 | plugin_python.py: yes | __init__ __version__ = "0.7.0"
 CHECK 571 gh: bare /private/tmp/claude-501/adopt571-rehearsal/remote.git registers graftling-dsh as a profile bundle: PASS
-CHECK 571 gh: installed graftling-dsh package.json says 0.6.4: PASS
+CHECK 571 gh: installed graftling-dsh package.json says 0.7.0: PASS
 CHECK 571 gh: ~/.dsh profiles unchanged: PASS
-成功: exit=0；ERR_PNPM_IGNORED_BUILDS lines: 0；bundles 含 graftling-dsh；'CHECK 571 gh: bare … registers graftling-dsh as a profile bundle: PASS'；'CHECK 571 gh: installed graftling-dsh package.json says 0.6.4: PASS'；'CHECK 571 gh: ~/.dsh profiles unchanged: PASS'。
-REHEARSAL PASS: gh exit 0: registered as a profile bundle, package.json says 0.6.4, ~/.dsh unchanged
+成功: exit=0；ERR_PNPM_IGNORED_BUILDS lines: 0；bundles 含 graftling-dsh；'CHECK 571 gh: bare … registers graftling-dsh as a profile bundle: PASS'；'CHECK 571 gh: installed graftling-dsh package.json says 0.7.0: PASS'；'CHECK 571 gh: ~/.dsh profiles unchanged: PASS'。
+REHEARSAL PASS: gh exit 0: registered as a profile bundle, package.json says 0.7.0, ~/.dsh unchanged
 REHEARSAL PASS: gh: everything under the isolated root /private/tmp/claude-501/adopt571-rehearsal/ghroot
 REHEARSAL PASS: gh again: refuses while the isolated root exists
 
-======== B: wheels from git archive v0.6.4 (archive root) and of the candidate; version strings; requirement pairs
+======== B: wheels from git archive v0.7.0 (archive root) and of the candidate; version strings; requirement pairs
 REHEARSAL PASS: B exit 0
 ### GraphTraj dev (information only; integration follows the Leader's acceptance, before T)
-GraphTraj dev: 11f84ed6328b96c72d5749a738ec7a02f40b7499 | dev contains 956c6ff9: no | the wheel is built from git archive 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4
-main: d5b334981e42eed43a27382447df6aeea06f4e8e | dev: d5b334981e42eed43a27382447df6aeea06f4e8e | main = v0.6.4: yes | dev contains v0.6.4: yes
-v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: yes
-v0.6.4 is an annotated tag (cat-file -t: tag): yes
-CHECK 571 v0.6.4 version strings all 0.6.4: PASS
-CHANGELOG heading: ## 0.6.4 (incompatible)
-408675a6264a57d42d3c281bd681409cf867d6f0ad29e1e264e2186c3d247423  graftling-0.6.4-py3-none-any.whl
-4808de09db5e25875e281fdf91c368fdfc9c986dcc21759fefc2355ea823fe57  graphtraj-0.1.0-py3-none-any.whl
-CHECK 571 Requires-Dist graftling<0.7,>=0.6.4 satisfied by 0.6.4: PASS
-CHECK 571 Requires-Dist graftling<0.7,>=0.6.4 NOT satisfied by 0.6.3: PASS
-graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/src-956c6ff9/src: files 142 same=142 differing=0 | expected none | expected but equal: none
-CHECK 571 graphtraj wheel equals git archive 956c6ff9: PASS
-graftling graftling-0.6.4-py3-none-any.whl vs /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/gsrc-0.6.4/src: files 95 same=95 differing=0 | expected none | expected but equal: none
-CHECK 571 graftling wheel equals git archive v0.6.4: PASS
+GraphTraj dev: 11f84ed6328b96c72d5749a738ec7a02f40b7499 | dev contains 98125982: no | the wheel is built from git archive 98125982e0d3edbcd11af6de46320524cfc80a56
+main: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | dev: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | main = v0.7.0: yes | dev contains v0.7.0: yes
+v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: yes
+v0.7.0 is an annotated tag (cat-file -t: tag): yes
+CHECK 571 v0.7.0 version strings all 0.7.0: PASS
+CHANGELOG heading: ## 0.7.0 (incompatible)
+1a5995ed531254462fb2e63d0a8128a9d43034a10806e562cf8c946d94355214  graftling-0.7.0-py3-none-any.whl
+ce184ffe238f9e5adc5b419fd677c4acbb6c8e80374406c374f19b3234e84be9  graphtraj-0.1.0-py3-none-any.whl
+CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 satisfied by 0.7.0: PASS
+CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 NOT satisfied by 0.6.3: PASS
+CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 NOT satisfied by 0.6.4: PASS
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/src-98125982/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 571 graphtraj wheel equals git archive 98125982: PASS
+graftling graftling-0.7.0-py3-none-any.whl vs /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/gsrc-0.7.0/src: files 95 same=95 differing=0 | expected none | expected but equal: none
+CHECK 571 graftling wheel equals git archive v0.7.0: PASS
 markers expected present: PASS (8/8)
 ### no build/ or __pycache__ inside the wheels (expect leaked: 0)
 leaked: 0
 ### GraphTraj dev (information only; integration follows the Leader's acceptance, before T)
-GraphTraj dev: 11f84ed6328b96c72d5749a738ec7a02f40b7499 | dev contains 956c6ff9: no | the wheel is built from git archive 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4
-main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | dev: 00778d17a543f35d49e218de5f9ede061f977dac | main = v0.6.4: NO | dev contains v0.6.4: NO
+GraphTraj dev: 11f84ed6328b96c72d5749a738ec7a02f40b7499 | dev contains 98125982: no | the wheel is built from git archive 98125982e0d3edbcd11af6de46320524cfc80a56
+main: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | dev: 00778d17a543f35d49e218de5f9ede061f977dac | main = v0.7.0: NO | dev contains v0.7.0: NO
 ### GraphTraj dev (information only; integration follows the Leader's acceptance, before T)
-GraphTraj dev: 11f84ed6328b96c72d5749a738ec7a02f40b7499 | dev contains 956c6ff9: no | the wheel is built from git archive 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4
-main: d5b334981e42eed43a27382447df6aeea06f4e8e | dev: d5b334981e42eed43a27382447df6aeea06f4e8e | main = v0.6.4: yes | dev contains v0.6.4: yes
-v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: yes
-v0.6.4 is an annotated tag (cat-file -t: tag): yes
-CHECK 571 v0.6.4 version strings all 0.6.4: PASS
-CHANGELOG heading: ## 0.6.4 (incompatible)
-408675a6264a57d42d3c281bd681409cf867d6f0ad29e1e264e2186c3d247423  graftling-0.6.4-py3-none-any.whl
-4808de09db5e25875e281fdf91c368fdfc9c986dcc21759fefc2355ea823fe57  graphtraj-0.1.0-py3-none-any.whl
-CHECK 571 Requires-Dist graftling<0.7,>=0.6.4 satisfied by 0.6.4: PASS
-CHECK 571 Requires-Dist graftling<0.7,>=0.6.4 NOT satisfied by 0.6.3: PASS
-CHECK 571 graphtraj wheel equals git archive 956c6ff9: PASS
-CHECK 571 graftling wheel equals git archive v0.6.4: PASS
+GraphTraj dev: 11f84ed6328b96c72d5749a738ec7a02f40b7499 | dev contains 98125982: no | the wheel is built from git archive 98125982e0d3edbcd11af6de46320524cfc80a56
+main: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | dev: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | main = v0.7.0: yes | dev contains v0.7.0: yes
+v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: yes
+v0.7.0 is an annotated tag (cat-file -t: tag): yes
+CHECK 571 v0.7.0 version strings all 0.7.0: PASS
+CHANGELOG heading: ## 0.7.0 (incompatible)
+1a5995ed531254462fb2e63d0a8128a9d43034a10806e562cf8c946d94355214  graftling-0.7.0-py3-none-any.whl
+ce184ffe238f9e5adc5b419fd677c4acbb6c8e80374406c374f19b3234e84be9  graphtraj-0.1.0-py3-none-any.whl
+CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 satisfied by 0.7.0: PASS
+CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 NOT satisfied by 0.6.3: PASS
+CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 NOT satisfied by 0.6.4: PASS
+CHECK 571 graphtraj wheel equals git archive 98125982: PASS
+CHECK 571 graftling wheel equals git archive v0.7.0: PASS
 markers expected present: PASS (8/8)
 ### no build/ or __pycache__ inside the wheels (expect leaked: 0)
 leaked: 0
-成功: 'product guard: PASS'；'GraphTraj dev: … dev contains 956c6ff9: …' 只是信息；'v0.6.4 peels to d5b334981e42eed43a27382447df6aeea06f4e8e: yes' 与 'annotated … yes'；'CHECK 571 v0.6.4 version strings all 0.6.4: PASS'；/private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9 有 graphtraj-0.1.0 与 graftling-0.6.4 两个 wheel；'CHECK 571 Requires-Dist … satisfied by 0.6.4: PASS' 与 '… NOT satisfied by 0.6.3: PASS'；两行 'CHECK 571 … wheel equals git archive …: PASS'；'markers expected present: PASS (8/8)'；carries graftling/: 0；leaked: 0。
-REHEARSAL PASS: B: GraphTraj dev reported as information only; v0.6.4 annotated, peels to d5b334981e42eed43a27382447df6aeea06f4e8e
-REHEARSAL PASS: B: every version string 0.6.4; CHANGELOG heading 0.6.4
-REHEARSAL PASS: B: Requires-Dist satisfied by 0.6.4 and NOT by 0.6.3
+成功: 'product guard: PASS'；'GraphTraj dev: … dev contains 98125982: …' 只是信息；'v0.7.0 peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca: yes' 与 'annotated … yes'；'CHECK 571 v0.7.0 version strings all 0.7.0: PASS'；/private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982 有 graphtraj-0.1.0 与 graftling-0.7.0 两个 wheel；'CHECK 571 Requires-Dist … satisfied by 0.7.0: PASS' 与 '… NOT satisfied by 0.6.3: PASS'、'… NOT satisfied by 0.6.4: PASS'；两行 'CHECK 571 … wheel equals git archive …: PASS'；'markers expected present: PASS (8/8)'；carries graftling/: 0；leaked: 0。
+REHEARSAL PASS: B: GraphTraj dev reported as information only; v0.7.0 annotated, peels to 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca
+REHEARSAL PASS: B: every version string 0.7.0; CHANGELOG heading 0.7.0
+REHEARSAL PASS: B: Requires-Dist satisfied by 0.7.0 and NOT by 0.6.3 or 0.6.4
 REHEARSAL PASS: B: both wheels = their archives; markers present 8/8; leaked 0
-REHEARSAL PASS: B: the install directory holds exactly graphtraj-0.1.0 and graftling-0.6.4
+REHEARSAL PASS: B: the install directory holds exactly graphtraj-0.1.0 and graftling-0.7.0
 REHEARSAL PASS: B negative: a tag that does not peel to the expected commit STOPs
 REHEARSAL PASS: B negative: a wrong GraphTraj target commit STOPs at the guard
 REHEARSAL PASS: guard negative: an uncommitted src change STOPs
 
 ======== G through its real entry (6 shards; -k selects real tests, two with repository fixtures), queued behind a running suite; then GR
 REHEARSAL PASS: GR before any G: STOP 'run G first', FAIL
-scripts/adopt-571/rehearse.zsh:268: nice(5) failed: operation not permitted
-G record: /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-956c6ff9-20261123T014314
-pytest temp root: /private/tmp/claude-501/adopt-571-G-20261123T014314 (TMPDIR, outside the Harness)
-candidate: 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 | graftling wheel from git archive d5b334981e42eed43a27382447df6aeea06f4e8e (v0.6.4, /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graftling-0.6.4-py3-none-any.whl)
-python: /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-956c6ff9/bin/python
-test interpreter dependencies: click 8.5.0 (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-956c6ff9/lib/python3.13/site-packages/click/__init__.py) | PyYAML 6.0.3 (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-956c6ff9/lib/python3.13/site-packages/yaml/__init__.py) | websockets 16.1.1 (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-956c6ff9/lib/python3.13/site-packages/websockets/__init__.py) | pytest 9.1.1 (/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pytest/__init__.py)
+G record: /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-98125982-20261123T015341
+pytest temp root: /private/tmp/claude-501/adopt-571-G-20261123T015341 (TMPDIR, outside the Harness)
+candidate: 98125982e0d3edbcd11af6de46320524cfc80a56 | graftling wheel from git archive 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca (v0.7.0, /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graftling-0.7.0-py3-none-any.whl)
+python: /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-98125982/bin/python
+test interpreter dependencies: click 8.5.0 (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-98125982/lib/python3.13/site-packages/click/__init__.py) | PyYAML 6.0.3 (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-98125982/lib/python3.13/site-packages/yaml/__init__.py) | websockets 16.1.1 (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/gvenv-98125982/lib/python3.13/site-packages/websockets/__init__.py) | pytest 9.1.1 (/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pytest/__init__.py)
 REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract or test_child_tool_descriptions_match_the_members_entry
-WAITING: Main's suite queue is serial and another suite is running now; G is queued and starts by itself when it ends (checked every 2 s; nothing to do meanwhile; progress: tail -f /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-956c6ff9-20261123T014314/wait.txt):
+WAITING: Main's suite queue is serial and another suite is running now; G is queued and starts by itself when it ends (checked every 2 s; nothing to do meanwhile; progress: tail -f /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-98125982-20261123T015341/wait.txt):
   running: 4242 1 /usr/bin/python3 scripts/run_test_shards.py --shards 6 (another Task's suite, simulated)
-queued in the background at 01:43:17; output: /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-956c6ff9-20261123T014314/suite.txt (last line 'exit=N' when it ends; about 25-30 min of run time once started)
+queued in the background at 01:53:44; output: /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-98125982-20261123T015341/suite.txt (last line 'exit=N' when it ends; about 25-30 min of run time once started)
 REHEARSAL PASS: G queued: says WAITING with the running suite, never stops (exit 0)
 REHEARSAL PASS: G record: pytest temp under TMPDIR (outside the Harness), candidate, graftling commit, dependencies (click 8.5.0)
 REHEARSAL PASS: GR while G waits or runs: 'not finished', FAIL
-01:43:17 waiting for another suite: 4242 
-01:43:19 waiting for another suite: 4242 
-01:43:21 started
-01:43:26 ended (exit=1)
+01:53:44 waiting for another suite: 4242 
+01:53:46 waiting for another suite: 4242 
+01:53:48 started
+01:53:52 ended (exit=1)
 4 passed, 3734 deselected
-logs: /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-956c6ff9-20261123T014314/shards
+logs: /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/G-98125982-20261123T015341/shards
 exit=1
 REHEARSAL PASS: G waited then started by itself: wait.txt has 'waiting for another suite: 4242' then 'started' and 'ended'
 REHEARSAL PASS: G rehearsal: the four selected real tests PASSED (not collect-only), '4 passed', no FAILED line
@@ -233,10 +234,10 @@ REHEARSAL PASS: G rehearsal: shards with nothing selected end 'exit 5' (pytest: 
 REHEARSAL PASS: GR reads the newest G record by itself: candidate, graftling commit and click accepted; exit=1 without classed lines -> FAIL (GR never accepts a nonzero exit by itself)
 
 ======== GR mechanics on a REHEARSAL FIXTURE record, and negatives on copies
-product guard: HEAD 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 | git diff 956c6ff9 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
-product guard: PASS (HEAD's src tests plugins pyproject.toml = 956c6ff9; only scripts/ differ)
-candidate: 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 | git diff 956c6ff9 956c6ff9 -- src tests plugins pyproject.toml: empty | same product: yes
-graftling commit of the wheel: d5b334981e42eed43a27382447df6aeea06f4e8e | = v0.6.4 (d5b334981e42eed43a27382447df6aeea06f4e8e): yes
+product guard: HEAD 98125982e0d3edbcd11af6de46320524cfc80a56 | git diff 98125982 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: PASS (HEAD's src tests plugins pyproject.toml = 98125982; only scripts/ differ)
+candidate: 98125982e0d3edbcd11af6de46320524cfc80a56 | git diff 98125982 98125982 -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | = v0.7.0 (6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca): yes
 totals: 1 failed, 3690 passed, 48 skipped | exit: 1
 test interpreter dependencies: click 8.5.0 (fixture) | PyYAML 6.0.3 (fixture) | websockets 16.1.1 (fixture) | pytest 9.1.1 (fixture)
 test interpreter click = production's 8.5.0: yes
@@ -244,17 +245,17 @@ test interpreter click = production's 8.5.0: yes
 516 current definition read: yes (/private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md)
   known flaky (516 current definition /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md names the helper _assert_native_budget_stop it failed in): tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
 failed tests: 1 | NEW: 0
-CHECK 571 G record (956c6ff9 + v0.6.4) no new failure: PASS
+CHECK 571 G record (98125982 + v0.7.0) no new failure: PASS
 CHECK 571 GR (guard + G record): PASS
-product guard: HEAD 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 | git diff 956c6ff9 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
-product guard: PASS (HEAD's src tests plugins pyproject.toml = 956c6ff9; only scripts/ differ)
-candidate: 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4 | git diff 956c6ff9 956c6ff9 -- src tests plugins pyproject.toml: empty | same product: yes
-graftling commit of the wheel: d5b334981e42eed43a27382447df6aeea06f4e8e | = v0.6.4 (d5b334981e42eed43a27382447df6aeea06f4e8e): yes
+product guard: HEAD 98125982e0d3edbcd11af6de46320524cfc80a56 | git diff 98125982 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: PASS (HEAD's src tests plugins pyproject.toml = 98125982; only scripts/ differ)
+candidate: 98125982e0d3edbcd11af6de46320524cfc80a56 | git diff 98125982 98125982 -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | = v0.7.0 (6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca): yes
 totals: 1 failed, 3690 passed, 48 skipped | exit: 1
 516 current definition (flaky tests): /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
 516 current definition read: yes (/private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md)
   known flaky (516 current definition /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md names the helper _assert_native_budget_stop it failed in): tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
-CHECK 571 G record (956c6ff9 + v0.6.4) no new failure: PASS
+CHECK 571 G record (98125982 + v0.7.0) no new failure: PASS
 CHECK 571 GR (guard + G record): PASS
 REHEARSAL PASS: GR on the fixture: the 516 helper failure known flaky; PASS
 REHEARSAL PASS: GR negative: an unknown FAILED test -> NEW, FAIL, and no PASS left in GR.txt
@@ -265,54 +266,54 @@ REHEARSAL PASS: GR: earlier GR.txt kept as GR-<time>.txt
 
 ======== V: plugin unchanged (predicted); real MCP tools/list and Codex hooks entry; markers both ways
 REHEARSAL PASS: V exit 0
-graftling v0.6.3..v0.6.4 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py 
-graphtraj 8949caff..956c6ff9 under plugins/ and src/graphtraj/runtimes/claude: src/graphtraj/runtimes/claude/execution.py 
+graftling v0.6.3..v0.7.0 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py 
+graphtraj 8949caff..98125982 under plugins/ and src/graphtraj/runtimes/claude: src/graphtraj/runtimes/claude/execution.py 
 SAME    .claude-plugin/plugin.json
 SAME    hooks/hooks.json
 SAME    hooks/host_context.mjs
 CHECK 571 candidate plugin unchanged (predicted): PASS (no plugin/hooks trust dialog expected at claude --continue)
 CHECK 571 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
-CHECK 571 Codex hooks entry names /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 571 Codex hooks entry names /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
 CHECK 571 Codex hooks entry runs (neutral event answers {}): PASS
 markers expected present: PASS (8/8)
 markers expected absent: PASS (8/8)
-CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9 vs /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9)
-CHECK 503 layout one distribution: PASS (1 found: [('0.6.4', '/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling-0.6.4.dist-info')])
-CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.4.dist-info']; other graftling entries: none)
-CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graftling-0.6.4-py3-none-any.whl editable=False)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982 vs /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982)
+CHECK 503 layout one distribution: PASS (1 found: [('0.7.0', '/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling-0.7.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.7.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graftling-0.7.0-py3-none-any.whl editable=False)
 CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
-CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling/__init__.py version 0.6.4)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling/__init__.py version 0.7.0)
 CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
-CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling/: PASS
-CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling/: PASS
 SAME    .mcp.json
 SAME    .claude/settings.local.json
 SAME    .graphtraj/claude-host/config.json
-task graph of the clone: tasks = 479
-graftling v0.6.3..v0.6.4 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py 
-graphtraj 8949caff..956c6ff9 under plugins/ and src/graphtraj/runtimes/claude: src/graphtraj/runtimes/claude/execution.py 
+task graph of the clone: tasks = 480
+graftling v0.6.3..v0.7.0 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py 
+graphtraj 8949caff..98125982 under plugins/ and src/graphtraj/runtimes/claude: src/graphtraj/runtimes/claude/execution.py 
 SAME    .claude-plugin/plugin.json
 SAME    hooks/hooks.json
 SAME    hooks/host_context.mjs
 CHECK 571 candidate plugin unchanged (predicted): PASS (no plugin/hooks trust dialog expected at claude --continue)
 CHECK 571 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
-CHECK 571 Codex hooks entry names /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 571 Codex hooks entry names /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
 CHECK 571 Codex hooks entry runs (neutral event answers {}): PASS
 markers expected present: PASS (8/8)
 markers expected absent: PASS (8/8)
-CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9 vs /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9)
-CHECK 503 layout one distribution: PASS (1 found: [('0.6.4', '/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling-0.6.4.dist-info')])
-CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.4.dist-info']; other graftling entries: none)
-CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graftling-0.6.4-py3-none-any.whl editable=False)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982 vs /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982)
+CHECK 503 layout one distribution: PASS (1 found: [('0.7.0', '/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling-0.7.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.7.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graftling-0.7.0-py3-none-any.whl editable=False)
 CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
-CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling/__init__.py version 0.6.4)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling/__init__.py version 0.7.0)
 CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
-CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling/: PASS
-CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-956c6ff9/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/tmp/571/vvenv-98125982/lib/python3.13/site-packages/graftling/: PASS
 SAME    .mcp.json
 SAME    .claude/settings.local.json
 SAME    .graphtraj/claude-host/config.json
-task graph of the clone: tasks = 479
+task graph of the clone: tasks = 480
 成功: 三行 SAME 与 'CHECK 571 candidate plugin unchanged (predicted): PASS'（claude --continue 时不应出现插件/hooks 信任框）；'CHECK 571 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 571 Codex hooks entry …: PASS'；
   'markers expected present: PASS (8/8)' 与 'markers expected absent: PASS (8/8)'；'503 layout: PASS' 与两行 node resolves PASS；候选 ✘ 不多于 baseline；read_session failures=0 与 task graph of the clone（生产 Task 状态，只读）；无 STOP。
 REHEARSAL PASS: V: plugin CHECK PASS (unchanged; no dialog expected); prediction lines printed
@@ -322,7 +323,7 @@ REHEARSAL PASS: V: read check of production Task state (task graph) by the candi
 REHEARSAL PASS: V wrote nothing to production entry files
 
 ======== negatives: 0.6.3 left installed; markers both ways
-REHEARSAL PASS: proddiff negative: graftling 0.6.3's dist-info left beside 0.6.4 -> FAIL (LEFTOVER)
+REHEARSAL PASS: proddiff negative: graftling 0.6.3's dist-info left beside 0.7.0 -> FAIL (LEFTOVER)
 REHEARSAL PASS: markers 'present' on production fails; 'absent' on the candidate fails
 
 ======== Vu / Vc (stub claude: plugin not loaded, so Vc asks for Vu)
@@ -337,25 +338,25 @@ REHEARSAL PASS: Mpre: GR PASS shown; restart reason names the loaded old modules
 REHEARSAL PASS: I exit 0
       Successfully uninstalled graphtraj-0.1.0
       Successfully uninstalled graftling-0.6.3
-Successfully installed graftling-0.6.4 graphtraj-0.1.0
+Successfully installed graftling-0.7.0 graphtraj-0.1.0
 PASS 254 FAIL 0
 CHECK 571 graftling 0.6.3 dist-info gone: PASS
 ### 571 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
-graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=d4c72250d077a1d0d01d944dd79cb300f02914e3adfcbdae06aee6883519e420", "hashes": {"sha256": "d4c72250d077a1d0d01d944dd79cb300f02914e3adfcbdae06aee6883519e420"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graphtraj-0.1.0-py3-none-any.whl"}
-graftling-0.6.4.dist-info direct_url: {"archive_info": {"hash": "sha256=978c39f3de0fe26144ffad81ecca823ee2c1723f986606a92fae1051b863bd31", "hashes": {"sha256": "978c39f3de0fe26144ffad81ecca823ee2c1723f986606a92fae1051b863bd31"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graftling-0.6.4-py3-none-any.whl"}
-CHECK 571 direct_url of both names the wheels-956c6ff9 wheels: PASS
-built from: graphtraj git archive 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4, graftling git archive v0.6.4 d5b334981e42eed43a27382447df6aeea06f4e8e (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=e67fa7edc78425e38b4714a65b56ee67934aaa93259422d1bc2da709a5f95e28", "hashes": {"sha256": "e67fa7edc78425e38b4714a65b56ee67934aaa93259422d1bc2da709a5f95e28"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.7.0.dist-info direct_url: {"archive_info": {"hash": "sha256=c44bf7c1e92be5f4966a05337fcd729c1c20e4a56ce823e44d6cee983da77642", "hashes": {"sha256": "c44bf7c1e92be5f4966a05337fcd729c1c20e4a56ce823e44d6cee983da77642"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graftling-0.7.0-py3-none-any.whl"}
+CHECK 571 direct_url of both names the wheels-98125982 wheels: PASS
+built from: graphtraj git archive 98125982e0d3edbcd11af6de46320524cfc80a56, graftling git archive v0.7.0 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
 markers expected present: PASS (8/8)
 CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime vs /private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime)
-CHECK 503 layout one distribution: PASS (1 found: [('0.6.4', '/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.6.4.dist-info')])
-CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.4.dist-info']; other graftling entries: none)
-CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graftling-0.6.4-py3-none-any.whl editable=False)
+CHECK 503 layout one distribution: PASS (1 found: [('0.7.0', '/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.7.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.7.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graftling-0.7.0-py3-none-any.whl editable=False)
 CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
-CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.6.4)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.7.0)
 CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
 CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
 CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
-configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-956c6ff9/I-configuration.txt)
+configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-98125982/I-configuration.txt)
 SAME-AS-VALIDATED
 plugin files changed by the install: none (V expected: plugin dialog expected at claude --continue: no (plugin unchanged))
 CHECK 571 installed plugin unchanged: PASS
@@ -369,25 +370,25 @@ CHECK 571 Codex hooks entry names /private/tmp/claude-501/adopt571-rehearsal/pro
 CHECK 571 Codex hooks entry runs (neutral event answers {}): PASS
       Successfully uninstalled graphtraj-0.1.0
       Successfully uninstalled graftling-0.6.3
-Successfully installed graftling-0.6.4 graphtraj-0.1.0
+Successfully installed graftling-0.7.0 graphtraj-0.1.0
 PASS 254 FAIL 0
 CHECK 571 graftling 0.6.3 dist-info gone: PASS
 ### 571 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
-graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=d4c72250d077a1d0d01d944dd79cb300f02914e3adfcbdae06aee6883519e420", "hashes": {"sha256": "d4c72250d077a1d0d01d944dd79cb300f02914e3adfcbdae06aee6883519e420"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graphtraj-0.1.0-py3-none-any.whl"}
-graftling-0.6.4.dist-info direct_url: {"archive_info": {"hash": "sha256=978c39f3de0fe26144ffad81ecca823ee2c1723f986606a92fae1051b863bd31", "hashes": {"sha256": "978c39f3de0fe26144ffad81ecca823ee2c1723f986606a92fae1051b863bd31"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graftling-0.6.4-py3-none-any.whl"}
-CHECK 571 direct_url of both names the wheels-956c6ff9 wheels: PASS
-built from: graphtraj git archive 956c6ff9d53bc98ec37d1a1757c2dd66caef50f4, graftling git archive v0.6.4 d5b334981e42eed43a27382447df6aeea06f4e8e (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=e67fa7edc78425e38b4714a65b56ee67934aaa93259422d1bc2da709a5f95e28", "hashes": {"sha256": "e67fa7edc78425e38b4714a65b56ee67934aaa93259422d1bc2da709a5f95e28"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.7.0.dist-info direct_url: {"archive_info": {"hash": "sha256=c44bf7c1e92be5f4966a05337fcd729c1c20e4a56ce823e44d6cee983da77642", "hashes": {"sha256": "c44bf7c1e92be5f4966a05337fcd729c1c20e4a56ce823e44d6cee983da77642"}}, "url": "file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graftling-0.7.0-py3-none-any.whl"}
+CHECK 571 direct_url of both names the wheels-98125982 wheels: PASS
+built from: graphtraj git archive 98125982e0d3edbcd11af6de46320524cfc80a56, graftling git archive v0.7.0 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
 markers expected present: PASS (8/8)
 CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime vs /private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime)
-CHECK 503 layout one distribution: PASS (1 found: [('0.6.4', '/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.6.4.dist-info')])
-CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.4.dist-info']; other graftling entries: none)
-CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-956c6ff9/graftling-0.6.4-py3-none-any.whl editable=False)
+CHECK 503 layout one distribution: PASS (1 found: [('0.7.0', '/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.7.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.7.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/wheels-98125982/graftling-0.7.0-py3-none-any.whl editable=False)
 CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
-CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.6.4)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.7.0)
 CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
 CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
 CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
-configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-956c6ff9/I-configuration.txt)
+configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt571-rehearsal/project/.graphtraj/core/state/tasks/571-graftling-0-6-4-release-and-production-adoption/adoption/raw-98125982/I-configuration.txt)
 SAME-AS-VALIDATED
 plugin files changed by the install: none (V expected: plugin dialog expected at claude --continue: no (plugin unchanged))
 CHECK 571 installed plugin unchanged: PASS
@@ -399,10 +400,10 @@ bytes unchanged: .graphtraj/claude-host/config.json
 CHECK 571 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
 CHECK 571 Codex hooks entry names /private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
 CHECK 571 Codex hooks entry runs (neutral event answers {}): PASS
-成功: Successfully installed graftling-0.6.4 graphtraj-0.1.0；PASS n FAIL 0（两个 wheel）；'CHECK 571 graftling 0.6.3 dist-info gone: PASS'；三个 -rw------- 备份入口文件；'graftling 0.6.4'；'CHECK 571 direct_url of both names the wheels-956c6ff9 wheels: PASS'；'markers expected present: PASS (8/8)'；'503 layout: PASS'；两行 node resolves PASS；SAME-AS-VALIDATED；'CHECK 571 installed plugin unchanged: PASS'；'CHECK 515 .mcp.json …: PASS'；
+成功: Successfully installed graftling-0.7.0 graphtraj-0.1.0；PASS n FAIL 0（两个 wheel）；'CHECK 571 graftling 0.6.3 dist-info gone: PASS'；三个 -rw------- 备份入口文件；'graftling 0.7.0'；'CHECK 571 direct_url of both names the wheels-98125982 wheels: PASS'；'markers expected present: PASS (8/8)'；'503 layout: PASS'；两行 node resolves PASS；SAME-AS-VALIDATED；'CHECK 571 installed plugin unchanged: PASS'；'CHECK 515 .mcp.json …: PASS'；
   'CHECK 571 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 571 Codex hooks entry …: PASS'。
 REHEARSAL PASS: I: both wheels installed together, proddiff PASS, 0.6.3 dist-info gone, markers 8/8
-REHEARSAL PASS: I: direct_url of both names wheels-956c6ff9; built from both archives
+REHEARSAL PASS: I: direct_url of both names wheels-98125982; built from both archives
 REHEARSAL PASS: I: configuration --write rc=0, plugin unchanged, .mcp.json PASS, SAME-AS-VALIDATED
 REHEARSAL PASS: I: real entries of the installed venv: MCP tools/list and Codex hooks PASS
 REHEARSAL PASS: I: no Task-state migration ran (no migrate lines)
@@ -418,7 +419,7 @@ REHEARSAL PASS: done: counts are 0 when nothing matches (560's miscount fixed): 
 
 ======== R (rollback from the backup's own tools): both packages, plugin and entries restored
 DIFF entries=990 differences=62 (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime)
-before R: graftling installed graftling-0.6.4.dist-info | backup graftling-0.6.3.dist-info 
+before R: graftling installed graftling-0.7.0.dist-info | backup graftling-0.6.3.dist-info 
 graphtraj package installed vs backup: 10 differing entries (none after an earlier R)
 ### venv restored whole from the backup
 SAME entries=990 differences=0 (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime)
@@ -435,7 +436,7 @@ CHECK 571 R: graftling is 0.6.3 again: PASS
 Version: 0.1.0
 Version: 0.6.3
 DIFF entries=990 differences=62 (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime)
-before R: graftling installed graftling-0.6.4.dist-info | backup graftling-0.6.3.dist-info 
+before R: graftling installed graftling-0.7.0.dist-info | backup graftling-0.6.3.dist-info 
 graphtraj package installed vs backup: 10 differing entries (none after an earlier R)
 ### venv restored whole from the backup
 SAME entries=990 differences=0 (/private/tmp/claude-501/adopt571-rehearsal/project/.venv-runtime)
@@ -455,7 +456,7 @@ Version: 0.6.3
 REHEARSAL PASS: R exit 0; venv and plugin SAME
 REHEARSAL PASS: R: graftling and graphtraj restored (vs backup); graftling is 0.6.3 again
 REHEARSAL PASS: R: production graftling 0.6.3, graphtraj 8949caff markers absent again; entries as before
-old code task graph: 479
+old code task graph: 480
 REHEARSAL PASS: R: the old code still reads the state (task graph loads)
 REHEARSAL PASS: 560's backup under tmp/560 unchanged
 REHEARSAL PASS: real <Harness>/graftling untouched by the rehearsal (every branch and tag as at the start)

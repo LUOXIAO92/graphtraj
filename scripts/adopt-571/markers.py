@@ -1,4 +1,4 @@
-"""Check the markers of Task 571's pair (graftling 0.6.4 + GraphTraj candidate) in a site-packages tree.
+"""Check the markers of Task 571's pair (graftling 0.7.0 + GraphTraj candidate) in a site-packages tree.
 
 usage: markers.py <site-packages | directory holding graphtraj/ and graftling/> <expect: present|absent>
 
@@ -6,7 +6,7 @@ Each marker is a line the 571 pair has and production (560: graphtraj 8949caff +
 read as text; nothing is imported. Exit 0 only when every marker is as expected: ``present`` for the candidate or the
 installed venv, ``absent`` for production now.
 
-  graftling 0.6.4: the version line; 551 extra_tool_table (extra_tools.py), Codex apply_tools (codex/driver.py),
+  graftling 0.7.0: the version line; 551 extra_tool_table (extra_tools.py), Codex apply_tools (codex/driver.py),
                    Claude --tools only from a create's choice (claude/execution.py); 569 the DSH plugin's own Python
                    (dsh/plugin_python.py).
   graphtraj:       551 the agents driver imports extra_tool_table; 565 the Pi collector reads stdin by readline;
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 MARKERS = [
-    ('571 graftling version 0.6.4', 'graftling/__init__.py', '__version__ = "0.6.4"'),
+    ('571 graftling version 0.7.0', 'graftling/__init__.py', '__version__ = "0.7.0"'),
     ('551 graftling extra_tool_table', 'graftling/extra_tools.py',
      'def extra_tool_table(extra_tools: Sequence[ExtraTool] | None) -> dict[str, ExtraTool]:'),
     ('551 graftling Codex apply_tools', 'graftling/codex/driver.py',

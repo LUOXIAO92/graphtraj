@@ -1,17 +1,18 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
-# Task 571 — graftling 0.6.4 release and production adoption of the paired GraphTraj candidate.
-# graftling: v0.6.4 = $GCOMMIT "graftling 0.6.4 (571)", one commit on graftling dev 00778d1 (v0.6.3 + 551 + 569), on
-# branch agent/571-graftling-0.6.4, carried as scripts/adopt-571/graftling-0.6.4.bundle. Step rel (Main) fetches it by
-# exact SHA, creates the annotated tag v0.6.4 at it, fast-forwards main to it and brings dev to it: a fast-forward when
+# Task 571 — graftling 0.7.0 release and production adoption of the paired GraphTraj candidate.
+# graftling: v0.7.0 = $GCOMMIT "graftling 0.7.0 (571)", one commit on graftling dev 00778d1 (v0.6.3 + 551 + 569), on
+# branch agent/571-graftling-0.7.0, carried as scripts/adopt-571/graftling-0.7.0.bundle. Step rel (Main) fetches it by
+# exact SHA, creates the annotated tag v0.7.0 at it, fast-forwards main to it and brings dev to it: a fast-forward when
 # dev is still 00778d1, else (570 merged meanwhile) a merge of $GCOMMIT into dev with the noreply identity that STOPS on
-# a conflict. rp (Main, after the USER's explicit yes) pushes dev, main and v0.6.4. gh (after rp) installs graftling-dsh
+# a conflict. rp (Main, after the USER's explicit yes) pushes dev, main and v0.7.0. gh (after rp) installs graftling-dsh
 # from the bare GitHub address in an isolated DSH home. The wheel builds from the archive ROOT (`pip wheel <archive>`).
 # graphtraj: production 8949caff (560) -> a wheel built from `git archive $TARGET` (GraphTraj dev 11f84ed6 + 571's
-# range graftling>=0.6.4,<0.7: dev uses 551's names that 0.6.3 lacks). Production's 0.6.3 does not satisfy it: the two
+# range graftling>=0.7.0,<0.8: dev uses 551's names that 0.6.3 lacks, and 551's Claude default-tools change is
+# incompatible, so graftling releases it as 0.7.0 (correction 1)). Production's 0.6.3 does not satisfy it: the two
 # wheels are installed together by I and are a pair.
 # No Task-state migration in 571 (560 migrated it with 563); I and R touch packages, plugin and entries only.
-# Full suite: G (Main) runs this Worktree's HEAD with the v0.6.4 wheel from B; Main's suite queue is serial, so G
+# Full suite: G (Main) runs this Worktree's HEAD with the v0.7.0 wheel from B; Main's suite queue is serial, so G
 # WAITS (printing that it waits) while another suite runs, then starts by itself. GR reads G's record and checks
 # candidate, graftling commit, interpreter dependencies, totals, exit and FAILED lines (known: 516's CURRENT definition
 # only; 560's other known lines are fixed on dev, gr571.py names the source of each).
@@ -42,18 +43,18 @@ BASE=${ADOPT571_BASE:-$H/tmp/571}
 RT=${ADOPT571_RT:-$H/.venv-runtime}
 PNPM_SHIM=${ADOPT571_PNPM_SHIM:-/Users/luoxiao/agents-394/pnpm-shim}
 WT=${ADOPT571_WT:-/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/571-graftling-0-6-4-release-and-production-adoption}
-G=${ADOPT571_G:-$H/graftling}   # graftling repository: rel writes dev, main and v0.6.4 there; B reads `git archive v0.6.4`
-GTAG=${VERIFY571_GTAG:-v0.6.4}
-GVERSION=0.6.4      # the graftling I installs
+G=${ADOPT571_G:-$H/graftling}   # graftling repository: rel writes dev, main and v0.7.0 there; B reads `git archive v0.7.0`
+GTAG=${VERIFY571_GTAG:-v0.7.0}
+GVERSION=0.7.0      # the graftling I installs
 GOLDVERSION=0.6.3   # production's graftling now (560)
-GCOMMIT=${VERIFY571_GCOMMIT:-d5b334981e42eed43a27382447df6aeea06f4e8e}   # graftling 0.6.4 (571) = v0.6.4
+GCOMMIT=${VERIFY571_GCOMMIT:-6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca}   # graftling 0.7.0 (571) = v0.7.0
 GBASE=${VERIFY571_GBASE:-00778d17a543f35d49e218de5f9ede061f977dac}   # graftling dev when 571 was dispatched (its parent)
 GOLDTAG=v0.6.3; GOLDCOMMIT=ef7c37db15f4e6318fd5b6bf5bd79321b876eac5   # production's graftling (560)
-GBRANCH=agent/571-graftling-0.6.4
-BUNDLE=$SD/graftling-0.6.4.bundle
+GBRANCH=agent/571-graftling-0.7.0
+BUNDLE=$SD/graftling-0.7.0.bundle
 GURL=${ADOPT571_GURL:-https://github.com/LUOXIAO92/graftling.git}   # gh: the bare address (no commit, no path)
 GHROOT=${ADOPT571_GHROOT:-/private/tmp/graftling-571}               # gh: isolated DSH home lives here
-TARGET=${VERIFY571_TARGET:-956c6ff9d53bc98ec37d1a1757c2dd66caef50f4}   # GraphTraj candidate: dev 11f84ed6 + 571's range
+TARGET=${VERIFY571_TARGET:-98125982e0d3edbcd11af6de46320524cfc80a56}   # GraphTraj candidate: dev 11f84ed6 + 571's range
 C8=${TARGET[1,8]}   # per-commit names
 OLD=8949caff74156d14625f45d7d6b762a04cef87eb   # production's graphtraj now (560)
 OLDBASE=${ADOPT571_OLDBASE:-$H/tmp/560}   # 560's backup: listed only, never touched
@@ -68,7 +69,7 @@ MODEL=claude-opus-5-5
 W=${ADOPT571_W:-$H/.graphtraj/core/state/tasks/$TASK/adoption}
 R=$W/raw-$C8
 CTL=$R/ctl
-N=$W/wheels-$C8   # graphtraj-0.1.0 AND graftling-0.6.4: what I installs (proddiff compares every wheel here)
+N=$W/wheels-$C8   # graphtraj-0.1.0 AND graftling-0.7.0: what I installs (proddiff compares every wheel here)
 SRC=$W/src-$C8
 GSRC=$W/gsrc-$GVERSION   # git archive of graftling $GTAG (built from the archive root, as from 0.6.3)
 # The newest G record of this candidate (G writes $W/G-<c8>-<time>/); GR reads it unless ADOPT571_GREC names one.
@@ -481,7 +482,7 @@ step_00() {
   local d; for d in $(site)/graphtraj-*.dist-info(N) $(site)/graftling-*.dist-info(N); do
     print -r -- "production ${d:t} direct_url: $(cat $d/direct_url.json 2>/dev/null || print none)"; done
   print -r -- "(expected: both from 560's adoption/wheels-${OLD[1,8]}/: graphtraj-0.1.0-…whl and graftling-$GOLDVERSION-…whl)"
-  say "plugin files and hashes (571 prediction: graftling 0.6.3..0.6.4 leaves claude/host_context.mjs, hooks and plugin.py unchanged and GraphTraj ${OLD[1,8]}..$C8 leaves plugins/ unchanged, so configuration --write should change nothing; V checks)"; shasum -a 256 $PDIR/hooks/host_context.mjs $PDIR/hooks/hooks.json $PDIR/.claude-plugin/plugin.json
+  say "plugin files and hashes (571 prediction: graftling 0.6.3..0.7.0 leaves claude/host_context.mjs, hooks and plugin.py unchanged and GraphTraj ${OLD[1,8]}..$C8 leaves plugins/ unchanged, so configuration --write should change nothing; V checks)"; shasum -a 256 $PDIR/hooks/host_context.mjs $PDIR/hooks/hooks.json $PDIR/.claude-plugin/plugin.json
   grep -nE '^const (PLUGIN|SERVER|PREFIX)' $PDIR/hooks/host_context.mjs | sed 's/^/production copy: /'
   say "entry files (hashes; .mcp.json: 515 left only '$NEWS')"; shasum -a 256 $ENTRIES; tree mcp $H/.mcp.json
   mcp_keys $H/.mcp.json
@@ -523,7 +524,7 @@ step_B() {
   local gc=$(git -C $G rev-parse -q --verify "$GTAG^{commit}" 2>/dev/null) gm=$(git -C $G rev-parse -q --verify main 2>/dev/null) gd=$(git -C $G rev-parse -q --verify dev 2>/dev/null)
   print "$GTAG^{commit}: ${gc:-NOT FOUND} | tag object: $(git -C $G rev-parse -q --verify refs/tags/$GTAG 2>/dev/null || print none) | type: $(git -C $G cat-file -t $GTAG 2>/dev/null)"
   print "main: ${gm:-NOT FOUND} | dev: ${gd:-NOT FOUND} | main = $GTAG: $([[ -n $gc && $gc == $gm ]] && print yes || print NO) | dev contains $GTAG: $(git -C $G merge-base --is-ancestor ${gc:-missing} ${gd:-missing} 2>/dev/null && print yes || print NO)"
-  [[ $gc == $GCOMMIT ]] && print "$GTAG peels to $GCOMMIT: yes" || { print "STOP: $GTAG^{commit} is ${gc:-missing}, not $GCOMMIT (graftling 0.6.4 (571)). Run rel first, or Main asks the Leader."; return 1; }
+  [[ $gc == $GCOMMIT ]] && print "$GTAG peels to $GCOMMIT: yes" || { print "STOP: $GTAG^{commit} is ${gc:-missing}, not $GCOMMIT (graftling 0.7.0 (571)). Run rel first, or Main asks the Leader."; return 1; }
   [[ $(git -C $G cat-file -t refs/tags/$GTAG 2>/dev/null) == tag ]] && print "$GTAG is an annotated tag (cat-file -t: tag): yes" || { print "STOP: $GTAG is not an annotated tag (cat-file -t: $(git -C $G cat-file -t refs/tags/$GTAG 2>&1)). Main asks the Leader."; return 1; }
   print "$GTAG tagger: $(git -C $G for-each-ref --format='%(taggername) %(taggeremail) %(taggerdate:iso)' refs/tags/$GTAG)"
   print "$GTAG commit author / committer: $(git -C $G log -1 --format='%an %ae / %cn %ce' $gc) | parent: $(git -C $G rev-parse $gc~1)"
@@ -554,11 +555,14 @@ step_B() {
   $CONDA -I -c 'import sys
 from packaging.requirements import Requirement
 r = Requirement(sys.argv[1].removeprefix("Requires-Dist: "))
-new, old = r.specifier.contains(sys.argv[2]), r.specifier.contains(sys.argv[3])
+new = r.specifier.contains(sys.argv[2])
 verdict = {True: "PASS", False: "FAIL"}
 print(f"CHECK 571 Requires-Dist {r} satisfied by {sys.argv[2]}: {verdict[new]}")
-print(f"CHECK 571 Requires-Dist {r} NOT satisfied by {sys.argv[3]}: {verdict[not old]}")
-sys.exit(0 if new and not old else 1)' "$req" $GVERSION $GOLDVERSION || { print "STOP: the graphtraj requirement does not pair with graftling $GVERSION"; return 1; }
+old = False
+for other in sys.argv[3:]:   # production 0.6.3 and the withdrawn 0.6.4 candidate
+    hit = r.specifier.contains(other); old = old or hit
+    print(f"CHECK 571 Requires-Dist {r} NOT satisfied by {other}: {verdict[not hit]}")
+sys.exit(0 if new and not old else 1)' "$req" $GVERSION $GOLDVERSION 0.6.4 || { print "STOP: the graphtraj requirement does not pair with graftling $GVERSION"; return 1; }
   say "both wheels = their git archives, file by file (gate)"
   $CONDA -I $SD/pkgdiff532.py graphtraj $(wheel_of graphtraj) archive:$SRC/src "571 graphtraj wheel equals git archive $C8" - || { print "STOP: the graphtraj wheel differs from git archive $C8"; return 1; }
   $CONDA -I $SD/pkgdiff532.py graftling $(wheel_of graftling) archive:$GSRC/src "571 graftling wheel equals git archive $GTAG" - || { print "STOP: the graftling wheel differs from git archive $GTAG"; return 1; }
@@ -589,7 +593,7 @@ step_V() {
   say "scratch venv: the $C8 graphtraj wheel + the $GTAG graftling wheel plus production's click, yaml, websockets"; scratch_venv || return 1
   # 571: production's plugin graphtraj-claude-host is written by graftling.claude.claude_host_plugin (claude/plugin.py)
   # from graftling/claude/host_context.mjs and hooks, with GraphTraj's host configuration. Prediction from the diffs:
-  # graftling 0.6.3..0.6.4 changes only claude/driver.py and claude/execution.py under claude/ (the child, not the
+  # graftling 0.6.3..0.7.0 changes only claude/driver.py and claude/execution.py under claude/ (the child, not the
   # plugin), plugin.py writes version '1' regardless of the graftling version, and GraphTraj 8949caff..$C8 leaves
   # plugins/ and runtimes/claude/host*.py unchanged. So the plugin is EXPECTED to stay byte-identical and no
   # plugin/hooks trust dialog is expected at `claude --continue`. Anything that changes is shown and stops here.
@@ -611,7 +615,7 @@ step_V() {
   (( ${#changed} )) && print "plugin dialog expected at claude --continue: yes (one: plugin/hooks trust for graphtraj-claude-host)" > $R/V-dialog.txt || print "plugin dialog expected at claude --continue: no (plugin unchanged)" > $R/V-dialog.txt
   grep -q '^const SERVER = "graphtraj";' $VP/hooks/host_context.mjs && print "candidate host_context.mjs const SERVER = \"graphtraj\": yes (515's, unchanged)" \
     || { print "STOP: candidate host_context.mjs does not name the server graphtraj"; rc=1; }
-  say "graftling: production's $GOLDVERSION vs the $GTAG wheel (information: the files 0.6.4 changes)"
+  say "graftling: production's $GOLDVERSION vs the $GTAG wheel (information: the files 0.7.0 changes)"
   $CONDA -I $SD/pkgdiff532.py graftling $(wheel_of graftling) $(site) "graftling $GTAG differs from production $GOLDVERSION (information)" - 2>&1 | sed 's/^CHECK /INFO /' | tail -2 | tee $R/V-gldiff.txt
   say "graphtraj: the $C8 wheel vs production's installed ${OLD[1,8]} (information)"
   $CONDA -I $SD/pkgdiff532.py graphtraj $(wheel_of graphtraj) $(site) "graphtraj $C8 differs from production ${OLD[1,8]} (information)" - 2>&1 | sed 's/^CHECK /INFO /' | tail -2 | tee $R/V-gtdiff.txt
@@ -722,8 +726,8 @@ do_install() {
     done
   done
   say "pip check and imports"; $P -m pip check --disable-pip-version-check || return 1
-  $P -c 'import graftling, graphtraj.runtimes.claude.host as h, graftling.control as c, graftling.tool_descendants as td, graphtraj.execution.runner_worker as rw; print("graftling", graftling.__version__); print(h.__file__); print("457", c._stop_escaped.__name__, "| 459 SAMPLE_SECONDS", td.SAMPLE_SECONDS, "| 460", rw.TOOL_PROCESSES_RECORD); assert graftling.__version__ == "0.6.4"' || return 1
-  $P -c 'import importlib.metadata as md, pathlib, graftling, graphtraj; gs = pathlib.Path(graftling.__file__).parent; print("395 layout graftling", graftling.__version__, "| distributions", sum(1 for d in md.distributions() if (d.metadata["Name"] or "").lower() == "graftling"), "| beside graphtraj:", gs.parent == pathlib.Path(graphtraj.__file__).parent.parent, "| graftling.mjs:", (pathlib.Path(graphtraj.__file__).parent / "runtimes/graftling.mjs").is_file(), "| graphtraj requires", [r for r in md.requires("graphtraj") if r.startswith("graftling")]); assert graftling.__version__ == "0.6.4"' || return 1
+  $P -c 'import graftling, graphtraj.runtimes.claude.host as h, graftling.control as c, graftling.tool_descendants as td, graphtraj.execution.runner_worker as rw; print("graftling", graftling.__version__); print(h.__file__); print("457", c._stop_escaped.__name__, "| 459 SAMPLE_SECONDS", td.SAMPLE_SECONDS, "| 460", rw.TOOL_PROCESSES_RECORD); assert graftling.__version__ == "0.7.0"' || return 1
+  $P -c 'import importlib.metadata as md, pathlib, graftling, graphtraj; gs = pathlib.Path(graftling.__file__).parent; print("395 layout graftling", graftling.__version__, "| distributions", sum(1 for d in md.distributions() if (d.metadata["Name"] or "").lower() == "graftling"), "| beside graphtraj:", gs.parent == pathlib.Path(graphtraj.__file__).parent.parent, "| graftling.mjs:", (pathlib.Path(graphtraj.__file__).parent / "runtimes/graftling.mjs").is_file(), "| graphtraj requires", [r for r in md.requires("graphtraj") if r.startswith("graftling")]); assert graftling.__version__ == "0.7.0"' || return 1
   say "571 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from"
   local d; for d in $S/graphtraj-0.1.0.dist-info $S/graftling-$GVERSION.dist-info; do print -r -- "${d:t} direct_url: $(cat $d/direct_url.json 2>/dev/null || print none)"; done
   local du=$(cat $S/graphtraj-0.1.0.dist-info/direct_url.json 2>/dev/null) dg=$(cat $S/graftling-$GVERSION.dist-info/direct_url.json 2>/dev/null)
@@ -916,7 +920,7 @@ R_HINT="回退（USER，先在 Main 里 /exit）: zsh $BK/tools/steps.zsh R"
 # GR (571): read only. The product guard, then the G record $GREC (newest $W/G-<c8>-*/ unless ADOPT571_GREC names one;
 # run.txt: candidate and graftling commit; suite.txt: totals and exit; failures.txt: every FAILED/ERROR line of
 # suite.txt and the shard logs). The candidate's src/tests/plugins/pyproject must equal $C8's and the graftling commit
-# must be $GCOMMIT exactly (the v0.6.4 wheel). A FAILED/ERROR line is known only when 516's CURRENT definition (through
+# must be $GCOMMIT exactly (the v0.7.0 wheel). A FAILED/ERROR line is known only when 516's CURRENT definition (through
 # its task.yml current_definition) names it; gr571.py names the accepted records showing 560's other lines fixed on dev.
 step_GR() {
   local ok=0 cand gl tot ex line t any=0
@@ -953,7 +957,7 @@ step_GR() {
 # stops, main and the tag are untouched.
 RELNAME=LUOXIAO92
 RELMAIL=89069722+LUOXIAO92@users.noreply.github.com
-RELMSG="graftling 0.6.4: a child's tools follow its host unless create or a preset chooses them, with tools/disallowed_tools and tool_check (551, incompatible: Claude's default tool set); host tools beside agents and extra_tool_table (551); every Runtime's child names its MCP server (551); graftling-dsh installs from the GitHub address and builds its own Python (569)"
+RELMSG="graftling 0.7.0: a child's tools follow its host unless create or a preset chooses them, with tools/disallowed_tools and tool_check (551, incompatible: Claude's default tool set); host tools beside agents and extra_tool_table (551); every Runtime's child names its MCP server (551); graftling-dsh installs from the GitHub address and builds its own Python (569)"
 rel_wt() {  # the worktree that has branch $1 checked out, if any
   git -C $G worktree list --porcelain | awk -v b="branch refs/heads/$1" '/^worktree /{w=substr($0,10)} $0==b{print w}'
 }
@@ -990,7 +994,7 @@ step_rel() {
   else
     say "dev moved since dispatch ($GBASE -> $gd: $(git -C $G rev-list --count $GBASE..$gd) commits, e.g. 570): merge $GCOMMIT into dev as $RELNAME <$RELMAIL>; STOP on a conflict"
     git -C $G log --oneline $GBASE..$gd | sed 's/^/  dev since dispatch: /'
-    local msg="Merge graftling 0.6.4 (571) into dev"
+    local msg="Merge graftling 0.7.0 (571) into dev"
     if [[ -n $dw ]]; then
       if ! git -C $dw -c user.name=$RELNAME -c user.email=$RELMAIL merge --no-ff --no-edit -q -m "$msg" $GCOMMIT; then
         print -r -- "conflicted files: $(git -C $dw diff --name-only --diff-filter=U | tr '\n' ' ')"
@@ -1029,7 +1033,7 @@ rel_verify() {
   return $ok
 }
 # rp (571, Main, only after the USER's explicit yes in this conversation): outward-facing push of graftling dev, main
-# and v0.6.4 to its configured remote (fast-forward only; no force).
+# and v0.7.0 to its configured remote (fast-forward only; no force).
 step_rp() {
   local remote=$(git -C $G remote | head -1)
   [[ -n $remote ]] || { print "graftling has no remote: nothing to push"; return 0; }
@@ -1129,7 +1133,7 @@ help) print "顺序: 00 → rel（graftling 发布：dev 到 $GTAG（快进，�
   print "USER 只做: rp 的明确同意（对外推送）、Vu（仅当 Vc 要求；信任框 'Yes, proceed'）、/exit Main、I、claude --continue（预测不出现插件/hooks 信任框，见 V），失败时 R。其余都由 Main 运行。"
   next "zsh $THIS 00" ;;
 
-rel) cv; print "[rel] Main. graftling 0.6.4 发布：从 $BUNDLE 按 SHA 取 $GBRANCH（$GCOMMIT，父提交 $GBASE），dev 到 $GCOMMIT（dev 仍为 ${GBASE[1,8]} 时快进；否则以 $RELNAME <$RELMAIL> 合并，冲突即中止并 STOP），main 快进到 $GCOMMIT，建注释 tag $GTAG（tagger $RELNAME <$RELMAIL>）。不推送。对话框: 无。< 10 秒。只改 $G 的 dev、main、$GBRANCH 与 tag。"
+rel) cv; print "[rel] Main. graftling 0.7.0 发布：从 $BUNDLE 按 SHA 取 $GBRANCH（$GCOMMIT，父提交 $GBASE），dev 到 $GCOMMIT（dev 仍为 ${GBASE[1,8]} 时快进；否则以 $RELNAME <$RELMAIL> 合并，冲突即中止并 STOP），main 快进到 $GCOMMIT，建注释 tag $GTAG（tagger $RELNAME <$RELMAIL>）。不推送。对话框: 无。< 10 秒。只改 $G 的 dev、main、$GBRANCH 与 tag。"
   [[ -e $R/rel.txt ]] && mv $R/rel.txt $R/rel-$(date +%Y%m%dT%H%M%S).txt   # earlier rel output kept; the summary reads this run only
   if logged $R/rel.txt step_rel; then
     summary rel "$(grep -E '^(dev:|already|CHECK|version at|.*= $GCOMMIT)' $R/rel.txt)"
@@ -1168,7 +1172,7 @@ G) cv; print "[G] Main. 全套测试：本 Worktree HEAD + B 的 $GTAG wheel，6
 B) cv; print "[B] Main. 两个 wheel：graphtraj（git archive $C8）与 graftling（git -C $G archive $GTAG，从 archive 根目录构建）；I 两个一起装。不联网、不改 graftling 仓库和生产。对话框: 无。< 2 分钟。"
   if logged $R/B.txt step_B; then
     summary B "$(grep -E '\.whl$|leaked|peels|annotated|tagger|author|^main:|\^\{commit\}|product guard|GraphTraj dev|CHANGELOG heading|wheel version|Requires-Dist|CHECK|markers expected|carries' $R/B.txt)"
-    print "成功: 'product guard: PASS'；'GraphTraj dev: … dev contains $C8: …' 只是信息；'$GTAG peels to $GCOMMIT: yes' 与 'annotated … yes'；'CHECK 571 $GTAG version strings all $GVERSION: PASS'；$N 有 graphtraj-0.1.0 与 graftling-$GVERSION 两个 wheel；'CHECK 571 Requires-Dist … satisfied by $GVERSION: PASS' 与 '… NOT satisfied by $GOLDVERSION: PASS'；两行 'CHECK 571 … wheel equals git archive …: PASS'；'markers expected present: PASS (8/8)'；carries graftling/: 0；leaked: 0。"
+    print "成功: 'product guard: PASS'；'GraphTraj dev: … dev contains $C8: …' 只是信息；'$GTAG peels to $GCOMMIT: yes' 与 'annotated … yes'；'CHECK 571 $GTAG version strings all $GVERSION: PASS'；$N 有 graphtraj-0.1.0 与 graftling-$GVERSION 两个 wheel；'CHECK 571 Requires-Dist … satisfied by $GVERSION: PASS' 与 '… NOT satisfied by $GOLDVERSION: PASS'、'… NOT satisfied by 0.6.4: PASS'；两行 'CHECK 571 … wheel equals git archive …: PASS'；'markers expected present: PASS (8/8)'；carries graftling/: 0；leaked: 0。"
     next "zsh $THIS G    （Main 的全套测试队列串行：另一套在跑时 G 会排队等待并说明）"
   else print "\nB 失败。把 $R/B.txt 交给 Main（product guard STOP: Worktree 的 src/tests/plugins/pyproject 不等于 $C8；'peels' 或 'annotated' 失败: 先运行 rel，或交 Leader）。"; exit 1; fi ;;
 

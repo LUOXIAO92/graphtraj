@@ -7,7 +7,7 @@ helper it failed in, is 'known flaky (516)' and does not block.
 
 No other failure is known. 560's accepted G record (adoption/G-8949caff-20261122T214834) had five non-516 lines; the
 latest accepted full-suite records show each fixed by a Task now on GraphTraj dev 11f84ed6, so on the 571 pair (dev +
-graftling 0.6.4 = 551's graftling side + 569) each must pass. If one fails it is printed as NEW with its source:
+graftling 0.7.0 = 551's graftling side + 569) each must pass. If one fails it is printed as NEW with its source:
   test_native_gateway ... [helper-main], [thread-1-main], [helper-independent], [thread-1-independent]:
       fixed by 551 (GraphTraj a57decf0 + graftling 79532b5): 551 realhost/main-raw/GR-v063.txt lists only
       test_child_env_own_key and the 516 claude_runner test ('2 failed, 3686 passed, 48 skipped').

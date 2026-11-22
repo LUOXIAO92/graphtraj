@@ -2,10 +2,10 @@
 # Rehearsal of adopt-571/steps.zsh from an EMPTY base against a fake production tree in $TMPDIR (modelled on adopt-560's).
 # Starts no real host and never touches production, <Harness>/graftling, GitHub or GraphTraj dev:
 # - graftling: a scratch clone of <Harness>/graftling put back to the state at dispatch (dev = 00778d1 checked out in a
-#   linked worktree as on the real host, main = v0.6.3 in the main worktree, no v0.6.4, no release branch); its `origin`
+#   linked worktree as on the real host, main = v0.6.3 in the main worktree, no v0.7.0, no release branch); its `origin`
 #   is a scratch bare repository, so the confirmed rp pushes there. rel fetches the bundle into it. Further scratch clones
 #   rehearse dev moved by 570 (clean merge), a conflicting dev (worktree and no-worktree paths), dev without the base and
-#   a wrong existing v0.6.4.
+#   a wrong existing v0.7.0.
 # - GraphTraj: a scratch clone of this Worktree whose local dev is 11f84ed6, WITHOUT the candidate (B must not need it).
 # - fake production: graphtraj wheel of 8949caff + graftling wheel of the real v0.6.3 (git archive root, read only),
 #   click, yaml and websockets copied from production .venv-runtime (read only); 516's task.yml and definitions copied.
@@ -17,6 +17,7 @@
 #   reads that record.
 #   zsh scripts/adopt-571/rehearse.zsh
 set -u
+setopt no_bg_nice   # the simulated suite runs in the background; renicing is refused in a sandbox
 SD=${0:A:h}
 WT=${SD:h:h}
 F=${${TMPDIR:-/tmp}:A}/${ADOPT571_REHEARSAL_NAME:-adopt571-rehearsal}
@@ -29,10 +30,10 @@ REALH=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 REALS=$REALH/.venv-runtime/lib/python3.13/site-packages
 REALG=$REALH/graftling
 REALSTATE=$REALH/.graphtraj/core/state
-GC=d5b334981e42eed43a27382447df6aeea06f4e8e
+GC=6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca
 GBASE=00778d17a543f35d49e218de5f9ede061f977dac
 GOLD=ef7c37db15f4e6318fd5b6bf5bd79321b876eac5   # v0.6.3
-NEW=956c6ff9d53bc98ec37d1a1757c2dd66caef50f4
+NEW=98125982e0d3edbcd11af6de46320524cfc80a56
 OLD=8949caff74156d14625f45d7d6b762a04cef87eb
 DEV=11f84ed6                                     # GraphTraj dev at dispatch
 NR=89069722+LUOXIAO92@users.noreply.github.com
@@ -51,12 +52,12 @@ head1() { print -r -- ""; print -r -- "======== $*"; }
 FAILED=0; COUNT=0
 check() { local what=$1; shift; (( COUNT++ )); if "$@"; then print -r -- "REHEARSAL PASS: $what"; else print -r -- "REHEARSAL FAIL: $what"; FAILED=1; fi; }
 # A scratch graftling clone at the dispatch state: main = v0.6.3 (main worktree), dev = $GBASE (linked worktree $2 when
-# given), no v0.6.4, no release branch, origin = $3 when given.
+# given), no v0.7.0, no release branch, origin = $3 when given.
 gclone() {
   local d=$1 wt=${2:-} origin=${3:-}
   git clone -q --no-hardlinks $REALG $d || return 1
   git -C $d checkout -q --detach && git -C $d branch -q -f main $GOLD && git -C $d checkout -q main && git -C $d branch -q -f dev $GBASE
-  git -C $d tag -d v0.6.4 > /dev/null 2>&1; git -C $d branch -q -D agent/571-graftling-0.6.4 > /dev/null 2>&1
+  git -C $d tag -d v0.7.0 > /dev/null 2>&1; git -C $d branch -q -D agent/571-graftling-0.7.0 > /dev/null 2>&1
   git -C $d config user.name rehearsal; git -C $d config user.email rehearsal@invalid
   [[ -n $wt ]] && git -C $d worktree add -q $wt dev
   if [[ -n $origin ]]; then git -C $d remote set-url origin $origin; else git -C $d remote remove origin; fi
@@ -73,8 +74,8 @@ head1 "setup: scratch graftling (dev = ${GBASE[1,8]} in a linked worktree, main 
 git -C $REALG for-each-ref --format='%(objectname) %(refname)' refs/heads refs/tags > $F/realg-refs-before.txt
 gclone $FG $FGD $F/remote.git
 git clone -q --bare --no-hardlinks $FG $F/remote.git && git -C $F/remote.git symbolic-ref HEAD refs/heads/main
-git -C $F/remote.git tag -d v0.6.4 > /dev/null 2>&1; true
-print "scratch graftling: dev $(git -C $FG rev-parse dev) main $(git -C $FG rev-parse main) v0.6.4 $(git -C $FG rev-parse -q --verify refs/tags/v0.6.4 || print absent) | origin $(git -C $FG remote get-url origin) | worktrees: $(git -C $FG worktree list | wc -l | tr -d ' ')"
+git -C $F/remote.git tag -d v0.7.0 > /dev/null 2>&1; true
+print "scratch graftling: dev $(git -C $FG rev-parse dev) main $(git -C $FG rev-parse main) v0.7.0 $(git -C $FG rev-parse -q --verify refs/tags/v0.7.0 || print absent) | origin $(git -C $FG remote get-url origin) | worktrees: $(git -C $FG worktree list | wc -l | tr -d ' ')"
 git clone -q --shared --no-checkout $WT $FWT && git -C $FWT checkout -q -b cand $(git -C $WT rev-parse HEAD) && git -C $FWT branch -q -f dev $DEV
 print "scratch GraphTraj: HEAD $(git -C $FWT rev-parse HEAD) dev $(git -C $FWT rev-parse dev)"
 
@@ -178,17 +179,17 @@ check "00: 571 markers absent in production (8/8), graftling 0.6.3" sh -c "grep 
 check "00: task.md counted 0 with count() (no 'print -l | wc -l' miscount)" grep -q 'task.md: 0 (expect 0)' $F/00.out
 check "00 next is rel" grep -q "next.*: zsh $SD/steps.zsh rel" $F/00.out
 
-head1 "B before rel (no v0.6.4 tag yet) refuses"
+head1 "B before rel (no v0.7.0 tag yet) refuses"
 steps B > $F/B-norel.out 2>&1; BN=$?
-check "B negative: without rel, v0.6.4 is missing -> STOP" sh -c "[ $BN -ne 0 ] && grep -q 'STOP: v0.6.4^{commit} is missing' $F/B-norel.out"
+check "B negative: without rel, v0.7.0 is missing -> STOP" sh -c "[ $BN -ne 0 ] && grep -q 'STOP: v0.7.0^{commit} is missing' $F/B-norel.out"
 
-head1 "rel negatives: dev without the base; a wrong existing v0.6.4"
+head1 "rel negatives: dev without the base; a wrong existing v0.7.0"
 gclone $F/gnobase && git -C $F/gnobase branch -q -f dev $GOLD
 ADOPT571_G=$F/gnobase steps rel > $F/rel-nobase.out 2>&1; RNB=$?
-check "rel negative: dev does not contain ${GBASE[1,8]} -> STOP, nothing changed" sh -c "[ $RNB -ne 0 ] && grep -q 'does not contain $GBASE' $F/rel-nobase.out && [ \$(git -C $F/gnobase rev-parse dev) = $GOLD ] && [ \$(git -C $F/gnobase rev-parse main) = $GOLD ] && ! git -C $F/gnobase rev-parse -q --verify refs/tags/v0.6.4 > /dev/null"
-gclone $F/gwrong && git -C $F/gwrong -c user.name=x -c user.email=x@invalid tag -a v0.6.4 $GBASE -m wrong
+check "rel negative: dev does not contain ${GBASE[1,8]} -> STOP, nothing changed" sh -c "[ $RNB -ne 0 ] && grep -q 'does not contain $GBASE' $F/rel-nobase.out && [ \$(git -C $F/gnobase rev-parse dev) = $GOLD ] && [ \$(git -C $F/gnobase rev-parse main) = $GOLD ] && ! git -C $F/gnobase rev-parse -q --verify refs/tags/v0.7.0 > /dev/null"
+gclone $F/gwrong && git -C $F/gwrong -c user.name=x -c user.email=x@invalid tag -a v0.7.0 $GBASE -m wrong
 ADOPT571_G=$F/gwrong steps rel > $F/rel-wrong.out 2>&1; RW1=$?
-check "rel negative: an existing v0.6.4 at another commit -> STOP" sh -c "[ $RW1 -ne 0 ] && grep -q 'STOP: v0.6.4 exists at' $F/rel-wrong.out"
+check "rel negative: an existing v0.7.0 at another commit -> STOP" sh -c "[ $RW1 -ne 0 ] && grep -q 'STOP: v0.7.0 exists at' $F/rel-wrong.out"
 
 head1 "rel with dev moved by 570 (clean): merge $GC into dev as the noreply identity"
 gclone $F/gmoved $F/gmoved-dev
@@ -196,13 +197,13 @@ print -l "570 note (rehearsal)" > $F/gmoved-dev/docs/570-rehearsal.md && git -C 
 MOVED=$(git -C $F/gmoved rev-parse dev)
 ADOPT571_G=$F/gmoved steps rel > $F/rel-moved.out 2>&1; RMV=$?; grep -E 'CHECK|dev:|dev moved' $F/rel-moved.out
 check "rel dev moved: exit 0, four CHECK PASS" sh -c "[ $RMV -eq 0 ] && [ \$(grep '^CHECK 571 .*: PASS' $F/rel-moved.out | sort -u | wc -l) -eq 4 ] && ! grep -q '^CHECK 571 .*: FAIL' $F/rel-moved.out"
-check "rel dev moved: dev is a merge (parents $MOVED[1,8] + ${GC[1,8]}) by $NR; main = v0.6.4 = $GC; worktree clean" sh -c "[ \"\$(git -C $F/gmoved log -1 --format=%P dev)\" = '$MOVED $GC' ] && [ \"\$(git -C $F/gmoved log -1 --format='%ae %ce' dev)\" = '$NR $NR' ] && [ \$(git -C $F/gmoved rev-parse main) = $GC ] && [ \$(git -C $F/gmoved rev-parse 'v0.6.4^{commit}') = $GC ] && [ -z \"\$(git -C $F/gmoved-dev status --porcelain)\" ]"
+check "rel dev moved: dev is a merge (parents $MOVED[1,8] + ${GC[1,8]}) by $NR; main = v0.7.0 = $GC; worktree clean" sh -c "[ \"\$(git -C $F/gmoved log -1 --format=%P dev)\" = '$MOVED $GC' ] && [ \"\$(git -C $F/gmoved log -1 --format='%ae %ce' dev)\" = '$NR $NR' ] && [ \$(git -C $F/gmoved rev-parse main) = $GC ] && [ \$(git -C $F/gmoved rev-parse 'v0.7.0^{commit}') = $GC ] && [ -z \"\$(git -C $F/gmoved-dev status --porcelain)\" ]"
 
 gclone $F/gmovedp && git -C $F/gmovedp worktree add -q $F/gmovedp-edit dev
 print -l "570 note (rehearsal)" > $F/gmovedp-edit/docs/570-rehearsal.md && git -C $F/gmovedp-edit add docs/570-rehearsal.md && git -C $F/gmovedp-edit -c user.name=x -c user.email=x@invalid commit -qm "570 (rehearsal)"
 git -C $F/gmovedp worktree remove $F/gmovedp-edit; MOVEDP=$(git -C $F/gmovedp rev-parse dev)
 ADOPT571_G=$F/gmovedp steps rel > $F/rel-movedp.out 2>&1; RMP=$?
-check "rel dev moved, dev checked out nowhere: merge-tree + commit-tree merge by $NR (parents ${MOVEDP[1,8]} + ${GC[1,8]}), four CHECK PASS" sh -c "[ $RMP -eq 0 ] && grep -q 'dev checked out in: no worktree' $F/rel-movedp.out && [ \"\$(git -C $F/gmovedp log -1 --format=%P dev)\" = '$MOVEDP $GC' ] && [ \"\$(git -C $F/gmovedp log -1 --format='%an <%ae> / %cn <%ce>' dev)\" = 'LUOXIAO92 <$NR> / LUOXIAO92 <$NR>' ] && [ \$(grep '^CHECK 571 .*: PASS' $F/rel-movedp.out | sort -u | wc -l) -eq 4 ] && git -C $F/gmovedp diff --quiet dev $MOVEDP -- docs/570-rehearsal.md && [ \"\$(git -C $F/gmovedp show dev:src/graftling/__init__.py | grep ^__version__)\" = '__version__ = \"0.6.4\"' ]"
+check "rel dev moved, dev checked out nowhere: merge-tree + commit-tree merge by $NR (parents ${MOVEDP[1,8]} + ${GC[1,8]}), four CHECK PASS" sh -c "[ $RMP -eq 0 ] && grep -q 'dev checked out in: no worktree' $F/rel-movedp.out && [ \"\$(git -C $F/gmovedp log -1 --format=%P dev)\" = '$MOVEDP $GC' ] && [ \"\$(git -C $F/gmovedp log -1 --format='%an <%ae> / %cn <%ce>' dev)\" = 'LUOXIAO92 <$NR> / LUOXIAO92 <$NR>' ] && [ \$(grep '^CHECK 571 .*: PASS' $F/rel-movedp.out | sort -u | wc -l) -eq 4 ] && git -C $F/gmovedp diff --quiet dev $MOVEDP -- docs/570-rehearsal.md && [ \"\$(git -C $F/gmovedp show dev:src/graftling/__init__.py | grep ^__version__)\" = '__version__ = \"0.7.0\"' ]"
 
 head1 "rel with a conflicting dev (CHANGELOG edited by 570): worktree path and no-worktree path STOP with nothing changed"
 for kind in worktree plain; do
@@ -213,7 +214,7 @@ for kind in worktree plain; do
   [[ $kind == plain ]] && git -C $r worktree remove $e
   CONF=$(git -C $r rev-parse dev)
   ADOPT571_G=$r steps rel > $F/rel-conf-$kind.out 2>&1; RC=$?; grep -E 'conflicted|STOP|merge-tree' $F/rel-conf-$kind.out | head -3
-  check "rel conflict ($kind): STOP; dev still ${CONF[1,8]}, main still v0.6.3, no v0.6.4" sh -c "[ $RC -ne 0 ] && grep -q 'STOP: merging $GC into dev conflicts' $F/rel-conf-$kind.out && [ \$(git -C $r rev-parse dev) = $CONF ] && [ \$(git -C $r rev-parse main) = $GOLD ] && ! git -C $r rev-parse -q --verify refs/tags/v0.6.4 > /dev/null"
+  check "rel conflict ($kind): STOP; dev still ${CONF[1,8]}, main still v0.6.3, no v0.7.0" sh -c "[ $RC -ne 0 ] && grep -q 'STOP: merging $GC into dev conflicts' $F/rel-conf-$kind.out && [ \$(git -C $r rev-parse dev) = $CONF ] && [ \$(git -C $r rev-parse main) = $GOLD ] && ! git -C $r rev-parse -q --verify refs/tags/v0.7.0 > /dev/null"
 done
 check "rel conflict (plain): dev checked out nowhere, so rel used git merge-tree (no worktree touched)" sh -c "grep -q 'dev checked out in: no worktree' $F/rel-conf-plain.out && grep -q '^merge-tree: ' $F/rel-conf-plain.out"
 check "rel conflict (worktree): the merge was aborted, dev's worktree clean" sh -c "[ -z \"\$(git -C $F/gconf-worktree-dev status --porcelain)\" ] && ! [ -e $F/gconf-worktree-dev/.git/MERGE_HEAD ] && ! git -C $F/gconf-worktree-dev rev-parse -q --verify MERGE_HEAD > /dev/null"
@@ -221,7 +222,7 @@ check "rel conflict (worktree): the merge was aborted, dev's worktree clean" sh 
 head1 "rel (scratch graftling, dev = base): fetch the bundle, dev and main fast-forward, annotated noreply tag"
 steps rel > $F/rel.out 2>&1; RRC=$?; grep -E 'CHECK|version at|= $GC|dev:' $F/rel.out
 check "rel exit 0 with four CHECK PASS" sh -c "[ $RRC -eq 0 ] && [ \$(grep '^CHECK 571 .*: PASS' $F/rel.out | sort -u | wc -l) -eq 4 ] && ! grep -q '^CHECK 571 .*: FAIL' $F/rel.out"
-check "rel: v0.6.4 = dev = main = $GC (dev's linked worktree too), tagger noreply, version 0.6.4" sh -c "[ \$(git -C $FG rev-parse 'v0.6.4^{commit}') = $GC ] && [ \$(git -C $FG rev-parse dev) = $GC ] && [ \$(git -C $FG rev-parse main) = $GC ] && [ \$(git -C $FGD rev-parse HEAD) = $GC ] && git -C $FG for-each-ref --format='%(taggeremail)' refs/tags/v0.6.4 | grep -q '$NR' && grep -q 'version at v0.6.4: __version__ = \"0.6.4\"' $F/rel.out"
+check "rel: v0.7.0 = dev = main = $GC (dev's linked worktree too), tagger noreply, version 0.7.0" sh -c "[ \$(git -C $FG rev-parse 'v0.7.0^{commit}') = $GC ] && [ \$(git -C $FG rev-parse dev) = $GC ] && [ \$(git -C $FG rev-parse main) = $GC ] && [ \$(git -C $FGD rev-parse HEAD) = $GC ] && git -C $FG for-each-ref --format='%(taggeremail)' refs/tags/v0.7.0 | grep -q '$NR' && grep -q 'version at v0.7.0: __version__ = \"0.7.0\"' $F/rel.out"
 check "rel: prints the push as a separate step after the USER's yes, then gh, and the GraphTraj integration" sh -c "grep -q 'ADOPT571_PUSH_CONFIRMED=yes' $F/rel.out && grep -q 'zsh $SD/steps.zsh gh' $F/rel.out && grep -q 'GraphTraj 集成' $F/rel.out"
 steps rel > $F/rel2.out 2>&1
 check "rel again: already released, nothing to do" grep -q 'already released' $F/rel2.out
@@ -233,25 +234,25 @@ steps rp > $F/rp.out 2>&1; RP=$?
 check "rp without the USER's confirmation refuses (no push)" sh -c "[ $RP -ne 0 ] && grep -q 'STOP: the push is outward-facing' $F/rp.out && [ \$(git -C $F/remote.git rev-parse main) = $GOLD ]"
 check "rp target is the scratch bare repository" sh -c "[ \$(git -C $FG remote get-url origin) = $F/remote.git ]"
 ADOPT571_PUSH_CONFIRMED=yes steps rp > $F/rp-yes.out 2>&1; RPY=$?; grep -E 'remote|CHECK' $F/rp-yes.out
-check "rp confirmed: remote main and v0.6.4 = $GC, remote dev = local dev" sh -c "[ $RPY -eq 0 ] && grep -q 'CHECK 571 remote main and v0.6.4 = $GC, remote dev = local dev: PASS' $F/rp-yes.out && [ \$(git -C $F/remote.git rev-parse 'v0.6.4^{commit}') = $GC ]"
+check "rp confirmed: remote main and v0.7.0 = $GC, remote dev = local dev" sh -c "[ $RPY -eq 0 ] && grep -q 'CHECK 571 remote main and v0.7.0 = $GC, remote dev = local dev: PASS' $F/rp-yes.out && [ \$(git -C $F/remote.git rev-parse 'v0.7.0^{commit}') = $GC ]"
 
-head1 "gh (result 4): the bare address installs graftling-dsh 0.6.4 in an isolated DSH home (dsh stub)"
+head1 "gh (result 4): the bare address installs graftling-dsh 0.7.0 in an isolated DSH home (dsh stub)"
 steps gh > $F/gh.out 2>&1; GHR=$?; grep -E 'GitHub main|exit=|bundles|installed|CHECK' $F/gh.out
-check "gh exit 0: registered as a profile bundle, package.json says 0.6.4, ~/.dsh unchanged" sh -c "[ $GHR -eq 0 ] && grep -q 'CHECK 571 gh: bare $F/remote.git registers graftling-dsh as a profile bundle: PASS' $F/gh.out && grep -q 'CHECK 571 gh: installed graftling-dsh package.json says 0.6.4: PASS' $F/gh.out && grep -q 'CHECK 571 gh: ~/.dsh profiles unchanged: PASS' $F/gh.out"
+check "gh exit 0: registered as a profile bundle, package.json says 0.7.0, ~/.dsh unchanged" sh -c "[ $GHR -eq 0 ] && grep -q 'CHECK 571 gh: bare $F/remote.git registers graftling-dsh as a profile bundle: PASS' $F/gh.out && grep -q 'CHECK 571 gh: installed graftling-dsh package.json says 0.7.0: PASS' $F/gh.out && grep -q 'CHECK 571 gh: ~/.dsh profiles unchanged: PASS' $F/gh.out"
 check "gh: everything under the isolated root $F/ghroot" sh -c "[ -f $F/ghroot/home/profiles/gh571/node_modules/graftling-dsh/package.json ]"
 steps gh > $F/gh-again.out 2>&1; GHA=$?
 check "gh again: refuses while the isolated root exists" sh -c "[ $GHA -ne 0 ] && grep -q 'STOP: $F/ghroot exists' $F/gh-again.out"
 
-head1 "B: wheels from git archive v0.6.4 (archive root) and of the candidate; version strings; requirement pairs"
+head1 "B: wheels from git archive v0.7.0 (archive root) and of the candidate; version strings; requirement pairs"
 steps B > $F/B.out 2>&1; BRC=$?; check "B exit 0" [ $BRC -eq 0 ]
 grep -E 'whl|leaked|peels|annotated|CHECK|markers expected|GraphTraj dev|CHANGELOG heading|main:' $F/B.out
-check "B: GraphTraj dev reported as information only; v0.6.4 annotated, peels to $GC" sh -c "grep -q 'dev contains ${NEW[1,8]}: no' $F/B.out && grep -q 'v0.6.4 peels to $GC: yes' $F/B.out && grep -q 'v0.6.4 is an annotated tag (cat-file -t: tag): yes' $F/B.out"
-check "B: every version string 0.6.4; CHANGELOG heading 0.6.4" sh -c "grep -q 'CHECK 571 v0.6.4 version strings all 0.6.4: PASS' $F/B.out && grep -q '^CHANGELOG heading: ## 0.6.4 (incompatible)' $F/B.out"
-check "B: Requires-Dist satisfied by 0.6.4 and NOT by 0.6.3" sh -c "grep -q 'CHECK 571 Requires-Dist graftling<0.7,>=0.6.4 satisfied by 0.6.4: PASS' $F/B.out && grep -q 'CHECK 571 Requires-Dist graftling<0.7,>=0.6.4 NOT satisfied by 0.6.3: PASS' $F/B.out"
-check "B: both wheels = their archives; markers present 8/8; leaked 0" sh -c "grep -q 'CHECK 571 graphtraj wheel equals git archive ${NEW[1,8]}: PASS' $F/B.out && grep -q 'CHECK 571 graftling wheel equals git archive v0.6.4: PASS' $F/B.out && grep -q 'markers expected present: PASS (8/8)' $F/B.out && grep -q '^leaked: 0' $F/B.out"
-check "B: the install directory holds exactly graphtraj-0.1.0 and graftling-0.6.4" sh -c "[ \$(ls $W/wheels-${NEW[1,8]}/*.whl | wc -l) -eq 2 ] && ls $W/wheels-${NEW[1,8]}/graftling-0.6.4-*.whl > /dev/null"
+check "B: GraphTraj dev reported as information only; v0.7.0 annotated, peels to $GC" sh -c "grep -q 'dev contains ${NEW[1,8]}: no' $F/B.out && grep -q 'v0.7.0 peels to $GC: yes' $F/B.out && grep -q 'v0.7.0 is an annotated tag (cat-file -t: tag): yes' $F/B.out"
+check "B: every version string 0.7.0; CHANGELOG heading 0.7.0" sh -c "grep -q 'CHECK 571 v0.7.0 version strings all 0.7.0: PASS' $F/B.out && grep -q '^CHANGELOG heading: ## 0.7.0 (incompatible)' $F/B.out"
+check "B: Requires-Dist satisfied by 0.7.0 and NOT by 0.6.3 or 0.6.4" sh -c "grep -q 'CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 satisfied by 0.7.0: PASS' $F/B.out && grep -q 'CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 NOT satisfied by 0.6.3: PASS' $F/B.out && grep -q 'CHECK 571 Requires-Dist graftling<0.8,>=0.7.0 NOT satisfied by 0.6.4: PASS' $F/B.out"
+check "B: both wheels = their archives; markers present 8/8; leaked 0" sh -c "grep -q 'CHECK 571 graphtraj wheel equals git archive ${NEW[1,8]}: PASS' $F/B.out && grep -q 'CHECK 571 graftling wheel equals git archive v0.7.0: PASS' $F/B.out && grep -q 'markers expected present: PASS (8/8)' $F/B.out && grep -q '^leaked: 0' $F/B.out"
+check "B: the install directory holds exactly graphtraj-0.1.0 and graftling-0.7.0" sh -c "[ \$(ls $W/wheels-${NEW[1,8]}/*.whl | wc -l) -eq 2 ] && ls $W/wheels-${NEW[1,8]}/graftling-0.7.0-*.whl > /dev/null"
 VERIFY571_GCOMMIT=$GBASE steps B > $F/B-tag.out 2>&1; BT=$?
-check "B negative: a tag that does not peel to the expected commit STOPs" sh -c "[ $BT -ne 0 ] && grep -q 'STOP: v0.6.4^{commit} is $GC, not $GBASE' $F/B-tag.out"
+check "B negative: a tag that does not peel to the expected commit STOPs" sh -c "[ $BT -ne 0 ] && grep -q 'STOP: v0.7.0^{commit} is $GC, not $GBASE' $F/B-tag.out"
 VERIFY571_TARGET=$OLD steps B > $F/B-commit.out 2>&1; BC=$?
 check "B negative: a wrong GraphTraj target commit STOPs at the guard" sh -c "[ $BC -ne 0 ] && grep -q 'STOP: the Worktree.s src tests plugins pyproject.toml differ from ${OLD[1,8]}' $F/B-commit.out"
 print '# drift' >> $FWT/src/graphtraj/execution/runner_worker.py
@@ -278,10 +279,10 @@ check "G waited then started by itself: wait.txt has 'waiting for another suite:
 check "G rehearsal: the four selected real tests PASSED (not collect-only), '4 passed', no FAILED line" sh -c "[ \$(grep -hoE '^PASSED tests/(test_runtime_distribution|test_graphtraj_public_agents_api|test_child_server_name_551)\.py::[a-z_0-9]+' $GO/shards/*.log | sort -u | wc -l) -eq 4 ] && grep -q '^4 passed' $GO/suite.txt && ! grep -qE '^(FAILED|ERROR) ' $GO/failures.txt"
 check "G rehearsal: shards with nothing selected end 'exit 5' (pytest: no tests), so the run's exit is 1" sh -c "grep -q '^exit=1' $GO/suite.txt && ! grep 'ABNORMAL' $GO/suite.txt | grep -v 'exit 5' | grep -q ."
 steps GR > $F/GR-G.out 2>&1; GRG=$?
-check "GR reads the newest G record by itself: candidate, graftling commit and click accepted; exit=1 without classed lines -> FAIL (GR never accepts a nonzero exit by itself)" sh -c "[ $GRG -ne 0 ] && grep -q 'G record: $GO' $F/GR-G.out && grep -q 'same product: yes' $F/GR-G.out && grep -q '= v0.6.4 ($GC): yes' $F/GR-G.out && grep -q 'click = production.s 8.5.0: yes' $F/GR-G.out && grep -q 'exit: 1' $F/GR-G.out && grep -q 'no new failure: FAIL' $F/GR-G.out"
+check "GR reads the newest G record by itself: candidate, graftling commit and click accepted; exit=1 without classed lines -> FAIL (GR never accepts a nonzero exit by itself)" sh -c "[ $GRG -ne 0 ] && grep -q 'G record: $GO' $F/GR-G.out && grep -q 'same product: yes' $F/GR-G.out && grep -q '= v0.7.0 ($GC): yes' $F/GR-G.out && grep -q 'click = production.s 8.5.0: yes' $F/GR-G.out && grep -q 'exit: 1' $F/GR-G.out && grep -q 'no new failure: FAIL' $F/GR-G.out"
 
 head1 "GR mechanics on a REHEARSAL FIXTURE record, and negatives on copies"
-# The fixture is not evidence of a suite result: it holds this candidate, the v0.6.4 commit, production's click and one
+# The fixture is not evidence of a suite result: it holds this candidate, the v0.7.0 commit, production's click and one
 # failure of a helper 516's current definition names.
 GX=$F/grec; mkdir -p $GX
 print -l "pytest temp root: ${${TMPDIR:-/tmp}:A}/fixture (REHEARSAL FIXTURE)" "candidate: $(git -C $FWT rev-parse HEAD) | graftling wheel from git archive $GC (REHEARSAL FIXTURE)" \
@@ -308,7 +309,7 @@ check "GR: earlier GR.txt kept as GR-<time>.txt" sh -c "ls $RW/GR-*.txt > /dev/n
 head1 "V: plugin unchanged (predicted); real MCP tools/list and Codex hooks entry; markers both ways"
 steps V > $F/V.out 2>&1; VRC=$?; check "V exit 0" [ $VRC -eq 0 ]
 grep -E '^(SAME|CHANGED)|CHECK|^(PASS|FAIL):|markers expected|plugin dialog|^graftling v|^graphtraj [0-9a-f]|task graph' $F/V.out
-check "V: plugin CHECK PASS (unchanged; no dialog expected); prediction lines printed" sh -c "grep -q 'CHECK 571 candidate plugin unchanged (predicted): PASS' $F/V.out && [ \$(grep -E '^SAME +(\.claude-plugin/plugin\.json|hooks/hooks\.json|hooks/host_context\.mjs)$' $F/V.out | sort -u | wc -l) -eq 3 ] && ! grep -q '^CHANGED ' $F/V.out && grep -q 'plugin dialog expected at claude --continue: no' $RW/V-dialog.txt && grep -q '^graftling v0.6.3..v0.6.4 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py' $F/V.out"
+check "V: plugin CHECK PASS (unchanged; no dialog expected); prediction lines printed" sh -c "grep -q 'CHECK 571 candidate plugin unchanged (predicted): PASS' $F/V.out && [ \$(grep -E '^SAME +(\.claude-plugin/plugin\.json|hooks/hooks\.json|hooks/host_context\.mjs)$' $F/V.out | sort -u | wc -l) -eq 3 ] && ! grep -q '^CHANGED ' $F/V.out && grep -q 'plugin dialog expected at claude --continue: no' $RW/V-dialog.txt && grep -q '^graftling v0.6.3..v0.7.0 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py' $F/V.out"
 check "V: real graphtraj-mcp lists exactly agents, tasks; Codex hooks entry two CHECKs PASS" sh -c "grep -q 'CHECK 571 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS' $F/V.out && [ \$(grep '^CHECK 571 Codex hooks entry .*: PASS' $F/V.out | sort -u | wc -l) -eq 2 ]"
 check "V: markers present in the candidate and absent in production (8/8)" sh -c "grep -q 'markers expected present: PASS (8/8)' $F/V.out && grep -q 'markers expected absent: PASS (8/8)' $F/V.out"
 check "V: read check of production Task state (task graph) by the candidate" grep -q 'task graph of the clone: tasks =' $F/V.out
@@ -318,7 +319,7 @@ head1 "negatives: 0.6.3 left installed; markers both ways"
 VS=($FB/vvenv-${NEW[1,8]}/lib/python*/site-packages(N))
 mkdir -p $F/lneg && cp -Rp $VS[1] $F/lneg/site && cp -Rp $D/graftling-0.6.3.dist-info $F/lneg/site/
 $CONDA -I $SD/proddiff.py $F/lneg/site $F/lneg $W/wheels-${NEW[1,8]} > $F/lneg.out 2>&1; LN=$?
-check "proddiff negative: graftling 0.6.3's dist-info left beside 0.6.4 -> FAIL (LEFTOVER)" sh -c "[ $LN -ne 0 ] && grep -q 'LEFTOVER' $F/lneg.out"
+check "proddiff negative: graftling 0.6.3's dist-info left beside 0.7.0 -> FAIL (LEFTOVER)" sh -c "[ $LN -ne 0 ] && grep -q 'LEFTOVER' $F/lneg.out"
 check "markers 'present' on production fails; 'absent' on the candidate fails" sh -c "! $CONDA -I $SD/markers.py $D present > /dev/null && ! $CONDA -I $SD/markers.py $VS[1] absent > /dev/null"
 
 head1 "Vu / Vc (stub claude: plugin not loaded, so Vc asks for Vu)"
@@ -344,8 +345,8 @@ check "Mpre: GR PASS shown; restart reason names the loaded old modules" sh -c "
 : > $F/ps.txt
 print | steps I > $F/I.out 2>&1; IRC=$?; check "I exit 0" [ $IRC -eq 0 ]
 grep -E 'Successfully|^PASS|^FAIL|CHECK|direct_url|built from|configuration --write rc|plugin files|SAME-AS-VALIDATED|markers expected|bytes unchanged' $F/I.out
-check "I: both wheels installed together, proddiff PASS, 0.6.3 dist-info gone, markers 8/8" sh -c "grep -q '^Successfully installed graftling-0.6.4 graphtraj-0.1.0' $F/I.out && grep -q '^PASS' $F/I.out && grep -q 'CHECK 571 graftling 0.6.3 dist-info gone: PASS' $F/I.out && grep -q 'markers expected present: PASS (8/8)' $F/I.out"
-check "I: direct_url of both names wheels-${NEW[1,8]}; built from both archives" sh -c "grep -q 'CHECK 571 direct_url of both names the wheels-${NEW[1,8]} wheels: PASS' $F/I.out && grep -q 'built from: graphtraj git archive $NEW, graftling git archive v0.6.4 $GC' $F/I.out"
+check "I: both wheels installed together, proddiff PASS, 0.6.3 dist-info gone, markers 8/8" sh -c "grep -q '^Successfully installed graftling-0.7.0 graphtraj-0.1.0' $F/I.out && grep -q '^PASS' $F/I.out && grep -q 'CHECK 571 graftling 0.6.3 dist-info gone: PASS' $F/I.out && grep -q 'markers expected present: PASS (8/8)' $F/I.out"
+check "I: direct_url of both names wheels-${NEW[1,8]}; built from both archives" sh -c "grep -q 'CHECK 571 direct_url of both names the wheels-${NEW[1,8]} wheels: PASS' $F/I.out && grep -q 'built from: graphtraj git archive $NEW, graftling git archive v0.7.0 $GC' $F/I.out"
 check "I: configuration --write rc=0, plugin unchanged, .mcp.json PASS, SAME-AS-VALIDATED" sh -c "grep -q 'configuration --write rc=0' $F/I.out && grep -q 'CHECK 571 installed plugin unchanged: PASS' $F/I.out && grep -q 'CHECK 515 .mcp.json has graphtraj' $F/I.out && grep -q SAME-AS-VALIDATED $F/I.out"
 check "I: real entries of the installed venv: MCP tools/list and Codex hooks PASS" sh -c "grep -q 'CHECK 571 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS' $F/I.out && [ \$(grep '^CHECK 571 Codex hooks entry .*: PASS' $F/I.out | sort -u | wc -l) -eq 2 ]"
 check "I: no Task-state migration ran (no migrate lines)" sh -c "! grep -qE 'migrate-task-definitions|CHECK 571 563|preview rc=' $F/I.out"
@@ -362,7 +363,7 @@ steps N > $F/N.out 2>&1
 check "N: one advisor member of Task 571 creates n571" sh -c "grep -q '\"task_id\":\"571\",\"role\":\"opus_coding_team.advisor\"' $F/N.out && grep -q 'create ONE claude child named n571' $F/N.out"
 export FAKE_PROBE_API_KEY=sk-rehearsal-value-123456
 steps done > $F/done.out 2>&1
-check "done: versions, direct_urls, real entries PASS, no key value" sh -c "grep -q '^Version: 0.6.4' $F/done.out && grep -q 'graftling direct_url: .*wheels-${NEW[1,8]}' $F/done.out && grep -q 'CHECK 571 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS' $F/done.out && grep -q 'raw files containing an exported key value: 0' $F/done.out"
+check "done: versions, direct_urls, real entries PASS, no key value" sh -c "grep -q '^Version: 0.7.0' $F/done.out && grep -q 'graftling direct_url: .*wheels-${NEW[1,8]}' $F/done.out && grep -q 'CHECK 571 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS' $F/done.out && grep -q 'raw files containing an exported key value: 0' $F/done.out"
 check "done: counts are 0 when nothing matches (560's miscount fixed): '0.6.3 dist-info left: 0', 'task.md 0'" sh -c "grep -q 'graftling 0.6.3 dist-info left: 0 (expect 0)' $F/done.out && grep -q 'Task state now: task.md 0 ' $F/done.out"
 
 head1 "R (rollback from the backup's own tools): both packages, plugin and entries restored"

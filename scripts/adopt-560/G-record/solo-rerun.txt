@@ -1,0 +1,8 @@
+...                                                                      [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_execution_budgets.py::test_installed_runner_delivers_elapsed_notices_to_final_leader
+PASSED tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+PASSED tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+3 passed in 43.24s
+exit=0

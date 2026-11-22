@@ -1,0 +1,19 @@
+test run id: be5eee85ba4045e6 (shard n carries PYTEST_GRAPHTRAJ_RUN=be5eee85ba4045e6-<n>)
+shard 0: 38 files -> /private/tmp/claude-501/t560/G-8949caff-20261122T203712/shards/shard-0.log
+shard 1: 38 files -> /private/tmp/claude-501/t560/G-8949caff-20261122T203712/shards/shard-1.log
+shard 2: 40 files -> /private/tmp/claude-501/t560/G-8949caff-20261122T203712/shards/shard-2.log
+shard 3: 40 files -> /private/tmp/claude-501/t560/G-8949caff-20261122T203712/shards/shard-3.log
+shard 4: 39 files -> /private/tmp/claude-501/t560/G-8949caff-20261122T203712/shards/shard-4.log
+shard 5: 40 files -> /private/tmp/claude-501/t560/G-8949caff-20261122T203712/shards/shard-5.log
+leftover processes of run be5eee85ba4045e6: before=0 after-shards=0 stopped=0 remaining=0
+FAILED tests/test_child_env_own_key.py::test_a_model_cannot_ask_for_a_key
+FAILED tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+FAILED tests/test_execution_budgets.py::test_installed_runner_delivers_elapsed_notices_to_final_leader
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-independent]
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-main]
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent]
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main]
+8 failed, 3637 passed, 58 skipped
+logs: /private/tmp/claude-501/t560/G-8949caff-20261122T203712/shards
+exit=1

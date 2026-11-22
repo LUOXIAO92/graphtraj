@@ -1,0 +1,35 @@
+FAILED tests/test_child_env_own_key.py::test_a_model_cannot_ask_for_a_key
+    E       AssertionError: assert {'code': 'inv... parameter'}]} == {'code': 'inv...ed parameter'}
+    E
+    E         Omitting 2 identical items, use -vv to show
+    at tests/test_child_env_own_key.py:417
+FAILED tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+    E               AssertionError: Both Batch results must reach the parent
+    E               assert 343529.3822805 < 343529.364825041
+    E                +  where 343529.3822805 = <built-in function monotonic>()
+    at tests/test_claude_runner.py:414
+FAILED tests/test_execution_budgets.py::test_installed_runner_delivers_elapsed_notices_to_final_leader
+    E       assert False
+    E        +  where False = all(<generator object test_installed_runner_delivers_elapsed_notices_to_final_leader.<locals>.<genexpr> at 0x103eef4c0>)
+    at tests/test_execution_budgets.py:849
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+    E           AssertionError: {'started_at': 1795348023.6874151, 'budget': {'difficulty': 'high', 'difficulty_reason': 'Runtime work crosses the Tea...'sessions': {'team_leader': 1, 'engineer': 1, 'standards_reviewer': 1, 'spec_reviewer': 1, ...}, 'corrections': 0, ...}
+    E           assert 343914.876164333 < 343914.860339083
+    E            +  where 343914.876164333 = <built-in function monotonic>()
+    at tests/test_mcp_host_tools.py:1489
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-independent]
+    E       assert False
+    E        +  where False = all(<generator object test_codex_uses_progressive_mcp_with_native_session_authority.<locals>.<genexpr> at 0x10408a180>)
+    at tests/test_native_gateway.py:88
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-main]
+    E       assert False
+    E        +  where False = all(<generator object test_codex_uses_progressive_mcp_with_native_session_authority.<locals>.<genexpr> at 0x104088660>)
+    at tests/test_native_gateway.py:88
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent]
+    E       assert False
+    E        +  where False = all(<generator object test_codex_uses_progressive_mcp_with_native_session_authority.<locals>.<genexpr> at 0x1041c9ee0>)
+    at tests/test_native_gateway.py:88
+FAILED tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main]
+    E       assert False
+    E        +  where False = all(<generator object test_codex_uses_progressive_mcp_with_native_session_authority.<locals>.<genexpr> at 0x103f799a0>)
+    at tests/test_native_gateway.py:88

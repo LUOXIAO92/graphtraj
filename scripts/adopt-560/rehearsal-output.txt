@@ -1,0 +1,506 @@
+
+======== empty base: /private/tmp/claude-501/adopt560-rehearsal removed; zsh -n of every zsh file
+REHEARSAL PASS: zsh -n rehearse.zsh
+REHEARSAL PASS: zsh -n steps.zsh
+REHEARSAL PASS: base /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560 absent before 00
+Worktree HEAD 8949caff74156d14625f45d7d6b762a04cef87eb | candidate 8949caff74156d14625f45d7d6b762a04cef87eb | graftling repository read only: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (dev 9f962bcff91c37fc2aef177b4ab1457f3de5680b, main 4a002129f8b97f32980afd59e5a1a64c428fe684)
+
+======== setup: scratch graftling clone (dev = 9f962bcff91c37fc2aef177b4ab1457f3de5680b, main = v0.6.2), scratch GraphTraj clone (dev = candidate)
+scratch graftling: dev 9f962bcff91c37fc2aef177b4ab1457f3de5680b main 4a002129f8b97f32980afd59e5a1a64c428fe684 v0.6.3 absent
+scratch GraphTraj: HEAD 8949caff74156d14625f45d7d6b762a04cef87eb dev 8949caff74156d14625f45d7d6b762a04cef87eb
+
+======== setup: fake production = graphtraj a7b20447ce9c4ffeee62aba026265f6a1e0f10d2 + graftling v0.6.2, plugin, configuration, production Task state copy
+graftling-0.6.2-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+Create dev from 9306955b9cbc98fa0293fc7b7466d5f422a2047c? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+  state: .graphtraj/core/state
+fake production .mcp.json servers: ['graphtraj']
+fake production Task state: 472 Tasks, 472 task.md
+
+======== 00 (Claude and Codex answer; TMPDIR outside; 560 markers absent in production; unmigrated state counted)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+codex: /private/tmp/claude-501/adopt560-rehearsal/stub/codex -> /private/tmp/claude-501/adopt560-rehearsal/stub/codex | version: codex-cli 0.171.0 (stub)
+codex exec rc=0 (142 = 180 s timeout)
+codex configured /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/raw-8949caff/00-codex.err:model: gpt-5.5-codex (stub configured model)
+CHECK 560 Codex answers CODEX-560-OK (configured model, logged in): PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+Task directories: 472 | task.md: 472 | definitions/*.md: 896
+Version: 0.1.0
+Version: 0.6.2
+532 backup COMPLETE marker: present
+markers expected absent: PASS (6/6)
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/main.session)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+codex: /private/tmp/claude-501/adopt560-rehearsal/stub/codex -> /private/tmp/claude-501/adopt560-rehearsal/stub/codex | version: codex-cli 0.171.0 (stub)
+codex exec rc=0 (142 = 180 s timeout)
+codex configured /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/raw-8949caff/00-codex.err:model: gpt-5.5-codex (stub configured model)
+CHECK 560 Codex answers CODEX-560-OK (configured model, logged in): PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+Task directories: 472 | task.md: 472 | definitions/*.md: 896
+Version: 0.1.0
+Version: 0.6.2
+532 backup COMPLETE marker: present
+markers expected absent: PASS (6/6)
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/main.session)
+REHEARSAL PASS: 00 exit 0, MAIN found
+REHEARSAL PASS: 00: Claude answer check OK and Codex CHECK PASS
+REHEARSAL PASS: 00: TMPDIR outside the Harness, zsh interpreter
+REHEARSAL PASS: 00: 560 markers absent in production (6/6), graftling 0.6.2
+REHEARSAL PASS: 00: unmigrated task.md counted
+REHEARSAL PASS: 00 next is rel
+
+======== B before rel (no v0.6.3 tag yet) refuses
+REHEARSAL PASS: B negative: without rel, v0.6.3 is missing -> STOP
+
+======== rel negatives on second scratch clones: dev moved; a wrong v0.6.3 tag
+REHEARSAL PASS: rel negative: graftling dev not at 9f962bc -> STOP, nothing changed
+REHEARSAL PASS: rel negative: an existing v0.6.3 at another commit -> STOP
+
+======== rel (scratch graftling): fetch the bundle, dev and main fast-forward, annotated noreply tag
+dev: 9f962bcff91c37fc2aef177b4ab1457f3de5680b | main: 4a002129f8b97f32980afd59e5a1a64c428fe684 | v0.6.3: absent
+CHECK 560 v0.6.3 peels to ef7c37db15f4e6318fd5b6bf5bd79321b876eac5: PASS
+CHECK 560 graftling dev == main == v0.6.3: PASS
+CHECK 560 v0.6.3 is annotated with the noreply tagger: PASS
+version at v0.6.3: __version__ = "0.6.3" | root pyproject: yes
+dev: 53b96aa06f3147e48d8b19e080f67b71472ca569 | main: 4a002129f8b97f32980afd59e5a1a64c428fe684 | v0.6.3: absent
+dev: 9f962bcff91c37fc2aef177b4ab1457f3de5680b | main: 4a002129f8b97f32980afd59e5a1a64c428fe684 | v0.6.3: 9f962bcff91c37fc2aef177b4ab1457f3de5680b
+dev: 9f962bcff91c37fc2aef177b4ab1457f3de5680b | main: 4a002129f8b97f32980afd59e5a1a64c428fe684 | v0.6.3: absent
+CHECK 560 v0.6.3 peels to ef7c37db15f4e6318fd5b6bf5bd79321b876eac5: PASS
+CHECK 560 graftling dev == main == v0.6.3: PASS
+CHECK 560 v0.6.3 is annotated with the noreply tagger: PASS
+version at v0.6.3: __version__ = "0.6.3" | root pyproject: yes
+成功: 三行 CHECK 560 PASS（v0.6.3 peels to ef7c37db15f4e6318fd5b6bf5bd79321b876eac5；dev == main == v0.6.3；annotated, noreply tagger）；version at v0.6.3: __version__ = "0.6.3"；root pyproject: yes。
+REHEARSAL PASS: rel exit 0 with three CHECK PASS
+REHEARSAL PASS: rel: v0.6.3 = dev = main = ef7c37db15f4e6318fd5b6bf5bd79321b876eac5, tagger noreply
+REHEARSAL PASS: rel: prints the push as a separate confirmed step and the GraphTraj integration
+REHEARSAL PASS: rel again: already released, nothing to do
+REHEARSAL PASS: rp without the USER's confirmation refuses (no push)
+
+======== B: wheels from git archive v0.6.3 (archive root) and of the candidate; layout proof; requirement pairs
+REHEARSAL PASS: B exit 0
+### GraphTraj dev after Main's integration: its src/tests/plugins/pyproject must equal the candidate 8949caff
+GraphTraj dev: 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff dev -- src tests plugins pyproject.toml: empty | dev contains 8949caff: yes
+CHECK 560 GraphTraj dev product = candidate 8949caff: PASS
+v0.6.3 peels to ef7c37db15f4e6318fd5b6bf5bd79321b876eac5: yes
+v0.6.3 is an annotated tag (cat-file -t: tag): yes
+### 560 layout: graftling v0.6.3 builds from the archive root
+archive root pyproject.toml: yes | src/graftling/pyproject.toml: absent | root README/CHANGELOG/PUBLIC_API: 3/3 | docs/install: 4 guides
+88e68ca5739d2df42facd1f0dfb7ad0f1191d19fa3be4439b133e0039355e67b  graftling-0.6.3-py3-none-any.whl
+d94cd53a5e0812b7b0c3108763023d6aa0021bc19d9344fc550f2b307eaea7ca  graphtraj-0.1.0-py3-none-any.whl
+old wheel /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/glwheel-base/graftling-0.6.2-py3-none-any.whl: 95 package files | new wheel /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl: 93 package files
+CHECK 560 layout files: same package files except the dropped documents: PASS (only old: none; only new: none; documents still in new: none)
+CHECK 560 layout bytes: shared files equal except the version files: PASS (unexpected: none)
+CHECK 560 layout entry points: identical: PASS
+CHECK 560 layout metadata: headers identical apart from Version: PASS (old only: none; new only: none)
+CHECK 560 layout shipped docs: graftling/PUBLIC_API.md and install/*.md shipped: PASS (install guides: ['claude-code.md', 'codex.md', 'dsh.md', 'pi.md'])
+RESULT 560 layout: PASS
+CHECK 560 Requires-Dist graftling<0.7,>=0.6.3 satisfied by 0.6.3: PASS
+CHECK 560 Requires-Dist graftling<0.7,>=0.6.3 NOT satisfied by 0.6.2: PASS
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/src-8949caff/src: files 141 same=141 differing=0 | expected none | expected but equal: none
+CHECK 560 graphtraj wheel equals git archive 8949caff: PASS
+graftling graftling-0.6.3-py3-none-any.whl vs /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/gsrc-0.6.3/src: files 93 same=93 differing=0 | expected none | expected but equal: none
+CHECK 560 graftling wheel equals git archive v0.6.3: PASS
+markers expected present: PASS (6/6)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+### GraphTraj dev after Main's integration: its src/tests/plugins/pyproject must equal the candidate 8949caff
+GraphTraj dev: 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff dev -- src tests plugins pyproject.toml: empty | dev contains 8949caff: yes
+CHECK 560 GraphTraj dev product = candidate 8949caff: PASS
+### GraphTraj dev after Main's integration: its src/tests/plugins/pyproject must equal the candidate 8949caff
+GraphTraj dev: 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff dev -- src tests plugins pyproject.toml: empty | dev contains 8949caff: yes
+CHECK 560 GraphTraj dev product = candidate 8949caff: PASS
+v0.6.3 peels to ef7c37db15f4e6318fd5b6bf5bd79321b876eac5: yes
+v0.6.3 is an annotated tag (cat-file -t: tag): yes
+### 560 layout: graftling v0.6.3 builds from the archive root
+archive root pyproject.toml: yes | src/graftling/pyproject.toml: absent | root README/CHANGELOG/PUBLIC_API: 3/3 | docs/install: 4 guides
+88e68ca5739d2df42facd1f0dfb7ad0f1191d19fa3be4439b133e0039355e67b  graftling-0.6.3-py3-none-any.whl
+d94cd53a5e0812b7b0c3108763023d6aa0021bc19d9344fc550f2b307eaea7ca  graphtraj-0.1.0-py3-none-any.whl
+CHECK 560 layout files: same package files except the dropped documents: PASS (only old: none; only new: none; documents still in new: none)
+CHECK 560 layout bytes: shared files equal except the version files: PASS (unexpected: none)
+CHECK 560 layout entry points: identical: PASS
+CHECK 560 layout metadata: headers identical apart from Version: PASS (old only: none; new only: none)
+CHECK 560 layout shipped docs: graftling/PUBLIC_API.md and install/*.md shipped: PASS (install guides: ['claude-code.md', 'codex.md', 'dsh.md', 'pi.md'])
+RESULT 560 layout: PASS
+CHECK 560 Requires-Dist graftling<0.7,>=0.6.3 satisfied by 0.6.3: PASS
+CHECK 560 Requires-Dist graftling<0.7,>=0.6.3 NOT satisfied by 0.6.2: PASS
+CHECK 560 graphtraj wheel equals git archive 8949caff: PASS
+CHECK 560 graftling wheel equals git archive v0.6.3: PASS
+markers expected present: PASS (6/6)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+成功: 'product guard: PASS'；'CHECK 560 GraphTraj dev product = candidate 8949caff: PASS'；'v0.6.3 peels to ef7c37db15f4e6318fd5b6bf5bd79321b876eac5: yes' 与 'annotated … yes'；'archive root pyproject.toml: yes | src/graftling/pyproject.toml: absent'；/private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff 有 graphtraj-0.1.0 与 graftling-0.6.3 两个 wheel；六行 'CHECK 560 layout …: PASS' 与 'RESULT 560 layout: PASS'；'CHECK 560 Requires-Dist … satisfied by 0.6.3: PASS' 与 '… NOT satisfied by 0.6.2: PASS'；两行 'CHECK 560 … wheel equals git archive …: PASS'；'markers expected present: PASS (6/6)'；carries graftling/: 0；leaked: 0。
+REHEARSAL PASS: B: GraphTraj dev product = candidate; v0.6.3 annotated, peels to ef7c37db15f4e6318fd5b6bf5bd79321b876eac5
+REHEARSAL PASS: B: root layout and the six layout CHECKs PASS
+REHEARSAL PASS: B: Requires-Dist satisfied by 0.6.3 and NOT by 0.6.2
+REHEARSAL PASS: B: both wheels = their archives; markers present 6/6; leaked 0
+REHEARSAL PASS: B: the install directory holds exactly graphtraj-0.1.0 and graftling-0.6.3
+REHEARSAL PASS: B negative: a tag that does not peel to the expected commit STOPs
+REHEARSAL PASS: B negative: a wrong GraphTraj target commit STOPs at the guard
+REHEARSAL PASS: B negative: GraphTraj dev without the candidate STOPs
+REHEARSAL PASS: guard negative: an uncommitted src change STOPs
+
+======== G through its real entry (6 shards, -k selects real tests with repository fixtures), then GR on that record
+G record: /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/G-8949caff-20261122T210323
+pytest temp root: /private/tmp/claude-501/adopt-560-G-20261122T210323 (TMPDIR, outside the Harness)
+candidate: 8949caff74156d14625f45d7d6b762a04cef87eb | graftling wheel from git archive ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 (v0.6.3, /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl)
+python: /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/gvenv-8949caff/bin/python
+test interpreter dependencies: click 8.5.0 (/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/gvenv-8949caff/lib/python3.13/site-packages/click/__init__.py) | PyYAML 6.0.3 (/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/gvenv-8949caff/lib/python3.13/site-packages/yaml/__init__.py) | websockets 16.1.1 (/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/gvenv-8949caff/lib/python3.13/site-packages/websockets/__init__.py) | pytest 9.1.1 (/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pytest/__init__.py)
+REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract
+REHEARSAL PASS: G started: pytest temp under TMPDIR, dependencies recorded (click 8.5.0)
+3 passed, 3700 deselected
+logs: /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/G-8949caff-20261122T210323/shards
+exit=1
+2 passed, 616 deselected in 3.51s
+1 passed, 508 deselected in 4.49s
+REHEARSAL PASS: G rehearsal: the three selected real tests PASSED (not collect-only), '3 passed', no FAILED line
+REHEARSAL PASS: G rehearsal: shards with nothing selected end 'exit 5' (pytest: no tests), so the run's exit is 1
+REHEARSAL PASS: GR on the G rehearsal record: candidate, graftling commit and click accepted; exit=1 without classed lines -> FAIL (GR never accepts a nonzero exit by itself)
+
+======== GR mechanics on a REHEARSAL FIXTURE record (the known failures as observed in the Engineer's run), and negatives on copies
+product guard: HEAD 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: PASS (HEAD's src tests plugins pyproject.toml = 8949caff; only scripts/ differ)
+candidate: 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff 8949caff -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | = v0.6.3 (ef7c37db15f4e6318fd5b6bf5bd79321b876eac5): yes
+totals: 4 failed, 3690 passed, 48 skipped | exit: 1
+test interpreter dependencies: click 8.5.0 (fixture) | PyYAML 6.0.3 (fixture) | websockets 16.1.1 (fixture) | pytest 9.1.1 (fixture)
+test interpreter click = production's 8.5.0: yes
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-main]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-independent]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent]
+  known flaky (516 current definition /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md names the helper _assert_native_budget_stop it failed in): tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+failed tests: 5 | NEW: 0
+CHECK 560 G record (8949caff + v0.6.3) no new failure: PASS
+CHECK 560 GR (guard + G record): PASS
+product guard: HEAD 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: PASS (HEAD's src tests plugins pyproject.toml = 8949caff; only scripts/ differ)
+candidate: 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff 8949caff -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | = v0.6.3 (ef7c37db15f4e6318fd5b6bf5bd79321b876eac5): yes
+totals: 4 failed, 3690 passed, 48 skipped | exit: 1
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-main]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-independent]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent]
+  known flaky (516 current definition /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md names the helper _assert_native_budget_stop it failed in): tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+CHECK 560 G record (8949caff + v0.6.3) no new failure: PASS
+CHECK 560 GR (guard + G record): PASS
+REHEARSAL PASS: GR on the fixture: the four gateway params known (551/556, :88), the 516 helper failure known flaky; PASS
+REHEARSAL PASS: GR negative: an unknown FAILED test -> NEW, FAIL, and no PASS left in GR.txt
+REHEARSAL PASS: GR negative: a known test failing for another reason -> NEW
+REHEARSAL PASS: GR negative: a G run with another graftling commit (0.6.2) -> FAIL
+REHEARSAL PASS: GR negative: a test interpreter with Miniconda's click 8.2.1 -> FAIL
+REHEARSAL PASS: GR: earlier GR.txt kept as GR-<time>.txt
+
+======== V: plugin change only host_context.mjs; real MCP tools/list and Codex hooks entry; 563 demo on a copy of the state
+REHEARSAL PASS: V exit 0
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+CHECK 560 candidate plugin changes only hooks/host_context.mjs (533): PASS (changed: at claude --continue expect at most ONE native dialog, the plugin/hooks trust dialog of graphtraj-claude-host)
+CHECK 560 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 560 Codex hooks entry names /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 560 Codex hooks entry runs (neutral event answers {}): PASS
+state copy: 472 Task directories, 472 task.md, 896 definitions/*.md, 3 links -> /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/demo/h/.graphtraj/core/state
+preview rc=0
+planned renames: 472
+migrate rc=0
+renamed: 472
+again rc=0
+renamed: []
+CHECK 560 563 second run renames nothing: PASS
+PASS: same Task directories (472 before, 472 after)
+PASS: every Task keeps all version contents in the same order
+PASS: every Task keeps its current definition content
+PASS: version count unchanged (1368 versions)
+PASS: no task.md remains
+PASS: names sort oldest first
+PASS: every version stays read-only (0o444)
+PASS: current_definition names a definitions/ file
+PASS: Task Graph loads every Task (472 Tasks)
+RESULT: PASS
+CHECK 560 563 migration: every Task's current definition and all versions hash-equal: PASS
+markers expected present: PASS (6/6)
+markers expected absent: PASS (6/6)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff vs /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.3', '/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling-0.6.3.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.3.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling/__init__.py version 0.6.3)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling/: PASS
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+CHECK 560 candidate plugin changes only hooks/host_context.mjs (533): PASS (changed: at claude --continue expect at most ONE native dialog, the plugin/hooks trust dialog of graphtraj-claude-host)
+CHECK 560 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 560 Codex hooks entry names /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 560 Codex hooks entry runs (neutral event answers {}): PASS
+state copy: 472 Task directories, 472 task.md, 896 definitions/*.md, 3 links -> /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/demo/h/.graphtraj/core/state
+planned renames: 472
+renamed: 472
+renamed: []
+CHECK 560 563 second run renames nothing: PASS
+PASS: same Task directories (472 before, 472 after)
+PASS: every Task keeps all version contents in the same order
+PASS: every Task keeps its current definition content
+PASS: version count unchanged (1368 versions)
+PASS: no task.md remains
+PASS: names sort oldest first
+PASS: every version stays read-only (0o444)
+PASS: current_definition names a definitions/ file
+PASS: Task Graph loads every Task (472 Tasks)
+RESULT: PASS
+CHECK 560 563 migration: every Task's current definition and all versions hash-equal: PASS
+markers expected present: PASS (6/6)
+markers expected absent: PASS (6/6)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff vs /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.3', '/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling-0.6.3.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.3.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling/__init__.py version 0.6.3)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/vvenv-8949caff/lib/python3.13/site-packages/graftling/: PASS
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+成功: 'CHECK 560 candidate plugin changes only hooks/host_context.mjs (533): PASS'（若 CHANGED，claude --continue 时最多一个插件/hooks 信任框）；'CHECK 560 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 560 Codex hooks entry …: PASS'；
+  563 演示: 'preview rc=0'、'migrate rc=0'、'CHECK 560 563 second run renames nothing: PASS'、defs563 的每行 PASS 与 'RESULT: PASS'、'CHECK 560 563 migration: … hash-equal: PASS'；'markers expected present: PASS (6/6)' 与 'markers expected absent: PASS (6/6)'；'503 layout: PASS' 与两行 node resolves PASS；候选 ✘ 不多于 baseline；read_session failures=0 与 task graph of the clone（迁移后的副本）；无 STOP。
+REHEARSAL PASS: V: plugin CHECK PASS (only hooks/host_context.mjs may change)
+REHEARSAL PASS: V: real graphtraj-mcp lists exactly agents, tasks; Codex hooks entry two CHECKs PASS
+REHEARSAL PASS: V: 563 demo: preview, migrate, again renames nothing, all hashes equal
+REHEARSAL PASS: V: markers present in the candidate and absent in production (6/6)
+REHEARSAL PASS: V: read check of the migrated copy (task graph)
+REHEARSAL PASS: V wrote nothing to production entry files; fake production state still unmigrated
+
+======== negatives: migration hash mismatch; 0.6.2 left installed; markers both ways
+REHEARSAL PASS: migration negative: one changed definition -> hash compare FAIL
+REHEARSAL PASS: proddiff negative: graftling 0.6.2's dist-info left beside 0.6.3 -> FAIL (LEFTOVER)
+REHEARSAL PASS: markers 'present' on production fails; 'absent' on the candidate fails
+
+======== Vu / Vc (stub claude: plugin not loaded, so Vc asks for Vu)
+REHEARSAL PASS: Vu names the isolated path and 'Yes, proceed'
+REHEARSAL PASS: Vc setup: isolated .mcp.json CHECK PASS and answer check OK
+REHEARSAL PASS: Vc with the stub asks for Vu
+
+======== guard refusal, I refusal without GR PASS, then Mpre / I (USER): backup, pair install, migration
+REHEARSAL PASS: guard negative: a member Worker under the venv -> BLOCKING, no backup made
+REHEARSAL PASS: I negative: refuses while GR.txt has no PASS, and creates no backup
+REHEARSAL PASS: Mpre: GR PASS shown; restart reason names the migrated state
+REHEARSAL PASS: I exit 0
+state copy: 472 Task directories, 472 task.md, 896 definitions/*.md, 3 links -> /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/backup/state
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.6.2
+Successfully installed graftling-0.6.3 graphtraj-0.1.0
+PASS 251 FAIL 0
+CHECK 560 graftling 0.6.2 dist-info gone: PASS
+### 560 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=0bb13e22c56a6740410717bec5a6d328d91f01b937c38eb49220757325ac08b2", "hashes": {"sha256": "0bb13e22c56a6740410717bec5a6d328d91f01b937c38eb49220757325ac08b2"}}, "url": "file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.6.3.dist-info direct_url: {"archive_info": {"hash": "sha256=ffb2471e400fec1aae30b31a1e31c9f1f835cc03bebf8bcfc1693f187ad5545d", "hashes": {"sha256": "ffb2471e400fec1aae30b31a1e31c9f1f835cc03bebf8bcfc1693f187ad5545d"}}, "url": "file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl"}
+CHECK 560 direct_url of both names the wheels-8949caff wheels: PASS
+built from: graphtraj git archive 8949caff74156d14625f45d7d6b762a04cef87eb, graftling git archive v0.6.3 ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
+markers expected present: PASS (6/6)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime vs /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.3', '/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.6.3.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.3.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.6.3)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/raw-8949caff/I-configuration.txt)
+SAME-AS-VALIDATED
+plugin files changed by the install: hooks/host_context.mjs  (V expected: plugin dialog expected at claude --continue: yes (one: plugin/hooks trust for graphtraj-claude-host))
+CHECK 560 installed plugin changes only hooks/host_context.mjs: PASS
+### CHECKs after configuration --write
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+CHECK 560 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 560 Codex hooks entry names /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 560 Codex hooks entry runs (neutral event answers {}): PASS
+preview rc=0
+migrate rc=0
+backup: .graphtraj/backups/task-definitions-20261122T120409885697Z
+renamed: 472
+again rc=0
+renamed: []
+CHECK 560 563 second run renames nothing: PASS
+PASS: same Task directories (472 before, 472 after)
+PASS: every Task keeps all version contents in the same order
+PASS: every Task keeps its current definition content
+PASS: version count unchanged (1368 versions)
+PASS: no task.md remains
+PASS: names sort oldest first
+PASS: every version stays read-only (0o444)
+PASS: current_definition names a definitions/ file
+PASS: Task Graph loads every Task (472 Tasks)
+RESULT: PASS
+CHECK 560 563 migration: every Task's current definition and all versions hash-equal: PASS
+CHECK 560 backup state copy equals the state just before the migration: PASS
+the migration's own backup: .graphtraj/backups/task-definitions-20261122T120409885697Z | I's copy for R: /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/backup/state
+state copy: 472 Task directories, 472 task.md, 896 definitions/*.md, 3 links -> /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/backup/state
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.6.2
+Successfully installed graftling-0.6.3 graphtraj-0.1.0
+PASS 251 FAIL 0
+CHECK 560 graftling 0.6.2 dist-info gone: PASS
+### 560 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=0bb13e22c56a6740410717bec5a6d328d91f01b937c38eb49220757325ac08b2", "hashes": {"sha256": "0bb13e22c56a6740410717bec5a6d328d91f01b937c38eb49220757325ac08b2"}}, "url": "file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.6.3.dist-info direct_url: {"archive_info": {"hash": "sha256=ffb2471e400fec1aae30b31a1e31c9f1f835cc03bebf8bcfc1693f187ad5545d", "hashes": {"sha256": "ffb2471e400fec1aae30b31a1e31c9f1f835cc03bebf8bcfc1693f187ad5545d"}}, "url": "file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl"}
+CHECK 560 direct_url of both names the wheels-8949caff wheels: PASS
+built from: graphtraj git archive 8949caff74156d14625f45d7d6b762a04cef87eb, graftling git archive v0.6.3 ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
+markers expected present: PASS (6/6)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime vs /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.6.3', '/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.6.3.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.6.3.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/wheels-8949caff/graftling-0.6.3-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.6.3)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/560-graftling-0-6-3-release-and-production-adoption/adoption/raw-8949caff/I-configuration.txt)
+SAME-AS-VALIDATED
+plugin files changed by the install: hooks/host_context.mjs  (V expected: plugin dialog expected at claude --continue: yes (one: plugin/hooks trust for graphtraj-claude-host))
+CHECK 560 installed plugin changes only hooks/host_context.mjs: PASS
+### CHECKs after configuration --write
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+CHECK 560 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 560 Codex hooks entry names /private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 560 Codex hooks entry runs (neutral event answers {}): PASS
+preview rc=0
+migrate rc=0
+backup: .graphtraj/backups/task-definitions-20261122T120409885697Z
+renamed: 472
+again rc=0
+renamed: []
+CHECK 560 563 second run renames nothing: PASS
+PASS: same Task directories (472 before, 472 after)
+PASS: every Task keeps all version contents in the same order
+PASS: every Task keeps its current definition content
+PASS: version count unchanged (1368 versions)
+PASS: no task.md remains
+PASS: names sort oldest first
+PASS: every version stays read-only (0o444)
+PASS: current_definition names a definitions/ file
+PASS: Task Graph loads every Task (472 Tasks)
+RESULT: PASS
+CHECK 560 563 migration: every Task's current definition and all versions hash-equal: PASS
+CHECK 560 backup state copy equals the state just before the migration: PASS
+the migration's own backup: .graphtraj/backups/task-definitions-20261122T120409885697Z | I's copy for R: /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/backup/state
+成功: Successfully installed graftling-0.6.3 graphtraj-0.1.0；PASS n FAIL 0（两个 wheel）；'CHECK 560 graftling 0.6.2 dist-info gone: PASS'；三个 -rw------- 备份入口文件；state copy 行；'graftling 0.6.3'；'CHECK 560 direct_url of both names the wheels-8949caff wheels: PASS'；'markers expected present: PASS (6/6)'；'503 layout: PASS'；两行 node resolves PASS；SAME-AS-VALIDATED；'CHECK 560 installed plugin changes only hooks/host_context.mjs: PASS'；'CHECK 515 .mcp.json …: PASS'；
+  'CHECK 560 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 560 Codex hooks entry …: PASS'；迁移: preview/migrate/again rc=0，'CHECK 560 563 second run renames nothing: PASS'，defs563 每行 PASS 与 'RESULT: PASS'，'CHECK 560 563 migration: … hash-equal: PASS'，'CHECK 560 backup state copy equals the state just before the migration: PASS'。
+REHEARSAL PASS: I: both wheels installed together, proddiff PASS, 0.6.2 dist-info gone, markers 6/6
+REHEARSAL PASS: I: direct_url of both names wheels-8949caff; built from both archives
+REHEARSAL PASS: I: configuration --write rc=0, plugin change only host_context.mjs, .mcp.json PASS, SAME-AS-VALIDATED
+REHEARSAL PASS: I: real entries of the installed venv: MCP tools/list and Codex hooks PASS
+REHEARSAL PASS: I: migration of the fake production: again renames nothing, hashes equal, backup copy = state before
+REHEARSAL PASS: I: backup holds venv, plugin, entries, tools, pre-migration state; COMPLETE
+REHEARSAL PASS: I: prints the restart command and the expected dialog from V
+
+======== M / Mp after the restart; done
+REHEARSAL PASS: M prompt: upgraded by Task 560, tools present, task_graph reads the migrated state
+REHEARSAL PASS: Mp exit 0: four init CHECKs PASS
+REHEARSAL PASS: N: one advisor member of Task 560 creates n560
+REHEARSAL PASS: done: versions, direct_urls, no 0.6.2 left, state migrated, real entries PASS, no key value
+
+======== R (rollback from the backup's own tools): both packages and the pre-migration Task state restored
+DIFF entries=991 differences=90 (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime)
+before R: graftling installed graftling-0.6.3.dist-info | backup graftling-0.6.2.dist-info 
+graphtraj package installed vs backup: 29 differing entries (none after an earlier R)
+### venv restored whole from the backup
+SAME entries=991 differences=0 (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/private/tmp/claude-501/adopt560-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+CHECK 560 graftling restored (after R vs backup): PASS
+CHECK 560 graphtraj restored (after R vs backup): PASS
+### 560 (563): Task state restored from I's pre-migration copy; the current files kept in /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/backup/after-install-20261122T210418/state
+Tasks created after I (left as they are; tell Main): none
+CHECK 560 Task state after R equals the pre-migration copy (every Task in it: versions, current, modes): PASS
+task.md files after R: 472 expected from the copy; 472 present
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.6.2
+DIFF entries=991 differences=90 (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime)
+before R: graftling installed graftling-0.6.3.dist-info | backup graftling-0.6.2.dist-info 
+graphtraj package installed vs backup: 29 differing entries (none after an earlier R)
+### venv restored whole from the backup
+SAME entries=991 differences=0 (/private/tmp/claude-501/adopt560-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/private/tmp/claude-501/adopt560-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+CHECK 560 graftling restored (after R vs backup): PASS
+CHECK 560 graphtraj restored (after R vs backup): PASS
+### 560 (563): Task state restored from I's pre-migration copy; the current files kept in /private/tmp/claude-501/adopt560-rehearsal/project/tmp/560/backup/after-install-20261122T210418/state
+Tasks created after I (left as they are; tell Main): none
+CHECK 560 Task state after R equals the pre-migration copy (every Task in it: versions, current, modes): PASS
+task.md files after R: 472 expected from the copy; 472 present
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.6.2
+成功: venv 与 plugin 都是 SAME differences=0；三个入口文件 OK；pip check 通过；'CHECK 560 graftling restored …: PASS' 与 'CHECK 560 graphtraj restored …: PASS'；Version graphtraj 0.1.0 与 graftling 0.6.2；'CHECK 560 Task state after R equals the pre-migration copy …: PASS'；'Tasks created after I …: none'（否则告诉 Main）。
+REHEARSAL PASS: R exit 0; venv and plugin SAME
+REHEARSAL PASS: R: graftling and graphtraj restored (vs backup)
+REHEARSAL PASS: R: Task state equals the pre-migration copy; task.md files back
+REHEARSAL PASS: R: production graftling 0.6.2 and markers absent again
+old code task graph: 472
+REHEARSAL PASS: R: the old code reads the restored state (task graph loads)
+REHEARSAL PASS: 532's backup under tmp/532 unchanged
+REHEARSAL PASS: real <Harness>/graftling untouched by the rehearsal (dev 9f962bc, main 4a00212, no v0.6.3)
+
+======== information (not a rehearsal check): GR's verdict on the committed record /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/560-graftling-0-6-3-release-and-production-adoption/scripts/adopt-560/G-record
+candidate: 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff 8949caff -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | = v0.6.3 (ef7c37db15f4e6318fd5b6bf5bd79321b876eac5): yes
+totals: 8 failed, 3637 passed, 58 skipped | exit: 1
+test interpreter click = production's 8.5.0: yes
+  known: tests/test_child_env_own_key.py::test_a_model_cannot_ask_for_a_key
+  known flaky (516 current definition /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md): tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+  NEW: tests/test_execution_budgets.py::test_installed_runner_delivers_elapsed_notices_to_final_leader
+  known flaky (516 current definition /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md names the helper _assert_native_budget_stop it failed in): tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-independent]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-main]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main]
+failed tests: 8 | NEW: 1
+CHECK 560 G record (8949caff + v0.6.3) no new failure: FAIL
+CHECK 560 GR (guard + G record): FAIL
+candidate: 8949caff74156d14625f45d7d6b762a04cef87eb | git diff 8949caff 8949caff -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: ef7c37db15f4e6318fd5b6bf5bd79321b876eac5 | = v0.6.3 (ef7c37db15f4e6318fd5b6bf5bd79321b876eac5): yes
+totals: 8 failed, 3637 passed, 58 skipped | exit: 1
+  known: tests/test_child_env_own_key.py::test_a_model_cannot_ask_for_a_key
+  known flaky (516 current definition /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md): tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+  NEW: tests/test_execution_budgets.py::test_installed_runner_delivers_elapsed_notices_to_final_leader
+  known flaky (516 current definition /private/tmp/claude-501/adopt560-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md names the helper _assert_native_budget_stop it failed in): tests/test_mcp_host_tools.py::test_installed_mcp_server_keeps_the_continue_path_on_the_request_caller
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-independent]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[helper-main]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-independent]
+  known: tests/test_native_gateway.py::test_codex_uses_progressive_mcp_with_native_session_authority[thread-1-main]
+CHECK 560 G record (8949caff + v0.6.3) no new failure: FAIL
+CHECK 560 GR (guard + G record): FAIL
+
+REHEARSAL SUMMARY: 72 checks, all PASS
+rc=0

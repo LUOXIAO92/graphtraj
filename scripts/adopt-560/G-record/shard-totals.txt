@@ -1,0 +1,6 @@
+678 passed, 4 skipped in 1003.67s (0:16:43)
+587 passed, 15 skipped in 1398.76s (0:23:18)
+5 failed, 567 passed, 13 skipped in 1062.14s (0:17:42)
+613 passed, 5 skipped in 1249.60s (0:20:49)
+1 failed, 489 passed, 19 skipped, 37 warnings in 964.27s (0:16:04)
+2 failed, 703 passed, 2 skipped, 12 warnings in 1156.39s (0:19:16)

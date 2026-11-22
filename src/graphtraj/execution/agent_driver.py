@@ -46,7 +46,7 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
 
     Omitted at create, the child keeps the host's own tool settings. Claude
     takes them as native flags (``ClaudeExecution.tool_arguments``); Codex
-    maps what it can express (``graftling.codex.driver.apply_tools``). Pi
+    maps what it can express (``graftling.codex.apply_tools``). Pi
     takes ``--tools``/``--exclude-tools`` and asks the parent before a
     built-in beyond the host's settings; DSH chooses installed agent-preset
     tool rows and refuses enabling a host-disabled one.
@@ -55,7 +55,7 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
         request['tools'] = tools['tools']
         request['disallowed_tools'] = list(tools['disallowed_tools'])
     elif runtime == 'codex':
-        from graftling.codex.driver import apply_tools
+        from graftling.codex import apply_tools
         from graphtraj.interfaces.task_free import TASK_FREE_TOOL_NAMES
         from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 
@@ -66,13 +66,13 @@ def apply_child_tools(runtime: str, request: dict, tools: Mapping[str, Any]) -> 
     elif runtime == 'pi':
         # Pi's --tools / --exclude-tools; a built-in beyond the host's settings asks the parent first.
         # An entry Pi provably does not know refuses the create; the child's own tools are mcp__graphtraj__*.
-        from graftling.pi.driver import apply_tools
+        from graftling.pi import apply_tools
         from graphtraj.runtimes.pi.managed_session import PiManagedExecution
 
         apply_tools(request, tools, own_server=PiManagedExecution.mcp_server)
     elif runtime == 'dsh':
         # DSH agent-preset tool rows; unknown -> unavailable, a host-disabled row -> authorization-required.
-        from graftling.dsh.execution import apply_tools
+        from graftling.dsh import apply_tools
 
         apply_tools(request, tools)
     else:
@@ -83,7 +83,7 @@ def report_unverified_tools(run: Run) -> None:
     """Tell the parent which create tool entries the Pi child's Runtime could not check before start (551).
 
     Pi resolves extension tools only at start, so with host extensions loaded an unknown name cannot be
-    refused at create (graftling.pi.driver.check_tool_names). It is not ignored either: it becomes the
+    refused at create (graftling.pi.apply_tools). It is not ignored either: it becomes the
     child's ``tool_check`` (``unverified``), which agents ``status`` reports, as Claude's unapplied entries do.
     """
     unverified = (run.settings.get('adapter_request') or {}).get('unverified_tools')
@@ -352,7 +352,7 @@ class AdapterDriver:
             turn.extra_fields = graphtraj_fields(str(turn.request['harness_root']), run.agent,
                                                  extra_fields=run.extra_fields)
             turn.agent_call = getattr(run, 'call', None)
-            from graftling.extra_tools import extra_tool_table
+            from graftling import extra_tool_table
 
             # The child's tasks entry beside agents (551); PiExecution serves it.
             turn.extra_tools = extra_tool_table(self.child_tools(run))

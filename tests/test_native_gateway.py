@@ -84,8 +84,10 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
         assert not done.failed, done.document
         observed = json.loads(done.document['result']['last_result']['last_message'])
     tools = observed[0]['result']['tools']
-    assert {tool['name'] for tool in tools} == ({'agents', 'tasks'} if host == 'main' else {'agents'})
-    assert all(set(tool['inputSchema']['properties']) == {'action', 'query', 'feature', 'schema', 'arguments'}
+    # Task-free children reach the tasks methods as Main does (551).
+    assert {tool['name'] for tool in tools} == {'agents', 'tasks'}
+    assert all(set(tool['inputSchema']['properties'])
+               == {'action', 'query', 'feature', 'schema', 'arguments', 'arguments_file'}
                for tool in tools)
     if issuer == 'thread-1':
         assert observed[1]['result']['structuredContent']['features'][0]['feature'] == 'status'
@@ -103,4 +105,4 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
     start = next(json.loads(line)['params'] for line in protocol.read_text().splitlines()
                  if json.loads(line).get('method') == 'thread/start')
     assert not start.get('dynamicTools')
-    assert ('graphtraj' if host == 'main' else 'graftling') in start['config']['mcp_servers']
+    assert 'graphtraj' in start['config']['mcp_servers']

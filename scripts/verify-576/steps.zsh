@@ -11,6 +11,32 @@
 #             look up a keychain credential for that config dir (read only). Writes only under ROOT/diag; the
 #             mtimes of ~/.claude and ~/.claude.json are printed before and after. STOP if ROOT/diag exists.
 #             Dialog: none. ~1-2 min.
+# ACCEPTANCE (the real entry users go through: a wheel installed per docs/install/claude-code.md, the generated plugin
+# files `configuration --write` in the project, then `claude -p` started in it; the parent creates its children only
+# through its own mcp__graftling__agents tool). No --plugin-dir, no direct calls of graftling.
+#   pre       Main. Versions (zsh, python3, git, claude); the base and candidate on GitHub; the login check (below);
+#             creates ROOT/proj-base and ROOT/proj (STOP if either exists). A one-line `claude -p` in ROOT names
+#             its model and login source (system/init model and apiKeySource). Dialog: none. ~30 s.
+#   push      Main, after asking the user. Pushes the candidate branch from the Engineer's bundle
+#             (.scratch/576/graftling-576.bundle) to LUOXIAO92/graftling. Dialog: none expected; git uses your usual
+#             GitHub login. ~30 s.
+#   repro     Main. The premise on the BASE (graftling dev cadc419 = 0.7.0): clone at BASE from GitHub, build and
+#             install the wheel into ROOT/venv-base, `configuration --write` into ROOT/proj-base, then one `claude -p`
+#             parent there creates three claude children (model CMODEL): (i) no tools, asked to run
+#             `echo r576-bash` with Bash; (ii) tools [Read]; (iii) disallowed_tools [Bash]. It waits for each and
+#             reads status. Verdicts: (i) Bash ABSENT from the child's recorded system/init tools (premise; if it is
+#             present the step says PREMISE NOT REPRODUCED and fails); (ii)/(iii) Bash absent. Dialog: none
+#             (-p shows none). ~3-5 min.
+#   check     Main. The same on the CANDIDATE (GCOMMIT, from GitHub after push) in ROOT/venv and ROOT/proj.
+#             Verdicts: (i) Bash PRESENT in the recorded system/init tools AND its Bash call returned output
+#             containing `r576-bash`; (ii) Bash absent, Read present; (iii) Bash absent. Dialog: none. ~3-5 min.
+# Login for pre/repro/check: by default Claude Code runs isolated in CLAUDE_CONFIG_DIR=ROOT/claude-home with
+# ANTHROPIC_API_KEY (STOP if unset). With VERIFY576_CLAUDE_USER_LOGIN=1 (Main asks the user first) it uses the user's
+# own login: it READS the keychain login, ~/.claude.json and the user's ~/.claude settings, plugins and CLAUDE.md as
+# any start does; it WRITES Session transcripts under ~/.claude/projects/-private-tmp-graftling-576*/, project entries
+# for ROOT, ROOT/proj-base and ROOT/proj in ~/.claude.json, and Claude Code's own per-start files under ~/.claude
+# (the step lists every ~/.claude entry changed during the run, names only). Nothing under ~/.claude is installed:
+# the plugin files go only into the project (configuration --write); no `claude plugin` command is run.
 # Everything is under ROOT=/private/tmp/graftling-576. Step output is kept in OUT. VERIFY576_ROOT / VERIFY576_OUT /
 # VERIFY576_BIN are for the Engineer's rehearsal only (VERIFY576_BIN: a stub claude, script check only).
 emulate -L zsh
@@ -23,6 +49,14 @@ THIS=${0:A}
 STEP=${1:-}
 JUDGE=${0:A:h}/judge.py
 path=(${VERIFY576_BIN:+$VERIFY576_BIN} $path)
+URL=${VERIFY576_URL:-https://github.com/LUOXIAO92/graftling.git}
+BASE=cadc419271dabc8f4a0b11da1bb46c70ef598c77      # graftling dev = 0.7.0 + 570 (the production behaviour)
+BRANCH=agent/576-claude-agents-child-without-tools-has-no-bash
+GCOMMIT=${VERIFY576_GCOMMIT:-}                      # the graftling candidate; set when the fix is committed
+BUNDLE=$WT/.scratch/576/graftling-576.bundle        # the candidate branch, from the base
+CH=$ROOT/claude-home                                # isolated CLAUDE_CONFIG_DIR (default login mode)
+CMODEL=${VERIFY576_CHILD_MODEL:-claude-haiku-5-5}   # children: the cheapest model
+PMODEL=${VERIFY576_PARENT_MODEL:-claude-sonnet-5-5} # the parent follows a 5-call script
 
 say() { print -r -- "== $*"; }
 mtimes() { local f; for f in $HOME/.claude $HOME/.claude.json; do
@@ -44,6 +78,99 @@ diag_run() {
 }
 has() { python3 -I -c 'import json, sys; d = json.load(open(sys.argv[1]))
 sys.exit(0 if d["init"] and d["tools"] and sys.argv[2] in d["tools"] else 1 if d["init"] and d["tools"] else 2)' $D/run-$1.json $2; }
+
+# Claude Code as a user starts it: no inherited agents channel or Claude Code session markers. Isolated by default.
+claude_env() {
+  local -a clean=(-u GRAFTLING_PYTHON -u GRAFTLING_CONNECTION -u GRAFTLING_CLAUDE_HOST_CONFIG -u GRAFTLING_CLAUDE_HOST_CHANNEL
+                  -u GRAFTLING_NATIVE_RUNTIME -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u ANTHROPIC_BASE_URL)
+  if [[ -n ${VERIFY576_CLAUDE_USER_LOGIN:-} ]]; then env $clean "$@"; else env $clean CLAUDE_CONFIG_DIR=$CH "$@"; fi
+}
+login_check() {
+  if [[ -n ${VERIFY576_CLAUDE_USER_LOGIN:-} ]]; then
+    print -r -- "VERIFY576_CLAUDE_USER_LOGIN=1: the user's own Claude login (Main asked the user). Reads and writes: see this"
+    print -r -- "file's header; the ~/.claude entries changed during the step are listed at its end."
+  elif [[ -z ${ANTHROPIC_API_KEY:-} ]]; then
+    print -r -- "STOP: ANTHROPIC_API_KEY is not set, and Claude Code would run isolated in CLAUDE_CONFIG_DIR=$CH (no login)."
+    print -r -- "Either export ANTHROPIC_API_KEY=<key> and rerun: zsh $THIS $STEP"
+    print -r -- "or, after the user agrees to their own login:  VERIFY576_CLAUDE_USER_LOGIN=1 zsh $THIS $STEP"
+    return 1
+  else
+    mkdir -p $CH
+    print -r -- "Isolated: CLAUDE_CONFIG_DIR=$CH, ANTHROPIC_API_KEY (${#ANTHROPIC_API_KEY} characters; not printed)."
+  fi
+}
+changed_claude() {  # marker file: names of ~/.claude entries changed since it, and the ~/.claude.json entries for ROOT
+  [[ -n ${VERIFY576_CLAUDE_USER_LOGIN:-} ]] || { print -r -- "$CH now holds: $(cd $CH && print -l -- *(ND) | tr '\n' ' ')"; return 0; }
+  say "~/.claude entries changed during this step (names only)"
+  find $HOME/.claude -maxdepth 3 -newer $1 2>&1 | sed "s|$HOME|~|" | head -40
+  python3 -I -c 'import json, sys
+p = json.load(open(sys.argv[1])).get("projects") or {}
+print("~/.claude.json project entries under", sys.argv[2] + ":", [k for k in p if k.startswith(sys.argv[2])])' \
+    $HOME/.claude.json ${ROOT:A} 2>&1
+}
+# install_wheel TAG COMMIT: clone at COMMIT from GitHub, build and install the wheel (docs/install/claude-code.md) into
+# ROOT/venv-TAG ("venv" for the candidate), then `configuration --write` into the project; sets V and P.
+install_wheel() {
+  local tag=$1 commit=$2 src=$ROOT/src-$1 wheels=$ROOT/wheels-$1
+  typeset -g V=$ROOT/venv${${tag:#cand}:+-$tag} P=$ROOT/proj${${tag:#cand}:+-$tag}
+  [[ -d $P ]] || { print -r -- "STOP: $P missing; run: zsh $THIS pre"; return 1; }
+  if [[ ! -x $V/bin/python ]] || ! $V/bin/python -I -c 'import graftling' 2>/dev/null; then
+    say "install graftling $commit into $V (docs/install/claude-code.md: Install the wheel)"
+    rm -rf $src $wheels
+    git clone -q $URL $src && git -C $src checkout -q $commit || { print "STOP: cannot clone $URL at $commit"; return 1; }
+    python3 -m venv $V && $V/bin/python -m pip -q wheel --no-deps -w $wheels $src \
+      && $V/bin/python -m pip -q install $wheels/graftling-*.whl || { print "STOP: the wheel install failed"; return 1; }
+  fi
+  print -r -- "installed: $($V/bin/python -m pip show graftling 2>&1 | grep -E '^(Name|Version|Location)' | tr '\n' ' ')"
+  print -r -- "source commit: $(git -C $src rev-parse HEAD 2>&1)"
+  CLAUDE=$(command -v claude) || { print "STOP: no claude on PATH"; return 1; }
+  say "generated plugin files (docs: Generate the plugin files) in $P"
+  (cd $P && $V/bin/python -I -m graftling.claude.host configuration --project $P --claude $CLAUDE --write) \
+    || { print "STOP: configuration --write failed"; return 1; }
+  # The approval Claude Code's project MCP server prompt records (docs: 'Approve ... project MCP server prompts');
+  # print mode shows no prompt, so the answer is written where Claude Code keeps it, in the project only.
+  python3 -I -c 'import json, sys
+f = sys.argv[1]; d = json.load(open(f)); d.setdefault("enabledMcpjsonServers", [])
+d["enabledMcpjsonServers"] = sorted(set(d["enabledMcpjsonServers"]) | {"graftling"}); json.dump(d, open(f, "w"), indent=2)' \
+    $P/.claude/settings.local.json || return 1
+  print -r -- "project files: $(cd $P && print -l -- .mcp.json .claude/**/*(N.D) .agents-control/claude-host.json(N) | tr '\n' ' ')"
+  print -r -- ".claude/settings.local.json: $(tr -d '\n' < $P/.claude/settings.local.json)"
+}
+PARENT_PROMPT='Use the tool mcp__graftling__agents, not your own subagents or any other tool. Its input is {"action":"execute","feature":<name>,"arguments":{...}}. Make exactly these calls, in this order, one at a time:
+1) {"action":"execute","feature":"create","arguments":{"runtime":"claude","model":"CMODEL","instruction":"R576-I. Use your Bash tool to run exactly this command: echo r576-bash . Then reply with its exact output and nothing else. If you have no Bash tool, reply exactly: NO-BASH"}}
+2) {"action":"execute","feature":"create","arguments":{"runtime":"claude","model":"CMODEL","tools":["Read"],"instruction":"R576-II. Do not run any command. Reply with the names of all your tools on one line."}}
+3) {"action":"execute","feature":"create","arguments":{"runtime":"claude","model":"CMODEL","disallowed_tools":["Bash"],"instruction":"R576-III. Do not run any command. Reply with the names of all your tools on one line."}}
+4) {"action":"execute","feature":"wait","arguments":{"agent":"<agent id from call 1>","timeout_seconds":240}}
+5) {"action":"execute","feature":"wait","arguments":{"agent":"<agent id from call 2>","timeout_seconds":240}}
+6) {"action":"execute","feature":"wait","arguments":{"agent":"<agent id from call 3>","timeout_seconds":240}}
+7) {"action":"execute","feature":"status","arguments":{}}
+Do not approve, deny or answer anything for the children. Then report one line per child: CHILD-I / CHILD-II / CHILD-III: agent id, state, and its reply. If any call returns an error, print it verbatim on a line prefixed ERROR:.'
+# accept MODE: one parent Session in P creates the three children; computed verdicts.
+accept() {
+  local mode=$1 snap=$ROOT/$1-before.ids out=$ROOT/$1-parent-$(date +%H%M%S).jsonl mark=$ROOT/$1-start.mark
+  $V/bin/python -I $JUDGE snap $P/.agents-control > $snap 2>/dev/null || : > $snap
+  : > $mark
+  say "parent: claude -p --model $PMODEL --output-format stream-json --verbose --allowedTools mcp__graftling__agents (in $P)"
+  (cd $P && claude_env $CLAUDE -p --model $PMODEL --output-format stream-json --verbose \
+     --allowedTools mcp__graftling__agents "${PARENT_PROMPT//CMODEL/$CMODEL}" < /dev/null > $out 2> $out.stderr)
+  local prc=$?
+  print -r -- "parent exit=$prc; stream-json $out; stderr: $(tail -5 $out.stderr)"
+  python3 -I -c 'import json, sys
+for line in open(sys.argv[1], errors="replace"):
+    try: e = json.loads(line)
+    except ValueError: continue
+    if e.get("type") == "system" and e.get("subtype") == "init":
+        print("parent init: model", e.get("model"), "apiKeySource", e.get("apiKeySource"), "agents tool:", "mcp__graftling__agents" in (e.get("tools") or []))
+    if e.get("type") == "result": print("parent result:", str(e.get("result"))[:1500])' $out
+  say "verdicts (computed from the recorded files; each can fail)"
+  $V/bin/python -I $JUDGE accept $mode $P/.agents-control $snap $out; local jrc=$?
+  (( prc == 0 )) && print "PASS: the parent exited 0" || { print "FAIL: the parent exited $prc"; jrc=1; }
+  changed_claude $mark
+  say "follow-up (copy and paste)"
+  print -r -- "  $V/bin/python -I $JUDGE accept $mode $P/.agents-control $snap $out"
+  print -r -- "  ls $P/.agents-control/control/agents/; grep -rn r576-bash $P/.agents-control --include=session.yml --include='*.jsonl' | head"
+  return $jrc
+}
 
 run_step() {
 case $STEP in
@@ -144,7 +271,68 @@ diagnose)
   print -r -- "Raw records: $D/run-*.json (+ .argv, .label), $D/help.txt"
   print -r -- "next: report $OUT/diagnose.txt to the Leader"
   ;;
-*) print -r -- "usage: zsh $THIS diagnose"; return 2 ;;
+pre)
+  say "[pre] Main. Versions, GitHub refs, login check, ROOT. Dialog: none. ~30 s."
+  print -r -- "zsh: $ZSH_VERSION ($THIS)"
+  local t; for t in python3 git claude; do print -r -- "$t: $(command -v $t) $($t --version 2>&1 | head -1)"; done
+  [[ -e $ROOT/proj || -e $ROOT/proj-base ]] && { print -r -- "STOP: $ROOT/proj or proj-base exists. Remove them yourself, then rerun: rm -rf $ROOT/proj $ROOT/proj-base $ROOT/venv* $ROOT/src-* $ROOT/wheels-* && zsh $THIS pre"; return 1; }
+  print -r -- "GitHub refs at the base $BASE: $(git ls-remote $URL | grep $BASE | cut -f2 | tr '\n' ' ')"
+  print -r -- "GitHub $BRANCH: $(git ls-remote $URL refs/heads/$BRANCH | cut -f1) (candidate GCOMMIT=${GCOMMIT:-not set yet})"
+  login_check || return 1
+  mkdir -p $ROOT/proj $ROOT/proj-base || return 1
+  print -r -- "created $ROOT/proj-base (base project) and $ROOT/proj (candidate project)"
+  local mark=$ROOT/pre-start.mark; : > $mark
+  say "one-line prompt (model $CMODEL) in $ROOT: its model and login source"
+  (cd $ROOT && claude_env $(command -v claude) -p --model $CMODEL --output-format stream-json --verbose \
+     "Reply in one line with the model id you are running as and nothing else." < /dev/null > $ROOT/pre.jsonl 2>&1)
+  local rc=$?
+  python3 -I -c 'import json, sys
+for line in open(sys.argv[1], errors="replace"):
+    try: e = json.loads(line)
+    except ValueError: print("non-JSON:", line.strip()[:300]); continue
+    if e.get("type") == "system" and e.get("subtype") == "init": print("init: model", e.get("model"), "apiKeySource", e.get("apiKeySource"))
+    if e.get("type") == "result": print("answer:", str(e.get("result"))[:300], "| is_error", e.get("is_error"))' $ROOT/pre.jsonl
+  print -r -- "exit=$rc"
+  changed_claude $mark
+  (( rc == 0 )) || { print -r -- "STOP: Claude Code did not answer with this login; fix the login, then: rm -rf $ROOT/proj $ROOT/proj-base && zsh $THIS pre"; return 1; }
+  print "Success: a model id, its login source and exit=0."
+  print -r -- "next: zsh $THIS repro   (same login variables)"
+  ;;
+push)
+  say "[push] Main, after the user agreed. Push $BRANCH (${GCOMMIT:-unset}) to $URL from $BUNDLE. Dialog: none expected. ~30 s."
+  [[ -n $GCOMMIT ]] || { print "STOP: GCOMMIT is not set in this script; ask the Engineer"; return 1; }
+  local G=${TMPDIR:-/tmp}/graftling-576-push.git
+  [[ $(git ls-remote $URL refs/heads/$BRANCH | cut -f1) == $GCOMMIT ]] && { print "already on GitHub"; print -r -- "next: zsh $THIS check"; return 0; }
+  [[ -f $BUNDLE ]] || { print -r -- "STOP: $BUNDLE missing; ask the Engineer"; return 1; }
+  rm -rf $G && git clone -q --bare $URL $G || return 1
+  git -C $G fetch -q $BUNDLE "${BRANCH}:${BRANCH}" || return 1
+  [[ $(git -C $G rev-parse $BRANCH) == $GCOMMIT ]] || { print "STOP: the bundle's branch is not $GCOMMIT"; return 1; }
+  print -r -- "authors and committers: $(git -C $G log --format='%an <%ae> | %cn <%ce>' $BASE..$BRANCH | sort -u)"
+  git -C $G push $URL "${BRANCH}:refs/heads/${BRANCH}" || return 1
+  print -r -- "on GitHub now: $(git ls-remote $URL refs/heads/$BRANCH)"
+  rm -rf $G
+  print "Success: the GitHub line above shows $GCOMMIT."
+  print -r -- "next: zsh $THIS check"
+  ;;
+repro)
+  say "[repro] Main. The premise on the BASE $BASE through the real entry. Dialog: none. ~3-5 min."
+  login_check || return 1
+  install_wheel base $BASE || return 1
+  accept repro || { print "FAIL or PREMISE NOT REPRODUCED: see the verdicts above"; return 1; }
+  print "Success: the base child without tools has no Bash; tools [Read] and disallowed [Bash] have none either."
+  print -r -- "next: (after push) zsh $THIS check"
+  ;;
+check)
+  say "[check] Main. The CANDIDATE ${GCOMMIT:-unset} through the real entry. Dialog: none. ~3-5 min."
+  [[ -n $GCOMMIT ]] || { print "STOP: GCOMMIT is not set in this script; ask the Engineer"; return 1; }
+  [[ $(git ls-remote $URL refs/heads/$BRANCH | cut -f1) == $GCOMMIT ]] || { print -r -- "STOP: $GCOMMIT is not on GitHub; run: zsh $THIS push"; return 1; }
+  login_check || return 1
+  install_wheel cand $GCOMMIT || return 1
+  accept check || { print "FAIL: see the verdicts above"; return 1; }
+  print "Success: the child without tools ran Bash; tools [Read] and disallowed [Bash] still have no Bash."
+  print -r -- "next: report $OUT to the Leader"
+  ;;
+*) print -r -- "usage: zsh $THIS diagnose|pre|push|repro|check"; return 2 ;;
 esac
 }
 

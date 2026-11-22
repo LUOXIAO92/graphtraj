@@ -12,7 +12,7 @@ import json, re, sys
 from pathlib import Path
 
 ID = re.compile(r'agent-[0-9a-f]{32}')
-ERRORS = ('invalid-input', 'ERROR:', 'authority-denied', 'unsupported-runtime', 'invalid-config')
+ERRORS = ('invalid-input', 'authority-denied', 'unsupported-runtime', 'invalid-config')
 
 
 def records(root):
@@ -27,7 +27,14 @@ def records(root):
 
 
 def line(text, prefix):
-    return next((item[len(prefix):].strip() for item in text.splitlines() if item.strip().startswith(prefix)), None)
+    """The last line starting with ``prefix``: DSH prints the model's reasoning first, the answer last."""
+    found = [item.strip()[len(prefix):].strip() for item in text.splitlines() if item.strip().startswith(prefix)]
+    return found[-1] if found else None
+
+
+def tool_errors(text):
+    """Error codes in the output, and answer lines starting with ERROR: (the prompt's own word is not one)."""
+    return [word for word in ERRORS if word in text] + (['ERROR: line'] if line(text, 'ERROR:') is not None else [])
 
 
 def check(ok, message, results):
@@ -45,7 +52,7 @@ def main(argv):
                         if (record.get('creator') or {}).get('host') == argv[2]))
         return 0
     text = Path(argv[1]).read_text(errors='replace')
-    errors = [word for word in ERRORS if word in text]
+    errors = tool_errors(text)
     if mode == 'tools':
         tools = line(text, 'TOOLS:') or ''
         if argv[2] == 'present':

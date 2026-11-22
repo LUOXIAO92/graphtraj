@@ -1,0 +1,40 @@
+
+=============== $ zsh steps.zsh pre ===============
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh:62: operation not permitted: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/task.yml
+
+### [pre] short preflight (dialog: none). Each host prompt at most 120 s; no paid child run.
+script: zsh 5.9 running /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/scripts/verify-551/steps.zsh | git version 2.50.1 (Apple Git-155)
+GraphTraj: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods at 7781fcb2c2593f27b7ba5030cc67bae88415b7d0 (GT=7781fcb2c2593f27b7ba5030cc67bae88415b7d0; dev base 3b9c2af758dd7ff29d7482a03ebb4dec1477ddd1: descends)
+graftling: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/551-task-free-children-reach-tasks-methods/.scratch/551/graftling.git branch agent/551-task-free-children-reach-tasks-methods at 94f59e6c1b64e38b0dcc8aff05f3548e6ec18a6d (dev base 9f962bcff91c37fc2aef177b4ab1457f3de5680b: descends)
+pytest temp: TMPDIR=/tmp/claude (outside the Harness)
+516 current definition (from 516's task.yml current_definition): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/
+host versions for this step: claude 2.1.326 (Claude Code) STUB-551 | codex codex STUB-551 | pi pi STUB-551 | dsh dsh STUB-551
+DEEPSEEK_API_KEY: unset
+NOTE: DEEPSEEK_API_KEY unset; pi and dsh cannot answer
+Pi sandbox env /private/tmp/claude/rehearse-551-pre-20261122T201309/no-pi-sandbox.env missing: the Pi role uses PATH for srt
+
+### one-line prompts; each host's model is judged from its OWN record (the reply is only a self-report)
+ready_hosts:4: can't create temp file for here document: operation not permitted
+claude rc=1
+claude: actual model NOT RECORDED (from stream-json system/init model) | login source (init apiKeySource): None = API key source
+claude: reply (self-report, not judged): (none)
+READY-551 claude: FAIL (expected claude-sonnet-5-5)
+codex: actual model ['gpt-6-luna'] provider ['openai'] (from codex exec header 'model:' line)
+codex: reply (self-report, not judged): READY-551 stub-codex (REHEARSAL STUB, no model)
+READY-551 codex: PASS (expected gpt-6-luna)
+pi: actual model ['deepseek-flash'] provider ['deepseek'] (from pi --mode json events (model/modelId/provider keys))
+pi: reply (self-report, not judged): {"type": "message_end", "message": {"role": "assistant", "provider": "deepseek", "model": "deepseek-flash", "content": [{"type": "text", "text": "READY-551 stub-pi"}]}}
+READY-551 pi: PASS (expected deepseek/deepseek-flash)
+dsh: actual model NOT RECORDED BY DSH (checked: dsh --json events; DSH session log /private/tmp/claude/rehearse-551-pre-20261122T201309/dsh-sessions/*/session-00000000-0000-4000-8000-000000000551/* (0 file(s)) (model/modelId/provider keys))
+dsh: model selected explicitly: deepseek-flash (from `dsh --profile headless --dump-config`, entry agent-default-model; no --model argv)
+dsh: reply (self-report, not judged): {"type": "final", "sessionId": "session-00000000-0000-4000-8000-000000000551", "reason": "completed", "text": "READY-551 stub-dsh (REHEARSAL STUB)"}
+READY-551 dsh: PASS (documented limit: DSH records no model; judged from its resolved config) (expected deepseek-flash; answered: True)
+raw host outputs: /private/tmp/claude/rehearse-551-pre-20261122T201309/base/runs/ready/{claude.jsonl,codex.txt,pi.jsonl,dsh.jsonl,dsh-config.yml,dsh-session/}
+
+### isolated project /private/tmp/claude/rehearse-551-pre-20261122T201309/base/project-before with graphtraj 0.1.0 graftling 0.6.2 from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages/graphtraj/__init__.py
+warning: unable to access '/Users/luoxiao/.config/git/ignore': Operation not permitted
+Error: fatal: unable to access '/Users/luoxiao/.gitconfig': Operation not permitted
+READY when: 'READY-551 <host>: PASS' x4 (each with its configured model and login), 'CHECK 551 role <role>: PASS' x5, 'CHECK 551 tasks probe: PASS', both heads 'descends', the 516 path ends in definitions/<time>.md.
+
+NOT READY: 516-definition DEEPSEEK_API_KEY READY-claude build
+(exit 1)

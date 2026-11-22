@@ -17,6 +17,14 @@ its dev base, `pytest temp: TMPDIR=... (outside the Harness)`, 516's current def
 `task.yml` `current_definition` (must end in `definitions/<time>.md`), each host's one-line answer judged from its
 own record (`READY-551 <host>: PASS` x4, Claude's login source printed), then project-before with the roles and the
 probe Tasks (`CHECK 551 tasks probe: PASS`); `READY` and the next line `zsh .../steps.zsh A0`, or `NOT READY: <checks>`.
+
+Round 3 integration correction (graftling v0.6.3): the graftling branch was rebased from dev 9f962bc onto
+`GLBASE` ef7c37db (tag v0.6.3, Task 560's conventional layout). The old head 94f59e6 stays pinned as
+`refs/archive/551-round3-head` in the clone. The rebase changed no graftling code. 551's PUBLIC_API 1.3 text
+moved to the root `PUBLIC_API.md` (`src/graftling/PUBLIC_API.md` is dev's symlink to it), and
+`tests/test_no_graphtraj_dependency.py` reads the root `pyproject.toml`. The order is therefore
+`pre` → `A0` → `G` → `GR`: A0's next line names G, and AX/A are not needed again. After A, the next line is
+`G`. `AU`/`AC` are optional: their Round-2 evidence is retained.
 G's limited rehearsal (`VERIFY551_TESTS`, `VERIFY551_GL_TESTS`) runs through the same `zsh steps.zsh G` / `GR`;
 Round 3's output is `rehearsal/output-G-round3.txt` (it includes `built_wheel` tests) and `rehearsal/output-pre-round3.txt`.
 
@@ -27,7 +35,7 @@ AFTER order: `A0` → `U after` (expected: project-after is a new path) → `A0`
 
 | step | dialog | observable that proves it |
 |---|---|---|
-| `A0` | none | `candidate venv: graphtraj ... from BASE/venv-after/...` built only from wheels of `git archive`: GraphTraj at the Worktree HEAD and graftling at the head of branch `agent/551-...` in `<Worktree>/.scratch/551/graftling.git` (Round 3; ignored through `info/exclude` `/.scratch`), which must descend from dev 9f962bc; GraphTraj must descend from dev 3b9c2af7. A0, pre and G print both resolved heads (`heads`). **Dependency direction (required result 4):** in a clean venv holding only graftling's wheel, PyYAML and websockets, the step prints `graftling wheel Requires-Dist: ['PyYAML<7,>=6', 'websockets<17,>=15']`, `graphtraj installed in this venv: False`, `graftling modules imported: N \| failed: none \| graphtraj modules loaded: []` and `CHECK 551 dependency direction: PASS`. Then project-after (roles, tasks probe, gate) as in 00, and `READY` or `NOT READY: ...` (the first run says `run U after`). |
+| `A0` | none | `candidate venv: graphtraj ... from BASE/venv-after/...` built only from wheels of `git archive`: GraphTraj at the Worktree HEAD and graftling at the head of branch `agent/551-...` in `<Worktree>/.scratch/551/graftling.git` (Round 3; ignored through `info/exclude` `/.scratch`), which must descend from graftling dev ef7c37db (v0.6.3); GraphTraj must descend from dev 3b9c2af7. Both graftling wheels (A0 and G) build from the archive root `.`: v0.6.3 keeps `pyproject.toml` at the repository root. A0, pre and G print both resolved heads (`heads`). **Dependency direction (required result 4):** in a clean venv holding only graftling's wheel, PyYAML and websockets, the step prints `graftling wheel Requires-Dist: ['PyYAML<7,>=6', 'websockets<17,>=15']`, `graphtraj installed in this venv: False`, `graftling modules imported: N \| failed: none \| graphtraj modules loaded: []` and `CHECK 551 dependency direction: PASS`. Then project-after (roles, tasks probe, gate) as in 00, and `READY` or `NOT READY: ...` (the first run says `run U after`). |
 | `A <rt\|all>` | none | One `A <rt> <case> {...}: OK ...` line per case, then `COMPLETE` or `NOT COMPLETE`. Cases: `plain` (no tool arguments; the child keeps the host's tools) and `deny` with `disallowed_tools`. The deny verdict reads the summary's `RECORD TOOLSET` line, the tool list from a record that Runtime itself writes:
 - Claude `WebSearch`: absent from the init tools. The inherited host tools have WebSearch and no WebFetch (Main's A run 1).
 - Codex `web_search`: `web__run` is absent from the code-mode tools that the rollout's `additional_tools` declares. Codex is judged by the tool list only: the child may still reach pages through another host MCP server such as `mcp__playwright`, and the A line notes this.

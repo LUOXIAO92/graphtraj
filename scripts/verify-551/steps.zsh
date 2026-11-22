@@ -5,6 +5,8 @@
 # installed manual (manual_ref)?        zsh scripts/verify-551/steps.zsh <STEP> [ARG]   (Main's Bash, this Worktree)
 # Order: 00 -> (U only if 00 says so) -> B all -> (later, once the Leader names the commits) A0 -> A all -> G -> GR
 # Correction round (Round 3): pre -> A0 -> AX -> (A all only if A0 says the candidate changed) -> G -> GR.
+# Round 3 integration onto graftling v0.6.3 (ef7c37db): pre -> A0 -> G -> GR. The rebase changed no graftling code
+# (PUBLIC_API.md and one test path only), so AX/A are not needed again; AU/AC are optional (Round-2 evidence kept).
 #   pre short preflight (dialog: none): zsh, resolved GraphTraj and graftling heads, TMPDIR outside the Harness,
 #       516's current definition (through 516's task.yml current_definition), each host answers one line with its
 #       configured model and login, then the in-use installation's isolated project with the probe Tasks
@@ -51,7 +53,10 @@ CLAUDE_PROJECTS=${VERIFY551_CLAUDE_PROJECTS:-$HOME/.claude/projects}   # AC copi
 GLREPO=${VERIFY551_GLREPO:-$WT/.scratch/551/graftling.git}; GLBRANCH=agent/551-task-free-children-reach-tasks-methods
 GT=${VERIFY551_GT:-$(git -C $WT rev-parse HEAD)}
 GL=${VERIFY551_GL:-$(git --git-dir=$GLREPO rev-parse $GLBRANCH 2>/dev/null || print -- missing)}
-GLBASE=9f962bcff91c37fc2aef177b4ab1457f3de5680b                 # graftling dev the branch starts from (Round 3)
+# graftling dev the branch starts from: v0.6.3 (Task 560, conventional layout: pyproject.toml at the repository
+# root, so graftling wheels build from the archive root '.'). Round 3 first used 9f962bc; the integration
+# correction rebased onto ef7c37db and pinned the old head as refs/archive/551-round3-head in the clone.
+GLBASE=ef7c37db15f4e6318fd5b6bf5bd79321b876eac5
 GTBASE=3b9c2af758dd7ff29d7482a03ebb4dec1477ddd1                 # GraphTraj dev this Worktree's branch starts from (Round 3)
 T=${VERIFY551_T:-$H/tmp/551}                                     # G's venvs (Task: test directory Harness tmp/551)
 RTSP=$RT/lib/python3.13/site-packages                            # click, yaml, websockets copied from here (read only)
@@ -351,7 +356,7 @@ step_A0() {
   local V=$BASE/venv-after W=$BASE/wheels-after
   if [[ ! -f $V/installed || $(<$V/installed) != "$GT $GL" ]]; then
     rm -rf $W; mkdir -p $W
-    wheel $GLREPO $GL src/graftling $W && wheel $WT $GT . $W || { print "STOP: a wheel did not build"; return 1; }
+    wheel $GLREPO $GL . $W && wheel $WT $GT . $W || { print "STOP: a wheel did not build"; return 1; }
     local gw hw; gw=$(one $W 'graftling-*.whl') && hw=$(one $W 'graphtraj-*.whl') || return 1
     [[ -e $V ]] && mv $V $V.$(date +%H%M%S)
     $CONDA -m venv $V && deps $V click yaml websockets && $V/bin/python -m pip install -q --disable-pip-version-check \
@@ -390,7 +395,9 @@ sys.exit(0 if ok else 1)') || FAILS+=(dependency-direction)
   if (( $#FAILS )); then print -r -- "
 NOT READY: ${FAILS[*]}"; return 1; fi
   print "READY: candidate installed, dependency direction PASS, roles x5, tasks probe and gate PASS"
-  next "zsh $THIS AX   (then zsh $THIS A all only for a Runtime whose candidate paths changed; then zsh $THIS G)"
+  # The v0.6.3 integration rebase changed no graftling code, only PUBLIC_API.md (551's 1.3 text moved to the root
+  # file) and one test path, so AX and A are not needed again for it; G is next.
+  next "zsh $THIS G   (AX/A not needed: the v0.6.3 rebase changed no graftling code, only PUBLIC_API.md and a test path)"
 }
 
 # A's headless probes per Runtime: plain, one manual deny, and (Codex, DSH) the beyond-host requests that have no
@@ -475,7 +482,7 @@ step_A() {
   if (( $#FAILS )); then print -r -- "
 NOT COMPLETE: ${FAILS[*]}"; return 1; fi
   print "COMPLETE"
-  next "zsh $THIS AU claude deny   (USER: the beyond-host request answered by you; then AC claude)"
+  next "zsh $THIS G   (optional before it: zsh $THIS AU claude deny, then AC claude; AU's Round-2 evidence is retained)"
 }
 
 # AX: the user's rule 'an allow/deny entry the child's Runtime does not know is refused or reported, never
@@ -623,7 +630,7 @@ g_venv() {  # G's venv: conda --system-site-packages + production click/yaml/web
   V=$T/venv-g-${GL[1,8]}
   if [[ -x $V/bin/python && -f $V/installed && $(<$V/installed) == "$GL $WT" ]]; then print -r -- "reusing $V"; return 0; fi
   rm -rf $V $T/wheels-g; mkdir -p $T/wheels-g
-  wheel $GLREPO $GL src/graftling $T/wheels-g || return 1   # never the working tree
+  wheel $GLREPO $GL . $T/wheels-g || return 1   # never the working tree; v0.6.3 builds from the archive root
   $CONDA -m venv --system-site-packages $V && deps $V click yaml websockets || return 1
   $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $(one $T/wheels-g 'graftling-*.whl') || return 1
   $V/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $WT 2>&1 | grep -vi cache
@@ -646,7 +653,7 @@ then graftling's own suite at $GL (git archive, editable). Dialog: none. Run not
   rm -rf $GS; mkdir -p $GS; gitr $GLREPO archive $GL | tar -x -C $GS || return 1
   local GV=$T/venv-gl-suite-${GL[1,8]}
   rm -rf $GV; $CONDA -m venv --system-site-packages $GV && deps $GV click yaml websockets \
-    && $GV/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $GS/src/graftling 2>&1 | grep -vi cache
+    && $GV/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation -e $GS 2>&1 | grep -vi cache
   (cd $RUNTMP && $V/bin/python -I -c 'import graphtraj, graftling, pytest; print("G venv: graphtraj", graphtraj.__file__, "| graftling", graftling.__version__, graftling.__file__, "| pytest", pytest.__version__)') | tee $R/run.txt
   (cd $RUNTMP && $GV/bin/python -I -c 'import graftling; print("graftling suite venv: graftling", graftling.__file__)') | tee -a $R/run.txt
   print -r -- "candidate: GraphTraj $(git -C $WT rev-parse HEAD) | graftling $GL | pytest temp root $RUNTMP (TMPDIR=$PYTEST_TMP)" | tee -a $R/run.txt

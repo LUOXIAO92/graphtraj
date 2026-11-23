@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Rehearsal stub of `claude`, SCRIPT CHECK ONLY: canned output, no Claude Code behaviour is claimed.
+
+--version prints a fixed version. Print mode prints one canned system/init (permissionMode default for
+claude-haiku-4-5-*, otherwise the --permission-mode value or default), a debug line on stderr when --debug is given,
+and a canned result. It makes no agents calls, so the acceptance verdicts of a stub parent FAIL (no create call).
+"""
+import json
+import sys
+
+argv = sys.argv[1:]
+if '--version' in argv:
+    print('2.1.330 (Claude Code)')
+    sys.exit(0)
+model = argv[argv.index('--model') + 1] if '--model' in argv else None
+requested = argv[argv.index('--permission-mode') + 1] if '--permission-mode' in argv else 'default'
+mode = 'default' if str(model).startswith('claude-haiku-4-5') else requested
+if '--debug' in argv:
+    print(f'[DEBUG] (stub) permission mode for {model}: requested {requested}, auto mode unavailable'
+          if mode != requested else f'[DEBUG] (stub) permission mode {mode}', file=sys.stderr)
+print(json.dumps({'type': 'system', 'subtype': 'init', 'model': model, 'permissionMode': mode,
+                  'apiKeySource': 'none (stub)', 'tools': ['Bash', 'mcp__graftling__agents'], 'stub': True}))
+print(json.dumps({'type': 'system', 'subtype': 'status', 'permissionMode': mode, 'stub': True}))
+print(json.dumps({'type': 'result', 'result': 'stub: no model call, no agents calls', 'is_error': False}))

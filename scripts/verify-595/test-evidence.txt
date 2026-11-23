@@ -1,0 +1,22 @@
+# Task 595 regression test: before (base 10a4d3a0 clone + this test and conftest hook) and after (fix)
+## base: /tmp/claude-501/595/venv-base (graphtraj editable from /tmp/claude-501/595/base at 10a4d3a0, graftling 0.8.0 wheel); pytest tests/test_member_registration_race.py
+                    if error.get('code') == 'MEMBER_REGISTRATION_FAILED'}, detail
+E       AssertionError: {'output': 'retained_batch_file: /private/tmp/claude-501/595/pt/base2/test_concurrent_members_all_re0/.graphtraj/state...95446052.7400162}, {'pid': 63214, 'kind': 'team-member-started', 'read': 1795446052.298719, 'lock': 1795446052.80322}]}
+E       assert not {'148-creation_order-handover0-spec_reviewer@spec_reviewer': {'code': 'MEMBER_REGISTRATION_FAILED', 'message': 'ValueError: The task changed before the delivery transition; inspect it again'}}
+                    if error.get('code') == 'MEMBER_REGISTRATION_FAILED'}, detail
+E       AssertionError: {'output': 'de-501/595/pt/base2/installed-environment0/venv/lib/python3.13/site-packages/graphtraj/teams/team_round.py...ck': 1795446057.195859}, {'pid': 63334, 'kind': 'team-started', 'read': 1795446056.748776, 'lock': 1795446057.253016}]}
+E       assert not {'148-creation_order-handover0-team_leader@team_leader': {'code': 'MEMBER_REGISTRATION_FAILED', 'message': 'ValueError: The task changed before the delivery transition; inspect it again'}}
+FAILED tests/test_member_registration_race.py::test_concurrent_members_all_register[joining]
+FAILED tests/test_member_registration_race.py::test_concurrent_members_all_register[new-team]
+2 failed in 17.74s
+
+## fix 1c4a090d: three repeats
+2 passed in 18.78s
+2 passed in 18.58s
+2 passed in 18.80s
+## fix fd107703 (adds the stderr notice assertion)
+2 passed in 18.88s
+## fix 1c4a090d: tests/test_member_creation_order.py tests/test_claude_runner.py
+27 passed, 3 skipped in 215.49s (0:03:35)
+## fix fd107703: tests/test_member_creation_order.py
+7 passed in 46.65s

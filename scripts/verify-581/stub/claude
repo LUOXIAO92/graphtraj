@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Rehearsal stand-in for claude (Task 581): only what steps.zsh calls. It checks the script, not graftling.
+
+--version; -p ... (stream-json): the prompt from the last argument or stdin. claude_isolation's preflight prompt gets
+'<TAG> <model>, logged in' and 'FILES: NONE'; a create prompt gets one completed claude-native record in
+./.agents-control. Both as system/init + result records; init lists mcp__graftling__agents when ./.mcp.json has the
+graftling server.
+"""
+import json, os, re, sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stubrecord
+
+args = sys.argv[1:]
+if args == ['--version']:
+    print('2.1.314 (Claude Code) (stub)'); sys.exit(0)
+prompt = args[-1] if args and args[-2:-1] == ['--'] else sys.stdin.read()
+model = args[args.index('--model') + 1] if '--model' in args else 'stub'
+mcp = Path('.mcp.json')
+server = json.loads(mcp.read_text()).get('mcpServers', {}).get('graftling') if mcp.exists() else None
+tools = ['Bash', 'Read'] + (['mcp__graftling__agents'] if server else [])
+print(json.dumps({'type': 'system', 'subtype': 'init', 'model': model, 'apiKeySource': 'ANTHROPIC_AUTH_TOKEN',
+                  'tools': tools, 'mcp_servers': [{'name': 'graftling', 'status': 'connected'}] if server else [],
+                  'plugins': [{'name': 'agents-claude-host'}] if server else []}))
+tag = re.search(r'Line 1: (\S+) followed', prompt)
+if tag:
+    text = f'{tag.group(1)} {model}, logged in\nFILES: NONE'
+else:
+    text = stubrecord.answer(prompt, 'claude', server and server.get('command'))
+print(json.dumps({'type': 'result', 'subtype': 'success', 'is_error': False, 'result': text,
+                  'modelUsage': {model: {}}}))

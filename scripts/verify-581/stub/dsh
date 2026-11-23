@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""Rehearsal stand-in for dsh (Task 581): only what steps.zsh calls. It checks the script, not graftling.
+
+--version; plugin --profile P add DIR (package.json 'link:DIR' and node_modules/graftling-dsh -> DIR, as pnpm does
+for a directory); --profile P PROMPT: a one-line answer, or for a create prompt one completed dsh-native record.
+"""
+import os, sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stubrecord
+
+args = sys.argv[1:]
+home = Path(os.environ.get('DSH_HOME') or Path.home() / '.dsh')
+if args == ['--version']:
+    print('0.2.2-rc.5 (stub)'); sys.exit(0)
+if args[:1] == ['plugin']:
+    profile = home / 'profiles' / args[2]
+    (profile / 'node_modules').mkdir(parents=True, exist_ok=True)
+    (profile / 'package.json').write_text('{"dependencies": {"graftling-dsh": "link:%s"}}\n' % args[-1])
+    link = profile / 'node_modules' / 'graftling-dsh'
+    if not link.is_symlink():
+        link.symlink_to(args[-1])
+    print('added (stub)'); sys.exit(0)
+link = home / 'profiles' / 'headless' / 'node_modules' / 'graftling-dsh'
+python = stubrecord.prefix_python(str(link)) if link.exists() else None
+print(stubrecord.answer(args[-1], 'dsh', python))

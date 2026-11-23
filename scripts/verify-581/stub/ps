@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""Rehearsal stand-in for ps (Task 581): the Engineer's sandbox cannot run /bin/ps. Main uses the real ps.
+
+`ps -axww -o pid=,ppid=,command=`: the live rows the stubs registered in $STUB581_PSFILE ("pid ppid command").
+Anything else: one line naming the stub.
+"""
+import os, sys
+
+if sys.argv[1:] != ['-axww', '-o', 'pid=,ppid=,command=']:
+    print('zsh (ps stub)'); sys.exit(0)
+path = os.environ.get('STUB581_PSFILE')
+for line in open(path) if path and os.path.exists(path) else []:
+    pid = int(line.split()[0])
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        continue
+    print(line.rstrip('\n'))

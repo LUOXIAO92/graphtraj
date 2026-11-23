@@ -721,7 +721,7 @@ def send_instruction(
     """Continue a Task member Session under GraphTraj's causal recording policy.
 
     GraphTraj delivery requires the causing Project Worldline events before it
-    calls the same continuation ``agents send`` uses, then records them with
+    calls the same continuation ``subagents send`` uses, then records them with
     the follow-up. ``reports_only`` selects report collection: the Session is
     resumed to return evidence it already holds, so it starts no new work and
     samples no stopping check.
@@ -731,7 +731,7 @@ def send_instruction(
         raise RunnerError(
             "invalid-input",
             "GraphTraj delivery continuation requires at least one causal Project "
-            "Worldline event ID; plain messages use agents send without one.",
+            "Worldline event ID; plain messages use subagents send without one.",
         )
     if (
         len(caused_by_event_ids) != len(set(caused_by_event_ids))
@@ -1445,7 +1445,7 @@ def interrupt_session(
     Each member is addressed directly through its native execution owner.
     Failure to reach one member does not prevent the others being stopped,
     and only native terminal evidence counts as a complete confirmation.
-    An ``ordinary`` interrupt (the public ``agents interrupt``) records who
+    An ``ordinary`` interrupt (the public ``subagents interrupt``) records who
     issued it, so that same direct parent can continue the Session later.
     ``abnormal_execution`` names the execution the Runner judged abnormal; its
     answer records that stop as ``kind: abnormal`` for that execution, so the

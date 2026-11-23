@@ -114,7 +114,7 @@ def stop_facts(root: Path) -> dict:
             blocking.append({'runner': alias, 'message': (
                 f'Stop and confirm the retained execution before cutover: {alias}. '
                 'Its direct parent confirms an unconfirmed end through the public interrupt '
-                '(agents interrupt), which retains a terminal-confirmation receipt.')})
+                '(subagents interrupt), which retains a terminal-confirmation receipt.')})
     for path in sorted((root / '.graphtraj/swarm/control/agents').glob('*.json')):
         record = json.loads(path.read_text())
         for execution in record.get('executions', []):

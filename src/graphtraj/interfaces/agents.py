@@ -859,11 +859,11 @@ def run_agents_feature(arguments: Mapping[str, Any], *, cwd: Path | None = None)
             caller = Caller('graphtraj-gateway', None, session=str(alias), runtime='codex')
         elif arguments.get('action') != 'status':
             return ToolResult({'error': {'code': 'authority-denied',
-                                        'message': 'Native helpers have read-only agents access.'}}, failed=True)
+                                        'message': 'Native helpers have read-only subagents access.'}}, failed=True)
     if alias is None and caller is None:
         return ToolResult({"action": arguments.get("action"), "error": {
             "code":    "authority-unavailable",
-            "message": "agents needs a verified caller: a managed Session or a verified native "
+            "message": "subagents needs a verified caller: a managed Session or a verified native "
                        "Main Session. This call has neither.",
         }}, failed=True)
     if caller is None:

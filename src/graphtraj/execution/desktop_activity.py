@@ -54,7 +54,7 @@ def observe(
     if task_id is None and alias is None and not human:
         # Defaults stay on the real hierarchy; only an explicit read lists project sources.
         raise ValueError('Supply task_id or alias for an explicit project read; '
-                         'the current hierarchy view is agents status.')
+                         'the current hierarchy view is subagents status.')
     return project_redact({**_observe(cwd, runner, task_id, alias, cursor), 'scope': 'project'})
 
 

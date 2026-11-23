@@ -1,8 +1,29 @@
 # Task 579 — graftling 0.8.0 release and production adoption of the paired GraphTraj candidate
 
 Production now: graphtraj 98125982 + graftling 0.7.0 (571, v0.7.0 = 6a1f18be).
-After 579: graphtraj 6aa25a80 (GraphTraj dev 4b20eed7 + `graftling>=0.8.0,<0.9`) + graftling 0.8.0
-(v0.8.0 = 542a81df). The user confirmed 0.8.0. No Task-state migration.
+After 579: graphtraj eb009725 (GraphTraj dev 4b20eed7 + `graftling>=0.8.0,<0.9` + the correction 1 test fix) +
+graftling 0.8.0 (v0.8.0 = 542a81df). The user confirmed 0.8.0. No Task-state migration.
+
+## Correction 1 (user decision Option A)
+
+Main's G on 6aa25a80 found one NEW failure:
+`tests/test_pi_attachment_private_paths.py::test_extension_still_hands_an_explicit_agents_session_to_graftling[agents-config]`.
+
+Cause: the test's fake Pi context gave every Session `getSessionFile() == ''`. Since graftling 585, a Session without a persistent Session file is a subagent child, which starts no host.
+
+Fix (`eb009725`, test only):
+- `extension_session_start(session_file=True)` gives only that case a persistent Session file, as a real Pi Main has.
+- Every other user keeps `''`.
+- src, plugins and pyproject.toml equal 6aa25a80's, and product_guard prints and enforces that.
+
+The candidate is now `eb009725`, so the raw directory is `raw-eb009725/` and the wheels, G records and V copies are named after it.
+
+rel, rp and gh are done; do not rerun them. If they were rerun:
+- rel only verifies (`already released`) and changes nothing.
+- rp pushes local graftling dev, main and v0.8.0 again, fast-forward only. main and the tag are unchanged; dev would move only if local dev has moved since.
+- gh only reads GitHub.
+
+Main reruns from B: B → G → GR (→ SR / suite-base only if NEW) → V → Vc → Mpre → I → …
 
 ## The two commits
 

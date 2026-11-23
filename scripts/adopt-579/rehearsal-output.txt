@@ -557,3 +557,572 @@ REHEARSAL PASS: real <Harness>/graftling untouched by the rehearsal (every branc
 
 REHEARSAL SUMMARY: 101 checks, all PASS
 rehearse-exit=0
+
+
+################ correction 1 (candidate eb009725 = 6aa25a80 + the Pi attachment test fix; steps d3553c93) ################
+Full rehearsal rerun: B, G and GR now run on the new candidate, and G runs the corrected test through its real entry.
+
+
+======== empty base: /private/tmp/claude-501/adopt579-rehearsal removed; zsh -n of every zsh file
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/579-graftling-next-release-and-production-adoption/scripts/adopt-579/rehearse.zsh:279: nice(5) failed: operation not permitted
+REHEARSAL PASS: zsh -n rehearse.zsh
+REHEARSAL PASS: zsh -n steps.zsh
+REHEARSAL PASS: base /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579 absent before 00
+Worktree HEAD d3553c93e03ca3eae3df056b0dfd23395cc55a05 | candidate eb00972580b0f8bb28dfc7f0da57a52ccafeb18f | graftling repository read only: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (dev 542a81df0c941f5b1a425d9807681b2a38daa87c, main 542a81df0c941f5b1a425d9807681b2a38daa87c)
+
+======== setup: scratch graftling (dev = fb9db6a6 in a linked worktree, main = v0.7.0, origin = scratch bare), scratch GraphTraj (dev = 4b20eed7)
+scratch graftling: dev fb9db6a6937ae67526cf815ad8da7504c817983a main 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca v0.8.0 absent | origin /private/tmp/claude-501/adopt579-rehearsal/remote.git | worktrees: 2
+scratch GraphTraj: HEAD d3553c93e03ca3eae3df056b0dfd23395cc55a05 dev 4b20eed7d3013bd2ae5e66d460cf0dbaf59eee00
+
+======== setup: fake production = graphtraj 98125982 + graftling v0.7.0, plugin, configuration; stubs
+graftling-0.7.0-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+Create dev from de663ff77acd49d6b2f1105253cfdca5e50c99ba? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+  state: .graphtraj/core/state
+fake production .mcp.json servers: ['graphtraj']
+fake production Task state: 493 Task directories (copied, read only)
+
+======== 00 (Claude and Codex answer; TMPDIR outside; 579 markers absent in production; Task state left alone)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+codex: /private/tmp/claude-501/adopt579-rehearsal/stub/codex -> /private/tmp/claude-501/adopt579-rehearsal/stub/codex | version: codex-cli 0.171.0 (stub)
+codex exec rc=0 (142 = 180 s timeout)
+codex configured /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/00-codex.err:model: gpt-5.5-codex (stub configured model)
+CHECK 579 Codex answers CODEX-579-OK (configured model, logged in): PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+Task directories: 493 | task.md: 0 (expect 0) | definitions/*.md: 1402
+Version: 0.1.0
+Version: 0.7.0
+571 backup COMPLETE marker: present
+markers expected absent: PASS (7/7)
+CHECK 579 probe Task 579 ready (current_definition definitions/20261123T194223.690391+0900.md exists): PASS
+CHECK 579 575 arguments file /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/args-575.json inside the project, outside .graphtraj: PASS
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/main.session)
+isolation: OK
+Claude Code installed: 2.1.325 (stub Claude Code)
+answer check (expect clean): OK
+codex: /private/tmp/claude-501/adopt579-rehearsal/stub/codex -> /private/tmp/claude-501/adopt579-rehearsal/stub/codex | version: codex-cli 0.171.0 (stub)
+codex exec rc=0 (142 = 180 s timeout)
+codex configured /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/00-codex.err:model: gpt-5.5-codex (stub configured model)
+CHECK 579 Codex answers CODEX-579-OK (configured model, logged in): PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+Task directories: 493 | task.md: 0 (expect 0) | definitions/*.md: 1402
+Version: 0.1.0
+Version: 0.7.0
+571 backup COMPLETE marker: present
+markers expected absent: PASS (7/7)
+CHECK 579 probe Task 579 ready (current_definition definitions/20261123T194223.690391+0900.md exists): PASS
+CHECK 579 575 arguments file /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/args-575.json inside the project, outside .graphtraj: PASS
+MAIN=11111111-2222-3333-4444-555555555555 (saved to /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/main.session)
+REHEARSAL PASS: 00 exit 0, MAIN found
+REHEARSAL PASS: 00: Claude answer check OK and Codex CHECK PASS
+REHEARSAL PASS: 00: TMPDIR outside the Harness, zsh interpreter
+REHEARSAL PASS: 00: 579 markers absent in production (7/7), graftling 0.7.0
+REHEARSAL PASS: 00: task.md counted 0 with count() (no 'print -l | wc -l' miscount)
+REHEARSAL PASS: 00: probe Task 579 ready and the 575 arguments file path inside the project; provider lines printed
+REHEARSAL PASS: 00 next is rel
+
+======== B before rel (no v0.8.0 tag yet) refuses
+REHEARSAL PASS: B negative: without rel, v0.8.0 is missing -> STOP
+
+======== rel negatives: dev without the base; a wrong existing v0.8.0
+REHEARSAL PASS: rel negative: dev does not contain fb9db6a6 -> STOP, nothing changed
+REHEARSAL PASS: rel negative: an existing v0.8.0 at another commit -> STOP
+
+======== rel with dev moved by 570 (clean): merge 542a81df0c941f5b1a425d9807681b2a38daa87c into dev as the noreply identity
+dev: 2fd529ed83fe1e9d57c066702f76535b4638344e | main: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | v0.8.0: absent | dev checked out in: /private/tmp/claude-501/adopt579-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt579-rehearsal/gmoved
+### dev moved since dispatch (fb9db6a6937ae67526cf815ad8da7504c817983a -> 2fd529ed83fe1e9d57c066702f76535b4638344e: 1 commits, e.g. 570): merge 542a81df0c941f5b1a425d9807681b2a38daa87c into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+dev: merged, now 7fc199cfc81741ca023de86e73411a1d219b918e (parents: 2fd529ed83fe1e9d57c066702f76535b4638344e 542a81df0c941f5b1a425d9807681b2a38daa87c) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 579 v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 graftling main == v0.8.0: PASS
+CHECK 579 graftling dev == v0.8.0 (fast-forward) or a noreply merge containing it: PASS (merge 7fc199cfc81741ca023de86e73411a1d219b918e)
+CHECK 579 v0.8.0 is annotated with the noreply tagger: PASS
+version at v0.8.0: __version__ = "0.8.0" | root package.json:  | version on dev: __version__ = "0.8.0"
+dev: 2fd529ed83fe1e9d57c066702f76535b4638344e | main: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | v0.8.0: absent | dev checked out in: /private/tmp/claude-501/adopt579-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt579-rehearsal/gmoved
+dev: merged, now 7fc199cfc81741ca023de86e73411a1d219b918e (parents: 2fd529ed83fe1e9d57c066702f76535b4638344e 542a81df0c941f5b1a425d9807681b2a38daa87c) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 579 v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 graftling main == v0.8.0: PASS
+CHECK 579 graftling dev == v0.8.0 (fast-forward) or a noreply merge containing it: PASS (merge 7fc199cfc81741ca023de86e73411a1d219b918e)
+CHECK 579 v0.8.0 is annotated with the noreply tagger: PASS
+version at v0.8.0: __version__ = "0.8.0" | root package.json:  | version on dev: __version__ = "0.8.0"
+成功: 四行 CHECK 579 PASS（v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c；main == v0.8.0；dev == v0.8.0 (fast-forward) 或含它的 noreply 合并；annotated, noreply tagger）；version at v0.8.0: __version__ = "0.8.0"；root package.json: "version":"0.8.0"。
+REHEARSAL PASS: rel dev moved: exit 0, four CHECK PASS
+REHEARSAL PASS: rel dev moved: dev is a merge (parents 2fd529ed + 542a81df) by 89069722+LUOXIAO92@users.noreply.github.com; main = v0.8.0 = 542a81df0c941f5b1a425d9807681b2a38daa87c; worktree clean
+REHEARSAL PASS: rel dev moved, dev checked out nowhere: merge-tree + commit-tree merge by 89069722+LUOXIAO92@users.noreply.github.com (parents fae44c8b + 542a81df), four CHECK PASS
+
+======== rel with a conflicting dev (CHANGELOG edited by 570): worktree path and no-worktree path STOP with nothing changed
+[rel] Main. graftling 0.8.0 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/579-graftling-next-release-and-production-adoption/scripts/adopt-579/graftling-0.8.0.bundle 按 SHA 取 agent/579-graftling-0.8.0（542a81df0c941f5b1a425d9807681b2a38daa87c，父提交 fb9db6a6937ae67526cf815ad8da7504c817983a），dev 到 542a81df0c941f5b1a425d9807681b2a38daa87c（dev 仍为 fb9db6a6 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 542a81df0c941f5b1a425d9807681b2a38daa87c，建注释 tag v0.8.0（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt579-rehearsal/gconf-worktree 的 dev、main、agent/579-graftling-0.8.0 与 tag。
+### dev moved since dispatch (fb9db6a6937ae67526cf815ad8da7504c817983a -> 21a5e72f7a569a2f70d1b9eb8251b63aeb711bff: 1 commits, e.g. 570): merge 542a81df0c941f5b1a425d9807681b2a38daa87c into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+conflicted files: CHANGELOG.md 
+REHEARSAL PASS: rel conflict (worktree): STOP; dev still 21a5e72f, main still v0.7.0, no v0.8.0
+[rel] Main. graftling 0.8.0 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/579-graftling-next-release-and-production-adoption/scripts/adopt-579/graftling-0.8.0.bundle 按 SHA 取 agent/579-graftling-0.8.0（542a81df0c941f5b1a425d9807681b2a38daa87c，父提交 fb9db6a6937ae67526cf815ad8da7504c817983a），dev 到 542a81df0c941f5b1a425d9807681b2a38daa87c（dev 仍为 fb9db6a6 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 542a81df0c941f5b1a425d9807681b2a38daa87c，建注释 tag v0.8.0（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt579-rehearsal/gconf-plain 的 dev、main、agent/579-graftling-0.8.0 与 tag。
+### dev moved since dispatch (fb9db6a6937ae67526cf815ad8da7504c817983a -> 6a53a937a160149bba7dfa586b30a2bb5b6ed2fc: 1 commits, e.g. 570): merge 542a81df0c941f5b1a425d9807681b2a38daa87c into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+merge-tree: exit 1 | c9321f8b5d12b942a979fd83dddb04c48e413a87 | 100644 0a102a942d5ec29352ed83397fa845ee059c7c8a 1	CHANGELOG.md | 100644 d3da8c29e4f83b2f1b97106d335fc3a0ba1f19c4 2	CHANGELOG.md | 100644 c32d5882dbbb60c210140051742e67fd83edd5db 3	CHANGELOG.md |  | Auto-merging CHANGELOG.md | CONFLICT (content): Merge conflict in CHANGELOG.md
+REHEARSAL PASS: rel conflict (plain): STOP; dev still 6a53a937, main still v0.7.0, no v0.8.0
+REHEARSAL PASS: rel conflict (plain): dev checked out nowhere, so rel used git merge-tree (no worktree touched)
+REHEARSAL PASS: rel conflict (worktree): the merge was aborted, dev's worktree clean
+
+======== rel (scratch graftling, dev = base): fetch the bundle, dev and main fast-forward, annotated noreply tag
+dev: fb9db6a6937ae67526cf815ad8da7504c817983a | main: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | v0.8.0: absent | dev checked out in: /private/tmp/claude-501/adopt579-rehearsal/graftling-dev | main checked out in: /private/tmp/claude-501/adopt579-rehearsal/graftling
+### dev: fast-forward fb9db6a6937ae67526cf815ad8da7504c817983a -> 542a81df0c941f5b1a425d9807681b2a38daa87c
+dev: fast-forwarded to 542a81df0c941f5b1a425d9807681b2a38daa87c
+CHECK 579 v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 graftling main == v0.8.0: PASS
+CHECK 579 graftling dev == v0.8.0 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
+CHECK 579 v0.8.0 is annotated with the noreply tagger: PASS
+version at v0.8.0: __version__ = "0.8.0" | root package.json:  | version on dev: __version__ = "0.8.0"
+dev: fb9db6a6937ae67526cf815ad8da7504c817983a | main: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | v0.8.0: absent | dev checked out in: /private/tmp/claude-501/adopt579-rehearsal/graftling-dev | main checked out in: /private/tmp/claude-501/adopt579-rehearsal/graftling
+dev: fast-forwarded to 542a81df0c941f5b1a425d9807681b2a38daa87c
+CHECK 579 v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 graftling main == v0.8.0: PASS
+CHECK 579 graftling dev == v0.8.0 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
+CHECK 579 v0.8.0 is annotated with the noreply tagger: PASS
+version at v0.8.0: __version__ = "0.8.0" | root package.json:  | version on dev: __version__ = "0.8.0"
+成功: 四行 CHECK 579 PASS（v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c；main == v0.8.0；dev == v0.8.0 (fast-forward) 或含它的 noreply 合并；annotated, noreply tagger）；version at v0.8.0: __version__ = "0.8.0"；root package.json: "version":"0.8.0"。
+REHEARSAL PASS: rel exit 0 with four CHECK PASS
+REHEARSAL PASS: rel: v0.8.0 = dev = main = 542a81df0c941f5b1a425d9807681b2a38daa87c (dev's linked worktree too), tagger noreply, version 0.8.0
+REHEARSAL PASS: rel: prints the push as a separate step after the USER's yes, then gh, and the GraphTraj integration
+REHEARSAL PASS: rel again: already released, nothing to do
+
+======== rp: refused without the USER's yes; with it, pushes to the scratch bare origin (never GitHub)
+REHEARSAL PASS: gh negative: before rp GitHub (the scratch bare) has no v0.8.0 and main is not 542a81df0c941f5b1a425d9807681b2a38daa87c -> FAIL, nothing installed
+REHEARSAL PASS: rp without the USER's confirmation refuses (no push); its header says Main asks the USER
+REHEARSAL PASS: rp target is the scratch bare repository
+[rp] Main，Main 先问 USER，仅在 USER 明确同意之后。对外推送 graftling dev、main 与 v0.8.0 到它的 remote（只快进，不 force）。对话框: 无（git 凭据由用户的 git 配置提供；若 git 要登录，用用户平常的 GitHub 登录）。< 30 秒。
+CHECK 579 v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 graftling main == v0.8.0: PASS
+CHECK 579 graftling dev == v0.8.0 (fast-forward) or a noreply merge containing it: PASS (fast-forward)
+CHECK 579 v0.8.0 is annotated with the noreply tagger: PASS
+remote origin: /private/tmp/claude-501/adopt579-rehearsal/remote.git
+remote before: fb9db6a6937ae67526cf815ad8da7504c817983a	refs/heads/dev 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca	refs/heads/main 
+To /private/tmp/claude-501/adopt579-rehearsal/remote.git
+remote now: 542a81df0c941f5b1a425d9807681b2a38daa87c	refs/heads/dev 542a81df0c941f5b1a425d9807681b2a38daa87c	refs/heads/main 542a81df0c941f5b1a425d9807681b2a38daa87c	refs/tags/v0.8.0^{}
+CHECK 579 remote main and v0.8.0 = 542a81df0c941f5b1a425d9807681b2a38daa87c, remote dev = local dev: PASS
+成功: 'CHECK 579 remote main and v0.8.0 = 542a81df0c941f5b1a425d9807681b2a38daa87c, remote dev = local dev: PASS'。
+REHEARSAL PASS: rp confirmed: remote main and v0.8.0 = 542a81df0c941f5b1a425d9807681b2a38daa87c, remote dev = local dev
+
+======== gh (result 4): GitHub's (here the scratch bare's) main and v0.8.0 resolve to the release commit; nothing installed
+GitHub (/private/tmp/claude-501/adopt579-rehearsal/remote.git): 542a81df0c941f5b1a425d9807681b2a38daa87c	refs/heads/main | d095c1e723d75160d00d68ad25906b2eda021a9d	refs/tags/v0.8.0 | 542a81df0c941f5b1a425d9807681b2a38daa87c	refs/tags/v0.8.0^{}
+CHECK 579 gh: GitHub graftling main = 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 gh: GitHub v0.8.0 resolves to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 gh: GitHub v0.8.0 is the local annotated tag object (d095c1e723d75160d00d68ad25906b2eda021a9d): PASS
+installed: nothing (no dsh plugin add, no host, dotfile or ~/.dsh change)
+GitHub (/private/tmp/claude-501/adopt579-rehearsal/remote.git): 542a81df0c941f5b1a425d9807681b2a38daa87c	refs/heads/main | d095c1e723d75160d00d68ad25906b2eda021a9d	refs/tags/v0.8.0 | 542a81df0c941f5b1a425d9807681b2a38daa87c	refs/tags/v0.8.0^{}
+CHECK 579 gh: GitHub graftling main = 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 gh: GitHub v0.8.0 resolves to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS
+CHECK 579 gh: GitHub v0.8.0 is the local annotated tag object (d095c1e723d75160d00d68ad25906b2eda021a9d): PASS
+installed: nothing (no dsh plugin add, no host, dotfile or ~/.dsh change)
+成功: 'CHECK 579 gh: GitHub graftling main = 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS'；'CHECK 579 gh: GitHub v0.8.0 resolves to 542a81df0c941f5b1a425d9807681b2a38daa87c: PASS'；'CHECK 579 gh: GitHub v0.8.0 is the local annotated tag object (…): PASS'；'installed: nothing'。
+REHEARSAL PASS: gh exit 0: three CHECK PASS (main, tag peels, the local annotated tag object)
+REHEARSAL PASS: gh: ~/.dsh profiles unchanged; nothing installed
+
+======== B: wheels from git archive v0.8.0 (archive root) and of the candidate; version strings; requirement pairs
+REHEARSAL PASS: B exit 0
+REHEARSAL PASS: B (correction 1): guard says src plugins pyproject.toml of eb009725 = 6aa25a80
+### GraphTraj dev (information only; integration follows the Leader's acceptance, before T)
+GraphTraj dev: 4b20eed7d3013bd2ae5e66d460cf0dbaf59eee00 | dev contains eb009725: no | the wheel is built from git archive eb00972580b0f8bb28dfc7f0da57a52ccafeb18f
+main: 542a81df0c941f5b1a425d9807681b2a38daa87c | dev: 542a81df0c941f5b1a425d9807681b2a38daa87c | main = v0.8.0: yes | dev contains v0.8.0: yes
+v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: yes
+v0.8.0 is an annotated tag (cat-file -t: tag): yes
+CHECK 579 v0.8.0 version strings all 0.8.0: PASS
+CHANGELOG heading: ## 0.8.0 (incompatible)
+CHECK 579 v0.8.0 has no 0.7.0 install route (root package.json, dsh/plugin_python.py, root marketplace; 581): PASS
+f4b0de4613383195e1f15514908180894e15300c9890de45f36f99b0c04f8726  graftling-0.8.0-py3-none-any.whl
+dbf87d3fd065db84f88fd89de907d428c086f4526aa454272413bc4ca975a3e3  graphtraj-0.1.0-py3-none-any.whl
+CHECK 579 Requires-Dist graftling<0.9,>=0.8.0 satisfied by 0.8.0: PASS
+CHECK 579 Requires-Dist graftling<0.9,>=0.8.0 NOT satisfied by 0.7.0: PASS
+CHECK 579 Requires-Dist graftling<0.9,>=0.8.0 NOT satisfied by 0.9.0: PASS
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/src-eb009725/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 579 graphtraj wheel equals git archive eb009725: PASS
+graftling graftling-0.8.0-py3-none-any.whl vs /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/gsrc-0.8.0/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 579 graftling wheel equals git archive v0.8.0: PASS
+markers expected present: PASS (7/7)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+### GraphTraj dev (information only; integration follows the Leader's acceptance, before T)
+GraphTraj dev: 4b20eed7d3013bd2ae5e66d460cf0dbaf59eee00 | dev contains eb009725: no | the wheel is built from git archive eb00972580b0f8bb28dfc7f0da57a52ccafeb18f
+main: 6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca | dev: fb9db6a6937ae67526cf815ad8da7504c817983a | main = v0.8.0: NO | dev contains v0.8.0: NO
+### GraphTraj dev (information only; integration follows the Leader's acceptance, before T)
+GraphTraj dev: 4b20eed7d3013bd2ae5e66d460cf0dbaf59eee00 | dev contains eb009725: no | the wheel is built from git archive eb00972580b0f8bb28dfc7f0da57a52ccafeb18f
+main: 542a81df0c941f5b1a425d9807681b2a38daa87c | dev: 542a81df0c941f5b1a425d9807681b2a38daa87c | main = v0.8.0: yes | dev contains v0.8.0: yes
+v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: yes
+v0.8.0 is an annotated tag (cat-file -t: tag): yes
+CHECK 579 v0.8.0 version strings all 0.8.0: PASS
+CHANGELOG heading: ## 0.8.0 (incompatible)
+CHECK 579 v0.8.0 has no 0.7.0 install route (root package.json, dsh/plugin_python.py, root marketplace; 581): PASS
+f4b0de4613383195e1f15514908180894e15300c9890de45f36f99b0c04f8726  graftling-0.8.0-py3-none-any.whl
+dbf87d3fd065db84f88fd89de907d428c086f4526aa454272413bc4ca975a3e3  graphtraj-0.1.0-py3-none-any.whl
+CHECK 579 Requires-Dist graftling<0.9,>=0.8.0 satisfied by 0.8.0: PASS
+CHECK 579 Requires-Dist graftling<0.9,>=0.8.0 NOT satisfied by 0.7.0: PASS
+CHECK 579 Requires-Dist graftling<0.9,>=0.8.0 NOT satisfied by 0.9.0: PASS
+CHECK 579 graphtraj wheel equals git archive eb009725: PASS
+CHECK 579 graftling wheel equals git archive v0.8.0: PASS
+markers expected present: PASS (7/7)
+### no build/ or __pycache__ inside the wheels (expect leaked: 0)
+leaked: 0
+成功: 'product guard: PASS'；'GraphTraj dev: … dev contains eb009725: …' 只是信息；'v0.8.0 peels to 542a81df0c941f5b1a425d9807681b2a38daa87c: yes' 与 'annotated … yes'；'CHECK 579 v0.8.0 version strings all 0.8.0: PASS'；/private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725 有 graphtraj-0.1.0 与 graftling-0.8.0 两个 wheel；'CHECK 579 Requires-Dist … satisfied by 0.8.0: PASS' 与 '… NOT satisfied by 0.7.0: PASS'、'… NOT satisfied by 0.9.0: PASS'；两行 'CHECK 579 … wheel equals git archive …: PASS'；'markers expected present: PASS (7/7)'；carries graftling/: 0；leaked: 0。
+REHEARSAL PASS: B: GraphTraj dev reported as information only; v0.8.0 annotated, peels to 542a81df0c941f5b1a425d9807681b2a38daa87c
+REHEARSAL PASS: B: every version string 0.8.0; CHANGELOG heading 0.8.0
+REHEARSAL PASS: B: no 0.7.0 install route in v0.8.0 (581)
+REHEARSAL PASS: B: Requires-Dist satisfied by 0.8.0 and NOT by 0.7.0 or 0.9.0
+REHEARSAL PASS: B: both wheels = their archives; markers present 8/8; leaked 0
+REHEARSAL PASS: B: the install directory holds exactly graphtraj-0.1.0 and graftling-0.8.0
+REHEARSAL PASS: B negative: a tag that does not peel to the expected commit STOPs
+REHEARSAL PASS: B negative: a wrong GraphTraj target commit STOPs at the guard
+REHEARSAL PASS: guard negative: an uncommitted src change STOPs
+
+======== G negative: a ps that cannot list processes STOPs G (never read as 'no other suite')
+REHEARSAL PASS: G with a failing ps: STOP before anything starts, exit != 0
+
+======== G through its real entry (6 shards; -k selects real tests, two with repository fixtures), queued behind a running suite; then GR
+REHEARSAL PASS: GR before any G: STOP 'run G first', FAIL
+G record: /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/G-eb009725-20261123T213556
+pytest temp root: /private/tmp/claude-501/adopt-579-G-20261123T213556 (TMPDIR=/tmp/claude-501, outside the Harness)
+launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+candidate: d3553c93e03ca3eae3df056b0dfd23395cc55a05 | graftling wheel from git archive 542a81df0c941f5b1a425d9807681b2a38daa87c (v0.8.0, /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graftling-0.8.0-py3-none-any.whl)
+python: /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/gvenv-eb009725/bin/python
+test interpreter dependencies: click 8.5.0 (/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/gvenv-eb009725/lib/python3.13/site-packages/click/__init__.py) | PyYAML 6.0.3 (/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/gvenv-eb009725/lib/python3.13/site-packages/yaml/__init__.py) | websockets 16.1.1 (/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/gvenv-eb009725/lib/python3.13/site-packages/websockets/__init__.py) | pytest 9.1.1 (/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pytest/__init__.py)
+REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract or test_child_tool_descriptions_match_the_members_entry or test_native_claude_lifecycle_without_a_task or test_extension_still_hands_an_explicit_agents_session_to_graftling
+WAITING: Main's suite queue is serial and another suite is running now; G is queued and starts by itself when it ends (checked every 2 s; nothing to do meanwhile; progress: tail -f /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/G-eb009725-20261123T213556/wait.txt):
+  running: 4242 1 /usr/bin/python3 scripts/run_test_shards.py --shards 6 (another Task's suite, simulated)
+queued in the background at 21:35:59; output: /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/G-eb009725-20261123T213556/suite.txt (last line 'exit=N' when it ends; about 25-30 min of run time once started)
+REHEARSAL PASS: G queued: says WAITING with the running suite, never stops (exit 0)
+REHEARSAL PASS: G record: pytest temp under TMPDIR (outside the Harness), clean launch environment, candidate, graftling commit, click 8.5.0
+REHEARSAL PASS: GR while G waits or runs: 'not finished', FAIL
+21:35:59 waiting for another suite: 4242 
+21:36:01 waiting for another suite: 4242 
+21:36:03 started
+21:36:08 ended (exit=1)
+ABNORMAL /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/G-eb009725-20261123T213556/shards/shard-3.log: exit 5
+7 passed, 3742 deselected
+logs: /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/G-eb009725-20261123T213556/shards
+exit=1
+REHEARSAL PASS: G waited then started by itself: wait.txt has 'waiting for another suite: 4242' then 'started' and 'ended'
+REHEARSAL PASS: G rehearsal: the selected real tests PASSED through G's entry (not collect-only), incl. fixture users; no FAILED line
+PASSED tests/test_agents_native_claude.py::test_native_claude_lifecycle_without_a_task
+PASSED tests/test_child_server_name_551.py::test_child_tool_descriptions_match_the_members_entry
+PASSED tests/test_graphtraj_public_agents_api.py::test_every_public_name_is_listed_in_the_contract
+PASSED tests/test_graphtraj_public_agents_api.py::test_graphtraj_uses_only_published_agents_names
+PASSED tests/test_pi_attachment_private_paths.py::test_extension_still_hands_an_explicit_agents_session_to_graftling
+PASSED tests/test_runtime_distribution.py::test_wheels_have_separate_owners
+REHEARSAL PASS: G (correction 1): the corrected test ran through G's real entry and PASSED, both params
+REHEARSAL PASS: G rehearsal: no provider credential reached the suite environment (the exported FAKE_PROVIDER_API_KEY value is in no G file)
+totals: 7 passed, 3742 deselected | exit: 1
+node ids read from: 6 shard logs (whole ids)
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/G-eb009725-20261123T213556/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/G-eb009725-20261123T213556/shards/shard-3.log: exit 5
+CHECK 579 G record (d3553c93 + v0.8.0) no new failure: FAIL
+CHECK 579 GR (guard + G record): FAIL
+totals: 7 passed, 3742 deselected | exit: 1
+node ids read from: 6 shard logs (whole ids)
+CHECK 579 G record (d3553c93 + v0.8.0) no new failure: FAIL
+CHECK 579 GR (guard + G record): FAIL
+REHEARSAL PASS: GR reads the newest G record by itself: same product, graftling 542a81df0c941f5b1a425d9807681b2a38daa87c, click 8.5.0; ids from the shard logs; no NEW
+
+======== GR / SR mechanics on REHEARSAL FIXTURE records (shard logs with whole ids), and negatives on copies
+product guard: HEAD d3553c93e03ca3eae3df056b0dfd23395cc55a05 | git diff eb009725 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: src plugins pyproject.toml of eb009725 = 6aa25a80 (correction 1 changed tests only): yes
+product guard: PASS (HEAD's src tests plugins pyproject.toml = eb009725; only scripts/ differ)
+candidate: d3553c93e03ca3eae3df056b0dfd23395cc55a05 | git diff d3553c93 eb009725 -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: 542a81df0c941f5b1a425d9807681b2a38daa87c | = v0.8.0 (542a81df0c941f5b1a425d9807681b2a38daa87c): yes
+totals: 1 failed, 3690 passed, 48 skipped | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+node ids read from: 1 shard logs (whole ids)
+  known (516): tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
+CHECK 579 G record (d3553c93 + v0.8.0) no new failure: PASS
+CHECK 579 GR (guard + G record): PASS
+product guard: HEAD d3553c93e03ca3eae3df056b0dfd23395cc55a05 | git diff eb009725 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: src plugins pyproject.toml of eb009725 = 6aa25a80 (correction 1 changed tests only): yes
+product guard: PASS (HEAD's src tests plugins pyproject.toml = eb009725; only scripts/ differ)
+candidate: d3553c93e03ca3eae3df056b0dfd23395cc55a05 | git diff d3553c93 eb009725 -- src tests plugins pyproject.toml: empty | same product: yes
+graftling commit of the wheel: 542a81df0c941f5b1a425d9807681b2a38daa87c | = v0.8.0 (542a81df0c941f5b1a425d9807681b2a38daa87c): yes
+totals: 1 failed, 3690 passed, 48 skipped | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+node ids read from: 1 shard logs (whole ids)
+  known (516): tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
+CHECK 579 G record (d3553c93 + v0.8.0) no new failure: PASS
+CHECK 579 GR (guard + G record): PASS
+REHEARSAL PASS: GR on the fixture: the 516-named test is known; PASS
+REHEARSAL PASS: GR negative: an unknown FAILED id (with spaces in its parameter) -> NEW as the WHOLE id, FAIL, no PASS left in GR.txt
+[SR] Main，只读（如 verify-586 的 SR）。最新 G 记录的 FAILED/ERROR 完整 node id（从 shard 日志读；suite.txt 的摘要会在第一个空格处截断 id），按 516 当前定义分为 known 或 NEW；写 new-ids.txt；有 NEW 时打印 suite-base 命令（每个 id 是单独的参数）。对话框: 无。< 10 秒。
+  NEW: tests/test_x.py::test_y[fallback-unexplained-Runtime reason: a b]
+SR verdict: FAIL (NEW lines above)
+NEW node ids (1, one per line): /private/tmp/claude-501/adopt579-rehearsal/gneg/a/new-ids.txt
+next (paste): zsh '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/579-graftling-next-release-and-production-adoption/scripts/adopt-579/steps.zsh' suite-base 'tests/test_x.py::test_y[fallback-unexplained-Runtime reason: a b]'
+or (paste):   zsh '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/579-graftling-next-release-and-production-adoption/scripts/adopt-579/steps.zsh' suite-base --from '/private/tmp/claude-501/adopt579-rehearsal/gneg/a'/new-ids.txt
+REHEARSAL PASS: SR: FAIL with the NEW id; prints suite-base with the id as ONE quoted argument, and the --from form
+REHEARSAL PASS: GR negative: an ABNORMAL shard (exit 2) -> FAIL
+REHEARSAL PASS: GR negative: a G run with another graftling commit -> FAIL
+REHEARSAL PASS: GR negative: a test interpreter with Miniconda's click 8.2.1 -> FAIL
+
+======== suite-base: one real id on GraphTraj 4b20eed7 + graftling fb9db6a6 (wheel) and on the candidate (G's venv)
+  id: tests/test_runtime_distribution.py::test_wheels_have_separate_owners
+base: /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/graphtraj-base (graftling fb9db6a6937ae67526cf815ad8da7504c817983a (wheel) + graphtraj 4b20eed7d3013bd2ae5e66d460cf0dbaf59eee00 (editable)) | candidate: /private/tmp/claude-501/adopt579-rehearsal/wt with /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/gvenv-eb009725 (graftling v0.8.0 wheel)
+base: pytest in /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/graphtraj-base | pytest temp root /private/tmp/claude-501/adopt-579-sb-base-20261123T213618 (TMPDIR, outside the Harness) | launch environment: HOME USER PATH TERM TMPDIR LANG only
+base: pytest exit=0, 1 passed in 1.54s (output: /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/suite-base-20261123T213618/base.txt)
+candidate: pytest in /private/tmp/claude-501/adopt579-rehearsal/wt | pytest temp root /private/tmp/claude-501/adopt-579-sb-candidate-20261123T213620 (TMPDIR, outside the Harness) | launch environment: HOME USER PATH TERM TMPDIR LANG only
+candidate: pytest exit=0, 1 passed in 1.52s (output: /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/suite-base-20261123T213618/candidate.txt)
+### classification (each id: base, then candidate)
+passes on both now (not reproduced): tests/test_runtime_distribution.py::test_wheels_have_separate_owners   [base passed | candidate passed]
+next: give /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/suite-base-20261123T213618/classification.txt to the Leader; a candidate-only id is a regression of this release
+REHEARSAL PASS: suite-base: both sides ran the id in a clean environment with a temp root outside the Harness; classified
+REHEARSAL PASS: GR: earlier GR.txt kept as GR-<time>.txt
+
+======== V: plugin hooks/host_context.mjs changed by exactly 577 (predicted); real MCP tools/list and Codex hooks entry; markers both ways
+REHEARSAL PASS: V exit 0
+graftling v0.7.0..v0.8.0 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py src/graftling/claude/host.py src/graftling/claude/host_context.mjs 
+graphtraj 98125982..eb009725 under plugins/ and src/graphtraj/runtimes/claude: src/graphtraj/runtimes/claude/host.py src/graphtraj/runtimes/claude/mcp.py 
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+host_context.mjs differences: removed 1 line(s), added 3 line(s)
+CHECK 579 plugin hooks/host_context.mjs differs by exactly 577's --data-root change: PASS
+CHECK 579 candidate plugin as predicted (only hooks/host_context.mjs, by 577): PASS (the plugin/hooks trust dialog for graphtraj-claude-host is expected at claude --continue: USER trusts it)
+INFO graftling v0.8.0 differs from production 0.7.0 (information): differs (expected; information, not a check)
+INFO graphtraj eb009725 differs from production 98125982 (information): differs (expected; information, not a check)
+CHECK 579 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 579 Codex hooks entry names /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 579 Codex hooks entry runs (neutral event answers {}): PASS
+markers expected present: PASS (7/7)
+markers expected absent: PASS (7/7)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725 vs /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725)
+CHECK 503 layout one distribution: PASS (1 found: [('0.8.0', '/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling-0.8.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.8.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graftling-0.8.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling/__init__.py version 0.8.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling/: PASS
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+task graph of the clone: tasks = 493
+graftling v0.7.0..v0.8.0 under src/graftling/claude: src/graftling/claude/driver.py src/graftling/claude/execution.py src/graftling/claude/host.py src/graftling/claude/host_context.mjs 
+graphtraj 98125982..eb009725 under plugins/ and src/graphtraj/runtimes/claude: src/graphtraj/runtimes/claude/host.py src/graphtraj/runtimes/claude/mcp.py 
+SAME    .claude-plugin/plugin.json
+SAME    hooks/hooks.json
+CHANGED hooks/host_context.mjs
+CHECK 579 plugin hooks/host_context.mjs differs by exactly 577's --data-root change: PASS
+CHECK 579 candidate plugin as predicted (only hooks/host_context.mjs, by 577): PASS (the plugin/hooks trust dialog for graphtraj-claude-host is expected at claude --continue: USER trusts it)
+CHECK 579 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 579 Codex hooks entry names /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 579 Codex hooks entry runs (neutral event answers {}): PASS
+markers expected present: PASS (7/7)
+markers expected absent: PASS (7/7)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725 vs /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725)
+CHECK 503 layout one distribution: PASS (1 found: [('0.8.0', '/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling-0.8.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.8.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graftling-0.8.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling/__init__.py version 0.8.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/vvenv-eb009725/lib/python3.13/site-packages/graftling/: PASS
+SAME    .mcp.json
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+task graph of the clone: tasks = 493
+成功: SAME .claude-plugin/plugin.json 与 SAME hooks/hooks.json、CHANGED hooks/host_context.mjs，'CHECK 579 plugin hooks/host_context.mjs differs by exactly 577's --data-root change: PASS' 与 'CHECK 579 candidate plugin as predicted (only hooks/host_context.mjs, by 577): PASS'（claude --continue 时预计出现 graphtraj-claude-host 的插件/hooks 信任框：选信任）；INFO 行只是信息（differs (expected; …)）；'CHECK 579 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 579 Codex hooks entry …: PASS'；
+  'markers expected present: PASS (7/7)' 与 'markers expected absent: PASS (7/7)'；'503 layout: PASS' 与两行 node resolves PASS；候选 ✘ 不多于 baseline；read_session failures=0 与 task graph of the clone（生产 Task 状态，只读）；无 STOP。
+REHEARSAL PASS: V: plugin as predicted (plugin.json and hooks.json SAME, host_context.mjs CHANGED by 577 only); dialog expected
+REHEARSAL PASS: V (571 F3): information lines read as information, no 'FAIL (STOP)' on an INFO line
+REHEARSAL PASS: V: real graphtraj-mcp lists exactly agents, tasks; Codex hooks entry two CHECKs PASS
+REHEARSAL PASS: V: markers present in the candidate and absent in production (7/7)
+REHEARSAL PASS: V: read check of production Task state (task graph) by the candidate
+REHEARSAL PASS: V wrote nothing to production entry files
+REHEARSAL PASS: V negative: any change beyond 577's lines -> plugin579 FAIL (V would STOP)
+
+======== negatives: 0.7.0 left installed; markers both ways
+REHEARSAL PASS: proddiff negative: graftling 0.7.0's dist-info left beside 0.8.0 -> FAIL (LEFTOVER)
+REHEARSAL PASS: markers 'present' on production fails; 'absent' on the candidate fails
+
+======== Vu / Vc (stub claude: plugin not loaded, so Vc asks for Vu)
+REHEARSAL PASS: Vu names the isolated path and 'Yes, proceed'
+REHEARSAL PASS: Vc setup: isolated .mcp.json CHECK PASS and answer check OK
+REHEARSAL PASS: Vc with the stub asks for Vu
+
+======== guard refusal, I refusal without GR PASS, then Mpre / I (USER): backup, pair install, real entries
+REHEARSAL PASS: guard negative: a member Worker under the venv -> BLOCKING, no backup made
+REHEARSAL PASS: I negative: refuses while GR.txt has no PASS, and creates no backup
+REHEARSAL PASS: Mpre: the next command says Main asks the USER before I
+REHEARSAL PASS: Mpre: GR PASS shown; restart reason names the loaded old modules
+REHEARSAL PASS: I exit 0
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.7.0
+Successfully installed graftling-0.8.0 graphtraj-0.1.0
+PASS 258 FAIL 0
+CHECK 579 graftling 0.7.0 dist-info gone: PASS
+### 579 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=011fd6a88561f38e11f304ec3998996587eb36effeb08257e901cf1940e491fe", "hashes": {"sha256": "011fd6a88561f38e11f304ec3998996587eb36effeb08257e901cf1940e491fe"}}, "url": "file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.8.0.dist-info direct_url: {"archive_info": {"hash": "sha256=d96b8fb95fcd77708f586a79458d7d7eee7e00b86f163651b843613a1ff7a9a1", "hashes": {"sha256": "d96b8fb95fcd77708f586a79458d7d7eee7e00b86f163651b843613a1ff7a9a1"}}, "url": "file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graftling-0.8.0-py3-none-any.whl"}
+CHECK 579 direct_url of both names the wheels-eb009725 wheels: PASS
+built from: graphtraj git archive eb00972580b0f8bb28dfc7f0da57a52ccafeb18f, graftling git archive v0.8.0 542a81df0c941f5b1a425d9807681b2a38daa87c (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
+markers expected present: PASS (7/7)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime vs /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.8.0', '/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.8.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.8.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graftling-0.8.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.8.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/I-configuration.txt)
+SAME-AS-VALIDATED
+plugin files changed by the install: hooks/host_context.mjs  (V expected: plugin dialog expected at claude --continue: yes (one: plugin/hooks trust for graphtraj-claude-host; choose trust))
+CHECK 579 plugin hooks/host_context.mjs differs by exactly 577's --data-root change: PASS
+CHECK 579 installed plugin changed as V predicted (only hooks/host_context.mjs): PASS (at claude --continue: the plugin/hooks trust dialog for graphtraj-claude-host; USER trusts it)
+### CHECKs after configuration --write
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+CHECK 579 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 579 Codex hooks entry names /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 579 Codex hooks entry runs (neutral event answers {}): PASS
+      Successfully uninstalled graphtraj-0.1.0
+      Successfully uninstalled graftling-0.7.0
+Successfully installed graftling-0.8.0 graphtraj-0.1.0
+PASS 258 FAIL 0
+CHECK 579 graftling 0.7.0 dist-info gone: PASS
+### 579 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=011fd6a88561f38e11f304ec3998996587eb36effeb08257e901cf1940e491fe", "hashes": {"sha256": "011fd6a88561f38e11f304ec3998996587eb36effeb08257e901cf1940e491fe"}}, "url": "file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.8.0.dist-info direct_url: {"archive_info": {"hash": "sha256=d96b8fb95fcd77708f586a79458d7d7eee7e00b86f163651b843613a1ff7a9a1", "hashes": {"sha256": "d96b8fb95fcd77708f586a79458d7d7eee7e00b86f163651b843613a1ff7a9a1"}}, "url": "file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graftling-0.8.0-py3-none-any.whl"}
+CHECK 579 direct_url of both names the wheels-eb009725 wheels: PASS
+built from: graphtraj git archive eb00972580b0f8bb28dfc7f0da57a52ccafeb18f, graftling git archive v0.8.0 542a81df0c941f5b1a425d9807681b2a38daa87c (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
+markers expected present: PASS (7/7)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime vs /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.8.0', '/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.8.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.8.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/wheels-eb009725/graftling-0.8.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.8.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 503 node resolves graftlingDirectory('pi/extension.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+CHECK 503 node resolves graftlingDirectory('dsh/plugin.mjs') to the sibling /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/lib/python3.13/site-packages/graftling/: PASS
+configuration --write rc=0 (output lines:        8; kept in /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/I-configuration.txt)
+SAME-AS-VALIDATED
+plugin files changed by the install: hooks/host_context.mjs  (V expected: plugin dialog expected at claude --continue: yes (one: plugin/hooks trust for graphtraj-claude-host; choose trust))
+CHECK 579 plugin hooks/host_context.mjs differs by exactly 577's --data-root change: PASS
+CHECK 579 installed plugin changed as V predicted (only hooks/host_context.mjs): PASS (at claude --continue: the plugin/hooks trust dialog for graphtraj-claude-host; USER trusts it)
+### CHECKs after configuration --write
+CHECK 515 .mcp.json has graphtraj, no agents, no other graphtraj/graftling server: PASS
+bytes unchanged: .mcp.json
+bytes unchanged: .claude/settings.local.json
+bytes unchanged: .graphtraj/claude-host/config.json
+CHECK 579 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS
+CHECK 579 Codex hooks entry names /private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook for SessionStart/Stop/SessionEnd: PASS
+CHECK 579 Codex hooks entry runs (neutral event answers {}): PASS
+成功: Successfully installed graftling-0.8.0 graphtraj-0.1.0；PASS n FAIL 0（两个 wheel）；'CHECK 579 graftling 0.7.0 dist-info gone: PASS'；三个 -rw------- 备份入口文件；'graftling 0.8.0'；'CHECK 579 direct_url of both names the wheels-eb009725 wheels: PASS'；'markers expected present: PASS (7/7)'；'503 layout: PASS'；两行 node resolves PASS；SAME-AS-VALIDATED；'CHECK 579 plugin hooks/host_context.mjs differs by exactly 577's …: PASS' 与 'CHECK 579 installed plugin changed as V predicted (only hooks/host_context.mjs): PASS'；'CHECK 515 .mcp.json …: PASS'；
+  'CHECK 579 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 579 Codex hooks entry …: PASS'。
+REHEARSAL PASS: I: both wheels installed together, proddiff PASS, 0.7.0 dist-info gone, markers 8/8
+REHEARSAL PASS: I: direct_url of both names wheels-eb009725; built from both archives
+REHEARSAL PASS: I: configuration --write rc=0, plugin changed as V predicted (577 only), .mcp.json PASS, SAME-AS-VALIDATED
+REHEARSAL PASS: I: real entries of the installed venv: MCP tools/list and Codex hooks PASS
+REHEARSAL PASS: I: no Task-state migration ran (no migrate lines)
+REHEARSAL PASS: I: backup holds venv, plugin, entries, tools; COMPLETE
+REHEARSAL PASS: I: header says Main asks the USER first; prints the restart command, V's expected dialog (plugin/hooks trust: yes) and Ma next
+
+======== M / Mp after the restart; N; done
+wrote /private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/args-575.json: {"view":"current","details":["579"]}
+installed read_arguments_file reads it as Main's host will: {"view": "current", "details": ["579"]}
+CHECK 579 575 arguments file readable by the installed graphtraj (project root, not .graphtraj): PASS
+Using only mcp__graphtraj__tasks, make exactly one call with this input and no "arguments" field: {"action":"execute","feature":"task_graph","arguments_file":"/private/tmp/claude-501/adopt579-rehearsal/project/tmp/579/args-575.json"}. Print whether it returned an error (with the error code if any) and Task 579's current definition path from its details.
+成功的可观察结果: 调用不返回错误（没有 authority-denied / VALIDATION），并且结果给出 Task 579 的当前定义路径 definitions/20261123T194223.690391+0900.md。这个 details 只在文件里，调用本身不带 arguments，所以该路径证明 Main 的 host 读了 arguments_file（575）。
+REHEARSAL PASS: Ma (575): the arguments file is inside the fake project, read by the INSTALLED graphtraj as Main's host reads it
+REHEARSAL PASS: Ma: prints the exact call with the real path and the observable
+REHEARSAL PASS: M[d]: the 575 call is in M's prompts with the real path
+REHEARSAL PASS: M prompt: upgraded by Task 579; task_graph with view current (560's 'summary' fixed)
+REHEARSAL PASS: Mp exit 0: four init CHECKs PASS
+REHEARSAL PASS: N (576, 571 F1): the child is created WITHOUT tools and must run Bash and reply DONE-579
+REHEARSAL PASS: N: one advisor member of Task 579 creates n579
+
+======== Nr (576 and 571 F2) on a REHEARSAL FIXTURE child record, member mapping and archives
+CHECK 455 stored record: configuration and model not null: PASS (configuration='opus_coding_team.advisor' model='claude-opus-5-5')
+CHECK 455 create/status result quoted by the member: configuration and model not null: FAIL (configuration values [] model values [])
+CHECK 576 child created without tools (stored selection.tools is null): PASS (tools=None)
+CHECK 576 child without tools ran Bash and replied DONE-579 (member quotes the last_message): PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/N-reply.txt)
+CHECK 576 a Bash tool_use running echo n579-tool is in a Session archive: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/swarm/sessions/s-child/session.jsonl)
+CHECK one child execution (create; 499 sends nothing else): PASS (1)
+CHECK 452 child execution ex-1 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution ex-1 notification delivered: PASS (delivered)
+CHECK 452 member execution ended and recorded (execution.yml terminal, same execution as the mapping): PASS (outcome=completed)
+CHECK 452 member reported its end to Main (raw/N-main-notice.txt names completed): PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/N-main-notice.txt)
+CHECK 477 no parent input pushed for waited execution ex-1: PASS
+CHECK 579 Main got exactly one completed notice of the member: FAIL (0 notice lines of shape '[Graftling notice from 579-x@advisor · completed · execution <id>]' in /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/N-main-notice.txt)
+[member 579-x@advisor] scanned 1 file(s); split: none (every call)
+[member 579-x@advisor] calls of mcp__graphtraj__agents: 2; ok 1; others: ['info: not-running: The Agent is in standby; no native request is pending.']
+CHECK 515 [member 579-x@advisor] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [member 579-x@advisor] no mcp__agents__* call: PASS (0 in the window, 0 undated)
+CHECK swarm result has agent: PASS (ag-member)
+CHECK 455 stored record: configuration and model not null: PASS (configuration='opus_coding_team.advisor' model='claude-opus-5-5')
+CHECK 455 create/status result quoted by the member: configuration and model not null: FAIL (configuration values [] model values [])
+CHECK 576 child created without tools (stored selection.tools is null): PASS (tools=None)
+CHECK 576 child without tools ran Bash and replied DONE-579 (member quotes the last_message): PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/N-reply.txt)
+CHECK 576 a Bash tool_use running echo n579-tool is in a Session archive: PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/swarm/sessions/s-child/session.jsonl)
+CHECK one child execution (create; 499 sends nothing else): PASS (1)
+CHECK 452 child execution ex-1 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution ex-1 notification delivered: PASS (delivered)
+CHECK 452 member execution ended and recorded (execution.yml terminal, same execution as the mapping): PASS (outcome=completed)
+CHECK 452 member reported its end to Main (raw/N-main-notice.txt names completed): PASS (/private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/N-main-notice.txt)
+CHECK 477 no parent input pushed for waited execution ex-1: PASS
+CHECK 579 Main got exactly one completed notice of the member: FAIL (0 notice lines of shape '[Graftling notice from 579-x@advisor · completed · execution <id>]' in /private/tmp/claude-501/adopt579-rehearsal/project/.graphtraj/core/state/tasks/579-graftling-next-release-and-production-adoption/adoption/raw-eb009725/N-main-notice.txt)
+CHECK 515 [member 579-x@advisor] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 515 [member 579-x@advisor] no mcp__agents__* call: PASS (0 in the window, 0 undated)
+CHECK swarm result has agent: PASS (ag-member)
+REHEARSAL PASS: Nr (576): created without tools, DONE-579 quoted, a Bash tool_use running echo n579-tool archived -> three PASS
+REHEARSAL PASS: Nr (571 F2): the member's informative not-running answer is not counted as an error
+REHEARSAL PASS: Nr negative: a child created WITH tools, or without DONE-579, FAILs the 576 checks
+REHEARSAL PASS: done: versions, direct_urls, real entries PASS, no key value
+REHEARSAL PASS: done: counts are 0 when nothing matches (560's miscount fixed): '0.7.0 dist-info left: 0', 'task.md 0'
+
+======== R (rollback from the backup's own tools): both packages, plugin and entries restored
+REHEARSAL PASS: R header says Main asks the USER first
+DIFF entries=993 differences=60 (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime)
+before R: graftling installed graftling-0.8.0.dist-info | backup graftling-0.7.0.dist-info 
+graphtraj package installed vs backup: 3 differing entries (none after an earlier R)
+### venv restored whole from the backup
+SAME entries=993 differences=0 (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/private/tmp/claude-501/adopt579-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+CHECK 579 graftling restored (after R vs backup): PASS
+CHECK 579 graphtraj restored (after R vs backup): PASS
+CHECK 579 R: graftling is 0.7.0 again: PASS
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.7.0
+DIFF entries=993 differences=60 (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime)
+before R: graftling installed graftling-0.8.0.dist-info | backup graftling-0.7.0.dist-info 
+graphtraj package installed vs backup: 3 differing entries (none after an earlier R)
+### venv restored whole from the backup
+SAME entries=993 differences=0 (/private/tmp/claude-501/adopt579-rehearsal/project/.venv-runtime)
+### plugin restored; the current one kept
+SAME entries=5 differences=0 (/private/tmp/claude-501/adopt579-rehearsal/project/.claude/skills/graphtraj-claude-host)
+### entry files restored from the backup copies; the current ones kept
+already as before: .mcp.json
+already as before: .claude/settings.local.json
+already as before: .graphtraj/claude-host/config.json
+CHECK 579 graftling restored (after R vs backup): PASS
+CHECK 579 graphtraj restored (after R vs backup): PASS
+CHECK 579 R: graftling is 0.7.0 again: PASS
+### a stale channel file would make the restored host refuse with host-busy
+Version: 0.1.0
+Version: 0.7.0
+成功: venv 与 plugin 都是 SAME differences=0；三个入口文件 OK；pip check 通过；'CHECK 579 graftling restored …: PASS' 与 'CHECK 579 graphtraj restored …: PASS'；'CHECK 579 R: graftling is 0.7.0 again: PASS'；Version graphtraj 0.1.0 与 graftling 0.7.0。
+REHEARSAL PASS: R exit 0; venv and plugin SAME
+REHEARSAL PASS: R: graftling and graphtraj restored (vs backup); graftling is 0.7.0 again
+REHEARSAL PASS: R: production graftling 0.7.0, graphtraj 98125982 markers absent again; entries as before
+old code task graph: 493
+REHEARSAL PASS: R: the old code still reads the state (task graph loads)
+REHEARSAL PASS: 571's backup under tmp/571 unchanged
+REHEARSAL PASS: real <Harness>/graftling untouched by the rehearsal (every branch and tag as at the start)
+
+REHEARSAL SUMMARY: 103 checks, all PASS
+rehearse-exit=0

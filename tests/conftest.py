@@ -857,7 +857,8 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
         script.write_text("#!{0}\nimport sys\nfrom {1} import {2}\nsys.exit({2}())\n".format(
             python, entry.module, entry.attr))
         script.chmod(0o755)
-    # Workers use Python -I. Load their clock after site initialization so
+    # Workers use Python -I. Load their clock (BUDGET_CLOCK) or another test
+    # sitecustomize (WORKER_SITECUSTOMIZE, 595) after site initialization so
     # dependencies inherited through system-site-packages are available.
     site = run_process([str(python), '-c',
                         "import sysconfig; print(sysconfig.get_path('purelib'))"], cwd=environment)
@@ -871,7 +872,7 @@ def _install_commands(environment: Path, wheel: Path) -> InstalledCommands:
     Path(site.stdout.strip(), 'graphtraj_test_clock.py').write_text(
         "import os, sys\n"
         "from pathlib import Path\n"
-        "if os.environ.get('BUDGET_CLOCK'):\n"
+        "if os.environ.get('BUDGET_CLOCK') or os.environ.get('WORKER_SITECUSTOMIZE'):\n"
         "    for directory in os.environ.get('PYTHONPATH', '').split(os.pathsep):\n"
         "        script = Path(directory) / 'sitecustomize.py'\n"
         "        if directory and script.is_file() and script.resolve() != Path(__file__).resolve():\n"

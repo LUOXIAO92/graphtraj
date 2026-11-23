@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import yaml
 
@@ -39,6 +39,9 @@ from graphtraj.runtimes.runtime_adapter import (
     RuntimeAdapterError, RuntimeTurn, select_runtime_adapter, runtime_process_owner,
 )
 
+if TYPE_CHECKING:
+    from graphtraj.workspace.runner_project import Project
+
 
 # A stopped Worker must exit while stop_worker (runner_process.py) still waits
 # to reap it; its last notice transport gets the rest of that window.
@@ -48,6 +51,9 @@ DELIVERY_JOIN_SECONDS = OPERATION_TIMEOUT_SECONDS - STOP_EXIT_MARGIN_SECONDS
 # in minutes and stop checks fall two minutes apart, so once a second is
 # enough; sampling every 50 ms kept an open turn's Worker busy (468).
 BUDGET_SAMPLE_SECONDS = 1.0
+# Each sibling registration that commits first can make one attempt stale, so
+# the bound covers a swarm call starting several members of one Team (595).
+MEMBER_REGISTRATION_ATTEMPTS = 5
 
 
 def run(job_file: Path) -> int:
@@ -474,8 +480,7 @@ def _register_created_member(
     """
     from graphtraj.execution.runner_heartbeat import ownership_is_held
     from graphtraj.execution.runner_status import read_alias_mapping
-    from graphtraj.graph.delivery_state import apply_delivery_state_request, read_team
-    from graphtraj.graph.delivery_worldline import latest_task_event, read_worldline
+    from graphtraj.graph.delivery_state import StaleDeliverySnapshot, apply_delivery_state_request, read_team
     from graphtraj.graph.task_graph import _load_task_state
     from graphtraj.workspace.runner_project import discover_project, discover_project_root
 
@@ -508,6 +513,55 @@ def _register_created_member(
                            for member in read_team(team_file)["members"].values())):
             raise ValueError("A resumed task Session must already be a registered member")
         return
+
+    # Members started by one swarm call register concurrently. A sibling that
+    # commits between this attempt's reads and its Worldline lock makes the
+    # request stale (594): rebuild it, including start versus member, from the
+    # current files. Other errors, and a stale request once this Session is
+    # already a member, are never retried.
+    task_file = task_directory / "task.yml"
+    for attempt in range(1, MEMBER_REGISTRATION_ATTEMPTS + 1):
+        snapshot = _delivery_files(task_file, team_file)
+        try:
+            _, task = _load_task_state(project.state_directory / "tasks", mapping["task_id"])
+            request = _member_registration_request(project, mapping, assignment, directory, task, team_file)
+            apply_delivery_state_request(project.state_directory, project.harness_root, request, request)
+            return
+        except ValueError as error:
+            stale = isinstance(error, StaleDeliverySnapshot) or _delivery_files(task_file, team_file) != snapshot
+            registered = team_file.is_file() and any(
+                member["session_ref"] == mapping["alias"] for member in read_team(team_file)["members"].values()
+            )
+            if not stale or registered or attempt == MEMBER_REGISTRATION_ATTEMPTS:
+                raise
+            # The Worker's stderr log keeps the evidence that a sibling won the lock.
+            print(f"member registration: the Task or Team changed before the Worldline lock; rebuilding "
+                  f"(attempt {attempt + 1} of {MEMBER_REGISTRATION_ATTEMPTS})", file=sys.stderr, flush=True)
+
+
+def _delivery_files(task_file: Path, team_file: Path) -> tuple[bytes, bytes | None]:
+    """Return the Task and Team file contents a registration request is built from."""
+    return task_file.read_bytes(), team_file.read_bytes() if team_file.is_file() else None
+
+
+def _member_registration_request(
+    project: "Project",
+    mapping: dict[str, object],
+    assignment: dict[str, object],
+    directory: Path,
+    task: dict[str, object],
+    team_file: Path,
+) -> dict[str, object]:
+    """Build one created Session's Delivery State request from the current Task and Team.
+
+    Without a Team file the Session starts the Team (``start``); otherwise it
+    joins the active Team (``member``), filling a vacant retired seat when it
+    replaces a Session.
+    """
+    from graphtraj.execution.runner_status import read_alias_mapping
+    from graphtraj.graph.delivery_state import read_team
+    from graphtraj.graph.delivery_worldline import latest_task_event, read_worldline
+
     predecessor = latest_task_event(read_worldline(project.state_directory, project.harness_root), mapping["task_id"])
     if predecessor is None:
         raise ValueError("The Project Worldline records no event for Task " + str(mapping["task_id"]))
@@ -543,7 +597,7 @@ def _register_created_member(
             if member in team["members"] and team["members"][member]["session_ref"] is not None:
                 member = mapping["alias"]
         request.update(phase=phase, member=member, role=mapping["role"], session_ref=mapping["alias"])
-    apply_delivery_state_request(project.state_directory, project.harness_root, request, request)
+    return request
 
 
 def _require_recorded_binding(

@@ -31,6 +31,16 @@ _COMMON = {"phase", "task_id", "caused_by_event_ids", "evidence_refs"}
 RESULT_DECISION_EVENTS = frozenset({"team-round-accepted", "team-round-implementation-rejected"})
 
 
+class StaleDeliverySnapshot(ValueError):
+    """The Task or Team changed between a request's read and its Worldline lock.
+
+    The request was derived from ``task.yml``/``team.yml`` contents that another
+    transition rewrote before this one took the Project Worldline lock. Nothing
+    was written. A caller that derived its request from those files may rebuild
+    it from the current state; the check itself keeps lost updates out.
+    """
+
+
 def current_result_rework_cause(
     events: list[dict[str, Any]],
     task: Mapping[str, Any],
@@ -340,7 +350,7 @@ def apply_delivery_state_request(
         current_team = team_file.read_bytes() if team_file.is_file() else None
         if ((task_directory / "task.yml").read_bytes() != original_task
                 or current_team != original_team):
-            raise ValueError("The task changed before the delivery transition; inspect it again")
+            raise StaleDeliverySnapshot("The task changed before the delivery transition; inspect it again")
         if phase == "rework":
             rejection = current_result_rework_cause(
                 _read_shards(state_directory)[1], task, read_team(team_file),

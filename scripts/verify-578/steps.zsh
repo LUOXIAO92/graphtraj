@@ -3,23 +3,31 @@
 # Task 578 Main-run steps: a Claude child created through the agents tool is failed with RUNTIME_REQUEST_FAILED
 # 'Claude did not confirm the requested permission mode' when its system/init reports default for a requested auto.
 #   zsh scripts/verify-578/steps.zsh <STEP>      (Main, from this Task's Worktree; one step at a time)
-# Order: pre -> Tu (USER) -> repro -> [push, after the user agrees] -> check.
+# Order: pre -> Tb (USER) -> repro -> Tc (USER) -> [push, after the user agrees] -> check.
 #   pre    Versions (zsh, python3, git, claude --version). Builds graftling base 99a66ae (dev, from <Harness>/graftling)
 #          as a wheel into ROOT/venv-base; creates ROOT/proj-base and ROOT/proj-cand (STOP if either exists) and
 #          writes the plugin files into proj-base (`configuration --write`, docs: Generate the plugin files). A
-#          one-line `claude -p` in ROOT prints its model and apiKeySource (user login). Dialog: none. ~2 min.
-#   Tu     USER, in a plain Terminal: trust ROOT/proj-base and ROOT/proj-cand in Claude Code's own dialog, then
-#          /exit (an untrusted folder suppresses the project plugin, Task 576). The step only reads ~/.claude.json
-#          and reports whether both folders are trusted. Dialog: Claude Code's trust dialog, twice.
-#   repro  BASE. (a) DIAGNOSIS: per model in DIAG_MODELS, DIAG_RUNS direct runs of
-#          `claude -p --permission-mode auto --model M --output-format stream-json --verbose --debug` (one-word
-#          prompt, empty MCP config) in ROOT/diag; prints each init permissionMode and the stderr lines about auto
-#          mode, and a per-model tally: the CONDITION under which Claude reports another mode. (b) ACCEPTANCE premise:
+#          one-line `claude -p --model PMODEL` (the parent's model) in ROOT prints its model and apiKeySource (user
+#          login). Dialog: none. ~2 min.
+#   Tb     USER, in a plain Terminal: `cd ROOT/proj-base && claude`. Dialog (one): Claude Code's folder trust dialog;
+#          choose "Yes, I trust this folder", then type /exit (an untrusted folder suppresses the project plugin,
+#          Task 576). The step only reads ~/.claude.json and reports whether proj-base is trusted.
+#   Tc     The same for ROOT/proj-cand (needed only before check). Dialog (one): the trust dialog; trust, then /exit.
+#   repro  BASE. (a) DIAGNOSIS in the trusted proj-base (--strict-mcp-config, empty MCP config, --debug, one-word
+#          prompt), per model in DIAG_MODELS and DIAG_RUNS runs each, two variants: `plain` = claude -p
+#          --permission-mode auto; `child` = the permission-relevant launch of a graftling child (base _prepare):
+#          --input-format stream-json, --permission-prompt-tool stdio, --restricted, --settings with
+#          permissions.defaultMode auto, blockReadsOutsideWorkingDirectories and the sandbox block (enabled,
+#          failIfUnavailable, no unsandboxed commands, no auto-allow), --permission-mode auto, and the environment
+#          graftling sets (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0, SDK_READS_SESSION_STATE=1, DISABLE_BACKGROUND_TASKS=1).
+#          Prints each init permissionMode, other permission fields and the stderr lines about auto mode, and a
+#          tally per model and variant: the CONDITION under which Claude reports another mode. Default count:
+#          4 models x 2 variants x 2 runs = 16 one-word model calls. (b) ACCEPTANCE premise:
 #          one real `claude -p` parent in proj-base creates four children through mcp__graftling__agents (inline
 #          arguments, tools [Bash], each asked to run `echo r578-bash` and reply): A, B claude-haiku-4-5-20251001,
 #          C claude-haiku-5-5, D the control CONTROL_MODEL. Per child: requested/observed mode, whether the work
 #          ran, outcome and error. REPRODUCED only when at least one child's observed mode differs. Dialog: none.
-#          ~4-6 min (model calls: DIAG_MODELS x DIAG_RUNS one-word runs, one parent, four children).
+#          ~5-7 min (model calls: 16 one-word runs, one parent, four children).
 #   push   Main, after asking the user: pushes the candidate branch from the bundle to LUOXIAO92/graftling (backup).
 #          Not needed by check. Dialog: none expected. ~30 s.
 #   check  CANDIDATE (CAND, from this Worktree's .scratch/578/graftling-578.bundle) in ROOT/venv-cand and
@@ -54,7 +62,7 @@ BUNDLE=$WT/.scratch/578/graftling-578.bundle
 PMODEL=${VERIFY578_PARENT_MODEL:-claude-sonnet-5-5}
 CONTROL=${VERIFY578_CONTROL_MODEL:-claude-opus-5-5}
 DIAG_MODELS=(${=${VERIFY578_DIAG_MODELS:-claude-haiku-4-5-20251001 claude-haiku-5-5 claude-sonnet-5-5 claude-opus-5-5}})
-DIAG_RUNS=${VERIFY578_DIAG_RUNS:-3}
+DIAG_RUNS=${VERIFY578_DIAG_RUNS:-2}
 path=(${VERIFY578_BIN:+$VERIFY578_BIN} $HOME/.local/bin $path)
 BOUND=(/usr/bin/perl -e 'alarm shift; exec @ARGV or die "exec: $!\n"')
 
@@ -162,12 +170,12 @@ pre)
   [[ -e $ROOT/proj-base || -e $ROOT/proj-cand ]] && { print -r -- "STOP: $ROOT/proj-base or proj-cand exists. Remove ROOT yourself if it is from an earlier attempt, then rerun: rm -rf $ROOT && zsh $THIS pre"; return 1; }
   need_login || return 1
   print -r -- "base $BASE in $LOCAL: $(git -C $LOCAL log -1 --format='%h %s' $BASE 2>&1)"
-  mkdir -p $ROOT/proj-base $ROOT/proj-cand $ROOT/diag || return 1
-  print -r -- "created $ROOT/proj-base (base), $ROOT/proj-cand (candidate) and $ROOT/diag"
+  mkdir -p $ROOT/proj-base $ROOT/proj-cand || return 1
+  print -r -- "created $ROOT/proj-base (base) and $ROOT/proj-cand (candidate)"
   install base $BASE $LOCAL || return 1
   local mark=$D/start.mark; : > $mark
-  say "one-line prompt in $ROOT: its model and login source"
-  (cd $ROOT && claude_env $BOUND 120 $(command -v claude) -p --model claude-haiku-5-5 --output-format stream-json --verbose \
+  say "one-line prompt in $ROOT with the parent's model $PMODEL: its model and login source"
+  (cd $ROOT && claude_env $BOUND 120 $(command -v claude) -p --model $PMODEL --output-format stream-json --verbose \
      -- "Reply in one line with the model id you are running as and nothing else." < /dev/null > $D/pre.jsonl 2> $D/pre.stderr)
   local rc=$?
   python3 -I -c 'import json, sys
@@ -181,48 +189,59 @@ for line in open(sys.argv[1], errors="replace"):
   changed_claude $mark
   (( rc == 0 )) || { print -r -- "STOP: Claude Code did not answer with this login"; return 1; }
   print "Success: versions, the base venv, both projects, and a model id with its login source."
-  print -r -- "next (USER, plain Terminal): cd $ROOT/proj-base && claude   -> trust the folder, then /exit"
-  print -r -- "                             cd $ROOT/proj-cand && claude   -> trust the folder, then /exit"
-  next "zsh $THIS Tu"
+  next "zsh $THIS Tb"
   ;;
-Tu)
-  say "[Tu] USER trusts both project folders in Claude Code's own dialog, then /exit. This step only reads ~/.claude.json."
-  print -r -- "If not done yet, in a plain Terminal:"
-  print -r -- "  cd $ROOT/proj-base && claude     (answer the trust dialog: trust this folder; then type /exit)"
-  print -r -- "  cd $ROOT/proj-cand && claude     (the same)"
-  local p ok=0
-  for p in ${ROOT:A}/proj-base ${ROOT:A}/proj-cand; do
-    local f=$(trusted $p); print -r -- "  $p: hasTrustDialogAccepted=$f"; [[ $f == True ]] || ok=1
-  done
-  (( ok == 0 )) || { print "NOT YET: a folder is not trusted; do the above, then rerun this step"; return 1; }
-  print "Success: both folders are trusted."
-  next "VERIFY578_CLAUDE_USER_LOGIN=1 zsh $THIS repro"
+Tb|Tc)
+  local p=${ROOT:A}/proj-cand; [[ $STEP == Tb ]] && p=${ROOT:A}/proj-base
+  say "[$STEP] USER, plain Terminal. Dialog (one): Claude Code's folder trust dialog for $p. This step only reads ~/.claude.json."
+  print -r -- "If not done yet:  cd $p && claude"
+  print -r -- "  In the dialog choose 'Yes, I trust this folder'; then type /exit. Then rerun: zsh $THIS $STEP"
+  local f=$(trusted $p); print -r -- "  $p: hasTrustDialogAccepted=$f"
+  [[ $f == True ]] || { print "NOT YET: the folder is not trusted"; return 1; }
+  print -r -- "Success: $p is trusted."
+  if [[ $STEP == Tb ]]; then next "VERIFY578_CLAUDE_USER_LOGIN=1 zsh $THIS repro"
+  else next "VERIFY578_CLAUDE_USER_LOGIN=1 zsh $THIS check"; fi
   ;;
 repro)
-  say "[repro] BASE $BASE: diagnosis of the condition, then the premise through the real entry. Dialog: none. ~4-6 min."
+  say "[repro] BASE $BASE: diagnosis of the condition, then the premise through the real entry. Dialog: none. ~5-7 min."
   need_login || return 1
-  [[ $(trusted ${ROOT:A}/proj-base) == True ]] || { print -r -- "STOP: $ROOT/proj-base is not trusted; run: zsh $THIS Tu"; return 1; }
+  [[ $(trusted ${ROOT:A}/proj-base) == True ]] || { print -r -- "STOP: $ROOT/proj-base is not trusted; run: zsh $THIS Tb"; return 1; }
   install base $BASE $LOCAL || return 1
   local mark=$D/start.mark; : > $mark
-  say "(a) DIAGNOSIS: direct claude -p --permission-mode auto, $DIAG_RUNS runs per model, in $ROOT/diag"
-  local m n f
+  # The permission-relevant part of a graftling child's launch (base ClaudeExecution._prepare / claude-settings.yml).
+  local settings='{"permissions":{"defaultMode":"auto","blockReadsOutsideWorkingDirectories":true,"allow":[],"deny":[],"additionalDirectories":[]},"sandbox":{"enabled":true,"failIfUnavailable":true,"allowUnsandboxedCommands":false,"autoAllowBashIfSandboxed":false,"excludedCommands":[]}}'
+  local -a common=(--model MODEL --output-format stream-json --verbose --debug --strict-mcp-config --mcp-config '{"mcpServers":{}}')
+  local -a plain=(-p --permission-mode auto $common -- 'Reply with one word: ok.')
+  local -a childv=(--print --input-format stream-json --permission-prompt-tool stdio --restricted --settings $settings
+                   --permission-mode auto $common)
+  say "(a) DIAGNOSIS in the trusted $P: ${#DIAG_MODELS} models x 2 variants x $DIAG_RUNS runs"
+  print -r -- "   plain: claude ${(j: :)${(@q-)plain}}"
+  print -r -- "   child: claude ${(j: :)${(@q-)childv}}  (stdin: one stream-json user message 'Reply with one word: ok.';"
+  print -r -- "          env CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 CLAUDE_CODE_SDK_READS_SESSION_STATE=1 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1)"
+  local m n f v
   for m in $DIAG_MODELS; do
-    for n in {1..$DIAG_RUNS}; do
-      f=$D/diag-$m-$n
-      print -r -- "-- $m run $n"
-      (cd $ROOT/diag && claude_env $BOUND 180 $CLAUDE -p --permission-mode auto --model $m --output-format stream-json \
-         --verbose --debug --strict-mcp-config --mcp-config '{"mcpServers":{}}' -- "Reply with one word: ok." \
-         < /dev/null > $f.jsonl 2> $f.stderr)
-      print -r -- "   exit=$?"
-      python3 -I $JUDGE diag $f.jsonl $f.stderr | tee $f.txt
+    for v in plain child; do
+      for n in {1..$DIAG_RUNS}; do
+        f=$D/diag-$m-$v-$n
+        print -r -- "-- $m $v run $n"
+        if [[ $v == plain ]]; then
+          (cd $P && claude_env $BOUND 180 $CLAUDE ${plain//MODEL/$m} < /dev/null > $f.jsonl 2> $f.stderr)
+        else
+          print -r -- '{"type":"user","message":{"role":"user","content":"Reply with one word: ok."}}' > $f.stdin
+          (cd $P && claude_env CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 CLAUDE_CODE_SDK_READS_SESSION_STATE=1 \
+             CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 $BOUND 180 $CLAUDE ${childv//MODEL/$m} < $f.stdin > $f.jsonl 2> $f.stderr)
+        fi
+        print -r -- "   exit=$?"
+        python3 -I $JUDGE diag $f.jsonl $f.stderr $v | tee $f.txt
+      done
     done
   done
-  say "condition tally (requested auto -> observed: count, model, permissionMode)"
+  say "condition tally (requested auto -> observed: count, variant, model, permissionMode)"
   cat $D/diag-*.txt | grep '^DIAG-MODE' | sort | uniq -c
   say "(b) ACCEPTANCE premise: children through mcp__graftling__agents in $P"
   accept repro || { print "NOT REPRODUCED or FAIL: see the verdicts above"; return 1; }
   print "Success: REPRODUCED (see the verdicts and the condition tally)."
-  next "zsh $THIS check   (after the Engineer sets CAND; push only after asking the user)"
+  next "zsh $THIS Tc   (then check, after the Engineer sets CAND; push only after asking the user)"
   ;;
 push)
   say "[push] Main, after the user agreed. Push $BRANCH (${CAND:-unset}) to $URL from $BUNDLE. Dialog: none expected."
@@ -239,14 +258,14 @@ check)
   say "[check] CANDIDATE ${CAND:-unset} through the real entry. Dialog: none. ~4 min."
   [[ -n $CAND ]] || { print "STOP: CAND is not set in this script; ask the Engineer"; return 1; }
   need_login || return 1
-  [[ $(trusted ${ROOT:A}/proj-cand) == True ]] || { print -r -- "STOP: $ROOT/proj-cand is not trusted; run: zsh $THIS Tu"; return 1; }
+  [[ $(trusted ${ROOT:A}/proj-cand) == True ]] || { print -r -- "STOP: $ROOT/proj-cand is not trusted; run: zsh $THIS Tc"; return 1; }
   [[ -f $BUNDLE ]] || { print -r -- "STOP: $BUNDLE missing; ask the Engineer"; return 1; }
   install cand $CAND $BUNDLE || return 1
   accept check || { print "FAIL: see the verdicts above"; return 1; }
   print "Success: narrower-mode children completed with the mismatch recorded and warned; matching ones completed."
   print -r -- "next: report $D to the Leader"
   ;;
-*) print -r -- "usage: zsh $THIS pre|Tu|repro|push|check"; return 2 ;;
+*) print -r -- "usage: zsh $THIS pre|Tb|repro|Tc|push|check"; return 2 ;;
 esac
 }
 

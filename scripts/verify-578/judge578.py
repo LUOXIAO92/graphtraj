@@ -1,6 +1,6 @@
 """Task 578 helper for steps.zsh. Run with python -I; PyYAML from the graftling venv for `accept`.
 
-  diag JSONL STDERR                     One direct `claude -p --permission-mode auto` run: system/init model,
+  diag JSONL STDERR LABEL               One direct `claude -p --permission-mode auto` run: system/init model,
                                         permissionMode and apiKeySource, every other system event's subtype and
                                         permission/auto fields, the result, and stderr lines about auto mode,
                                         permission mode or the classifier. Prints DIAG-MODE <model> <mode>.
@@ -33,7 +33,7 @@ def events(path):
             yield event
 
 
-def diag(jsonl: str, stderr: str) -> int:
+def diag(jsonl: str, stderr: str, label: str) -> int:
     init, other, result = None, [], None
     for event in events(jsonl):
         if event.get('type') == 'system' and event.get('subtype') == 'init':
@@ -58,7 +58,7 @@ def diag(jsonl: str, stderr: str) -> int:
     print(f'   stderr lines about auto mode / permission mode / classifier: {len(lines)}')
     for line in lines[:12]:
         print(f'     {line[:300]}')
-    print(f'DIAG-MODE {init and init.get("model")} {init and init.get("permissionMode")}')
+    print(f'DIAG-MODE {label} {init and init.get("model")} {init and init.get("permissionMode")}')
     return 0 if init else 1
 
 
@@ -221,7 +221,7 @@ def accept(mode: str, root: str, snapshot: str, parent: str) -> int:
 if __name__ == '__main__':
     command, args = sys.argv[1], sys.argv[2:]
     if command == 'diag':
-        sys.exit(diag(*args[:2]))
+        sys.exit(diag(*args[:3]))
     if command == 'snap':
         sys.exit(snap(args[0]))
     if command == 'accept':

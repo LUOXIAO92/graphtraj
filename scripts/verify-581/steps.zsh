@@ -97,6 +97,7 @@ JUDGE=$WT/scripts/verify-570/judge.py               # records on disk + the answ
 PROCS=${0:A:h}/procs.py                             # which Python ran graftling under a Session (process table)
 PROVIDERS=${0:A:h}/providers.py                     # provider, model and endpoint of each Main and child (files)
 CREDRE=$(python3 -I $PROCS pattern)                 # credential-like names (one definition, in procs.py)
+SUITEIDS=${0:A:h}/suiteids.py                       # node ids, classification and error origins (SR/SRX/suite-base)
 CSTREAM=${0:A:h}/claude_stream.py                   # a claude -p stream-json run -> summary + text for the judge
 ISO=$WT/scripts/verify-common/claude_isolation.py   # Task 489 rule for Claude hosts in isolated projects
 RTPY=$H/.venv-runtime/bin/python                    # read only: runs claude_isolation.py (no graftling use)
@@ -619,13 +620,15 @@ SR)
   [[ -n $g && -f $g/suite.txt ]] || { print -r -- "no suite result yet; run: zsh $THIS suite"; return 1; }
   cat $g/run.txt; tail -6 $g/suite.txt
   grep -q '^exit=' $g/suite.txt || { print -r -- "suite still running (no exit= line yet)"; return 1; }
+  # Node ids, whole: suiteids.py ends an id at pytest's ' - ' or its matching ']' (file::function if not closed).
   local line t id new=0 any=0; local -a ids=()
-  for line in ${(f)"$(grep -h -E '^(FAILED|ERROR) ' $g/suite.txt $g/shards/*(N.) 2>/dev/null | sed -E 's/ - .*//' | sort -u)"}; do
-    any=1; id=${line#* }; t=${id%%\[*}
-    if (( ${KNOWN581[(Ie)$id]} )); then print -r -- "known (581 definition): $line"
-    elif grep -qF -- "${t##*::}" $K; then print -r -- "known (516): $line"
-    else print -r -- "NEW: $line"; new=1; ids+=$id; fi
+  for id in ${(f)"$(python3 -I $SUITEIDS ids $g/suite.txt $g/shards/*(N.))"}; do
+    any=1; t=${id%%\[*}
+    if (( ${KNOWN581[(Ie)$id]} )); then print -r -- "known (581 definition): $id"
+    elif grep -qF -- "${t##*::}" $K; then print -r -- "known (516): $id"
+    else print -r -- "NEW: $id"; new=1; ids+=$id; fi
   done
+  print -l -- $ids > $g/new-ids.txt
   (( any )) || print -r -- "(no FAILED/ERROR lines)"
   # A shard ending other than by test failures (exit 1) is a failure of the run itself; exit 5 (nothing collected)
   # is only expected when a rehearsal filter was given.
@@ -638,36 +641,68 @@ SR)
     esac
   done
   print -r -- "SR verdict: $( (( new == 0 )) && print 'PASS (no NEW failure)' || print 'FAIL (NEW lines above)')"
-  (( $#ids )) && print -r -- "next (paste): zsh $THIS suite-base ${(j: :)${(q)ids}}"
+  print -r -- "NEW node ids ($#ids, one per line): $g/new-ids.txt"
+  (( $#ids )) && print -r -- "next (paste): zsh $THIS suite-base --from $g/new-ids.txt"
   return $new
   ;;
+SRX)
+  say "[SRX] read only: the first 'E ' line and the raise location of every failing test of the newest suite. Dialog: none."
+  local g=$(cat $T/suite-latest 2>/dev/null)
+  [[ -n $g && -d $g/shards ]] || { print -r -- "no suite result yet; run: zsh $THIS suite"; return 1; }
+  mkdir -p $OUT || return 1
+  python3 -I $SUITEIDS errors $g/shards/*(N.) > $OUT/suite-errors.txt
+  print -r -- "suite $g: $(grep -c '^    first E:' $OUT/suite-errors.txt) failing test sections -> $OUT/suite-errors.txt"
+  print -r -- "most frequent first E lines:"; grep '^    first E:' $OUT/suite-errors.txt | sort | uniq -c | sort -rn | head -8
+  print -r -- "most frequent raise locations:"; grep '^    raised at:' $OUT/suite-errors.txt | sort | uniq -c | sort -rn | head -8
+  return 0
+  ;;
 suite-base)
+  # The NEW ids on base (GraphTraj GTBASE + graftling BASE wheel), then on the candidate (this Worktree's HEAD +
+  # the GCOMMIT wheel, the suite's venv), one side after the other, same pytest flags, a fresh temp root each.
   setopt local_options no_bg_nice
-  local -a ids=("${(@)IDS}")
-  (( $#ids )) || { print -r -- "usage: zsh $THIS suite-base <node id>...   (SR prints the command with its NEW node ids)"; return 2; }
-  say "[suite-base] the NEW node ids on GraphTraj $GTBASE with graftling $BASE (wheel). Dialog: none. No login."
-  run_root base || return 1
+  local -a ids
+  if [[ ${IDS[1]:-} == --from ]]; then
+    [[ -f ${IDS[2]:-} ]] || { print -r -- "STOP: no id file '${IDS[2]:-}'; SR writes it (new-ids.txt)"; return 2; }
+    ids=(${(f)"$(<${IDS[2]})"})
+  else ids=("${(@)IDS}"); fi
+  ids=(${ids:#})
+  (( $#ids )) || { print -r -- "usage: zsh $THIS suite-base --from <ids file> | <node id>...   (SR prints the --from command)"; return 2; }
+  say "[suite-base] $#ids node ids: base (GraphTraj $GTBASE + graftling $BASE wheel), then candidate (HEAD $HEAD + graftling $GCOMMIT wheel). Dialog: none. No login."
+  gcommit_ready || return 1
+  local others=$(ps -axww -o pid=,command= | grep -E 'run_test_shards|-m pytest' | grep -v grep || true)
+  [[ -z $others ]] || { print -r -- "STOP: another test run is running; rerun later: zsh $THIS suite-base ${IDS[*]}"; print -r -- $others; return 1; }
   local B=$T/graphtraj-base
   if [[ ! -d $B/.git ]]; then
     rm -rf $B && git clone -q --no-checkout $GTREPO $B && git -C $B -c advice.detachedHead=false checkout -q $GTBASE || return 1
   fi
   [[ $(git -C $B rev-parse HEAD) == $GTBASE ]] || { print -r -- "STOP: $B is not at $GTBASE"; return 1; }
-  print -r -- "base checkout: $B (a git clone; $(git -C $B log --oneline -1))"
-  local V=$T/venv-base-${BASE[1,8]}
-  suite_venv $V $BASE $B || return 1
-  local R=$T/suite-base-$(date +%Y%m%dT%H%M%S); mkdir -p $R
-  (cd $B && TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rA "${ids[@]}" > $R/base.txt 2>&1); local rc=$?
-  tail -4 $R/base.txt; print -r -- "pytest exit=$rc (output: $R/base.txt)"
-  local id fails=0
-  for id in $ids; do
-    if grep -qE "^(FAILED|ERROR) ${(b)id}( |\$)" $R/base.txt; then print -r -- "also fails on base: $id"
-    elif grep -qE "^PASSED ${(b)id}\$" $R/base.txt; then print -r -- "candidate-only: $id"; fails=1
-    else print -r -- "NOT RUN on base (missing there?): $id"; fails=1; fi
+  print -r -- "base checkout: $B (a git clone; $(git -C $B log --oneline -1)); candidate checkout: $WT ($(git -C $WT log --oneline -1))"
+  local VB=$T/venv-base-${BASE[1,8]} VC=$T/venv-suite-${GCOMMIT[1,8]}
+  suite_venv $VB $BASE $B && suite_venv $VC $GCOMMIT $WT || return 1
+  local R=$OUT/suite-base-$(date +%Y%m%dT%H%M%S); mkdir -p $R || return 1
+  print -l -- $ids > $R/ids.txt
+  local side dir py rc
+  for side dir py in base $B $VB/bin/python candidate $WT $VC/bin/python; do
+    run_root $side || return 1
+    say "$side: pytest in $dir with $py (graftling: $(cd $RUNTMP && $py -I -c 'import graftling; print(graftling.__file__)'))"
+    # Only ids that exist on this side are passed (pytest stops the whole run on one unknown id).
+    (cd $dir && TMPDIR=$RUNTMP $py -m pytest -p no:cacheprovider -q --collect-only ${(u)${ids%%::*}} > $R/$side-collected.txt 2>&1)
+    python3 -I $SUITEIDS present $R/$side-collected.txt $R/ids.txt > $R/$side-ids.txt 2> $R/$side-missing.txt
+    [[ -s $R/$side-missing.txt ]] && print -r -- "not on $side (not run there): $(tr '\n' ' ' < $R/$side-missing.txt)"
+    local -a run=(${(f)"$(<$R/$side-ids.txt)"})
+    if (( $#run )); then
+      (cd $dir && TMPDIR=$RUNTMP $py -m pytest -p no:cacheprovider -q -rA "${run[@]}" > $R/$side.txt 2>&1); rc=$?
+    else print -r -- "(no id present on $side)" > $R/$side.txt; rc=5; fi
+    print -r -- "$side: pytest exit=$rc, $(grep -E '^[0-9]+ (passed|failed)|^=+ .*(passed|failed|error)' $R/$side.txt | tail -1) (output: $R/$side.txt)"
+    python3 -I $SUITEIDS errors $R/$side.txt > $R/$side-errors.txt
   done
-  print -r -- "writes: $T ($B, $V, $R) and $RUNTMP only"
+  say "classification (each id: base, then candidate)"
+  python3 -I $SUITEIDS classify $R/ids.txt $R/base.txt $R/candidate.txt | tee $R/classification.txt; local fails=${pipestatus[1]}
+  print -r -- "first E line + raise location per failing test: $R/base-errors.txt and $R/candidate-errors.txt"
+  print -r -- "writes: $T (venvs, $B), $R and the pytest temp roots under $PYTEST_TMP only"
   return $fails
   ;;
-*) print -r -- "usage: zsh $THIS pre|push|install|dsh|pi|claude|single|post|suite|SR|suite-base <ids>"; return 2 ;;
+*) print -r -- "usage: zsh $THIS pre|push|install|dsh|pi|claude|single|post|suite|SR|SRX|suite-base --from <file>|<ids>"; return 2 ;;
 esac
 }
 OK=1

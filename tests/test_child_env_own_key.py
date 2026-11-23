@@ -121,7 +121,10 @@ def launch_claude(tmp_path: Path, *, session: str | None = None, **fields) -> di
     driver   = ClaudeDriver(tmp_path, {'model': 'claude-opus-5-5', **fields})
     settings = driver.prepare('claude', Caller('h', None))
     settings = {**settings, **({'pass_env': pass_env} if pass_env else {}), **({'review': review} if review else {})}
-    turn = ClaudeExecution(settings, 'x', tmp_path, lambda *a: None, lambda *a: None, tmp_path / 't', session)
+    # graftling 576 caches the probed default tools in directory.parent.parent: keep that inside tmp_path.
+    directory = tmp_path / 'state' / 'agent' / 'one'
+    directory.mkdir(parents=True, exist_ok=True)
+    turn = ClaudeExecution(settings, 'x', directory, lambda *a: None, lambda *a: None, tmp_path / 't', session)
     return turn._prepare(None)[1]
 
 

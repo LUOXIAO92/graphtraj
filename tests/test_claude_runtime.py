@@ -172,17 +172,36 @@ def test_claude_permission_mode_configuration_and_resume(
 def test_claude_reports_mode_fallback_or_unknown(
     tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, observed: str,
 ) -> None:
-    """Do not label a native fallback or unavailable observation as active auto."""
+    """Do not label a native fallback or unavailable observation as active auto.
+
+    graftling 578: a narrower reported mode (default for auto) completes, recorded as not matching and
+    warned; an unknown mode still fails the run.
+    """
     result_project(tmp_path)
     monkeypatch.setenv('CLAUDE_FIXTURE_PERMISSION_MODE', observed)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'mode', claude={'permission_mode': 'auto'})
-        with pytest.raises(RuntimeAdapterError, match='requested permission mode') as failed:
-            turn.run()
-    assert failed.value.terminal_confirmed
+        if observed == 'default':
+            result = turn.run()
+            assert result['outcome'] == 'completed' and turn.terminal_confirmed
+        else:
+            with pytest.raises(RuntimeAdapterError, match='requested permission mode') as failed:
+                turn.run()
+            assert failed.value.terminal_confirmed
     assert turn.done.is_set() and turn.proc.poll() is not None
     assert turn.permission_evidence()['observed'] == observed
     assert turn.permission_evidence()['matches_request'] == (False if observed == 'default' else None)
+    if observed == 'default':
+        assert turn.permission_evidence()['narrower'] is True
+        assert result['permissions']['requested'] == 'auto' and result['permissions']['observed'] == 'default'
+        assert result['permissions']['matches_request'] is False and result['permissions']['narrower'] is True
+        recorded = yaml.safe_load((turn.directory / 'session.yml').read_text())['permissions']
+        assert (recorded['requested'], recorded['observed'], recorded['matches_request']) == ('auto', 'default', False)
+        assert {'source': 'system_init', 'category': 'permission_mode_narrower'} in turn.diagnostics['warnings']
+        assert turn.diagnostics['permission_mode']['narrower'] is True
+    else:
+        assert 'narrower' not in turn.permission_evidence()
+        assert not any(w['category'] == 'permission_mode_narrower' for w in turn.diagnostics['warnings'])
 
 
 @pytest.mark.parametrize('mode', ['bypassPermissions', 'acceptEdits', None])
@@ -219,10 +238,15 @@ def test_claude_native_resume_and_activity(tmp_path: Path, claude_environment: N
     assert usages == [dict(input_uncached=11, cache_read=7, cache_write=2, output=5, input=20)] * 2
 
 
+@pytest.mark.parametrize('observed', ['default', 'unknown'])
 def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
-    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, claude_environment: None, monkeypatch: pytest.MonkeyPatch, observed: str,
 ) -> None:
-    """Compare public diagnostic fields with actual Popen inputs, excluding private data."""
+    """Compare public diagnostic fields with actual Popen inputs, excluding private data.
+
+    graftling 578: the narrower reported mode (default for auto) completes with a warning; an unknown
+    mode still fails. The diagnostics are the same, bounded and private-free, on both paths.
+    """
     import subprocess
     from graphtraj.execution.runner_status import runtime_caller
     from graphtraj.execution.runner_models import RunnerError
@@ -230,7 +254,7 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
 
     runner, _, _ = result_project(tmp_path)
     monkeypatch.setenv('CLAUDE_FIXTURE_DIAGNOSTICS', '1')
-    monkeypatch.setenv('CLAUDE_FIXTURE_PERMISSION_MODE', 'default')
+    monkeypatch.setenv('CLAUDE_FIXTURE_PERMISSION_MODE', observed)
     captured = []
     popen = subprocess.Popen
 
@@ -243,9 +267,14 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
     monkeypatch.setattr(subprocess, 'Popen', observe)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'private-prompt-marker', claude={'permission_mode': 'auto'})
-        with pytest.raises(RuntimeAdapterError, match='requested permission mode') as failed:
-            turn.run()
-        assert failed.value.terminal_confirmed
+        if observed == 'default':
+            assert turn.run()['outcome'] == 'completed' and turn.terminal_confirmed
+        else:
+            with pytest.raises(RuntimeAdapterError, match='requested permission mode') as failed:
+                turn.run()
+            assert failed.value.terminal_confirmed
+    # Only the child's own launch is captured: a Runner member's fixed tools start no default-tools probe (576).
+    assert len(captured) == 1 and '--no-session-persistence' not in captured[0]
     with runtime_caller(runner, None):
         document = tools.read_reports({'alias': 'research@x1'}, cwd=tmp_path).document
     diagnostics = document['runtime_diagnostics']
@@ -266,8 +295,10 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
     assert launch['sandbox']['allowUnsandboxedCommands'] is False
     assert diagnostics['initialize']['autoModeAvailable'] is False
     assert diagnostics['initialize']['control_status'] == 'success'
-    assert diagnostics['system_init']['permissionMode'] == 'default'
+    assert diagnostics['system_init']['permissionMode'] == observed
     assert diagnostics['initialize']['reason'] == diagnostics['system_init']['reason'] == 'unknown'
+    assert ({'source': 'system_init', 'category': 'permission_mode_narrower'} in diagnostics['warnings']) is (
+        observed == 'default')
     assert {'source': 'stderr', 'category': 'native_auto_unavailable'} in diagnostics['warnings']
     assert {'source': 'stderr', 'category': 'native_permission_forced_default_by_environment_scrub'} in diagnostics['warnings']
     serialized = json.dumps(diagnostics)

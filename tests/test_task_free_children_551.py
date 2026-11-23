@@ -190,7 +190,8 @@ def test_claude_manual_grant_uses_the_installed_directory(monkeypatch: pytest.Mo
 def test_claude_member_tools_stay_fixed_and_children_inherit_the_host(
     tmp_path: Path, claude_environment: None, independent: bool,
 ) -> None:
-    """A Task member keeps its fixed tool list; an agents child gets no --tools unless it chose some."""
+    """A Task member keeps its fixed tool list; an agents child gets its Claude Code's probed default
+    set unless it chose some (graftling 576: --tools is always passed, --restricted would drop Bash)."""
     result_project(tmp_path)
     with ExitStack() as stack:
         turn, _, _ = execution(tmp_path, stack, 'unused')
@@ -198,7 +199,10 @@ def test_claude_member_tools_stay_fixed_and_children_inherit_the_host(
             turn.configure_independent(archive=None, agents_callback=lambda request: AgentsResult({}))
         argv, _ = turn._prepare(str(tmp_path / 'connection.sock'))
         if independent:
-            assert '--tools' not in argv and '--disallowedTools' not in argv
+            # The fixture's init answers graftling's probe with CLAUDE_FIXTURE_DEFAULT_TOOLS' default.
+            assert argv[argv.index('--tools') + 1] == 'Bash,Read,Edit,Write'
+            assert turn.diagnostics['default_tools'] == ['Bash', 'Read', 'Edit', 'Write']
+            assert '--disallowedTools' not in argv
             turn.request.update(tools=['Read', 'WebFetch'], disallowed_tools=['Bash'])
             chosen, _ = turn._prepare(str(tmp_path / 'connection.sock'))
             assert chosen[chosen.index('--tools') + 1] == 'Read,WebFetch'
@@ -206,6 +210,7 @@ def test_claude_member_tools_stay_fixed_and_children_inherit_the_host(
         else:
             assert argv[argv.index('--tools') + 1] == 'Bash,Read,Write,Edit,Glob,Grep'
             assert '--disallowedTools' not in argv
+            assert 'default_tools' not in turn.diagnostics   # a member's fixed tools start no probe
             turn.request.update(tools=['Read'], disallowed_tools=['Bash'])
             assert turn._prepare(str(tmp_path / 'connection.sock'))[0] == argv
 

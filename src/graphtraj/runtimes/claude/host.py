@@ -127,7 +127,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     from graphtraj.execution.main_continuity import claimable, requeue_notices
     from graphtraj.execution.runner_connection import parent_connection
     from graphtraj.execution.runner_status import runtime_caller
-    from graphtraj.interfaces.gateway import handle_request as handle_task
+    from graphtraj.interfaces.gateway import handle_request as handle_task, read_arguments_file
 
     runner = runner_directory(root)
     callers: dict[str, Callable] = {}
@@ -143,7 +143,12 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
         connection = {'runtime': 'claude', 'session': session, 'runner': str(runner)}
 
         def call(tool: str, request: dict) -> AgentsResult:
-            """Run one call as this Main; return queued Main notices with it."""
+            """Run one call as this Main; return queued Main notices with it.
+
+            The association matched ``request`` exactly as Claude Code sent it,
+            so its ``arguments_file`` is read only now, inside the project (575).
+            """
+            request = read_arguments_file(request, current)
             entry = None if session in claimed else (lambda: claimed.add(session))
             with claimable(entry), parent_connection(connection), runtime_caller(runner, None):
                 if tool == 'agents':

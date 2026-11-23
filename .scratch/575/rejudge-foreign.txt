@@ -1,0 +1,23 @@
+# Re-judge of Main's retained real foreign streams (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/575-mcp-arguments-file-authority-denied/realhost/main-raw/foreign-20261123T140053) with judge575.py at the working tree after the string-message fix (base commit fb3f8a94)
+# records in b.jsonl whose message is a string: 1
+## judge575.py calls b.jsonl
+tasks input={"action": "execute", "feature": "worldline_append", "arguments_file": "args575/append.json"}
+  -> error is_error=True: Permission to use mcp__graphtraj__tasks denied by plugins graphtraj-claude-host, cc-plugin-privacy: Error: Native agents association failed: host-busy: The agents host did not start: /private/tmp/argsfile-575/project/.graphtraj/claude-host/live/channel.json: another agents host is serving this project for Claude Code pid 84906. Close that Claude Code session.
+
+1 mcp__graphtraj__ call(s)
+rc=0
+## judge575.py expect b.jsonl b-write=tasks:worldline_append:file:code=host-busy
+b-write: tasks worldline_append (file) -> refused with permission check reason "host-busy: ..."; expected code=host-busy -> PASS
+  result: Permission to use mcp__graphtraj__tasks denied by plugins graphtraj-claude-host, cc-plugin-privacy: Error: Native agents association failed: host-busy: The agents host did not start: /private/tmp/argsfile-575/project/.graphtraj/claude-host/live/channel.json: another agents host is serving this proje
+rc=0
+## grep DONE-A a.jsonl (count of lines)
+4
+## a.jsonl result record
+subtype: success | is_error: False | result: The harness blocked a plain `sleep 150`, so I've started it in the background instead. I'll reply DONE-A once it finishes, in about 150 seconds.
+subtype: success | is_error: False | result: DONE-A
+## synthetic rehearsal: a record whose message is a string, then one host-busy call (old judge crashed with AttributeError here)
+b-write: tasks worldline_append (file) -> refused with permission check reason "host-busy: ..."; expected code=host-busy -> PASS
+  result: Error: Native agents association failed: host-busy: another agents host is serving this project
+rc=0
+## same stream with judge575.py at fb3f8a94 (before the fix)
+AttributeError: 'str' object has no attribute 'get'

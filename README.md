@@ -410,21 +410,60 @@ be on the `PATH` DSH starts with.
 **graftling-dsh.** The `graftling-dsh` bundle (Graftling's agents host, see
 [Independent agents](#independent-agents-without-graphtraj)) gives a DSH
 session a Task-free `agents` tool and its own children; it never makes the
-session GraphTraj Main and has no `tasks` tool. Add it only from the one graftling
-installation (`dsh plugin add` of that installation's `graftling/dsh` directory, as
-Graftling's DSH note shows); from graftling 0.8.0 (graftling Task 581) it is
-no longer installed from the graftling GitHub address and builds no copy of its own
-graftling under the DSH home. With graftling 0.7.0 it could stay
-installed in the same profile: without `GRAFTLING_DSH_CONFIG` its row started no
-agents host and attached no tool (it still installed its message relay). From
-graftling 0.8.0 (graftling Tasks 570 and 577) it starts its host in every
-main Session even without that variable, on `<project>/.agents-control` or the
-directory `GRAFTLING_DATA_ROOT` names, so with those versions keep it out of the
-profile you start a GraphTraj Main with (`dsh plugin --profile <profile> remove
-graftling-dsh`, or use another profile). Do not set
-`GRAFTLING_DSH_CONFIG` when starting a GraphTraj Main; the GraphTraj plugin
-refuses to load with it, because the Session would otherwise have two agents
-hosts. In a shell that exports it, start DSH with:
+session GraphTraj Main and has no `tasks` tool. A GraphTraj Main already has
+`agents`, so the profile you start a GraphTraj Main with does not need
+graftling-dsh: keep it out of that profile. Where you do want it, add it only
+from the one graftling installation (`dsh plugin add` of that installation's
+`graftling/dsh` directory, as Graftling's DSH note shows); from graftling 0.8.0
+(graftling Task 581) it is no longer installed from the graftling GitHub address
+and builds no copy of its own graftling under the DSH home. With graftling 0.7.0
+it could stay installed in the same profile: without `GRAFTLING_DSH_CONFIG` its
+row started no agents host and attached no tool (it still installed its message
+relay). From graftling 0.8.0 (graftling Tasks 570 and 577) it starts its host in
+every main Session even without that variable, on `<project>/.agents-control` or
+the directory `GRAFTLING_DATA_ROOT` names.
+
+What happens if graftling-dsh 0.8.0 is in the same profile as the GraphTraj Main
+patch (observed in GraphTraj Task 580 on the `headless` profile with DSH
+0.2.2-rc.5; other profiles were not run):
+
+- **No error and no warning.** The Session starts and runs as GraphTraj Main:
+  the continuity claim is written and `mcp__graphtraj__agents` and
+  `mcp__graphtraj__tasks` work. Nothing tells you a second host is running.
+- **Two agents hosts and two `agents` tools.** The Session runs both
+  graftling's host (`graftling.dsh.host`) and GraphTraj's MCP server
+  (`graphtraj.interfaces.mcp`), and the model is offered
+  `mcp__graftling__agents` next to `mcp__graphtraj__agents`.
+- **Children are not shared.** A child created through
+  `mcp__graftling__agents` is recorded only under `<project>/.agents-control`;
+  GraphTraj's `agents` and `tasks` do not list it, and it belongs to no Task.
+  The model can pick the wrong tool and start children GraphTraj never sees.
+- **With `GRAFTLING_DSH_CONFIG` set, GraphTraj drops out.** The GraphTraj
+  plugin refuses to load with that variable: DSH prints
+  `dsh: warning: 1 entry did not activate` and
+  `Error: GraphTraj DSH Main: unset GRAFTLING_DSH_CONFIG; graftling-dsh must not host this Session too.`,
+  then carries on with graftling-dsh only. That Session is not GraphTraj Main.
+  This check is the only one, and it does nothing when the variable is unset.
+
+To check a profile, compose it from the project directory without starting a
+session and look for graftling-dsh's row, `agents-host`:
+
+```bash
+dsh --profile headless --patch .graphtraj/dsh-main.patch.yml --dump-config \
+  | grep -n -A1 -E 'id: (agents-host|graphtraj-main)'
+```
+
+A clean GraphTraj Main profile shows only `- id: graphtraj-main`. If
+`- id: agents-host` with `name: graftling-dsh` also appears, remove the bundle
+from that profile (`dsh plugin` forwards the rest to pnpm in the profile
+directory), or start the GraphTraj Main with another profile, then run the
+check again:
+
+```bash
+dsh plugin --profile headless remove graftling-dsh
+```
+
+In a shell that exports `GRAFTLING_DSH_CONFIG`, start DSH without it:
 
 ```bash
 env -u GRAFTLING_DSH_CONFIG dsh --profile headless --patch .graphtraj/dsh-main.patch.yml "<task>"

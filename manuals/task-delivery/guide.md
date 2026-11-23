@@ -68,6 +68,13 @@ Use assigned report destinations. No role-specific filename or prose format is a
 universal submission or acceptance condition. Session completion alone does not
 accept or finish a Task.
 
+`submit_report` names one of your assigned reports by its filename
+(`engineer.md`), by its assigned path as the dispatch prompt gives it
+(`.state/teams/1/rounds/1/engineer.md`, or a trailing part such as
+`rounds/1/engineer.md`), or by its absolute location. The write always goes to
+that assigned file; another directory, `..`, or an unassigned name is refused
+with `authority-denied`, and the refusal lists your assigned report names.
+
 When an assigned report needs the direct parent's action, use `submit_report`
 through MCP with `notify_parent: true`. This includes an acceptance
 handoff or a blocker discovered while handling a child event. The default is

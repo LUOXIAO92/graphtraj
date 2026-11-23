@@ -28,7 +28,19 @@
 #   post         Main. The 'after' state of the four user locations, compared with pre's. <5 s.
 #   push         Main, ONLY after asking the user. Pushes the candidate branch to LUOXIAO92/graftling from the bundle.
 #                Dialog: none expected; git uses your usual GitHub login. ~30 s. No other step needs it.
+#   suite        Main. GraphTraj full suite of this Worktree's HEAD (6 shards, background, ~25 min) in a fresh venv under
+#                <Harness>/tmp/577 with graftling built as a WHEEL from the candidate bundle (GCOMMIT) and GraphTraj
+#                editable. pytest's temp root is under TMPDIR=${TMPDIR:-/tmp}, outside the Harness (checked, with the
+#                Harness-marker guard). Dialog: none. No login. VERIFY577_PYTEST_ARGS='<args>' only appends pytest
+#                args after `-- -rA` (rehearsal).
+#   SR           Read only: the newest suite's FAILED/ERROR lines classed known (Task 516's CURRENT definition, via its
+#                task.yml) or NEW; prints the ready-to-paste suite-base command for the NEW node ids. Dialog: none.
+#   suite-base   Main, only if SR reports NEW: `zsh <this file> suite-base <node id>...` reruns exactly those node ids on
+#                GraphTraj 660816c9 (a local git clone under <Harness>/tmp/577) with graftling built as a wheel from dev
+#                80e1bf0; per node id 'also fails on base' or 'candidate-only'. Dialog: none. No login.
 # Order: pre, install, dsh-default, dsh-unified, dsh-old, pi-default, pi-unified, pi-old, post (push: separately).
+# suite, SR (and suite-base) may run before or after the real-host steps; Main's suite queue is serial. They need no
+# ROOT and no key; they write only <Harness>/tmp/577/ (venvs, sources, outputs) and pytest's temp root under TMPDIR.
 # Login and credentials: only DEEPSEEK_API_KEY from your environment (never printed, never on a command line), for the
 # DSH Main, the Pi Main and every dsh child. Claude Code and Codex are not started. DEEPSEEK_BASE_URL is removed.
 # Writes outside ROOT: none expected from DSH (DSH_HOME=ROOT/dsh-home; children's homes under their data root's
@@ -59,6 +71,14 @@ MODELF=$ROOT/dsh-model.txt                          # the dsh child's model for 
 PIMODELF=$ROOT/pi-model.txt                         # the Pi Main's deepseek model id (pre)
 THIS=${0:A}
 STEP=${1:-}
+# suite / SR / suite-base (modelled on verify-575).
+T=${VERIFY577_T:-$H/tmp/577}                        # suite venvs, sources and outputs
+GTREPO=$H/graphtraj                                 # the GraphTraj repository (read only): holds GTBASE
+GTBASE=660816c9a90b6c52be03130f87e4b5d78d1c854e     # GraphTraj dev, this Task's base
+HEAD=$(git -C $WT rev-parse HEAD)
+CONDA=/Users/luoxiao/miniconda3/bin/python3.13
+PYTEST_TMP=${TMPDIR:-/tmp}
+D516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests
 path=(${VERIFY577_BIN:+$VERIFY577_BIN} /opt/homebrew/bin ${path:#$ROOT/*})
 
 say() { print -r -- "== $*"; }
@@ -188,6 +208,37 @@ build_venv() {  # dir commit: a venv with graftling built from the bundle at tha
   print -r -- "$c $got" > $v/installed; print -r -- "$v: $(<$v/installed)"
 }
 pkg() { print -r -- $ROOT/venv/lib/python3.13/site-packages/graftling/$1 }
+# A venv with graftling installed as a WHEEL built from commit $2 (the bundle supplies the candidate) and GraphTraj
+# editable from checkout $3; no network (click, PyYAML and websockets are copied from .venv-runtime).
+suite_venv() {  # venv graftling-commit graphtraj-checkout
+  local V=$1 c=$2 gt=$3 S=$1-src
+  [[ -x $V/bin/python && -f $V/installed ]] && { print -r -- "reusing $V ($(<$V/installed))"; return 0; }
+  rm -rf $V $S && mkdir -p $S/graftling $S/wheels || return 1
+  git clone -q --no-checkout $GREPO $S/repo && git -C $S/repo fetch -q $BUNDLE "${BRANCH}:refs/remotes/bundle/candidate" || return 1
+  git -C $S/repo archive $c | tar -x -C $S/graftling || { print -r -- "STOP: graftling $c not found"; return 1; }
+  $CONDA -m venv --system-site-packages $V || return 1
+  local D=$($V/bin/python -c 'import sysconfig; print(sysconfig.get_path("purelib"))') m
+  for m in click yaml websockets; do
+    $V/bin/python -I -c "import $m" 2>/dev/null && continue
+    case $m in
+      yaml) cp -Rp $RTSP/yaml $RTSP/_yaml(N) $RTSP/[Pp]y[Yy][Aa][Mm][Ll]-*.dist-info(N) $D/ ;;
+      *) cp -Rp $RTSP/$m $RTSP/$m-*.dist-info(N) $D/ ;;
+    esac || return 1
+  done
+  local -a pip=(-q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation)
+  $CONDA -m pip wheel $pip -w $S/wheels $S/graftling > /dev/null || return 1
+  $V/bin/python -m pip install $pip $S/wheels/graftling-*.whl && $V/bin/python -m pip install $pip -e $gt || return 1
+  print -r -- "graftling $c (wheel) + graphtraj $gt (editable)" > $V/installed; print -r -- "$V: $(<$V/installed)"
+}
+# A fresh pytest temp root under TMPDIR, outside the Harness, with no Harness marker above it; sets RUNTMP.
+run_root() {  # label
+  case ${PYTEST_TMP:A}/ in ${H:A}/*) print -r -- "STOP: TMPDIR $PYTEST_TMP is inside the Harness"; return 1 ;; esac
+  RUNTMP=${PYTEST_TMP:A}/verify-577-$1-$(date +%Y%m%dT%H%M%S)
+  local d=${RUNTMP:h}; while [[ $d != / ]]; do
+    [[ -e $d/.graphtraj || -e $d/.agents-control/claude-host.json ]] && { print -r -- "STOP: $d above the pytest temp root holds a Harness marker"; return 1; }
+    d=${d:h}; done
+  mkdir -p $RUNTMP && print -r -- "pytest temp: TMPDIR=$PYTEST_TMP -> run root $RUNTMP (outside the Harness)"
+}
 
 run_step() {
 case $STEP in
@@ -322,10 +373,90 @@ push)
   [[ $(git ls-remote $URL refs/heads/$BRANCH | cut -f1) == $GCOMMIT ]] && pass "GitHub $BRANCH = $GCOMMIT" || fail "GitHub $BRANCH is not $GCOMMIT"
   rm -rf $tmp
   ;;
-*) print -r -- "usage: zsh $THIS pre|install|dsh-default|dsh-unified|dsh-old|pi-default|pi-unified|pi-old|post|push"; return 2 ;;
+suite)
+  setopt local_options no_bg_nice
+  say "[suite] GraphTraj full suite of HEAD $HEAD (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. No login."
+  print -r -- "load average: $(sysctl -n vm.loadavg)"
+  local others=$(ps -axww -o pid=,command= | grep -E 'run_test_shards|-m pytest' | grep -v grep || true)
+  [[ -z $others ]] || { print -r -- "STOP: another test run is running; rerun later: zsh $THIS suite"; print -r -- $others; return 1; }
+  local dirty=$(git -C $WT status --porcelain -- src tests)
+  [[ -z $dirty ]] || { print -r -- "STOP: uncommitted changes in $WT: $dirty"; return 1; }
+  git -C $GREPO bundle verify $BUNDLE >/dev/null 2>&1 || { print -r -- "STOP: $BUNDLE does not verify"; return 1; }
+  run_root suite || return 1
+  local V=$T/venv-suite-${GCOMMIT[1,8]}
+  suite_venv $V $GCOMMIT $WT || return 1
+  (cd $RUNTMP && $V/bin/python -I -c 'import graphtraj, graftling, importlib.metadata as m; d = m.distribution("graftling"); print("graphtraj", graphtraj.__file__, "| graftling", graftling.__version__, graftling.__file__, "| editable:", any(str(f).startswith("__editable__") for f in d.files))') || return 1
+  local R=$T/suite-${HEAD[1,8]}-$(date +%Y%m%dT%H%M%S); mkdir -p $R
+  print -r -- "pytest temp root: $RUNTMP | candidate GraphTraj $HEAD | graftling $GCOMMIT (wheel)" > $R/run.txt
+  local extra=(${(Q)${(z)${VERIFY577_PYTEST_ARGS:-}}})
+  (( $#extra )) && print -r -- "REHEARSAL: extra pytest args after -- -rA: $extra" | tee -a $R/run.txt
+  (cd $WT && TMPDIR=$RUNTMP $V/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $R/shards -- -rA $extra \
+     > $R/suite.txt 2>&1; print "exit=$?" >> $R/suite.txt) &!
+  print -r -- $R > $T/suite-latest
+  print -r -- "started in the background at $(date +%T); output: $R/suite.txt (ends with 'exit=N')"
+  print -r -- "progress (paste): tail -3 $R/suite.txt; ls -la $R/shards"
+  print -r -- "writes: $T (venv, sources, $R) and $RUNTMP only"
+  print -r -- "next (paste, after $R/suite.txt ends with exit=): zsh $THIS SR"
+  ;;
+SR)
+  say "[SR] read only: newest suite; FAILED/ERROR lines classed against 516's current definition. Dialog: none."
+  local K=$D516/${${${(M)${(f)"$(<$D516/task.yml)"}:#current_definition: *}#current_definition: }//[\'\"]/}
+  print -r -- "516 current definition: $K"; [[ -f $K ]] || { print -r -- "STOP: cannot read $K"; return 1; }
+  local g=$(cat $T/suite-latest 2>/dev/null)
+  [[ -n $g && -f $g/suite.txt ]] || { print -r -- "no suite result yet; run: zsh $THIS suite"; return 1; }
+  cat $g/run.txt; tail -6 $g/suite.txt
+  grep -q '^exit=' $g/suite.txt || { print -r -- "suite still running (no exit= line yet)"; return 1; }
+  local line t id new=0 any=0; local -a ids=()
+  for line in ${(f)"$(grep -h -E '^(FAILED|ERROR) ' $g/suite.txt $g/shards/*(N.) 2>/dev/null | sed -E 's/ - .*//' | sort -u)"}; do
+    any=1; id=${line#* }; t=${id%%\[*}
+    if grep -qF -- "${t##*::}" $K; then print -r -- "known (516): $line"; else print -r -- "NEW: $line"; new=1; ids+=$id; fi
+  done
+  (( any )) || print -r -- "(no FAILED/ERROR lines)"
+  # A shard ending other than by test failures (exit 1) is a failure of the run itself; exit 5 (nothing collected)
+  # is only expected when a rehearsal filter was given.
+  for line in ${(f)"$(grep -E '^ABNORMAL .*: exit [0-9]+' $g/suite.txt)"}; do
+    case ${line##*exit } in
+      1) ;;
+      5) grep -q '^REHEARSAL' $g/run.txt && print -r -- "rehearsal filter, nothing collected: $line" \
+           || { print -r -- "ABNORMAL shard: $line"; new=1; } ;;
+      *) print -r -- "ABNORMAL shard: $line"; new=1 ;;
+    esac
+  done
+  print -r -- "SR verdict: $( (( new == 0 )) && print 'PASS (no NEW failure)' || print 'FAIL (NEW lines above)')"
+  (( $#ids )) && print -r -- "next (paste): zsh $THIS suite-base ${(j: :)${(q)ids}}"
+  return $new
+  ;;
+suite-base)
+  setopt local_options no_bg_nice
+  local -a ids=("${(@)IDS}")
+  (( $#ids )) || { print -r -- "usage: zsh $THIS suite-base <node id>...   (SR prints the command with its NEW node ids)"; return 2; }
+  say "[suite-base] the NEW node ids on GraphTraj $GTBASE with graftling $BASE (wheel). Dialog: none. No login."
+  run_root base || return 1
+  local B=$T/graphtraj-base
+  if [[ ! -d $B/.git ]]; then
+    rm -rf $B && git clone -q --no-checkout $GTREPO $B && git -C $B -c advice.detachedHead=false checkout -q $GTBASE || return 1
+  fi
+  [[ $(git -C $B rev-parse HEAD) == $GTBASE ]] || { print -r -- "STOP: $B is not at $GTBASE"; return 1; }
+  print -r -- "base checkout: $B (a git clone; $(git -C $B log --oneline -1))"
+  local V=$T/venv-base-${BASE[1,8]}
+  suite_venv $V $BASE $B || return 1
+  local R=$T/suite-base-$(date +%Y%m%dT%H%M%S); mkdir -p $R
+  (cd $B && TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rA "${ids[@]}" > $R/base.txt 2>&1); local rc=$?
+  tail -4 $R/base.txt; print -r -- "pytest exit=$rc (output: $R/base.txt)"
+  local id fails=0
+  for id in $ids; do
+    if grep -qE "^(FAILED|ERROR) ${(b)id}( |\$)" $R/base.txt; then print -r -- "also fails on base: $id"
+    elif grep -qE "^PASSED ${(b)id}\$" $R/base.txt; then print -r -- "candidate-only: $id"; fails=1
+    else print -r -- "NOT RUN on base (missing there?): $id"; fails=1; fi
+  done
+  print -r -- "writes: $T ($B, $V, $R) and $RUNTMP only"
+  return $fails
+  ;;
+*) print -r -- "usage: zsh $THIS pre|install|dsh-default|dsh-unified|dsh-old|pi-default|pi-unified|pi-old|post|push|suite|SR|suite-base <ids>"; return 2 ;;
 esac
 }
 OK=1
+IDS=("${(@)argv[2,-1]}")                            # suite-base: the node ids after the step name
 run_step; rc=$?
 print -r -- "STEP-END $STEP rc=$rc"
 exit $rc

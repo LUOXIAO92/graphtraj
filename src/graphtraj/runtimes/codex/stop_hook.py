@@ -37,7 +37,7 @@ def native_event(event: dict, project_root: Path | None = None) -> dict:
     if managed is not None:
         return skipped(f'process ownership resolved to managed Agent {managed}.')
     if launched_by_agents():
-        return skipped('this Codex runs as a child the agents tool started.')
+        return skipped('this Codex runs as a child the subagents tool started.')
     if not event.get('transcript_path'):
         # Ephemeral root forks have no transcript. Their hook session ID is the
         # root thread ID; verify it natively and require our creation binding

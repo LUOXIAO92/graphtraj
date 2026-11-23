@@ -2,7 +2,7 @@
 
 The installed ``graphtraj-mcp`` entry point answers the MCP methods a host
 needs to discover and run tools: ``initialize``, ``notifications/initialized``,
-``tools/list``, ``tools/call`` and ``ping``. Only ``agents`` and ``tasks`` are
+``tools/list``, ``tools/call`` and ``ping``. Only ``subagents`` and ``tasks`` are
 published, with individual feature schemas disclosed on demand.
 
 The server speaks newline-delimited JSON-RPC 2.0 over stdin/stdout and uses
@@ -60,7 +60,7 @@ def _tool_documents() -> list[dict[str, Any]]:
     return [
         {'name': name, 'description': f'Discover, describe, or execute {name} features.',
          'inputSchema': gateway.INPUT_SCHEMA}
-        for name in ('agents', 'tasks')
+        for name in ('subagents', 'tasks')
     ]
 
 
@@ -113,7 +113,7 @@ def _tool_call_response(
     """
 
     name = params.get("name")
-    if name not in ('agents', 'tasks'):
+    if name not in ('subagents', 'tasks'):
         return _error_response(
             request_id, INVALID_PARAMS, "Unknown tool: {0}".format(name)
         )
@@ -137,7 +137,7 @@ def _tool_call_response(
         # Keep the selected entry's scope before forwarding into the already
         # authenticated host. The host still owns feature authorization.
         if name == 'tasks' and arguments.get('action') != 'discover':
-            if arguments.get('feature') == 'agents':
+            if arguments.get('feature') == 'subagents':
                 raise ValueError('Feature does not belong to this MCP entry.')
         from graphtraj.runtimes.codex.host_events import calling_session
 
@@ -155,7 +155,7 @@ def _tool_call_response(
                 result = forward_request(request, Path.cwd(), native_context=client_native_context(metadata))
                 return result if result is not None else gateway.handle_request(request, cwd=Path.cwd())
 
-            if name == 'agents':
+            if name == 'subagents':
                 from graftling import handle_request
 
                 from graftling import client_native_context
@@ -167,7 +167,7 @@ def _tool_call_response(
                 result = dispatch(arguments)
                 if arguments.get('action') == 'discover' and not result.failed:
                     result.document['features'] = [item for item in result.document.get('features', [])
-                                                   if item['feature'] != 'agents']
+                                                   if item['feature'] != 'subagents']
                     # Capture in the serving process, not from a caller's CLI
                     # installation. A forwarded host supplies its own stamp.
                     result.document.setdefault('service', {})['mcp'] = _SERVICE
@@ -199,7 +199,7 @@ def _tool_call_response(
     # keeps the whole document in structuredContent. Every other host and
     # every other result keep the CLI's YAML rendering.
     card = (_agents_card(arguments, document)
-            if name == 'agents' and session is not None and not result.failed else None)
+            if name == 'subagents' and session is not None and not result.failed else None)
     return _result_response(
         request_id,
         {

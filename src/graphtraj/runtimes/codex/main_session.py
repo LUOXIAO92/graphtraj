@@ -99,7 +99,7 @@ async def run_main(
                 request = document['request']
                 with runtime_caller(runner, identity):
                     if (identity is None and request.get('action') == 'execute'
-                            and request.get('feature') == 'agents'):
+                            and request.get('feature') == 'subagents'):
                         result = agents_callback(root, Caller('runtime-mcp', None,
                                                  session=native_session, runtime='codex'))(request['arguments'])
                     else:

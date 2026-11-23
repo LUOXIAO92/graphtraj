@@ -72,7 +72,7 @@ class DshExecution(NativeDshExecution):
     connection_env = 'GRAPHTRAJ_CLI_CONNECTION'
     agents_only = False
 
-    # Members and agents children alike reach agents and tasks as mcp__graphtraj__* (551).
+    # Members and subagents children alike reach subagents and tasks as mcp__graphtraj__* (551).
     mcp_server = 'graphtraj'
 
     def __init__(

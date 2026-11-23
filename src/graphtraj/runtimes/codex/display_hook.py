@@ -1,8 +1,8 @@
 """Display retained receipts through Codex's UI-only hook output.
 
 This optional PostToolUse/Stop hook neither calls a tool nor adds model context.
-A Codex Main's own agents messages and replies are shown by the agents tool
-card itself (544), so this hook shows only receipts no agents call carries.
+A Codex Main's own subagents messages and replies are shown by the subagents tool
+card itself (544), so this hook shows only receipts no subagents call carries.
 Its per-Session cache contains displayed fact identifiers, never message bodies.
 The native host owns hook installation, trust and invocation.
 """

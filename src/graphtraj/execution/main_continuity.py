@@ -545,10 +545,10 @@ class MainRoots:
 
 
 # Task features that only read, plus features with their own Main policy:
-# ``agents`` applies MainRoots and ``bind_main_finalize`` keeps a Main's own
+# ``subagents`` applies MainRoots and ``bind_main_finalize`` keeps a Main's own
 # binding and pause. Every other executable feature is control.
 READ_FEATURES = frozenset({
-    'agents', 'alias_status', 'bind_main_finalize', 'desktop_activity', 'parent_status',
+    'subagents', 'alias_status', 'bind_main_finalize', 'desktop_activity', 'parent_status',
     'pending_requests', 'project_doctor', 'session_read', 'session_reports',
     'task_graph', 'task_members', 'worldline_read', 'worldline_render',
 })

@@ -262,7 +262,7 @@ class GraphTrajAgents:
         never reaches this receiver (477).
 
         A Task member's Runner-driven execution binds no native receiver, so
-        the end of a child it created with the agents tool also arrives here.
+        the end of a child it created with the subagents tool also arrives here.
         A ``failed`` or ``interrupted`` end, and a ``completed`` round with the
         child's final answer, is sent to the member's Session as a system
         notice (``notify_member_of_child_end``). The core calls this only for

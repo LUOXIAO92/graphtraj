@@ -7,7 +7,7 @@ chain still decides whether the MCP call is made; association does not approve i
 The verified Main continues the project's Main working state through the
 shared ``main_continuity`` record. Claude has no native entry event this host
 can observe, so a Session's first control call in this host process is its
-entry; reads never take control. ``agents`` and ``tasks`` share that identity.
+entry; reads never take control. ``subagents`` and ``tasks`` share that identity.
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from graphtraj.interfaces.agents import GraphTrajAgents, configured_archive
 from graphtraj.runtimes.claude.mcp import SERVER, descriptors, serve
 
 
-# The tool GraphTraj serves beside agents on its MCP server and declares to the plugin.
+# The tool GraphTraj serves beside subagents on its MCP server and declares to the plugin.
 ADDED_TOOLS = ('tasks',)
 
 
@@ -117,7 +117,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
     connection, so dispatched roots record it as their owner. A Session's
     first control call in this process claims Main (``main_continuity``); after
     another Main continues the project, its control calls are refused until a
-    new host process. ``backend`` is the same ``agents`` backend the Codex Main
+    new host process. ``backend`` is the same ``subagents`` backend the Codex Main
     uses (``GraphTrajAgents``: every Runtime driver and Task member Sessions).
     Queued member notices not yet delivered are claimed and returned with each
     result; a pickup failure is reported beside the result and never fails the
@@ -151,7 +151,7 @@ def main_calls(root: Path, backend: object, archive: object) -> Callable[[str, P
             request = read_arguments_file(request, current)
             entry = None if session in claimed else (lambda: claimed.add(session))
             with claimable(entry), parent_connection(connection), runtime_caller(runner, None):
-                if tool == 'agents':
+                if tool == 'subagents':
                     result = handle_request(request, callers[session])
                 else:
                     result = handle_task(request, cwd=root)
@@ -227,7 +227,7 @@ def adoption_material(root: Path, claude: Path) -> dict[str, object]:
             'GRAFTLING_CLAUDE_HOST_CONFIG': str(config),
         }},
         **claude_host_plugin(plugin, 'graphtraj-claude-host',
-                             'GraphTraj Main host context for the agents and tasks MCP entries.', ADDED_TOOLS,
+                             'GraphTraj Main host context for the subagents and tasks MCP entries.', ADDED_TOOLS,
                              server=SERVER['name']),
     }
 

@@ -100,7 +100,7 @@ def settings_request(request: dict, cwd: Path) -> dict:
     if not isinstance(request, dict) or request.get("action") not in {"read", "preview", "save", "archive"}:
         raise ValueError("Choose read, preview, save or archive settings.")
     if request["action"] == "archive":
-        # The agents tool owns these switches in its own config.yml; no copy is kept here.
+        # The subagents tool owns these switches in its own config.yml; no copy is kept here.
         from graftling import write_config
         from graphtraj.interfaces.agents import archive_choices, swarm_root
 

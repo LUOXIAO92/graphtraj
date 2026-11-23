@@ -123,7 +123,7 @@ def refresh_approval_route(request: dict, session_directory: Path) -> None:
 class CodexManagedExecution(NativeCodexExecution):
     """Attach GraphTraj task policy to the independent native execution owner."""
 
-    # Workers and agents children alike reach agents and tasks as mcp__graphtraj__* (551).
+    # Workers and subagents children alike reach subagents and tasks as mcp__graphtraj__* (551).
     # The owner's entry replaces any captured server of that name (see graftling's _run).
     mcp_server = 'graphtraj'
 
@@ -180,7 +180,7 @@ class CodexManagedExecution(NativeCodexExecution):
         return self.approval is not None
 
     def bind_connection(self, connections: ExitStack, request: dict, cwd: Path) -> tuple:
-        """Bind task tools for formal Workers, agents alone for Task-free consumers."""
+        """Bind task tools for formal Workers, subagents alone for Task-free consumers."""
         if self.independent:
             return super().bind_connection(connections, request, cwd)
         if self.created is None:
@@ -416,7 +416,7 @@ async def authorize_mcp_caller(
                 or metadata.get('forkedFromId') != native_session
                 or not is_bound_checker(discover_runner_directory(root), adapter.native_connection(thread))):
             raise RunnerError('authority-denied', 'Caller is outside this native Session subtree.')
-    return thread, {'task_graph', 'agents'}
+    return thread, {'task_graph', 'subagents'}
 
 
 def native_operation_features() -> set[str]:
@@ -427,4 +427,4 @@ def native_operation_features() -> set[str]:
                 'decide_result', 'retain_evidence', 'task_graph', 'task_members', 'worldline_read'}
             | set(METHOD_FEATURE_NAMES)
             | {'parent_status', 'replace', 'cleanup', 'approved_recovery',
-               'role_organization', 'runtime_connections', 'desktop_activity', 'session_read', 'agents'})
+               'role_organization', 'runtime_connections', 'desktop_activity', 'session_read', 'subagents'})

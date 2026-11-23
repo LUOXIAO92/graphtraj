@@ -19,7 +19,7 @@ def bind_agents(turn: DshExecution, run: Run, driver: AdapterDriver) -> None:
     # The child's own tasks entry (general methods only), bound to its own Agent ID (551).
     bind_run(turn, run, extra_tools=driver.child_tools(run))
     turn.agents_only = True
-    # The child's agents tool must reach the channel bind_run serves, so its calls run in
+    # The child's subagents tool must reach the channel bind_run serves, so its calls run in
     # this owner as the child. GraphTraj's own entry reads only GRAPHTRAJ_CLI_CONNECTION;
     # without it, it ran the call inside the MCP server, as the member, with an
     # environment DSH had stripped of every key (440).

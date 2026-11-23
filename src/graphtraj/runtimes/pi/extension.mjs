@@ -123,8 +123,8 @@ function quote(value) {
 export default function graphtraj(pi) {
   const sessions = new WeakMap();
   const collectors = new WeakMap();
-  // Members reach agents through GraphTraj's own MCP server as well; `agents`
-  // names it in Sessions started before 514. An independent child registers the
+  // Members reach subagents through GraphTraj's own MCP server as well; in
+  // Sessions started before 514 that server's key was agents. An independent child registers the
   // server its owner named (GraphTraj's children: graphtraj, 551), as graftling's own extension does.
   const agents = registerAgents(pi, { server: childServer?.(), displayServers: ['graphtraj', 'agents'] });
   const independent = agents.independent;
@@ -149,7 +149,7 @@ export default function graphtraj(pi) {
     await collectors.get(ctx.sessionManager)?.close();
     collectors.delete(ctx.sessionManager);
     // A GraphTraj-bound Session keeps its GraphTraj owner: it adopts neither
-    // an inherited independent connection nor a standalone agents host.
+    // an inherited independent connection nor a standalone subagents host.
     if (Object.hasOwn(process.env, 'GRAPHTRAJ_CLI_CONNECTION')) {
       if (Object.hasOwn(process.env, 'GRAFTLING_CONNECTION')) {
         throw new Error('Conflicting existing Agent connections; no identity was adopted.');

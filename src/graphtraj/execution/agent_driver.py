@@ -151,7 +151,7 @@ class AdapterDriver:
         self.codex = CodexDriver(execution=CodexManagedExecution, extra_tools=self.child_tools)
 
     def child_tools(self, run: Run) -> list:
-        """Return the tools a Task-free child gets beside ``agents``: GraphTraj's ``tasks`` entry.
+        """Return the tools a Task-free child gets beside ``subagents``: GraphTraj's ``tasks`` entry.
 
         It is bound to the child's own Agent ID, never to its parent's identity.
         """
@@ -354,7 +354,7 @@ class AdapterDriver:
             turn.agent_call = getattr(run, 'call', None)
             from graftling import extra_tool_table
 
-            # The child's tasks entry beside agents (551); PiExecution serves it.
+            # The child's tasks entry beside subagents (551); PiExecution serves it.
             turn.extra_tools = extra_tool_table(self.child_tools(run))
         turn.parent_notice = lambda message, details: (run.events.request(details),
                                                        {"delivery": "retained"})[1]

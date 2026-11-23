@@ -23,13 +23,14 @@ from graphtraj.interfaces.hosted_cli import agents_dispatch, forward_request
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, recovery_review
 
 
-# The MCP server key GraphTraj registers: Claude Code shows mcp__graphtraj__agents/tasks
-# (before 514 the key was ``agents``, which retained records still show).
+# The MCP server key GraphTraj registers: Claude Code shows mcp__graphtraj__subagents/tasks
+# (before 514 the key was ``agents``, which retained records still show; before
+# 592 the tool was ``agents``).
 SERVER = {'name': 'graphtraj', 'version': '1'}
 
 
 def descriptors() -> list[dict]:
-    """Expose agents and the GraphTraj tasks entry."""
+    """Expose subagents and the GraphTraj tasks entry."""
     return mcp_tool_documents() + [{
         'name': 'tasks', 'description': 'Discover, describe, or execute Task features.',
         'inputSchema': INPUT_SCHEMA,
@@ -44,7 +45,7 @@ def serve(
 ) -> None:
     """Expose the lightweight entries; the actual host retains caller authority.
 
-    ``native_call(request, tool)`` serves both ``agents`` and ``tasks`` for a
+    ``native_call(request, tool)`` serves both ``subagents`` and ``tasks`` for a
     verified native Main host. Every review that host's call needs (recovery,
     role organization, retirement or replacement, Runtime connection save)
     asks Claude Code itself through MCP elicitation: its own dialog shows the
@@ -65,8 +66,8 @@ def serve(
 
     def tasks(request: dict) -> AgentsResult:
         """Reuse Task authority through the native host or its existing hosted channel."""
-        if request.get('feature') == 'agents':
-            raise AgentsError('invalid-input', 'Use the agents entry for Agent controls.')
+        if request.get('feature') == 'subagents':
+            raise AgentsError('invalid-input', 'Use the subagents entry for Agent controls.')
         if native_call is not None:
             answer = native_call(request, 'tasks')
         else:
@@ -74,7 +75,7 @@ def serve(
             answer = answer if answer is not None else handle_request(request, cwd=cwd)
         if request.get('action') == 'discover' and 'features' in answer.document:
             return AgentsResult({**answer.document, 'features': [item for item in answer.document['features']
-                                if item['feature'] != 'agents']}, failed=answer.failed)
+                                if item['feature'] != 'subagents']}, failed=answer.failed)
         return answer
 
     def dispatch(request: dict) -> AgentsResult:
@@ -84,7 +85,7 @@ def serve(
     def call(identity: object, params: dict) -> dict:
         """Return shared discovery or execution without expanding the tool list."""
         if params.get('name') not in [item['name'] for item in descriptors()] or not isinstance(params.get('arguments', {}), dict):
-            return mcp_error_response(identity, -32602, 'Expected agents and object arguments.')
+            return mcp_error_response(identity, -32602, 'Expected subagents or tasks and object arguments.')
         try:
             # A native association matches Claude Code's exact tool input, so
             # the native backend reads the arguments file for the call it runs

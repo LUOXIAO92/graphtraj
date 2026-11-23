@@ -40,7 +40,7 @@ class ClaudeExecution(NativeClaudeExecution):
     # A Runner execution's member reaches the hosted CLI, not graftling's own owner.
     connection_env = 'GRAPHTRAJ_CLI_CONNECTION'
 
-    # Members and agents children alike reach agents and tasks as mcp__graphtraj__* (551).
+    # Members and subagents children alike reach subagents and tasks as mcp__graphtraj__* (551).
     # A child's --strict-mcp-config loads no other server, so no host entry can share the name.
     mcp_server = 'graphtraj'
 

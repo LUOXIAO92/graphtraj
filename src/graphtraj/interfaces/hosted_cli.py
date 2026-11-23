@@ -113,18 +113,18 @@ def cli_connection(
 def agents_dispatch(
     request: Mapping[str, Any], cwd: Path, *, native_context: dict | None = None,
 ) -> ToolResult:
-    """Run one ``agents`` action over this process's bound channel, else in this project.
+    """Run one ``subagents`` action over this process's bound channel, else in this project.
 
-    Both MCP entries and the ``agents`` CLI use this one route, so a Task
+    Both MCP entries and the ``subagents`` CLI use this one route, so a Task
     member's control stays in the host that verifies its caller.
     """
-    envelope = {'action': 'execute', 'feature': 'agents', 'arguments': dict(request)}
+    envelope = {'action': 'execute', 'feature': 'subagents', 'arguments': dict(request)}
     answer = forward_request(envelope, cwd, native_context=native_context)
     return answer if answer is not None else handle_request(envelope, cwd=cwd)
 
 
 def agents_host(cwd: Path) -> Callable[[dict], Any] | None:
-    """Claim the independent ``agents`` CLI only inside GraphTraj (``graftling.hosts`` entry).
+    """Claim the independent ``subagents`` CLI only inside GraphTraj (``graftling.hosts`` entry).
 
     A process bound to a Task channel, or a caller inside a Harness project,
     uses ``agents_dispatch``; anywhere else the CLI keeps its own owner. The

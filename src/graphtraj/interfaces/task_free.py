@@ -1,6 +1,6 @@
-"""The ``tasks`` entry an agents-created, Task-free child Agent reaches.
+"""The ``tasks`` entry a subagents-created, Task-free child Agent reaches.
 
-A child created through ``agents`` has no Task, Team or Runner alias. It still
+A child created through ``subagents`` has no Task, Team or Runner alias. It still
 uses GraphTraj's general methods through the same product entry as a Task
 member: progressive ``tasks`` discover/describe, which returns the installed
 manual's ``manual_ref``. Nothing is copied and no second source exists.
@@ -28,7 +28,7 @@ TASK_FREE_FEATURES = frozenset(METHOD_FEATURE_NAMES)
 
 TASKS_DESCRIPTION = 'Discover, describe, or execute Task features.'
 
-# The names of the tools task_free_tools declares beside agents.
+# The names of the tools task_free_tools declares beside subagents.
 TASK_FREE_TOOL_NAMES = ('tasks',)
 
 
@@ -52,9 +52,9 @@ def serve_task_free(root: Path, agent: str, request: object) -> AgentsResult:
                                        'message': 'A Task-free child needs its own Agent identity.'}}, failed=True)
     if not isinstance(request, dict):
         return AgentsResult({'error': 'Expected an object request.'}, failed=True)
-    if request.get('feature') == 'agents':
+    if request.get('feature') == 'subagents':
         return AgentsResult({'error': {'code': 'invalid-input',
-                                       'message': 'Use the agents entry for Agent controls.'}}, failed=True)
+                                       'message': 'Use the subagents entry for Agent controls.'}}, failed=True)
     try:
         with runtime_caller(runner_directory(Path(root)), agent):
             result = handle_request(request, cwd=Path(root), allowed_features=TASK_FREE_FEATURES)

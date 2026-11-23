@@ -521,7 +521,7 @@ def read_session_archive(arguments: Mapping[str, Any], *, cwd: Path | None = Non
 
 register_tool(
     "session_read",
-    "Transitional: prefer the agents tool's session_read feature, which reads a slice (by default "
+    "Transitional: prefer the subagents tool's session_read feature, which reads a slice (by default "
     "the last 5 conversation events) or searches. This forwards to it and keeps the old page: every "
     "archived event after `after`, at most `limit`, and durable unfinished output. "
     "Verified project callers, including Main and other Agents, read the project's linked Sessions with "

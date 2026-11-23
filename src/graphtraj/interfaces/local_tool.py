@@ -1,7 +1,7 @@
 """Trusted host binding and the ``graphtraj-tool`` structured stdio bridge.
 
 This is not a model tool: models reach GraphTraj only through the CLI and the
-progressive ``agents``/``tasks`` MCP entries. An owning host (for example the
+progressive ``subagents``/``tasks`` MCP entries. An owning host (for example the
 desktop window, or a host that receives child events) binds :func:`bind` to its
 own launch context: the working directory and, when chosen, the feature names
 it allows. A host that needs a process boundary starts ``graphtraj-tool`` and

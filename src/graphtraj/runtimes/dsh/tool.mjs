@@ -63,7 +63,7 @@ export function sessionEnvironment(agent) {
 }
 
 export function apply(ctx, config = { finishCheck: false }) {
-  // graftling-dsh's host row would make this Session a second, Task-free agents host.
+  // graftling-dsh's host row would make this Session a second, Task-free subagents host.
   if (config.python && process.env.GRAFTLING_DSH_CONFIG) {
     throw new Error('GraphTraj DSH Main: unset GRAFTLING_DSH_CONFIG; graftling-dsh must not host this Session too.');
   }

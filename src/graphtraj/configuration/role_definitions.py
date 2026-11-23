@@ -78,7 +78,7 @@ def resolve_child_role(
         "\nDo not use Runtime-native swarm or dispatch native helpers.\n"
     ) + (
         "Do not launch a Runtime's own command yourself; formal dispatch uses "
-        "Runner and the configured role_tree. The `agents` tool, where you have "
+        "Runner and the configured role_tree. The `subagents` tool, where you have "
         "it, is not such a launch and keeps its own limits.\n"
     )
     return ResolvedChildRole(

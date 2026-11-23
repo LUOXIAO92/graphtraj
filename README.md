@@ -400,9 +400,14 @@ be on the `PATH` DSH starts with.
 **graftling-dsh.** The `graftling-dsh` bundle (Graftling's agents host, see
 [Independent agents](#independent-agents-without-graphtraj)) gives a DSH
 session a Task-free `agents` tool and its own children; it never makes the
-session GraphTraj Main and has no `tasks` tool. It may stay installed in the
-same profile: without `GRAFTLING_DSH_CONFIG` its row starts no agents host and
-attaches no tool (it still installs its message relay). Do not set
+session GraphTraj Main and has no `tasks` tool. With graftling 0.7.0 it may stay
+installed in the same profile: without `GRAFTLING_DSH_CONFIG` its row starts no
+agents host and attaches no tool (it still installs its message relay). Later
+graftling versions (unreleased, graftling Tasks 570 and 577) start its host in every
+main Session even without that variable, on `<project>/.agents-control` or the
+directory `GRAFTLING_DATA_ROOT` names, so with those versions keep it out of the
+profile you start a GraphTraj Main with (`dsh plugin --profile <profile> remove
+graftling-dsh`, or use another profile). Do not set
 `GRAFTLING_DSH_CONFIG` when starting a GraphTraj Main; the GraphTraj plugin
 refuses to load with it, because the Session would otherwise have two agents
 hosts. In a shell that exports it, start DSH with:

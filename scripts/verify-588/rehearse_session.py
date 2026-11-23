@@ -28,7 +28,7 @@ from graphtraj.graph.delivery_state import apply_delivery_state_request
 from graphtraj.graph.delivery_worldline import read_worldline
 from graphtraj.workspace.runner_project import discover_runner_directory
 
-ALIAS = '1-submit_report_name_probe-rehearsal0-engineer@engineer'
+ALIAS = '1-submit_report_name_probe-handover9-engineer@engineer'   # Runner's alias form (runner_status.ALIAS)
 CALLS = [('engineer.md', 'probe bare'), ('.state/teams/1/rounds/1/validation.md', 'probe path'),
          ('engineer-budget', 'probe refused')]
 
@@ -46,7 +46,7 @@ def main(project: Path, home: Path) -> int:
         'phase': 'start', 'task_id': '1',
         'caused_by_event_ids': [read_worldline(state, project)[-1]['event_id']],
         'evidence_refs': ['.graphtraj/probe-588/evidence.md'],
-        'worktree': str(worktree.relative_to(project)), 'branch': 'agent/1-probe',
+        'worktree': str(worktree.relative_to(project)), 'branch': 'agent/1-submit-report-name-probe',
         'members': {'engineer': {'role': 'engineer', 'session_ref': ALIAS}},
     }
     apply_delivery_state_request(state, project, request, request)

@@ -513,7 +513,9 @@ graphtraj({registerFlag() {}, getFlag(name) { return flags[name]; },
   registerMessageRenderer(type) { renderers.push(`message ${type}`); },
   on(name, handler) { if (name === 'session_start') handlers.push(handler); }});
 const header = {type: 'session', version: 3, id: 'attachments', cwd: process.cwd(), timestamp: 0};
-const sessionManager = {getSessionId: () => 'attachments', getSessionFile: () => '', getHeader: () => header,
+// TEST_SESSION_FILE: the persistent Session file a Pi Main has; '' models `pi --no-session` (graftling 585).
+const sessionFile = process.env.TEST_SESSION_FILE || '';
+const sessionManager = {getSessionId: () => 'attachments', getSessionFile: () => sessionFile, getHeader: () => header,
   getEntries: () => [], getLeafId: () => null};
 const ctx = {cwd: process.cwd(), hasUI: process.env.TEST_HAS_UI === '1', sessionManager,
   ui: {notify(message, level) { notices.push({message, level}); }}};
@@ -527,10 +529,13 @@ console.log(JSON.stringify({notices, servers: servers.map(server => server.name)
 
 def extension_session_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owner: str, *,
                             agents_config: Path | None = None, has_ui: bool = False, rounds: int = 1,
+                            session_file: bool = False,
                             ) -> tuple[subprocess.CompletedProcess, list[str], Path]:
     """Run the real extension's session_start in a member Worktree with no GraphTraj Config there.
 
     ``owner`` is the marker the Session carries: plugin-child, runner, agents-driver or unmarked.
+    ``session_file`` gives the Session a persistent Session file, as a Pi Main has; without it the
+    Session has none (``pi --no-session``), which graftling 585 treats as a subagent child.
     graphtraj-session is a recording wrapper of the real entry; GRAFTLING_PYTHON, when set, is a
     recording wrapper of this interpreter in which ``-m graftling.pi.host`` exits 3 at once, so no
     real graftling host runs. Returns node's result, the recorded graphtraj-session argument lines and
@@ -585,6 +590,12 @@ exec {sys.executable!r} "$@"
         monkeypatch.setenv('GRAFTLING_PYTHON', str(python))
     if agents_config is not None:
         monkeypatch.setenv('TEST_AGENTS_CONFIG', str(agents_config))
+    if session_file:
+        persistent = tmp_path / 'pi-session.jsonl'
+        persistent.touch()
+        monkeypatch.setenv('TEST_SESSION_FILE', str(persistent))
+    else:
+        monkeypatch.delenv('TEST_SESSION_FILE', raising=False)
     monkeypatch.setenv('TEST_HAS_UI', '1' if has_ui else '0')
     monkeypatch.setenv('TEST_ROUNDS', str(rounds))
     pi = shutil.which('pi') if has_ui else None
@@ -640,7 +651,10 @@ def test_extension_still_hands_an_explicit_agents_session_to_graftling(
     config = tmp_path / 'pi-host.json'
     config.write_text(json.dumps({'root': str(tmp_path / 'explicit')}))
     if route == 'agents-config':
-        result, spawned, pythons = extension_session_start(tmp_path, monkeypatch, 'unmarked', agents_config=config)
+        # An explicit --agents-config Main: a real Pi Main has a persistent Session file (graftling 585
+        # starts no host without one, as for a `pi --no-session` subagent child).
+        result, spawned, pythons = extension_session_start(tmp_path, monkeypatch, 'unmarked', agents_config=config,
+                                                           session_file=True)
         lines = pythons.read_text().splitlines()
         assert f'-I -m graftling.pi.host --config {config}' in lines, lines
         assert result.returncode != 0, result.stdout

@@ -50,6 +50,13 @@ if os.environ.get('CLAUDE_FIXTURE_DIAGNOSTICS'):
     print('Permission mode forced to default — CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is set '
           '(allowed_non_write_users hardening). Declare allowedTools explicitly, or set '
           'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=0 to opt out.', file=sys.stderr)
+if '--no-session-persistence' in sys.argv and '--restricted' not in sys.argv:
+    # graftling's default-tools probe (576; same branch as graftling's own fixture): one init, then wait to be stopped.
+    sys.stdin.readline()
+    print(json.dumps({'type': 'system', 'subtype': 'init', 'tools': os.environ.get(
+        'CLAUDE_FIXTURE_DEFAULT_TOOLS', 'Bash,Read,Edit,Write').split(',')}), flush=True)
+    time.sleep(30)
+    raise SystemExit
 args = sys.argv
 session = args[args.index('--resume' if '--resume' in args else '--session-id') + 1]
 model = args[args.index('--model') + 1]

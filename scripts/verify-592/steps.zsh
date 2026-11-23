@@ -55,7 +55,8 @@
 #                server and plugin are given on the command line, so no folder-trust or server-approval prompt).
 #                Network: Anthropic. ~1-2 min.
 #   post         Main. ~/.pi/agent, ~/.dsh and ~/.codex vs pre (any difference FAILs). <5 s.
-#   suite        Main, if Engineer A's sandbox could not run the full suite (the Leader says). First STOPs, writing
+#   suite        Main, OPTIONAL: A ran the full suite (c9d68f31: 3 failed, 3696 passed, 60 skipped; see validation report).
+#                This is Main's own confirmation. First STOPs, writing
 #                nothing, unless T=<Harness>/tmp/592 can be created and written (suite-base too). GraphTraj's full suite of
 #                GCOMMIT (a clean clone in T, not this Worktree: uncommitted edits cannot leak in) with graftling
 #                49f97004 as a WHEEL and GraphTraj editable from that clone; scripts/run_test_shards.py, 6 shards,
@@ -64,12 +65,13 @@
 #   SR           Read only: the newest suite's FAILED/ERROR node ids (whole ids, scripts/verify-581/suiteids.py), each
 #                marked 'listed in 516' (Task 516's CURRENT definition, read through its task.yml current_definition)
 #                or 'not in 516'; ALL of them go to failed-ids.txt and to the ready-to-paste suite-base command (each id
-#                a separate shell-quoted argument). Dialog: none.
-#   suite-base   Main, only if SR lists failures: the ids on base GraphTraj bfed0c4c with graftling 542a81df (0.8.0)
+#                a separate shell-quoted argument). test_runtime_distribution::test_wheels_have_separate_owners gets a
+#                NOTE: candidate version label 0.8.0; resolved by 593. Dialog: none. (optional: A ran the full suite)
+#   suite-base   Main, optional (A ran the full suite), only if SR lists failures: the ids on base GraphTraj bfed0c4c with graftling 542a81df (0.8.0)
 #                as a WHEEL, then on GCOMMIT with graftling 49f97004; per id: fails on both (also fails on base) |
 #                candidate-only (NEW unless listed in 516) | ... Dialog: none. No login.
-# Order: pre, install, cli, pi-main, [claude-pre, claude-main], post. suite, SR (suite-base) need no ROOT, no key, no
-# login. No push step: the backup to LUOXIAO92/graphtraj is the Leader's/Main's integration step.
+# Order: pre, install, cli, pi-main, [claude-pre, claude-main], post. suite, SR (suite-base) are optional (A ran the
+# full suite) and need no ROOT, no key, no login. No push step: the backup to LUOXIAO92/graphtraj is the Leader's/Main's integration step.
 # Preflight: every host answers a one-line prompt naming its configured model and login before it is used: Pi in pre,
 # Claude in claude-pre. No probe Task is needed (tasks discover and the two refusals need none).
 # Credentials: every pi process runs in an ALLOWLISTED environment (launch: HOME USER LOGNAME SHELL TERM LANG LC_ALL
@@ -96,7 +98,7 @@ GREPO=$H/graftling                                  # the local graftling reposi
 LCAND=49f97004a86cc245ad32515b9dd056d7092b08f7      # graftling candidate (591, accepted; dev), version string 0.8.0
 LBASE=542a81df0c941f5b1a425d9807681b2a38daa87c      # graftling v0.8.0, the base's graftling
 GTBASE=bfed0c4c                                     # GraphTraj dev, this Task's base (expanded below)
-GCOMMIT=${VERIFY592_GCOMMIT:-}                      # the GraphTraj candidate; the Leader sets it before handoff
+GCOMMIT=${VERIFY592_GCOMMIT:-c9d68f31ea1bf5a23ada6157d084f6edaf7ed60c}  # GraphTraj candidate (A final; code as 3f8207b6)
 RTSP=$H/.venv-runtime/lib/python3.13/site-packages  # read only: click, PyYAML and websockets are copied from here
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
 JUDGE=${0:A:h}/judge.py
@@ -309,6 +311,16 @@ pre)
   local t; for t in node pi git; do print -r -- "$t: $(command -v $t) $(launch -- $t --version < /dev/null 2>&1 | head -1)"; done
   print -r -- "GraphTraj candidate $GCOMMIT: $(git -C $WT log --format=%s -1 $GCOMMIT | cut -c1-90)"
   print -r -- "GraphTraj base $GTBASE: $(git -C $WT log --format=%s -1 $GTBASE | cut -c1-90)"
+  # The wheels are built from GCOMMIT (git archive); this shows the checkout Main runs from equals it outside verify-592.
+  say "git diff --stat $GCOMMIT HEAD (this Worktree, $(git -C $WT rev-parse HEAD)):"
+  git -C $WT diff --stat $GCOMMIT HEAD
+  local -a other=(${(f)"$( { git -C $WT diff --name-only $GCOMMIT HEAD; git -C $WT diff --name-only HEAD; } | grep -v '^scripts/verify-592/' | sort -u)"})
+  if [[ -n ${VERIFY592_NO_DIFF_CHECK:-} ]]; then
+    print -r -- "REHEARSAL: diff check skipped (VERIFY592_NO_DIFF_CHECK); differing paths outside scripts/verify-592: ${#other}"
+  elif (( $#other )); then
+    print -r -- "FAIL: the Worktree differs from GCOMMIT outside scripts/verify-592 (committed or not): $other"
+    print -r -- "STOP: the installed candidate would not equal this checkout; report this to the Leader."; return 1
+  else pass "the Worktree equals GCOMMIT outside scripts/verify-592 (committed and uncommitted)"; fi
   git -C $GREPO cat-file -e "$LCAND^{commit}" 2>/dev/null || { print -r -- "STOP: graftling $LCAND not in $GREPO"; return 1; }
   print -r -- "graftling candidate $LCAND: $(git -C $GREPO log --format=%s -1 $LCAND | cut -c1-90)"
   [[ -d $RTSP/websockets && -d $RTSP/yaml && -d $RTSP/click ]] || { print -r -- "STOP: $RTSP lacks click, websockets or yaml"; return 1; }
@@ -473,7 +485,7 @@ post)
 suite)
   setopt local_options no_bg_nice
   gcommit || return 1
-  say "[suite] Main. GraphTraj full suite of $GCOMMIT (clean clone) + graftling $LCAND (wheel); 6 shards, --timeout 1500, -rA, background ~25 min. Dialog: none. No login."
+  say "[suite] Main, optional: A ran the full suite. GraphTraj full suite of $GCOMMIT (clean clone) + graftling $LCAND (wheel); 6 shards, --timeout 1500, -rA, background ~25 min. Dialog: none. No login."
   print -r -- "load average: $(sysctl -n vm.loadavg 2>/dev/null || print unavailable)"
   local o=$(others); [[ -z $o ]] || { print -r -- "STOP: another test run is running; rerun later: zsh $THIS suite"; print -r -- $o; return 1; }
   t_ready && run_root suite || return 1
@@ -511,6 +523,8 @@ SR)
     [[ -n $id ]] || continue
     t=${id%%\[*}; ids+=$id; bad=1
     if grep -qF -- "${t##*::}" $K; then print -r -- "listed in 516: $id"; else print -r -- "not in 516: $id"; fi
+    [[ $t == *test_runtime_distribution.py::test_wheels_have_separate_owners ]] \
+      && print -r -- "NOTE: $id: candidate version label 0.8.0; resolved by 593 (A showed it passes with a 0.9.0-labelled wheel)"
   done
   print -l -- $ids > $g/failed-ids.txt
   (( $#ids )) || print -r -- "(no FAILED/ERROR lines)"
@@ -545,7 +559,7 @@ suite-base)
   else ids=("${(@)IDS}"); fi
   ids=(${ids:#})
   (( $#ids )) || { print -r -- "usage: zsh $THIS suite-base --from <ids file> | <node id>...   (SR prints both)"; return 2; }
-  say "[suite-base] Main. $#ids node ids: base (GraphTraj $GTBASE + graftling $LBASE), then candidate (GraphTraj $GCOMMIT + graftling $LCAND). Dialog: none. No login."
+  say "[suite-base] Main, optional: A ran the full suite. $#ids node ids: base (GraphTraj $GTBASE + graftling $LBASE), then candidate (GraphTraj $GCOMMIT + graftling $LCAND). Dialog: none. No login."
   print -l -- "  id: "${^ids}
   local o=$(others); [[ -z $o ]] || { print -r -- "STOP: another test run is running; rerun this command later"; print -r -- $o; return 1; }
   t_ready || return 1

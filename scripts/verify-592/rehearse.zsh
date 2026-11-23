@@ -25,8 +25,12 @@ side() {  # label commit
 }
 print -r -- "rehearsal of $S at $(git -C $WT log --oneline -1 -- scripts/verify-592) | candidate $CAND | $(date '+%F %T %Z')"
 print -r -- "zsh $ZSH_VERSION | TMPDIR=$TMPDIR | stub pi: $VERIFY592_BIN/pi"
-side base $BASE
+print -r -- "(base part: VERIFY592_NO_DIFF_CHECK=1, since this checkout differs from base by design)"
+VERIFY592_NO_DIFF_CHECK=1 side base $BASE
 side cand $CAND
+print -r -- "======== part: pre's diff check against a commit whose tests differ (3f8207b6; expected FAIL + STOP)"
+( export VERIFY592_ROOT=$TMPDIR/graphtraj-592-reh-diff VERIFY592_OUT=$B/out-diff VERIFY592_GCOMMIT=$(git -C $WT rev-parse 3f8207b6)
+  rm -rf $VERIFY592_ROOT; zsh $S pre 2>&1 | grep -E '^(PASS|FAIL|STOP|STEP-END| [^ ].*\|)' | cut -c1-200; print -r -- "rc=${pipestatus[1]}" )
 print -r -- "======== part: Claude gates (no login flag; claude is not on this sandbox's PATH)"
 run claude-pre
 run claude-main
@@ -74,7 +78,7 @@ print -r -- "======== part: suite through the step (FILTERED), SR, suite-base on
 export VERIFY592_GCOMMIT=$CAND VERIFY592_OUT=$B/out-suite VERIFY592_NO_PS=1
 print -r -- "######## suite with an unwritable T (expected STOP before anything is written)"
 VERIFY592_T=/var/empty/graphtraj-592-T zsh $S suite 2>&1 | grep -E '^(STOP|T=|STEP-END)' ; print -r -- "rc=${pipestatus[1]}"
-export VERIFY592_PYTEST_ARGS="-k 'tool_name_592 or test_host_plugin_tools or test_mcp_adoption'"
+export VERIFY592_PYTEST_ARGS="-k 'tool_name_592 or test_host_plugin_tools or test_mcp_adoption or test_wheels_have_separate_owners'"
 run suite
 [[ -f $VERIFY592_T/suite-latest ]] || { print -r -- "rehearsal stops: the suite step did not start (above)"; exit 1; }
 local g=$(<$VERIFY592_T/suite-latest) i; for i in {1..180}; do grep -q '^exit=' $g/suite.txt 2>/dev/null && break; sleep 5; done

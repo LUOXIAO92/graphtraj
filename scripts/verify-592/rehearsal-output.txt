@@ -1,0 +1,393 @@
+# Task 592 Engineer B rehearsal (NOT acceptance evidence): zsh scripts/verify-592/rehearse.zsh c9d68f31, run 2026-11-24 01:59:40 JST in the
+# Engineer sandbox with the stub pi (no model; real installed graphtraj-mcp). Script version: the commit adding this file.
+rehearsal of /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/scripts/verify-592/steps.zsh at 8d02ec0b verify-592: old-form verdicts match whole words; suite-base prints graftling TOOL_NAME (592) | candidate c9d68f31ea1bf5a23ada6157d084f6edaf7ed60c | 2026-11-24 01:54:46 JST
+zsh 5.9 | TMPDIR=/tmp/claude-501 | stub pi: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/scripts/verify-592/stub/pi
+(base part: VERIFY592_NO_DIFF_CHECK=1, since this checkout differs from base by design)
+======== part: base = GraphTraj bfed0c4c708181f58fe5bc3c32a2b06985a718ef + graftling 49f97004 (wheels); ROOT=/tmp/claude-501/graphtraj-592-reh-base
+######## pre
+REHEARSAL: diff check skipped (VERIFY592_NO_DIFF_CHECK); differing paths outside scripts/verify-592: 103
+PASS: no provider credential other than DEEPSEEK_API_KEY reaches Pi
+exit=0 (login: DEEPSEEK_API_KEY from the allowlisted environment)
+PASS: Pi answered as deepseek/deepseek-v4-flash
+STEP-END pre rc=0
+rc=0
+######## install
+pip install --no-deps --no-index graftling-0.8.0-py3-none-any.whl graphtraj-0.1.0-py3-none-any.whl (both wheels side by side; no resolver)
+graphtraj 0.1.0 requires: ['graftling<0.9,>=0.8.0']
+graftling 0.8.0 (591 candidate; its version string is not bumped until 593 releases 0.9.0)
+PASS: subagents, subagents-mcp and graphtraj-mcp are installed
+PASS: agents and agents-mcp are not installed
+PASS: /tmp/claude-501/graphtraj-592-reh-base/proj has GraphTraj Config and runner
+PASS: /tmp/claude-501/graphtraj-592-reh-base/proj/.pi/settings.json names /tmp/claude-501/graphtraj-592-reh-base/venv/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs
+STEP-END install rc=0
+rc=0
+######## cli
+tools/list: ['agents', 'tasks']
+FAIL: graphtraj-mcp lists exactly the tools subagents and tasks
+FAIL: graphtraj-mcp refuses a call of the old tool name agents as unknown
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+NOTE: result texts still carry other old human-facing labels (information, not a verdict): ['agents tool']
+  subagents-discover: mcp__graphtraj__subagents {"action": "discover"} -> error True: "{'code': -32602, 'message': 'Unknown tool: subagents'}"
+FAIL: subagents-discover: a real call of mcp__graphtraj__subagents answered with its features (create, status among [])
+  subagents-status: mcp__graphtraj__subagents {"action": "execute", "feature": "status", "arguments": {}} -> error True: "{'code': -32602, 'message': 'Unknown tool: subagents'}"
+FAIL: subagents-status: the refusal is not a routing error (unknown feature or tool / does not belong): "{'code': -32602, 'message': 'Unknown tool: subagents'}"
+NOTE: subagents-status was refused for another reason (shown above); the acceptance call is subagents-discover; report this refusal.
+  tasks-discover: mcp__graphtraj__tasks {"action": "discover"} -> error False: "features:\n- feature: parent_status\n  description: Read a root Agent's recorded owning host activity and latest turn metadata,\n    optionally waiting a finite interval for native
+PASS: tasks-discover: tasks discover answered (37 features)
+FAIL: tasks-discover: lists neither the feature subagents nor agents: ['subagents']
+  tasks-refuses-subagents: mcp__graphtraj__tasks {"action": "execute", "feature": "subagents", "arguments": {}} -> error True: "feature: subagents\nerror:\n  code: invalid-input\n  message: 'arguments.action: required'\n  errors:\n  - path: arguments.action\n 
+FAIL: tasks-refuses-subagents: tasks refuses feature subagents with 'Feature does not belong to this MCP entry.'
+  tasks-no-agents-feature: mcp__graphtraj__tasks {"action": "execute", "feature": "agents", "arguments": {}} -> error True: 'Feature does not belong to this MCP entry.'
+FAIL: tasks-no-agents-feature: the old feature agents is unknown to tasks
+judge: 7 FAIL
+exit=1 | {"error": "Unknown feature: agents"}
+FAIL: the hosted subagents CLI hit a routing error
+PASS: the hosted CLI's answer has neither old form ('agents needs a verified caller', 'read-only agents access')
+FAIL: role_definitions does not name only the `subagents` tool
+STEP-END cli rc=1
+FAIL: the step did not end with rc=0 (see above)
+rc=1
+######## pi-main
+PASS: the Pi Main exited 0
+PASS: one Pi Session file in /tmp/claude-501/graphtraj-592-reh-base/sessions/pi-main: ['stub_56722f19-5715-4e32-8d05-ead4eb9ea6c1.jsonl']
+PASS: the Session file has system messages declaring the tools (1)
+FAIL: the tools Pi offered at the first request has mcp__graphtraj__subagents and mcp__graphtraj__tasks
+FAIL: the tools Pi offered at the first request has no old name (agents or mcp__*__agents): ['mcp__graphtraj__agents']
+FAIL: no system message of the Session ever offered an old name
+PASS: deepseek is the only provider of the Main's answers
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+NOTE: result texts still carry other old human-facing labels (information, not a verdict): ['agents tool']
+  subagents-discover: mcp__graphtraj__subagents {"action": "discover"} -> error True: "{'code': -32602, 'message': 'Unknown tool: subagents'}"
+FAIL: subagents-discover: a real call of mcp__graphtraj__subagents answered with its features (create, status among [])
+  subagents-status: mcp__graphtraj__subagents {"action": "execute", "feature": "status", "arguments": {}} -> error True: "{'code': -32602, 'message': 'Unknown tool: subagents'}"
+FAIL: subagents-status: the refusal is not a routing error (unknown feature or tool / does not belong): "{'code': -32602, 'message': 'Unknown tool: subagents'}"
+NOTE: subagents-status was refused for another reason (shown above); the acceptance call is subagents-discover; report this refusal.
+  tasks-discover: mcp__graphtraj__tasks {"action": "discover"} -> error False: "features:\n- feature: parent_status\n  description: Read a root Agent's recorded owning host activity and latest turn metadata,\n    optionally waiting a finite interval for native
+PASS: tasks-discover: tasks discover answered (37 features)
+FAIL: tasks-discover: lists neither the feature subagents nor agents: ['subagents']
+  tasks-refuses-subagents: mcp__graphtraj__tasks {"action": "execute", "feature": "subagents", "arguments": {}} -> error True: "feature: subagents\nerror:\n  code: invalid-input\n  message: 'arguments.action: required'\n  errors:\n  - path: arguments.action\n 
+FAIL: tasks-refuses-subagents: tasks refuses feature subagents with 'Feature does not belong to this MCP entry.'
+  tasks-no-agents-feature: mcp__graphtraj__tasks {"action": "execute", "feature": "agents", "arguments": {}} -> error True: 'Feature does not belong to this MCP entry.'
+FAIL: tasks-no-agents-feature: the old feature agents is unknown to tasks
+PASS: no Extension error in the Main's output
+judge: 8 FAIL
+STEP-END pi-main rc=1
+FAIL: the step did not end with rc=0 (see above)
+rc=1
+######## post
+PASS: ~/.pi/agent, ~/.dsh and ~/.codex unchanged
+STEP-END post rc=0
+rc=0
+======== part: cand = GraphTraj c9d68f31ea1bf5a23ada6157d084f6edaf7ed60c + graftling 49f97004 (wheels); ROOT=/tmp/claude-501/graphtraj-592-reh-cand
+######## pre
+PASS: the Worktree equals GCOMMIT outside scripts/verify-592 (committed and uncommitted)
+PASS: no provider credential other than DEEPSEEK_API_KEY reaches Pi
+exit=0 (login: DEEPSEEK_API_KEY from the allowlisted environment)
+PASS: Pi answered as deepseek/deepseek-v4-flash
+STEP-END pre rc=0
+rc=0
+######## install
+pip install --no-deps --no-index graftling-0.8.0-py3-none-any.whl graphtraj-0.1.0-py3-none-any.whl (both wheels side by side; no resolver)
+graphtraj 0.1.0 requires: ['graftling<0.10,>=0.9.0']
+graftling 0.8.0 (591 candidate; its version string is not bumped until 593 releases 0.9.0)
+NOTE: installed with --no-deps; a resolver would refuse graftling 0.8.0 here until its release carries 0.9.0 (593)
+PASS: subagents, subagents-mcp and graphtraj-mcp are installed
+PASS: agents and agents-mcp are not installed
+PASS: /tmp/claude-501/graphtraj-592-reh-cand/proj has GraphTraj Config and runner
+PASS: /tmp/claude-501/graphtraj-592-reh-cand/proj/.pi/settings.json names /tmp/claude-501/graphtraj-592-reh-cand/venv/lib/python3.13/site-packages/graphtraj/runtimes/pi/extension.mjs
+STEP-END install rc=0
+rc=0
+######## cli
+tools/list: ['subagents', 'tasks']
+PASS: graphtraj-mcp lists exactly the tools subagents and tasks
+PASS: graphtraj-mcp refuses a call of the old tool name agents as unknown
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+  subagents-discover: mcp__graphtraj__subagents {"action": "discover"} -> error False: 'features:\n- feature: create\n  description: Create a child Agent on a Runtime; returns before its work finishes.\n- feature: send\n  description: Send a message to an Agen
+PASS: subagents-discover: a real call of mcp__graphtraj__subagents answered with its features (create, status among ['create', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 'retire', 'ask_parent', 'session_read'])
+  subagents-status: mcp__graphtraj__subagents {"action": "execute", "feature": "status", "arguments": {}} -> error True: "action: status\nerror:\n  code: authority-unavailable\n  message: 'subagents needs a verified caller: a managed Session or a verified nati
+PASS: subagents-status: the refusal is not a routing error (unknown feature or tool / does not belong): "action: status\nerror:\n  code: authority-unavailable\n  message: 'subagents needs a verified caller: a managed Session or a verified native\n    Main Sess
+NOTE: subagents-status was refused for another reason (shown above); the acceptance call is subagents-discover; report this refusal.
+  tasks-discover: mcp__graphtraj__tasks {"action": "discover"} -> error False: "features:\n- feature: parent_status\n  description: Read a root Agent's recorded owning host activity and latest turn metadata,\n    optionally waiting a finite interval for native
+PASS: tasks-discover: tasks discover answered (36 features)
+PASS: tasks-discover: lists neither the feature subagents nor agents: []
+  tasks-refuses-subagents: mcp__graphtraj__tasks {"action": "execute", "feature": "subagents", "arguments": {}} -> error True: 'Feature does not belong to this MCP entry.'
+PASS: tasks-refuses-subagents: tasks refuses feature subagents with 'Feature does not belong to this MCP entry.'
+  tasks-no-agents-feature: mcp__graphtraj__tasks {"action": "execute", "feature": "agents", "arguments": {}} -> error True: "error: 'Unknown feature: agents'\n"
+PASS: tasks-no-agents-feature: the old feature agents is unknown to tasks
+judge: ALL PASS
+exit=1 | {"action": "status", "error": {"code": "authority-unavailable", "message": "subagents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}
+PASS: the hosted subagents CLI is routed through GraphTraj with no routing error
+PASS: the hosted CLI's answer has neither old form ('agents needs a verified caller', 'read-only agents access')
+PASS: every child role's system text names the `subagents` tool, not `agents`
+STEP-END cli rc=0
+rc=0
+######## pi-main
+PASS: the Pi Main exited 0
+PASS: one Pi Session file in /tmp/claude-501/graphtraj-592-reh-cand/sessions/pi-main: ['stub_b838f3a5-b97a-430d-9306-3803323c0130.jsonl']
+PASS: the Session file has system messages declaring the tools (1)
+PASS: the tools Pi offered at the first request has mcp__graphtraj__subagents and mcp__graphtraj__tasks
+PASS: the tools Pi offered at the first request has no old name (agents or mcp__*__agents): []
+PASS: no system message of the Session ever offered an old name
+PASS: deepseek is the only provider of the Main's answers
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+  subagents-discover: mcp__graphtraj__subagents {"action": "discover"} -> error False: 'features:\n- feature: create\n  description: Create a child Agent on a Runtime; returns before its work finishes.\n- feature: send\n  description: Send a message to an Agen
+PASS: subagents-discover: a real call of mcp__graphtraj__subagents answered with its features (create, status among ['create', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 'retire', 'ask_parent', 'session_read'])
+  subagents-status: mcp__graphtraj__subagents {"action": "execute", "feature": "status", "arguments": {}} -> error True: "action: status\nerror:\n  code: authority-unavailable\n  message: 'subagents needs a verified caller: a managed Session or a verified nati
+PASS: subagents-status: the refusal is not a routing error (unknown feature or tool / does not belong): "action: status\nerror:\n  code: authority-unavailable\n  message: 'subagents needs a verified caller: a managed Session or a verified native\n    Main Sess
+NOTE: subagents-status was refused for another reason (shown above); the acceptance call is subagents-discover; report this refusal.
+  tasks-discover: mcp__graphtraj__tasks {"action": "discover"} -> error False: "features:\n- feature: parent_status\n  description: Read a root Agent's recorded owning host activity and latest turn metadata,\n    optionally waiting a finite interval for native
+PASS: tasks-discover: tasks discover answered (36 features)
+PASS: tasks-discover: lists neither the feature subagents nor agents: []
+  tasks-refuses-subagents: mcp__graphtraj__tasks {"action": "execute", "feature": "subagents", "arguments": {}} -> error True: 'Feature does not belong to this MCP entry.'
+PASS: tasks-refuses-subagents: tasks refuses feature subagents with 'Feature does not belong to this MCP entry.'
+  tasks-no-agents-feature: mcp__graphtraj__tasks {"action": "execute", "feature": "agents", "arguments": {}} -> error True: "error: 'Unknown feature: agents'\n"
+PASS: tasks-no-agents-feature: the old feature agents is unknown to tasks
+PASS: no Extension error in the Main's output
+judge: ALL PASS
+SUCCESS: a real GraphTraj Pi Main was offered mcp__graphtraj__subagents and mcp__graphtraj__tasks, no old name, and called the new name
+STEP-END pi-main rc=0
+rc=0
+######## post
+PASS: ~/.pi/agent, ~/.dsh and ~/.codex unchanged
+STEP-END post rc=0
+rc=0
+======== part: pre's diff check against a commit whose tests differ (3f8207b6; expected FAIL + STOP)
+ desktop/tests/adoption-linux.mjs                 |   2 +-
+ scripts/verify-592/judge.py                      | 254 ++++++++++
+ scripts/verify-592/rehearse.zsh                  |  89 ++++
+ scripts/verify-592/steps.zsh                     | 593 +++++++++++++++++++++++
+ scripts/verify-592/stub/pi                       |  72 +++
+ tests/agents_helpers.py                          |   2 +-
+ tests/claude_cli_fixture.py                      |  12 +-
+ tests/codex_stdio_peer.py                        |   4 +-
+ tests/fixtures/dsh_mcp_plugin.mjs                |   6 +-
+ tests/fixtures/dsh_mcp_server.py                 |   2 +-
+ tests/linux_adoption_input.py                    |   4 +-
+ tests/pi_rpc_fixture.py                          |   4 +-
+ tests/test_agents_cli.py                         |   2 +-
+ tests/test_agents_contract.py                    |  10 +-
+ tests/test_agents_generic_surfaces.py            |   4 +-
+ tests/test_agents_mcp_bridge.py                  |  18 +-
+ tests/test_agents_native_claude.py               |  10 +-
+ tests/test_agents_refused_reply.py               |   6 +-
+ tests/test_agents_task_members.py                |  20 +-
+ tests/test_approved_recovery.py                  |   8 +-
+ tests/test_arguments_file_556.py                 |   4 +-
+ tests/test_child_server_name_551.py              |   6 +-
+ tests/test_claude_acceptance.py                  |   4 +-
+ tests/test_claude_arguments_file_575.py          |  14 +-
+ tests/test_claude_codex_host_shutdown.py         |  12 +-
+ tests/test_claude_host_concurrent_calls.py       |  60 +--
+ tests/test_claude_host_context.py                |  30 +-
+ tests/test_claude_host_cross_runtime.py          |  10 +-
+ tests/test_claude_host_integration_resolver.py   |   6 +-
+ tests/test_claude_mcp.py                         |  20 +-
+ tests/test_claude_member_survives_cd.py          |   2 +-
+ tests/test_claude_native_host.py                 |  54 +--
+ tests/test_claude_native_reviews.py              |   8 +-
+ tests/test_claude_runtime.py                     |   2 +-
+ tests/test_codex_agent_display.py                |   8 +-
+ tests/test_codex_agents_card_544.py              |   2 +-
+ tests/test_codex_child_parent_notices.py         |  10 +-
+ tests/test_codex_host_cross_runtime.py           |   2 +-
+ tests/test_codex_parent_uses_agents.py           |  14 +-
+ tests/test_configuration_write_keeps_settings.py |   9 +-
+ tests/test_descendant_stop_control.py            |  10 +-
+ tests/test_dsh_main_root_end_486.py              |   2 +-
+ tests/test_dsh_member_tools.py                   |   2 +-
+ tests/test_dsh_owner_death.py                    |   2 +-
+ tests/test_dsh_runtime.py                        |   2 +-
+ tests/test_external_session_entry.py             |   2 +-
+ tests/test_graphtraj_ask_parent.py               |  24 +-
+ tests/test_host_event_delivery.py                |   8 +-
+ tests/test_host_notice_holding.py                |   6 +-
+ tests/test_host_plugin_tools.py                  |  29 +-
+ tests/test_hosted_cli.py                         |   4 +-
+ tests/test_hosts_pi_children.py                  |   6 +-
+ tests/test_independent_claude.py                 |  30 +-
+ tests/test_main_continuity.py                    |   6 +-
+ tests/test_main_finalize.py                      |   2 +-
+ tests/test_managed_sessions.py                   |  12 +-
+ tests/test_mcp_adoption.py                       |   2 +-
+ tests/test_mcp_host_tools.py                     |  16 +-
+ tests/test_member_child_workspace.py             |   8 +-
+ tests/test_native_gateway.py                     |   6 +-
+ tests/test_native_review_timeout.py              |   2 +-
+ tests/test_native_status_identity.py             |   2 +-
+ tests/test_nested_create_own_key.py              |   2 +-
+ tests/test_pi_child_parent_notices.py            |   8 +-
+ tests/test_pi_dsh_main_continuity.py             |   2 +-
+ tests/test_pi_main_notice_display_536.py         |   4 +-
+ tests/test_release_low_bundle.py                 |   6 +-
+ tests/test_review_plugin.py                      |  10 +-
+ tests/test_review_plugin_pi_dsh.py               |  10 +-
+ tests/test_shared_tools.py                       |   4 +-
+ tests/test_task_free_children_551.py             |   4 +-
+ tests/test_tool_name_592.py                      | 182 +++++++
+FAIL: the Worktree differs from GCOMMIT outside scripts/verify-592 (committed or not): desktop/tests/adoption-linux.mjs tests/agents_helpers.py tests/claude_cli_fixture.py tests/codex_stdio_peer.py te
+STOP: the installed candidate would not equal this checkout; report this to the Leader.
+STEP-END pre rc=1
+FAIL: the step did not end with rc=0 (see above)
+rc=1
+======== part: Claude gates (no login flag; claude is not on this sandbox's PATH)
+######## claude-pre
+STOP: this step uses the user's own Claude login; Main asks the user first, then runs:
+STEP-END claude-pre rc=1
+FAIL: the step did not end with rc=0 (see above)
+rc=1
+######## claude-main
+STOP: claude-pre has not run in /tmp/claude-501/graphtraj-592-reh-cand; run: VERIFY592_CLAUDE_USER_LOGIN=1 zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/scripts/verify-592/s
+STEP-END claude-main rc=1
+FAIL: the step did not end with rc=0 (see above)
+rc=1
+======== part: judge hook on configuration --write material (--claude /usr/bin/true; nothing launched)
+######## judge hook (base)
+written hook TOOL/TOOLS lines under /tmp/claude-501/graphtraj-592-reh-base/hookproj/.claude/skills/graphtraj-claude-host: ['const TOOL = "subagents";', 'const TOOLS = [TOOL, "tasks"];']
+PASS: the written hook says const TOOL = "subagents";
+PASS: the written hook says const TOOLS = [TOOL, "tasks"];
+PASS: no TOOL/TOOLS line names "agents"
+judge: ALL PASS
+rc=0
+######## judge hook (cand)
+written hook TOOL/TOOLS lines under /tmp/claude-501/graphtraj-592-reh-cand/hookproj/.claude/skills/graphtraj-claude-host: ['const TOOL = "subagents";', 'const TOOLS = [TOOL, "tasks"];']
+PASS: the written hook says const TOOL = "subagents";
+PASS: the written hook says const TOOLS = [TOOL, "tasks"];
+PASS: no TOOL/TOOLS line names "agents"
+judge: ALL PASS
+rc=0
+======== part: judge claude on synthetic stream-json from part cand's real graphtraj-mcp answers
+######## judge claude synthetic/pass.jsonl (expected: ALL PASS)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/.scratch/592-b/synthetic/pass.jsonl has the init record
+PASS: the init tool list (every server) has mcp__graphtraj__subagents and mcp__graphtraj__tasks
+PASS: the init tool list (every server) has no old name (agents or mcp__*__agents): []
+PASS: the graphtraj MCP server is connected: [('graphtraj', 'connected')]
+PASS: the written graphtraj-claude-host plugin is loaded
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+PASS: subagents-discover: a real call of mcp__graphtraj__subagents answered with its features (create, status among ['create', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 're
+PASS: subagents-status: the refusal is not a routing error (unknown feature or tool / does not belong): "action: status\nerror:\n  code: authority-unavailable\n  message: 'subagents needs a verified c
+NOTE: subagents-status was refused for another reason (shown above); the acceptance call is subagents-discover; report this refusal.
+PASS: tasks-discover: tasks discover answered (36 features)
+PASS: tasks-discover: lists neither the feature subagents nor agents: []
+PASS: tasks-refuses-subagents: tasks refuses feature subagents with 'Feature does not belong to this MCP entry.'
+PASS: tasks-no-agents-feature: the old feature agents is unknown to tasks
+PASS: the Main ended with a result that is not an error
+judge: ALL PASS
+rc=0
+######## judge claude synthetic/other-old.jsonl (expected: FAIL)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/.scratch/592-b/synthetic/other-old.jsonl has the init record
+PASS: the init tool list (every server) has mcp__graphtraj__subagents and mcp__graphtraj__tasks
+FAIL: the init tool list (every server) has no old name (agents or mcp__*__agents): ['mcp__other__agents']
+PASS: the graphtraj MCP server is connected: [('graphtraj', 'connected'), ('other', 'connected')]
+PASS: the written graphtraj-claude-host plugin is loaded
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+PASS: subagents-discover: a real call of mcp__graphtraj__subagents answered with its features (create, status among ['create', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 're
+PASS: subagents-status: the refusal is not a routing error (unknown feature or tool / does not belong): "action: status\nerror:\n  code: authority-unavailable\n  message: 'subagents needs a verified c
+NOTE: subagents-status was refused for another reason (shown above); the acceptance call is subagents-discover; report this refusal.
+PASS: tasks-discover: tasks discover answered (36 features)
+PASS: tasks-discover: lists neither the feature subagents nor agents: []
+PASS: tasks-refuses-subagents: tasks refuses feature subagents with 'Feature does not belong to this MCP entry.'
+PASS: tasks-no-agents-feature: the old feature agents is unknown to tasks
+PASS: the Main ended with a result that is not an error
+judge: 1 FAIL
+rc=1
+######## judge claude synthetic/not-connected.jsonl (expected: FAIL)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/.scratch/592-b/synthetic/not-connected.jsonl has the init record
+PASS: the init tool list (every server) has mcp__graphtraj__subagents and mcp__graphtraj__tasks
+PASS: the init tool list (every server) has no old name (agents or mcp__*__agents): []
+FAIL: the graphtraj MCP server is connected: [('graphtraj', 'failed')]
+PASS: the written graphtraj-claude-host plugin is loaded
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+PASS: subagents-discover: a real call of mcp__graphtraj__subagents answered with its features (create, status among ['create', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 're
+PASS: subagents-status: the refusal is not a routing error (unknown feature or tool / does not belong): "action: status\nerror:\n  code: authority-unavailable\n  message: 'subagents needs a verified c
+NOTE: subagents-status was refused for another reason (shown above); the acceptance call is subagents-discover; report this refusal.
+PASS: tasks-discover: tasks discover answered (36 features)
+PASS: tasks-discover: lists neither the feature subagents nor agents: []
+PASS: tasks-refuses-subagents: tasks refuses feature subagents with 'Feature does not belong to this MCP entry.'
+PASS: tasks-no-agents-feature: the old feature agents is unknown to tasks
+PASS: the Main ended with a result that is not an error
+judge: 1 FAIL
+rc=1
+======== part: judge pi on Task 583's recorded REAL GraphTraj Pi Main Session (old names; expected FAIL)
+PASS: one Pi Session file in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/.scratch/592-b/synthetic/583: ['main-after
+PASS: the Session file has system messages declaring the tools (1)
+FAIL: the tools Pi offered at the first request has mcp__graphtraj__subagents and mcp__graphtraj__tasks
+FAIL: the tools Pi offered at the first request has no old name (agents or mcp__*__agents): ['mcp__graphtraj__agents']
+FAIL: no system message of the Session ever offered an old name
+PASS: deepseek is the only provider of the Main's answers
+PASS: no call used an old tool name
+PASS: no result text says the old form 'agents needs a verified caller' (Leader decision)
+PASS: no result text says the old form 'read-only agents access' (Leader decision)
+FAIL: subagents-discover: no call of mcp__graphtraj__subagents with {"action": "discover"}
+FAIL: subagents-status: no call of mcp__graphtraj__subagents with {"action": "execute", "feature": "status", "arguments": {}}
+PASS: tasks-discover: tasks discover answered (36 features)
+PASS: tasks-discover: lists neither the feature subagents nor agents: []
+FAIL: tasks-refuses-subagents: no call of mcp__graphtraj__tasks with {"action": "execute", "feature": "subagents", "arguments": {}}
+FAIL: tasks-no-agents-feature: no call of mcp__graphtraj__tasks with {"action": "execute", "feature": "agents", "arguments": {}}
+PASS: no Extension error in the Main's output
+judge: 7 FAIL
+rc=1
+======== part: suite through the step (FILTERED), SR, suite-base on one id
+######## suite with an unwritable T (expected STOP before anything is written)
+STOP: /var/empty/graphtraj-592-T is not writable here (the suite's venvs, clones and outputs go there). Run this step where
+STEP-END suite rc=1
+rc=1
+######## suite
+NOTE: ps cannot list processes here; check skipped (VERIFY592_NO_PS=1, rehearsal)
+pytest temp root: /private/tmp/claude-501/verify-592-suite-20261124T015505 (TMPDIR=/tmp/claude-501, outside the Harness)
+pytest temp root: /private/tmp/claude-501/verify-592-suite-20261124T015505 (TMPDIR=/tmp/claude-501, outside the Harness) | GraphTraj c9d68f31ea1bf5a23ada6157d084f6edaf7ed60c (clean clone /tmp/claude-501/graphtraj-592-reh-T/graphtraj-cand) | graftling 49f97004a
+REHEARSAL: extra pytest args after -- -rA: '-k' 'tool_name_592 or test_host_plugin_tools or test_mcp_adoption or test_wheels_have_separate_owners'
+STEP-END suite rc=0
+rc=0
+suite.txt tail: ABNORMAL /tmp/claude-501/graphtraj-592-reh-T/suite-c9d68f31-20261124T015507/shards/shard-5.log: exit 5|1 failed, 23 passed, 5 skipped, 3730 deselected|logs: /tmp/claude-501/graphtraj-592-reh-T/suite-c9d68f31-20261124T015507/shards|exit=1|
+######## SR
+pytest temp root: /private/tmp/claude-501/verify-592-suite-20261124T015505 (TMPDIR=/tmp/claude-501, outside the Harness) | GraphTraj c9d68f31ea1bf5a23ada6157d084f6edaf7ed60c (clean clone /tmp/claude-501/graphtraj-592-reh-T/graphtraj-cand) | graftling 49f97004a
+REHEARSAL: extra pytest args after -- -rA: '-k' 'tool_name_592 or test_host_plugin_tools or test_mcp_adoption or test_wheels_have_separate_owners'
+exit=1
+not in 516: tests/test_runtime_distribution.py::test_wheels_have_separate_owners
+NOTE: tests/test_runtime_distribution.py::test_wheels_have_separate_owners: candidate version label 0.8.0; resolved by 593 (A showed it passes with a 0.9.0-labelled wheel)
+SR verdict: FAILURES (1 ids; classify with suite-base) — FILTERED rehearsal run
+next (paste): zsh '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/scripts/verify-592/steps.zsh' suite-base 'tests/test_runtime_distribution.py::test_wheels_have_separate_owners'
+or (paste):   zsh '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/scripts/verify-592/steps.zsh' suite-base --from '/tmp/claude-501/graphtraj-592-reh-T/suite-c9d68f31-20261124T015
+STEP-END SR rc=1
+FAIL: the step did not end with rc=0 (see above)
+rc=1
+######## SR
+pytest temp root: /private/tmp/claude-501/verify-592-suite-20261124T015505 (TMPDIR=/tmp/claude-501, outside the Harness) | GraphTraj c9d68f31ea1bf5a23ada6157d084f6edaf7ed60c (clean clone /tmp/claude-501/graphtraj-592-reh-T/graphtraj-cand) | graftling 49f97004a
+REHEARSAL: extra pytest args after -- -rA: '-k' 'tool_name_592 or test_host_plugin_tools or test_mcp_adoption or test_wheels_have_separate_owners'
+exit=1
+not in 516: tests/test_host_plugin_tools.py::test_a_standalone_plugin_associates_and_lists_only_agents
+not in 516: tests/test_runtime_distribution.py::test_wheels_have_separate_owners
+NOTE: tests/test_runtime_distribution.py::test_wheels_have_separate_owners: candidate version label 0.8.0; resolved by 593 (A showed it passes with a 0.9.0-labelled wheel)
+SR verdict: FAILURES (2 ids; classify with suite-base) — FILTERED rehearsal run
+next (paste): zsh '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/scripts/verify-592/steps.zsh' suite-base 'tests/test_host_plugin_tools.py::test_a_standalone_plugin_associates_a
+or (paste):   zsh '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/592-graphtraj-rename-agents-to-subagents/scripts/verify-592/steps.zsh' suite-base --from '/tmp/claude-501/graphtraj-592-reh-T/suite-injected'/failed-ids.
+STEP-END SR rc=1
+FAIL: the step did not end with rc=0 (see above)
+rc=1
+######## suite-base tests/test_host_plugin_tools.py::test_a_standalone_plugin_associates_and_lists_only_agents
+NOTE: ps cannot list processes here; check skipped (VERIFY592_NO_PS=1, rehearsal)
+pytest temp root: /private/tmp/claude-501/verify-592-base-20261124T015518 (TMPDIR=/tmp/claude-501, outside the Harness)
+== base: pytest in /tmp/claude-501/graphtraj-592-reh-T/graphtraj-base; graphtraj /private/tmp/claude-501/graphtraj-592-reh-T/graphtraj-base/src/graphtraj/__init__.py | graftling 0.8.0 TOOL_NAME agents /tmp/claude-501/graphtraj-592-reh-T/venv-base/lib/python3.1
+base: pytest exit=0, 1 passed in 0.25s (output: /tmp/claude-501/graphtraj-592-reh-T/suite-base-20261124T015518/base.txt)
+pytest temp root: /private/tmp/claude-501/verify-592-candidate-20261124T015519 (TMPDIR=/tmp/claude-501, outside the Harness)
+== candidate: pytest in /tmp/claude-501/graphtraj-592-reh-T/graphtraj-cand; graphtraj /private/tmp/claude-501/graphtraj-592-reh-T/graphtraj-cand/src/graphtraj/__init__.py | graftling 0.8.0 TOOL_NAME subagents /tmp/claude-501/graphtraj-592-reh-T/venv-cand/lib/p
+candidate: pytest exit=0, 1 passed in 0.24s (output: /tmp/claude-501/graphtraj-592-reh-T/suite-base-20261124T015518/candidate.txt)
+passes on both now (not reproduced): tests/test_host_plugin_tools.py::test_a_standalone_plugin_associates_and_lists_only_agents   [base passed | candidate passed]
+candidate-only: 0
+STEP-END suite-base rc=0
+rc=0
+REHEARSE-EXIT 0

@@ -34,10 +34,14 @@ def calls(stream: Path) -> list[dict]:
     """Every mcp__graphtraj__ tool call in order, with its result text and error flag."""
     uses, results = [], {}
     for record in records(stream):
-        content = (record.get('message') or {}).get('content')
+        # Some records carry ``message`` as a string (not a model message); skip them.
+        message = record.get('message') if isinstance(record, dict) else None
+        content = message.get('content') if isinstance(message, dict) else None
         if not isinstance(content, list):
             continue
         for block in content:
+            if not isinstance(block, dict):
+                continue
             if block.get('type') == 'tool_use' and str(block.get('name', '')).startswith('mcp__graphtraj__'):
                 uses.append(block)
             elif block.get('type') == 'tool_result':

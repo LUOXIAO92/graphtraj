@@ -29,7 +29,7 @@ graphtraj task graph
 ```
 
 GraphTraj and `graftling` are separate distributions from separate repositories.
-GraphTraj declares the `graftling` versions it supports (currently `>=0.7.0,<0.8`).
+GraphTraj declares the `graftling` versions it supports (currently `>=0.8.0,<0.9`).
 The command above installs both into one uv tool environment, and that environment's
 graftling is your one graftling installation: where Graftling's host notes use
 `$AGENTS_PYTHON`, use its Python, `"$(uv tool dir)/graphtraj/bin/python"`, and do not
@@ -412,12 +412,12 @@ be on the `PATH` DSH starts with.
 session a Task-free `agents` tool and its own children; it never makes the
 session GraphTraj Main and has no `tasks` tool. Add it only from the one graftling
 installation (`dsh plugin add` of that installation's `graftling/dsh` directory, as
-Graftling's DSH note shows); later graftling versions (unreleased, graftling Task 581)
-no longer install it from the graftling GitHub address or build their own copy of
-graftling under the DSH home. With graftling 0.7.0 it may stay
-installed in the same profile: without `GRAFTLING_DSH_CONFIG` its row starts no
-agents host and attaches no tool (it still installs its message relay). Later
-graftling versions (unreleased, graftling Tasks 570 and 577) start its host in every
+Graftling's DSH note shows); from graftling 0.8.0 (graftling Task 581) it is
+no longer installed from the graftling GitHub address and builds no copy of its own
+graftling under the DSH home. With graftling 0.7.0 it could stay
+installed in the same profile: without `GRAFTLING_DSH_CONFIG` its row started no
+agents host and attached no tool (it still installed its message relay). From
+graftling 0.8.0 (graftling Tasks 570 and 577) it starts its host in every
 main Session even without that variable, on `<project>/.agents-control` or the
 directory `GRAFTLING_DATA_ROOT` names, so with those versions keep it out of the
 profile you start a GraphTraj Main with (`dsh plugin --profile <profile> remove

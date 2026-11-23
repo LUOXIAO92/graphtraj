@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Rehearsal stub of `claude`, SCRIPT CHECK ONLY: canned output, no Claude Code behaviour is claimed.
+
+--version / --help print fixed text. In print mode without stream-json input (the acceptance parent and pre's
+one-liner) it rejects, with Claude Code's error text, a prompt that follows a variadic option (--allowedTools, ...)
+without `--`; otherwise it prints a canned init and result and makes no agents calls. Otherwise it reads one stdin
+line and prints one canned system/init with made-up tools, so that every branch of the diagnose step's parsing runs:
+--restricted drops Bash and WebFetch unless --tools names them; a project .claude/settings.json deny is applied
+without --restricted; --tools replaces the list.
+"""
+import json
+import os
+import sys
+import time
+
+argv = sys.argv[1:]
+if '--version' in argv:
+    print('0.0.0-stub (Claude Code stub)')
+    sys.exit(0)
+if '--help' in argv:
+    print('  --restricted   (stub) restricted mode\n  --tools <tools...>   (stub) Use "default" for all tools\n'
+          '  --disallowedTools <tools...>  (stub)\n  --setting-sources <sources>  (stub)')
+    sys.exit(0)
+VARIADIC = {'--allowedTools', '--allowed-tools', '--disallowedTools', '--disallowed-tools', '--tools', '--add-dir',
+            '--mcp-config', '--betas', '--file'}
+if ('-p' in argv or '--print' in argv) and '--input-format' not in argv:
+    # A print-mode parent: like Claude Code 2.1.330, a variadic option takes every following word up to the next
+    # option, so a prompt after it without `--` is read as its value.
+    prompt, i = None, 0
+    while i < len(argv):
+        word = argv[i]
+        if word == '--':
+            prompt = ' '.join(argv[i + 1:]) or None
+            break
+        if word in VARIADIC:
+            i += 1
+            while i < len(argv) and not argv[i].startswith('-'):
+                if ' ' in argv[i]:
+                    print(f'"{argv[i][:40]}…" was read as a value of {word}, not as a prompt'
+                          f' · put a prompt before {word} or after --', file=sys.stderr)
+                i += 1
+            continue
+        if not word.startswith('-') and i > 0 and argv[i - 1] not in ('--model', '--output-format', '-p'):
+            prompt = word
+        i += 1
+    if prompt is None and not sys.stdin.read().strip():
+        print('Error: Input must be provided either through stdin or as a prompt argument when using --print',
+              file=sys.stderr)
+        sys.exit(1)
+    model = argv[argv.index('--model') + 1] if '--model' in argv else None
+    print(json.dumps({'type': 'system', 'subtype': 'init', 'model': model, 'apiKeySource': 'none (stub)',
+                      'tools': ['Bash', 'Read', 'mcp__graftling__agents'], 'stub': True}))
+    print(json.dumps({'type': 'result', 'result': f'stub accepted the prompt ({len(prompt or "")} characters);'
+                      ' it makes no agents calls', 'is_error': False}))
+    sys.exit(0)
+sys.stdin.readline()
+tools = ['Agent', 'Bash', 'Edit', 'Glob', 'Grep', 'Read', 'WebFetch', 'WebSearch', 'Write', 'CronList']
+if '--tools' in argv:
+    value = argv[argv.index('--tools') + 1]
+    tools = tools if value == 'default' else value.split(',')
+elif '--restricted' in argv:
+    tools = [t for t in tools if t not in ('Bash', 'WebFetch')]
+if os.path.exists('.claude/settings.json') and '--restricted' not in argv:
+    deny = json.load(open('.claude/settings.json'))['permissions']['deny']
+    tools = [t for t in tools if t not in deny]
+print(json.dumps({'type': 'system', 'subtype': 'init', 'tools': tools, 'model': 'claude-opus-5-5',
+                  'permissionMode': 'auto' if '--permission-mode' in argv else 'default', 'stub': True}), flush=True)
+time.sleep(30)

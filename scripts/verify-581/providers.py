@@ -8,6 +8,7 @@ usage:
   providers.py child <root> <agent>        the agent's record (runtime, executions[].process.resolved_model and model)
                                            plus `scan` of <root>/native (graftling composes a dsh child's own profile
                                            there with the llm-deepseek plugin, graftling dsh/execution.py)
+In YAML (DSH profile patches) `provider:` is not read: there it is a tool plugin's process mode (spawn | fork).
 PASS when something was found and every provider names deepseek, every endpoint host ends in deepseek.com, every
 llm-* plugin is llm-deepseek and every model id names deepseek; FAIL otherwise (with the file of each finding).
 Field names follow the real files: Pi Session messages carry provider/model (Task 584 Sessions), graftling records
@@ -52,7 +53,12 @@ def scan_file(path, found):
             if not m:
                 continue
             key, value = m.groups()
-            kind = ('provider' if key in PROVIDER_KEYS else 'model' if key in MODEL_KEYS else
+            # In DSH profile/patch YAML a `provider:` is a tool plugin's process mode (dsh-tool-subagent and
+            # dsh-workflow-ptc: spawn | fork; Main's real run, cordis.patch.yml), not an LLM provider. The LLM evidence
+            # there is the llm-* plugin ids and any baseURL host. Providers come from JSON(L) Sessions and records.
+            if key in PROVIDER_KEYS:
+                continue
+            kind = ('model' if key in MODEL_KEYS else
                     'endpoint' if key in URL_KEYS else 'llm plugin' if value.startswith('llm-') else None)
             if kind:
                 found.append((kind, urlparse(value).hostname or value if kind == 'endpoint' else value, str(path)))

@@ -2,10 +2,10 @@
 
 usage:
   judge.py snap <data root>                                   record ids now under <root>/control/agents
-  judge.py claude <stream.jsonl> <root> <snap> <tool> <host> <word>
+  judge.py claude <stream.jsonl> <root> <snap> <tool> <host> <word> <child runtime>
       a real `claude -p --output-format stream-json --verbose` Main: the init tool list, the tool calls it made,
       their results, and the one new child record under <root>
-  judge.py pi <session dir> <output> <root> <snap> <tool> <host> <word>
+  judge.py pi <session dir> <output> <root> <snap> <tool> <host> <word> <child runtime>
       a real Pi Main: the offered tool set replayed from the Session file's system messages (toolsAdded and
       toolsRemoved, Pi's documented session format), the tool calls, their results, and the one new child record
   judge.py cli <venv>                                         the installed console scripts of the candidate
@@ -36,14 +36,15 @@ def records(root):
     return found
 
 
-def child(root, snap, host, word, texts):
-    """The one new record: created by ``host``, a dsh child, completed with ``word``; the tool results name it."""
+def child(root, snap, host, word, texts, runtime):
+    """The one new record: created by ``host``, a ``runtime`` child, completed with ``word``; the tool results name it."""
     before = set(Path(snap).read_text().split()) if Path(snap).is_file() else set()
     new = {a: r for a, r in records(root).items() if a not in before}
     owners = {a: ((r.get('creator') or {}).get('host'), r.get('runtime')) for a, r in new.items()}
     check(len(new) == 1, f'exactly one new child record under {root}/control/agents: {owners}')
     for agent, record in new.items():
         check((record.get('creator') or {}).get('host') == host, f'{agent} was created by host {host}: {owners[agent]}')
+        check(record.get('runtime') == runtime, f'{agent} is a {runtime} child: runtime {record.get("runtime")!r}')
         last = (record.get('executions') or [{}])[-1]
         message = last.get('last_message') or ''
         check(last.get('outcome') == 'completed' and word in message.lower(),
@@ -82,7 +83,7 @@ def text_of(content):
     return '' if content is None else str(content)
 
 
-def claude(stream, root, snap, tool, host, word):
+def claude(stream, root, snap, tool, host, word, runtime):
     init, calls, ids, results, final = None, [], {}, [], None
     for raw in open(stream, errors='replace'):
         try:
@@ -110,18 +111,25 @@ def claude(stream, root, snap, tool, host, word):
     servers = [(s.get('name'), s.get('status')) for s in init.get('mcp_servers') or []]
     print(f'Main init: model {init.get("model")} | session {init.get("session_id")} | mcp servers {servers}')
     print(f'plugins: {[p.get("name") if isinstance(p, dict) else p for p in init.get("plugins") or []]}')
-    tools_verdict('the init tool list', set(init.get('tools') or []), tool)
+    tools = set(init.get('tools') or [])
+    tools_verdict('the init tool list', tools, tool)
     server = tool.split('__')[1] if tool.count('__') >= 2 else ''
     listed = dict(servers)
     names = [n for n in listed if n.replace(':', '_') == server or n == server]
     check(any(listed[n] == 'connected' for n in names), f'the MCP server of {tool} is connected: {servers}')
+    others = [(n, st) for n, st in servers if n not in names]
+    print(f'every other MCP server in the init record (name: status): '
+          f'{", ".join(f"{n}: {st}" for n, st in others) or "none"}')
+    for n, _ in others:
+        prefix = 'mcp__' + ''.join(c if c.isalnum() or c in '_-' else '_' for c in n) + '__'
+        print(f'  {n}: tools {sorted(t for t in tools if t.startswith(prefix))}')
     calls_and_results(calls, results, tool)
     print(f'Main result: {str((final or {}).get("result"))[:400]!r}')
     check(final is not None and not final.get('is_error'), 'the Main ended with a result that is not an error')
-    child(root, snap, host, word, [t for _, _, t in results])
+    child(root, snap, host, word, [t for _, _, t in results], runtime)
 
 
-def pi(sessions, output, root, snap, tool, host, word):
+def pi(sessions, output, root, snap, tool, host, word, runtime):
     files = sorted(Path(sessions).rglob('*.jsonl'))
     check(len(files) == 1, f'one Pi Session file in {sessions}: {[f.name for f in files]}')
     requests, active, calls, ids, results, providers = [], set(), [], {}, [], set()
@@ -154,7 +162,7 @@ def pi(sessions, output, root, snap, tool, host, word):
     calls_and_results(calls, results, tool)
     text = Path(output).read_text(errors='replace')
     check('Extension error' not in text, 'no Extension error in the Main\'s output')
-    child(root, snap, host, word, [t for _, _, t in results])
+    child(root, snap, host, word, [t for _, _, t in results], runtime)
 
 
 def cli(venv):
@@ -208,9 +216,9 @@ def main(argv):
     if argv[:1] == ['snap'] and len(argv) == 2:
         print('\n'.join(records(argv[1])))
         return 0
-    if argv[:1] == ['claude'] and len(argv) == 7:
+    if argv[:1] == ['claude'] and len(argv) == 8:
         claude(*argv[1:])
-    elif argv[:1] == ['pi'] and len(argv) == 8:
+    elif argv[:1] == ['pi'] and len(argv) == 9:
         pi(*argv[1:])
     elif argv[:1] == ['cli'] and len(argv) == 2:
         cli(argv[1])

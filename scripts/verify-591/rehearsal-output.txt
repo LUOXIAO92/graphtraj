@@ -1,4 +1,185 @@
 Task 591 verify-591 rehearsal (Engineer B). REHEARSAL ONLY: not acceptance evidence.
+PART 0 (2026-11-23 23:37 JST): CORRECTION ROUND. Main's run of e0395584 (.state/realhost) failed claude-plugin (init mcp_servers [],
+--strict-mcp-config drops a --plugin-dir plugin's MCP server) and claude-config (dsh child: unsupported-runtime). Changes: claude-plugin
+runs without --strict-mcp-config and lists every other MCP server by name, status and tools; both Claude steps create a Claude child
+(runtime claude, model claude-haiku-5-5, same user login); the child record must have the expected runtime; DEEPSEEK_API_KEY is
+removed from the Claude Mains' environment. zsh -n: OK. The Claude steps cannot run here (no claude, no login).
+
+################ judge.py on the REAL Main streams (must FAIL) and on PASS shapes built from their init records, with a FAIL case per changed verdict
+--- REAL Main stream, claude-plugin run 233228 (strict-mcp-config dropped the plugin server; empty data root): expect FAIL
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/.state/realhost/proj-claude-plugin-233228.jsonl has the init record
+Main init: model claude-haiku-5-5 | session fd8ef687-1356-4d70-943e-4583f0dd1ed4 | mcp servers []
+plugins: ['graftling', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+the init tool list (24): ['Bash', 'CronCreate', 'CronDelete', 'CronList', 'DesignSync', 'Edit', 'EnterWorktree', 'ExitWorktree', 'ListAgents', 'Monitor', 'NotebookEdit', 'PushNotification', 'Read', 'RemoteTrigger', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'Skill', 'Task', 'TaskStop', 'ToolSearch', 'WebSearch', 'Workflow', 'Write']
+FAIL: the init tool list has mcp__plugin_graftling_subagents__subagents
+PASS: the init tool list has no old name (agents or mcp__*__agents): []
+FAIL: the MCP server of mcp__plugin_graftling_subagents__subagents is connected: []
+every other MCP server in the init record (name: status): none
+tool calls made by the Main: ['ToolSearch', 'ToolSearch', 'ToolSearch']
+FAIL: the Main called mcp__plugin_graftling_subagents__subagents at least twice (create, wait): 0
+PASS: the Main called no old tool name: []
+PASS: no mcp__plugin_graftling_subagents__subagents result is an error: []
+  result of ToolSearch (error False): 'No matching deferred tools found'
+  result of ToolSearch (error False): ''
+  result of ToolSearch (error False): 'No matching deferred tools found'
+Main result: 'I couldn\'t run the requested calls because the tool isn\'t available in this session.\n\n- Searching for `mcp__plugin_graftling_subagents__subagents` by exact name returned no matches, twice.\n- A keyword search for "subagents graftling" returned only `SendMessage`, which is not the same tool.\n\nSo I made none of the three calls (`create`, `wait`, `status`). I have no agent ID and no ANSWER to report.\n'
+PASS: the Main ended with a result that is not an error
+FAIL: exactly one new child record under /tmp/claude-501/v591r/empty/control/agents: {}
+judge: 4 FAIL
+rc=1
+--- REAL Main stream, claude-config run 233247 (dsh child refused unsupported-runtime; empty data root): expect FAIL
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/.state/realhost/proj-claude-config-233247.jsonl has the init record
+Main init: model claude-haiku-5-5 | session c3023c8f-dfc2-4d81-a837-97bb06356848 | mcp servers [('graftling', 'connected')]
+plugins: ['agents-claude-host', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+the init tool list (25): ['Bash', 'CronCreate', 'CronDelete', 'CronList', 'DesignSync', 'Edit', 'EnterWorktree', 'ExitWorktree', 'ListAgents', 'Monitor', 'NotebookEdit', 'PushNotification', 'Read', 'RemoteTrigger', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'Skill', 'Task', 'TaskStop', 'ToolSearch', 'WebSearch', 'Workflow', 'Write', 'mcp__graftling__subagents']
+PASS: the init tool list has mcp__graftling__subagents
+PASS: the init tool list has no old name (agents or mcp__*__agents): []
+PASS: the MCP server of mcp__graftling__subagents is connected: [('graftling', 'connected')]
+every other MCP server in the init record (name: status): none
+tool calls made by the Main: ['ToolSearch', 'mcp__graftling__subagents']
+FAIL: the Main called mcp__graftling__subagents at least twice (create, wait): 1
+PASS: the Main called no old tool name: []
+FAIL: no mcp__graftling__subagents result is an error: ['{"action": "create", "error": {"code": "unsupported-runtime", "message": "No driver is available for Runtime \'dsh\'."}}']
+  result of ToolSearch (error False): ''
+  result of mcp__graftling__subagents (error True): '{"action": "create", "error": {"code": "unsupported-runtime", "message": "No driver is available for Runtime \'dsh\'."}}'
+Main result: 'AGENT: none. The `create` call failed, so no agent was started and there is no ID to pass to `wait` or `status`. I did not run those two calls.\n\nERROR: {"action": "create", "error": {"code": "unsupported-runtime", "message": "No driver is available for Runtime \'dsh\'."}}\n\nANSWER: not obtained.\n\nI did not retry or change the arguments, as instructed.'
+PASS: the Main ended with a result that is not an error
+FAIL: exactly one new child record under /tmp/claude-501/v591r/empty/control/agents: {}
+judge: 3 FAIL
+rc=1
+--- plugin form, PASS shape (init from the real stream; plugin server connected beside claude.ai connectors; Claude child record)
+PASS: /tmp/claude-501/v591r/plugin-good.jsonl has the init record
+Main init: model claude-haiku-5-5 | session fd8ef687-1356-4d70-943e-4583f0dd1ed4 | mcp servers [('plugin:graftling:subagents', 'connected'), ('claude.ai Claude Docs', 'connected'), ('claude.ai Gmail', 'needs-auth')]
+plugins: ['graftling', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+the init tool list (27): ['Bash', 'CronCreate', 'CronDelete', 'CronList', 'DesignSync', 'Edit', 'EnterWorktree', 'ExitWorktree', 'ListAgents', 'Monitor', 'NotebookEdit', 'PushNotification', 'Read', 'RemoteTrigger', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'Skill', 'Task', 'TaskStop', 'ToolSearch', 'WebSearch', 'Workflow', 'Write', 'mcp__claude_ai_Claude_Docs__query', 'mcp__claude_ai_Claude_Docs__read', 'mcp__plugin_graftling_subagents__subagents']
+PASS: the init tool list has mcp__plugin_graftling_subagents__subagents
+PASS: the init tool list has no old name (agents or mcp__*__agents): []
+PASS: the MCP server of mcp__plugin_graftling_subagents__subagents is connected: [('plugin:graftling:subagents', 'connected'), ('claude.ai Claude Docs', 'connected'), ('claude.ai Gmail', 'needs-auth')]
+every other MCP server in the init record (name: status): claude.ai Claude Docs: connected, claude.ai Gmail: needs-auth
+  claude.ai Claude Docs: tools ['mcp__claude_ai_Claude_Docs__query', 'mcp__claude_ai_Claude_Docs__read']
+  claude.ai Gmail: tools []
+tool calls made by the Main: ['mcp__plugin_graftling_subagents__subagents', 'mcp__plugin_graftling_subagents__subagents']
+PASS: the Main called mcp__plugin_graftling_subagents__subagents at least twice (create, wait): 2
+PASS: the Main called no old tool name: []
+PASS: no mcp__plugin_graftling_subagents__subagents result is an error: []
+  result of mcp__plugin_graftling_subagents__subagents (error False): '{"action": "create", "agent": "agent-0123456789abcdef0123456789abcdef"}'
+  result of mcp__plugin_graftling_subagents__subagents (error False): '{"action": "wait", "agent": "agent-0123456789abcdef0123456789abcdef", "state": "completed", "last_message": "ready"}'
+Main result: 'AGENT: agent-0123456789abcdef0123456789abcdef\nANSWER: ready'
+PASS: the Main ended with a result that is not an error
+PASS: exactly one new child record under /tmp/claude-501/v591r/root-claude/control/agents: {'agent-0123456789abcdef0123456789abcdef': ('claude-native', 'claude')}
+PASS: agent-0123456789abcdef0123456789abcdef was created by host claude-native: ('claude-native', 'claude')
+PASS: agent-0123456789abcdef0123456789abcdef is a claude child: runtime 'claude'
+PASS: agent-0123456789abcdef0123456789abcdef completed with 'ready': outcome completed, error None, last_message 'ready'
+PASS: a tool result of the Main names agent-0123456789abcdef0123456789abcdef
+follow-up (paste): python3 -m json.tool /tmp/claude-501/v591r/root-claude/control/agents/agent-0123456789abcdef0123456789abcdef.json
+judge: ALL PASS
+rc=0
+--- plugin form, ANOTHER server offers mcp__graphtraj__agents: the old-name verdict must FAIL
+PASS: /tmp/claude-501/v591r/plugin-oldname-other-server.jsonl has the init record
+Main init: model claude-haiku-5-5 | session fd8ef687-1356-4d70-943e-4583f0dd1ed4 | mcp servers [('plugin:graftling:subagents', 'connected'), ('claude.ai Claude Docs', 'connected'), ('claude.ai Gmail', 'needs-auth'), ('graphtraj', 'connected')]
+plugins: ['graftling', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+the init tool list (27): ['Bash', 'CronCreate', 'CronDelete', 'CronList', 'DesignSync', 'Edit', 'EnterWorktree', 'ExitWorktree', 'ListAgents', 'Monitor', 'NotebookEdit', 'PushNotification', 'Read', 'RemoteTrigger', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'Skill', 'Task', 'TaskStop', 'ToolSearch', 'WebSearch', 'Workflow', 'Write', 'mcp__claude_ai_Claude_Docs__read', 'mcp__graphtraj__agents', 'mcp__plugin_graftling_subagents__subagents']
+PASS: the init tool list has mcp__plugin_graftling_subagents__subagents
+FAIL: the init tool list has no old name (agents or mcp__*__agents): ['mcp__graphtraj__agents']
+PASS: the MCP server of mcp__plugin_graftling_subagents__subagents is connected: [('plugin:graftling:subagents', 'connected'), ('claude.ai Claude Docs', 'connected'), ('claude.ai Gmail', 'needs-auth'), ('graphtraj', 'connected')]
+every other MCP server in the init record (name: status): claude.ai Claude Docs: connected, claude.ai Gmail: needs-auth, graphtraj: connected
+  claude.ai Claude Docs: tools ['mcp__claude_ai_Claude_Docs__read']
+  claude.ai Gmail: tools []
+  graphtraj: tools ['mcp__graphtraj__agents']
+tool calls made by the Main: ['mcp__plugin_graftling_subagents__subagents', 'mcp__plugin_graftling_subagents__subagents']
+PASS: the Main called mcp__plugin_graftling_subagents__subagents at least twice (create, wait): 2
+PASS: the Main called no old tool name: []
+PASS: no mcp__plugin_graftling_subagents__subagents result is an error: []
+  result of mcp__plugin_graftling_subagents__subagents (error False): '{"action": "create", "agent": "agent-0123456789abcdef0123456789abcdef"}'
+  result of mcp__plugin_graftling_subagents__subagents (error False): '{"action": "wait", "agent": "agent-0123456789abcdef0123456789abcdef", "state": "completed", "last_message": "ready"}'
+Main result: 'AGENT: agent-0123456789abcdef0123456789abcdef\nANSWER: ready'
+PASS: the Main ended with a result that is not an error
+PASS: exactly one new child record under /tmp/claude-501/v591r/root-claude/control/agents: {'agent-0123456789abcdef0123456789abcdef': ('claude-native', 'claude')}
+PASS: agent-0123456789abcdef0123456789abcdef was created by host claude-native: ('claude-native', 'claude')
+PASS: agent-0123456789abcdef0123456789abcdef is a claude child: runtime 'claude'
+PASS: agent-0123456789abcdef0123456789abcdef completed with 'ready': outcome completed, error None, last_message 'ready'
+PASS: a tool result of the Main names agent-0123456789abcdef0123456789abcdef
+follow-up (paste): python3 -m json.tool /tmp/claude-501/v591r/root-claude/control/agents/agent-0123456789abcdef0123456789abcdef.json
+judge: 1 FAIL
+rc=1
+--- plugin form, child record is runtime dsh, expected claude: the runtime verdict must FAIL
+PASS: /tmp/claude-501/v591r/plugin-good.jsonl has the init record
+Main init: model claude-haiku-5-5 | session fd8ef687-1356-4d70-943e-4583f0dd1ed4 | mcp servers [('plugin:graftling:subagents', 'connected'), ('claude.ai Claude Docs', 'connected'), ('claude.ai Gmail', 'needs-auth')]
+plugins: ['graftling', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+the init tool list (27): ['Bash', 'CronCreate', 'CronDelete', 'CronList', 'DesignSync', 'Edit', 'EnterWorktree', 'ExitWorktree', 'ListAgents', 'Monitor', 'NotebookEdit', 'PushNotification', 'Read', 'RemoteTrigger', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'Skill', 'Task', 'TaskStop', 'ToolSearch', 'WebSearch', 'Workflow', 'Write', 'mcp__claude_ai_Claude_Docs__query', 'mcp__claude_ai_Claude_Docs__read', 'mcp__plugin_graftling_subagents__subagents']
+PASS: the init tool list has mcp__plugin_graftling_subagents__subagents
+PASS: the init tool list has no old name (agents or mcp__*__agents): []
+PASS: the MCP server of mcp__plugin_graftling_subagents__subagents is connected: [('plugin:graftling:subagents', 'connected'), ('claude.ai Claude Docs', 'connected'), ('claude.ai Gmail', 'needs-auth')]
+every other MCP server in the init record (name: status): claude.ai Claude Docs: connected, claude.ai Gmail: needs-auth
+  claude.ai Claude Docs: tools ['mcp__claude_ai_Claude_Docs__query', 'mcp__claude_ai_Claude_Docs__read']
+  claude.ai Gmail: tools []
+tool calls made by the Main: ['mcp__plugin_graftling_subagents__subagents', 'mcp__plugin_graftling_subagents__subagents']
+PASS: the Main called mcp__plugin_graftling_subagents__subagents at least twice (create, wait): 2
+PASS: the Main called no old tool name: []
+PASS: no mcp__plugin_graftling_subagents__subagents result is an error: []
+  result of mcp__plugin_graftling_subagents__subagents (error False): '{"action": "create", "agent": "agent-0123456789abcdef0123456789abcdef"}'
+  result of mcp__plugin_graftling_subagents__subagents (error False): '{"action": "wait", "agent": "agent-0123456789abcdef0123456789abcdef", "state": "completed", "last_message": "ready"}'
+Main result: 'AGENT: agent-0123456789abcdef0123456789abcdef\nANSWER: ready'
+PASS: the Main ended with a result that is not an error
+PASS: exactly one new child record under /tmp/claude-501/v591r/root-dsh/control/agents: {'agent-0123456789abcdef0123456789abcdef': ('claude-native', 'dsh')}
+PASS: agent-0123456789abcdef0123456789abcdef was created by host claude-native: ('claude-native', 'dsh')
+FAIL: agent-0123456789abcdef0123456789abcdef is a claude child: runtime 'dsh'
+PASS: agent-0123456789abcdef0123456789abcdef completed with 'ready': outcome completed, error None, last_message 'ready'
+PASS: a tool result of the Main names agent-0123456789abcdef0123456789abcdef
+follow-up (paste): python3 -m json.tool /tmp/claude-501/v591r/root-dsh/control/agents/agent-0123456789abcdef0123456789abcdef.json
+judge: 1 FAIL
+rc=1
+--- config form, PASS shape (init from the real stream)
+PASS: /tmp/claude-501/v591r/config-good.jsonl has the init record
+Main init: model claude-haiku-5-5 | session c3023c8f-dfc2-4d81-a837-97bb06356848 | mcp servers [('graftling', 'connected')]
+plugins: ['agents-claude-host', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']
+the init tool list (25): ['Bash', 'CronCreate', 'CronDelete', 'CronList', 'DesignSync', 'Edit', 'EnterWorktree', 'ExitWorktree', 'ListAgents', 'Monitor', 'NotebookEdit', 'PushNotification', 'Read', 'RemoteTrigger', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'Skill', 'Task', 'TaskStop', 'ToolSearch', 'WebSearch', 'Workflow', 'Write', 'mcp__graftling__subagents']
+PASS: the init tool list has mcp__graftling__subagents
+PASS: the init tool list has no old name (agents or mcp__*__agents): []
+PASS: the MCP server of mcp__graftling__subagents is connected: [('graftling', 'connected')]
+every other MCP server in the init record (name: status): none
+tool calls made by the Main: ['mcp__graftling__subagents', 'mcp__graftling__subagents']
+PASS: the Main called mcp__graftling__subagents at least twice (create, wait): 2
+PASS: the Main called no old tool name: []
+PASS: no mcp__graftling__subagents result is an error: []
+  result of mcp__graftling__subagents (error False): '{"action": "create", "agent": "agent-0123456789abcdef0123456789abcdef"}'
+  result of mcp__graftling__subagents (error False): '{"action": "wait", "agent": "agent-0123456789abcdef0123456789abcdef", "state": "completed", "last_message": "ready"}'
+Main result: 'AGENT: agent-0123456789abcdef0123456789abcdef\nANSWER: ready'
+PASS: the Main ended with a result that is not an error
+PASS: exactly one new child record under /tmp/claude-501/v591r/root-claude/control/agents: {'agent-0123456789abcdef0123456789abcdef': ('claude-native', 'claude')}
+PASS: agent-0123456789abcdef0123456789abcdef was created by host claude-native: ('claude-native', 'claude')
+PASS: agent-0123456789abcdef0123456789abcdef is a claude child: runtime 'claude'
+PASS: agent-0123456789abcdef0123456789abcdef completed with 'ready': outcome completed, error None, last_message 'ready'
+PASS: a tool result of the Main names agent-0123456789abcdef0123456789abcdef
+follow-up (paste): python3 -m json.tool /tmp/claude-501/v591r/root-claude/control/agents/agent-0123456789abcdef0123456789abcdef.json
+judge: ALL PASS
+rc=0
+--- pi judge, synthetic Session, child runtime dsh expected: PASS
+PASS: a tool result of the Main names agent-1
+follow-up (paste): python3 -m json.tool /tmp/claude-501/v591/judgefx/root/control/agents/agent-1.json
+judge: ALL PASS
+--- pi judge, same records, runtime claude expected: FAIL
+FAIL: agent-1 is a claude child: runtime 'dsh'
+judge: 1 FAIL
+
+################ gates
+--- gate: claude-pre without VERIFY591_CLAUDE_USER_LOGIN (rehearsal ROOT has venv-cand, no claude-pre run)
+STOP: this step uses the user's own Claude login; Main asks the user first, then runs:
+  VERIFY591_CLAUDE_USER_LOGIN=1 zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh claude-pre
+STEP-END claude-pre rc=1
+--- gate: claude-plugin without VERIFY591_CLAUDE_USER_LOGIN (rehearsal ROOT has venv-cand, no claude-pre run)
+STOP: claude-pre has not run in /tmp/claude-501/v591c/root; run: VERIFY591_CLAUDE_USER_LOGIN=1 zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh claude-pre
+STEP-END claude-plugin rc=1
+--- gate: claude-config without VERIFY591_CLAUDE_USER_LOGIN (rehearsal ROOT has venv-cand, no claude-pre run)
+STOP: claude-pre has not run in /tmp/claude-501/v591c/root; run: VERIFY591_CLAUDE_USER_LOGIN=1 zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh claude-pre
+STEP-END claude-config rc=1
+--- gate: claude-plugin with VERIFY591_CLAUDE_USER_LOGIN=1, claude-pre not run
+STOP: claude-pre has not run in /tmp/claude-501/v591c/root; run: VERIFY591_CLAUDE_USER_LOGIN=1 zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh claude-pre
+STEP-END claude-plugin rc=1
+
+======================================================================================================
+EARLIER PARTS (before the correction round)
+======================================================================================================
 PART 1 (2026-11-23 23:24 JST): the CANDIDATE 2440d75d37838327217c3f8e9eba04ef0165051a from Engineer A's bundle
 .scratch/591/graftling-591.bundle (GCOMMIT and BUNDLE as committed in steps.zsh, no override). VERIFY591_ROOT/OUT/SUITE_ROOT
 under $TMPDIR=/tmp/claude-501; pre/install with scripts/verify-585/stub pi and dsh (VERIFY591_BIN), a fake user home, VERIFY591_DMODEL,

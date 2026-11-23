@@ -5,7 +5,8 @@
 # stays. graftling only, no GraphTraj.
 # ACCEPTANCE ENTRY (user rule 2026-11-23): every judged step goes through the entry users use: a real Claude Code Main
 # (`claude -p`, the user's own login) and a real Pi Main (DeepSeek), each with the candidate installed as a wheel, the
-# model itself calling the subagents tool, and a real DSH child on DeepSeek. Verdicts read the hosts' own records (the
+# model itself calling the subagents tool, and a real child: a DSH child on DeepSeek for Pi, a Claude child
+# (claude-haiku-5-5, the Claude host's own Runtime, the same user login) for Claude. Verdicts read the hosts' records (the
 # Claude stream-json init tool list and tool results; the Pi Session file's tool declarations, calls and results) and
 # the child record under <project>/.agents-control. No stub, no direct call of a host's server instead of the host.
 # Run one step at a time, in this order:  zsh <this file> <STEP>
@@ -36,18 +37,22 @@
 #   claude-pre     Main, VERIFY591_CLAUDE_USER_LOGIN=1. A one-line `claude -p` in ROOT/claude-pre with the Mains'
 #                  flags and environment, judged by verify-common/claude_isolation.py check (model id, login, no
 #                  Harness instruction file loaded). Dialog: none. Network: Anthropic. ~30 s.
-#   claude-plugin  Main, VERIFY591_CLAUDE_USER_LOGIN=1. The STANDALONE PLUGIN form: `claude -p --plugin-dir <venv-cand's
-#                  graftling/claude-plugin>` with GRAFTLING_PYTHON=venv-cand's python, in ROOT/proj-claude-plugin. The
-#                  model creates ONE dsh child (DeepSeek) through mcp__plugin_graftling_subagents__subagents and waits
-#                  for it. Verdicts: the stream-json init tool list has that name and no agents/mcp__*__agents; the
-#                  plugin's MCP server plugin:graftling:subagents is connected; calls, results; the one new record
-#                  (host claude-native, completed, 'ready'). Dialog: none. Network: Anthropic, api.deepseek.com.
-#                  ~2-4 min. If the init record shows the plugin's server missing (for example because
-#                  --strict-mcp-config also drops plugin servers), report it and run claude-config.
+#   claude-plugin  Main, VERIFY591_CLAUDE_USER_LOGIN=1. The STANDALONE PLUGIN form: `claude -p --setting-sources
+#                  project,local --plugin-dir <venv-cand's graftling/claude-plugin>` with GRAFTLING_PYTHON=venv-cand's
+#                  python, in ROOT/proj-claude-plugin. WITHOUT --strict-mcp-config: the 591 correction-round run showed
+#                  that flag drops a --plugin-dir plugin's MCP server (init mcp_servers []), so MCP servers Claude Code
+#                  loads from your own configuration (user scope, claude.ai connectors) may load beside it; the step
+#                  prints every one by name and status and their tools. The model creates ONE Claude child (model
+#                  claude-haiku-5-5; the child uses the same user Claude login) through
+#                  mcp__plugin_graftling_subagents__subagents and waits for it. Verdicts: the stream-json init tool
+#                  list has that name and NO agents/mcp__*__agents from ANY server; plugin:graftling:subagents is
+#                  connected; calls, results; the one new record (host claude-native, runtime claude, completed,
+#                  'ready'). Dialog: none. Network: Anthropic. ~2-4 min.
 #   claude-config  Main, VERIFY591_CLAUDE_USER_LOGIN=1. The `configuration --write` form in ROOT/proj-claude-config
-#                  (--mcp-config <project>/.mcp.json + --plugin-dir of the written host plugin): the same create and
-#                  wait through mcp__graftling__subagents, the same verdicts. The fallback for claude-plugin, or extra
-#                  coverage if Main wants both forms. Dialog: none. ~2-4 min.
+#                  (--strict-mcp-config --mcp-config <project>/.mcp.json + --plugin-dir of the written host plugin):
+#                  the same create and wait of a Claude child (claude-haiku-5-5, same user login) through
+#                  mcp__graftling__subagents, the same verdicts, plus the written hook's TOOL lines. Dialog: none.
+#                  Network: Anthropic. ~2-4 min.
 #   post           Main. ~/.pi/agent, ~/.dsh and ~/.codex vs pre (any difference FAILs). <5 s.
 #   suite          Main. graftling's full suite on GCOMMIT: a clean clone from the bundle in SROOT (not ROOT), a venv
 #                  with conda's pytest and graftling editable (no network), TMPDIR=${TMPDIR:-/tmp} outside the
@@ -59,21 +64,22 @@
 #                  SROOT; per id 'also fails on base' (not new) or 'candidate-only' (NEW). Dialog: none. No login.
 #   push           Main, ONLY after asking the user. Pushes the candidate branch to LUOXIAO92/graftling from the
 #                  bundle. Dialog: none expected; git uses your usual GitHub login (github.com). ~30 s.
-# Order: pre, install, cli, pi-main, claude-pre, claude-plugin, [claude-config], post. suite and SR (suite-base) need
+# Order: pre, install, cli, pi-main, claude-pre, claude-plugin, claude-config, post. suite and SR (suite-base) need
 # no ROOT, no key and no login; push separately after asking.
 # Preflight: every host answers a one-line prompt with its configured model and login before it is used: Pi in pre,
 # DSH (the children's host) in install, Claude in claude-pre.
 # Credentials: every pi and dsh process started by pre/install/pi-main runs in an ALLOWLISTED environment: PATH,
 # HOME=ROOT/home, TMPDIR, LANG, PI_CODING_AGENT_DIR, DEEPSEEK_API_KEY and the step's own variables (shown by name).
 # The Claude Mains run in an allowlisted environment too: PATH, HOME (yours: Claude Code's login needs it), USER,
-# LOGNAME, SHELL, TMPDIR, LANG, DEEPSEEK_API_KEY, DSH_HOME=ROOT/dsh-home (and GRAFTLING_PYTHON for the plugin), so the
-# dsh child they create has DEEPSEEK_API_KEY as its only credential. The key is never printed and never an argument.
+# LOGNAME, SHELL, TMPDIR, LANG (and GRAFTLING_PYTHON for the plugin); DEEPSEEK_API_KEY is removed: the Claude steps
+# and their Claude children use only your Claude login. The key is never printed and never an argument.
 # The user's Claude login (VERIFY591_CLAUDE_USER_LOGIN=1, required by claude-*; STOP without it): Claude Code reads the
 # macOS keychain login and ~/.claude.json. Claude Code itself may write Session transcripts under
 # ~/.claude/projects/-private-tmp-graftling-591-*/, entries under ~/.claude/sessions, its plugin store cache
 # ~/.claude/plugins/store, and ~/.claude.json. These steps' own commands write nothing under ~/.claude, ~/.codex,
 # ~/.pi, ~/.dsh or to dotfiles (no marketplace add, no plugin install, no dsh plugin add). The Mains run with
-# --setting-sources project,local --strict-mcp-config, so no user settings or MCP servers load. Each claude step
+# --setting-sources project,local (no user settings) and claude_isolation's project settings; claude-pre and
+# claude-config also with --strict-mcp-config (no user MCP servers); claude-plugin cannot (see above). Each claude step
 # reports, by name only, what it can attribute under ~/.claude and ~/.claude/plugins/store before/after.
 # Writes outside ROOT and SROOT: none expected apart from Claude Code's own files named above.
 # VERIFY591_ROOT / _OUT / _BIN / _USERHOME / _BUNDLE / _GCOMMIT / _DMODEL / _PIMODEL / _SUITE_ROOT / _PYTEST_ARGS are for
@@ -100,6 +106,7 @@ DH=$ROOT/dsh-home                                   # isolated DSH home of the d
 MODELF=$ROOT/pi-model.txt                           # the Pi Main's deepseek model id (pre)
 DMODELF=$ROOT/dsh-model.txt                         # the dsh child's model (install)
 MMODEL=${VERIFY591_CLAUDE_MODEL:-claude-haiku-5-5}  # the Claude Mains' model (as 574)
+CHILDMODEL=claude-haiku-5-5                         # the Claude steps' child: runtime claude (as 418, 574)
 PTOOL=mcp__graftling__subagents                     # the Pi Main's and the configuration --write tool name
 CTOOL=mcp__plugin_graftling_subagents__subagents    # the standalone plugin's tool name
 THIS=${0:A}
@@ -136,12 +143,12 @@ callow() {
   local -a add=()
   while (( $# )) && [[ $1 != -- ]]; do add+=$1; shift; done; shift
   ( local k u=$HOME us=${USER:-$(id -un)} sh=${SHELL:-/bin/zsh} t=$PYTEST_TMP
-    for k in ${(k)parameters[(R)*export*]}; do [[ $k == DEEPSEEK_API_KEY ]] || unset $k 2>/dev/null; done
-    export PATH=${CLAUDE:h}:$PIPATH HOME=$u USER=$us LOGNAME=$us SHELL=$sh TMPDIR=$t LANG=en_US.UTF-8 DSH_HOME=$DH
+    for k in ${(k)parameters[(R)*export*]}; do unset $k 2>/dev/null; done
+    export PATH=${CLAUDE:h}:$PIPATH HOME=$u USER=$us LOGNAME=$us SHELL=$sh TMPDIR=$t LANG=en_US.UTF-8
     (( $#add )) && export "${add[@]}"
     exec /usr/bin/perl -e 'my %k = map { $_ => 1 } split /,/, shift; delete $ENV{$_} for grep { !$k{$_} } keys %ENV;
       exec @ARGV or die "exec $ARGV[0]: $!\n"' \
-      PATH,HOME,USER,LOGNAME,SHELL,TMPDIR,LANG,DSH_HOME,DEEPSEEK_API_KEY${add:+,${(j:,:)${add%%=*}}} "$@" )
+      PATH,HOME,USER,LOGNAME,SHELL,TMPDIR,LANG${add:+,${(j:,:)${add%%=*}}} "$@" )
 }
 # Your locations: names (+ sha256 prefixes for ~/.pi/agent files, mtimes for ~/.dsh and ~/.codex), never contents.
 user_state() {
@@ -199,9 +206,9 @@ dsh_preflight() {  # model
   fi
   pass "DSH answered as configured model $m (login: DEEPSEEK_API_KEY)"
 }
-create_prompt() {  # tool, dsh model
+create_prompt() {  # tool, child runtime, child model
   print -r -- 'Use the MCP tool '$1' (not any built-in Task or Agent tool of yours). Its input is {"action":"execute","feature":<name>,"arguments":{...}}. Make exactly these calls in order:
-1) {"action":"execute","feature":"create","arguments":{"runtime":"dsh","model":"'$2'","instruction":"Answer with exactly one word: ready."}}
+1) {"action":"execute","feature":"create","arguments":{"runtime":"'$2'","model":"'$3'","instruction":"Answer with exactly one word: ready."}}
 2) {"action":"execute","feature":"wait","arguments":{"agent":"<the agent id that create returned>","timeout_seconds":240}}
 3) {"action":"execute","feature":"status","arguments":{"agent":"<that agent id>"}}
 Do not retry or change any argument. Then report exactly two lines: AGENT: the agent id; ANSWER: the child'"'"'s answer. If any call returns an error, also print it verbatim on a line prefixed ERROR:.'
@@ -256,21 +263,21 @@ print("~/.claude.json project keys under", sys.argv[2] + ":", [k for k in p if k
 }
 # One real Claude Main in project $1 with launch flags $LAUNCH and extra env $CENV; judged for tool $2.
 claude_case() {  # project tool
-  local P=$1 tool=$2 out=$ROOT/${1:t}-$(date +%H%M%S).jsonl snap=$ROOT/${1:t}-before.ids model
-  model=$(<$DMODELF)
+  local P=$1 tool=$2 out=$ROOT/${1:t}-$(date +%H%M%S).jsonl snap=$ROOT/${1:t}-before.ids model=$CHILDMODEL
   python3 -I $JUDGE snap $P/.agents-control > $snap
-  say "Main in $P: claude ${LAUNCH[*]} '<create+wait+status prompt for $tool, dsh child model $model>'"
-  print -r -- "Main environment (names; values not printed): PATH HOME USER LOGNAME SHELL TMPDIR LANG DSH_HOME DEEPSEEK_API_KEY ${CENV%%=*}"
-  (cd $P && callow $CENV -- $CLAUDE $LAUNCH "$(create_prompt $tool $model)" < /dev/null > $out 2> $out.err)
+  say "Main in $P: claude ${LAUNCH[*]} '<create+wait+status prompt for $tool, Claude child model $model>'"
+  print -r -- "The child is a Claude child (runtime claude, model $model): it uses the same user Claude login as the Main."
+  print -r -- "Main environment (names; values not printed): PATH HOME USER LOGNAME SHELL TMPDIR LANG ${CENV%%=*}"
+  (cd $P && callow $CENV -- $CLAUDE $LAUNCH "$(create_prompt $tool claude $model)" < /dev/null > $out 2> $out.err)
   local mrc=$?
   print -r -- "Main exit=$mrc (stream: $out; stderr: $out.err, $(wc -l < $out.err | tr -d ' ') lines)"
   cp $out $out.err $OUT/ 2>/dev/null
   say "verdict (computed)"
   (( mrc == 0 )) && pass "the Main exited 0" || fail "the Main exited $mrc"
-  python3 -I $JUDGE claude $out $P/.agents-control $snap $tool claude-native ready || OK=0
+  python3 -I $JUDGE claude $out $P/.agents-control $snap $tool claude-native ready claude || OK=0
   print -r -- "host log (last lines): $(tail -3 $P/.agents-control/host.log 2>/dev/null | tr '\n' ' ')"
   print -r -- "processes still naming $P (expect none): $(pgrep -fl -- $P 2>/dev/null | head -3 | tr '\n' ' ')"
-  print -r -- "follow-up (paste): python3 -I $JUDGE claude $out $P/.agents-control $snap $tool claude-native ready"
+  print -r -- "follow-up (paste): python3 -I $JUDGE claude $out $P/.agents-control $snap $tool claude-native ready claude"
 }
 
 # A fresh pytest temp root under TMPDIR, outside the Harness, with no Harness marker above it; sets RUNTMP.
@@ -386,21 +393,21 @@ pi-main)
   mkproj $P; : > $snap; rm -rf $SD; mkdir -p $SD
   say "pi -p --provider deepseek --model $model --approve --session-dir $SD '<create+wait+status prompt>'; PI_CODING_AGENT_DIR=$ROOT/agent-cand; allowlisted env + DSH_HOME"
   ( cd $P && allow $ROOT/agent-cand DSH_HOME=$DH -- perl -e 'alarm shift; exec @ARGV' 600 pi -p --provider deepseek --model $model \
-      --approve --session-dir $SD "$(create_prompt $PTOOL $dmodel)" ) < /dev/null > $SOUT 2>&1
+      --approve --session-dir $SD "$(create_prompt $PTOOL dsh $dmodel)" ) < /dev/null > $SOUT 2>&1
   local src=$?
   tail -8 $SOUT; print -r -- "exit=$src (full output: $SOUT)"; cp $SOUT $OUT/ 2>/dev/null
   print -r -- "$root: $(print -l -- $root/*(N:t) | tr '\n' ' '); live: $(print -l -- $root/live/*(N:t) | tr '\n' ' ')"
   say "verdict (computed)"
   OK=1
   (( src == 0 )) && pass "the Pi Main exited 0" || fail "the Pi Main exited $src"
-  python3 -I $JUDGE pi $SD $SOUT $root $snap $PTOOL pi-native ready || OK=0
-  print -r -- "follow-up (paste): python3 -I $JUDGE pi $SD $SOUT $root $snap $PTOOL pi-native ready"
+  python3 -I $JUDGE pi $SD $SOUT $root $snap $PTOOL pi-native ready dsh || OK=0
+  print -r -- "follow-up (paste): python3 -I $JUDGE pi $SD $SOUT $root $snap $PTOOL pi-native ready dsh"
   (( OK )) || { print -r -- "next: inspect $SOUT and $SD"; return 1; }
   print -r -- "next: VERIFY591_CLAUDE_USER_LOGIN=1 zsh $THIS claude-pre   (Main asks the user first)"
   ;;
 claude-pre)
   say "[claude-pre] Main. One-line claude -p with the Mains' flags and environment. Dialog: none expected. ~30 s."
-  need $DMODELF install || return 1
+  need $(venv cand)/installed install || return 1
   login_gate || return 1
   mkdir -p $ROOT/claude-pre && python3 -I $ISO settings $H $ROOT/claude-pre || return 1
   [[ $($CLAUDE --help 2>&1) == *--plugin-dir* ]] && pass "claude --help offers --plugin-dir" || { print "STOP: claude --help offers no --plugin-dir"; return 1; }
@@ -416,7 +423,8 @@ claude-pre)
   print -r -- "next: VERIFY591_CLAUDE_USER_LOGIN=1 zsh $THIS claude-plugin"
   ;;
 claude-plugin)
-  key_ready && need $DMODELF install && need $ROOT/claude-pre.jsonl claude-pre || return 1
+  need $(venv cand)/installed install || return 1
+  [[ -e $ROOT/claude-pre.jsonl ]] || { print -r -- "STOP: claude-pre has not run in $ROOT; run: VERIFY591_CLAUDE_USER_LOGIN=1 zsh $THIS claude-pre"; return 1; }
   local P=$ROOT/proj-claude-plugin PD=$(site cand)/claude-plugin
   say "[claude-plugin] Main. Standalone plugin form (--plugin-dir $PD, GRAFTLING_PYTHON=$(venv cand)/bin/python); tool $CTOOL. Dialog: none expected. ~2-4 min."
   login_gate || return 1
@@ -424,18 +432,21 @@ claude-plugin)
   [[ $keys == subagents ]] && pass "the candidate plugin's only MCP server key is subagents" || fail "plugin mcpServers keys: $keys"
   mkproj $P && python3 -I $ISO settings $H $P || return 1
   OK=1
-  typeset -ga LAUNCH=(-p --setting-sources project,local --strict-mcp-config --plugin-dir $PD --model $MMODEL
+  print -r -- "no --strict-mcp-config here: it drops a --plugin-dir plugin's MCP server (591 correction round). MCP servers"
+  print -r -- "from your own Claude Code configuration may load beside the plugin's; each is listed below by name and status."
+  typeset -ga LAUNCH=(-p --setting-sources project,local --plugin-dir $PD --model $MMODEL
                       --allowedTools $CTOOL --output-format stream-json --verbose)
   CENV=GRAFTLING_PYTHON=$(venv cand)/bin/python
   claude_case $P $CTOOL
   claude_outside
-  (( OK )) && print -r -- "SUCCESS: the standalone plugin's Main created and waited for a child through $CTOOL" \
-    || { print -r -- "NOT ACCEPTED (FAIL lines above). If the init record lacks plugin:graftling:subagents, run instead:"
-         print -r -- "  VERIFY591_CLAUDE_USER_LOGIN=1 zsh $THIS claude-config"; return 1; }
-  print -r -- "next: zsh $THIS post   (claude-config is optional extra coverage)"
+  (( OK )) && print -r -- "SUCCESS: the standalone plugin's Main created and waited for a Claude child through $CTOOL" \
+    || { print -r -- "NOT ACCEPTED (FAIL lines above). Report them; the next step still runs:"; }
+  print -r -- "next: VERIFY591_CLAUDE_USER_LOGIN=1 zsh $THIS claude-config"
+  (( OK ))
   ;;
 claude-config)
-  key_ready && need $DMODELF install && need $ROOT/claude-pre.jsonl claude-pre || return 1
+  need $(venv cand)/installed install || return 1
+  [[ -e $ROOT/claude-pre.jsonl ]] || { print -r -- "STOP: claude-pre has not run in $ROOT; run: VERIFY591_CLAUDE_USER_LOGIN=1 zsh $THIS claude-pre"; return 1; }
   local P=$ROOT/proj-claude-config
   say "[claude-config] Main. configuration --write form; tool $PTOOL. Dialog: none expected. ~2-4 min."
   login_gate || return 1
@@ -458,8 +469,9 @@ claude-config)
   CENV=VERIFY591_FORM=config
   claude_case $P $PTOOL
   claude_outside
-  (( OK )) && print -r -- "SUCCESS: the configuration --write Main created and waited for a child through $PTOOL" || return 1
+  (( OK )) && print -r -- "SUCCESS: the configuration --write Main created and waited for a Claude child through $PTOOL"
   print -r -- "next: zsh $THIS post"
+  (( OK ))
   ;;
 post)
   say "[post] Main. Your ~/.pi/agent, ~/.dsh and ~/.codex vs pre (any difference FAILs). <5 s."

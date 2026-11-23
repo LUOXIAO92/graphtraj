@@ -480,6 +480,29 @@ members_idle() {
   print -r -- "members_idle [$phase]: no member execution is active: PASS"
 }
 
+# 593 C5 (correction 1): the uv tool environment and the interpreter uv based it on. $1 = the tool's bin/python.
+# CHECK: sys.prefix is $UVT/tools/graftling and graftling is $GVERSION. REPORT: the base interpreter
+# (sys._base_executable, else sys.base_prefix) and its class: uv-managed (under $UVT/python), conda (under the conda root)
+# or other. A conda base prints a NOTE that is neither PASS nor FAIL: Main decides; C5r still runs.
+c5_interp() {
+  local py=$1 out prefix base version croot=${CONDABIN:h:h} class
+  out=$($py -I -c 'import sys, graftling; print(sys.prefix); print(getattr(sys, "_base_executable", "") or sys.base_prefix); print(graftling.__version__)' 2>&1) \
+    || { print -r -- "CHECK 593 C5 one install from GitHub $GTAG in the uv tool environment $UVT/tools/graftling (sys.prefix), graftling $GVERSION: FAIL ($py: ${out[1,200]})"; return 1; }
+  prefix=${${(f)out}[1]} base=${${(f)out}[2]} version=${${(f)out}[3]}
+  print -r -- "uv tool python: $py | sys.prefix: $prefix | base interpreter: $base | graftling $version"
+  if [[ ${prefix:A} == ${UVT:A}/tools/graftling && $version == $GVERSION ]]; then
+    print -r -- "CHECK 593 C5 one install from GitHub $GTAG in the uv tool environment $UVT/tools/graftling (sys.prefix), graftling $GVERSION: PASS"
+  else print -r -- "CHECK 593 C5 one install from GitHub $GTAG in the uv tool environment $UVT/tools/graftling (sys.prefix), graftling $GVERSION: FAIL"; return 1; fi
+  case ${base:A}/ in
+    ${UVT:A}/python/*) class=uv-managed ;;
+    ${croot:A}/*) class=conda ;;
+    *) case $base/ in $UVT/python/*) class=uv-managed ;; $croot/*) class=conda ;; *) class=other ;; esac ;;
+  esac
+  print -r -- "REPORT 593 C5 base interpreter: $base ($class)"
+  [[ $class == conda ]] && print -r -- "NOTE 593 C5: the uv tool environment is based on conda's Python ($base); no install into conda was made; Main decides whether this meets requirement 5"
+  return 0
+}
+
 # USER's Terminal only: wait (never kill) until no BLOCKING process remains. $1 says what Ctrl-C leaves.
 wait_idle() {
   local g
@@ -1633,30 +1656,33 @@ Nr) print "[Nr] Main. 子级与成员记录、通知一次、成员的工具调�
   else print "\n清退成员: 先把 N 的 swarm 原始结果存到 $R/N.txt 再重跑 Nr。"; fi
   next "zsh $THIS X    （然后 zsh $THIS Nt；清退成员后再跑一次 Nt，然后 zsh $THIS scan 与 zsh $THIS C5）"; exit $rc ;;
 
-C5) cv; print "[C5] Main，gh 之后（$GTAG 已在 GitHub）。结果 5（单一安装源 + conda）：在隔离目录 $UVT 用 uv tool install 从 GitHub 的 $GTAG 安装一次 graftling（UV_TOOL_DIR、UV_TOOL_BIN_DIR、UV_CACHE_DIR、UV_PYTHON_INSTALL_DIR 都在 $UVT 下，uv 只用自己管理的 Python；不碰 ~/.local 与用户的 uv 工具目录），再用该安装为 $UVT/project 生成 Claude Code 的项目文件（configuration --write，只写这个项目）。之前先对 ~/.local、用户的 uv 工具目录、~/.pi、~/.dsh、~/.codex（按名字与 sha256，不含 logs_*.sqlite* 与 models_cache.json：USER 正在运行的 Codex 会写它们）与 conda（conda-meta 与 dist-info 名单）做快照。对话框: 无。需要网络（github.com、PyPI、uv 的 Python 下载）。约 2-3 分钟。"
+_c5interp) c5_interp ${IDS[1]:-$UVT/tools/graftling/bin/python}; exit $? ;;   # rehearsal only
+
+C5) cv; print "[C5] Main，gh 之后（$GTAG 已在 GitHub）。结果 5（单一安装源 + conda）：在隔离目录 $UVT 按 graftling README 的唯一安装方式 uv tool install 从 GitHub 的 $GTAG 安装一次 graftling（只把 UV_TOOL_DIR、UV_TOOL_BIN_DIR、UV_CACHE_DIR、UV_PYTHON_INSTALL_DIR 放在 $UVT 下；不指定解释器偏好，uv 自己选或下载 Python 3.12+，并打印它用的解释器；不碰 ~/.local 与用户的 uv 工具目录），再用该安装为 $UVT/project 生成 Claude Code 的项目文件（configuration --write，只写这个项目）。之前先对 ~/.local、用户的 uv 工具目录、~/.pi、~/.dsh、~/.codex（按名字与 sha256，不含 logs_*.sqlite* 与 models_cache.json：USER 正在运行的 Codex 会写它们）与 conda（conda-meta 与 dist-info 名单）做快照。对话框: 无。需要网络（github.com、PyPI、uv 的 Python 下载）。约 2-3 分钟。"
   { [[ -e $UVT/tools ]] && { print "STOP: $UVT/tools exists (an earlier C5). Main moves $UVT aside first, or runs C5r on it."; exit 1; }
     mkdir -p $UVT/project || exit 1
     say "before: USER directories that must stay unchanged (read only)"
     $CONDA -I $SD/homesnap593.py snap $R/C5-home-before.json local=$HOME/.local uvtools=$(clean uv tool dir 2>/dev/null || print $HOME/.local/share/uv/tools) pi=$HOME/.pi dsh=$HOME/.dsh codex=$HOME/.codex conda=${CONDABIN:h:h} || exit 1
     say "uv tool install from GitHub $GTAG into $UVT only"
-    UVENV=(UV_TOOL_DIR=$UVT/tools UV_TOOL_BIN_DIR=$UVT/bin UV_CACHE_DIR=$UVT/cache UV_PYTHON_INSTALL_DIR=$UVT/python UV_PYTHON_PREFERENCE=only-managed)
+    # The release's single install method as graftling's README states it ("uv gets a Python 3.12 or later when it needs
+    # one"): no interpreter preference is set; only uv's directories are isolated under $UVT.
+    UVENV=(UV_TOOL_DIR=$UVT/tools UV_TOOL_BIN_DIR=$UVT/bin UV_CACHE_DIR=$UVT/cache UV_PYTHON_INSTALL_DIR=$UVT/python)
     print -r -- "uv: $(command -v uv) | $(uv --version 2>&1) | environment: ${UVENV[*]}"
-    clean env $UVENV uv tool install "git+https://github.com/LUOXIAO92/graftling.git@$GTAG" 2>&1 | tail -6; urc=${pipestatus[1]}
-    print "uv tool install rc=$urc"; (( urc == 0 )) || exit 1
+    clean env $UVENV uv tool install "git+https://github.com/LUOXIAO92/graftling.git@$GTAG" > $R/C5-uv.txt 2>&1; urc=$?
+    grep -iE 'interpreter|cpython|python' $R/C5-uv.txt | head -4 | sed 's/^/uv said: /' || true
+    tail -4 $R/C5-uv.txt
+    print "uv tool install rc=$urc (full output: $R/C5-uv.txt)"; (( urc == 0 )) || exit 1
     UVPY=$UVT/tools/graftling/bin/python
-    print -r -- "uv tool python: $UVPY -> ${UVPY:A} | version: $($UVPY -I -c 'import graftling, sys; print(graftling.__version__, sys.prefix)')"
     print -r -- "uv tool bin: $(print -l $UVT/bin/*(N:t) | tr '\n' ' ') | subagents-mcp shebang: $(head -1 $UVT/bin/subagents-mcp)"
-    [[ ${UVPY:A} == ${UVT:A}/* && $($UVPY -I -c 'import graftling; print(graftling.__version__)') == $GVERSION ]] \
-      && print "CHECK 593 C5 one install from GitHub $GTAG under $UVT (uv-managed Python, not conda's): PASS" \
-      || { print "CHECK 593 C5 one install from GitHub $GTAG under $UVT (uv-managed Python, not conda's): FAIL"; exit 1; }
+    c5_interp $UVPY || exit 1
     say "Claude Code project $UVT/project: configuration --write from the uv installation (writes only that project)"
     [[ -d $UVT/project/.git ]] || git -C $UVT/project init -q --initial-branch=main
     (cd $UVT/project && clean $UVPY -m graftling.claude.host configuration --project $UVT/project --claude $(claude_bin) --write) 2>&1 | tail -8 || exit 1
     print -r -- ".mcp.json graftling command: $($CONDA -I -c 'import json,sys; s=json.load(open(sys.argv[1]))["mcpServers"]["graftling"]; print(s.get("command"), *(s.get("args") or []))' $UVT/project/.mcp.json 2>&1)"
   } 2>&1 | tee $R/C5.txt; rc=${pipestatus[1]}
   (( rc == 0 )) || { print "\nC5 STOP（见上）。把 $R/C5.txt 交给 Main。"; exit 1; }
-  summary C5 "$(grep -E '^(uv|uv tool|CHECK|\.mcp\.json|snap)' $R/C5.txt)"
-  print "成功: 'uv tool install rc=0'；'CHECK 593 C5 one install from GitHub $GTAG under $UVT (uv-managed Python, not conda's): PASS'；.mcp.json 的 graftling command 是 $UVT/tools/graftling/bin/python。"
+  summary C5 "$(grep -E '^(uv|uv tool|uv said|CHECK|REPORT|NOTE|\.mcp\.json|snap)' $R/C5.txt)"
+  print "成功: 'uv tool install rc=0'；'CHECK 593 C5 one install from GitHub $GTAG in the uv tool environment $UVT/tools/graftling (sys.prefix), graftling $GVERSION: PASS'；'REPORT 593 C5 base interpreter: …' 只是报告（若是 conda 的，会有 NOTE 行：既不是 PASS 也不是 FAIL，由 Main 判断是否满足结果 5；C5r 照常运行）；.mcp.json 的 graftling command 是 $UVT/tools/graftling/bin/python。"
   next "USER（仅一次）: zsh $THIS C5u    （之后 Main: zsh $THIS C5r）"; exit $rc ;;
 
 C5u) print "[C5u] USER（一次；Claude Code 只在已信任的文件夹加载项目插件，Main 做不了）。$(cv)"
@@ -1687,8 +1713,8 @@ C5r) cv; print "[C5r] Main，C5 与 C5u 之后。在 USER 已有的 conda 环境
     say "graftling processes seen while it ran (executables; the uv tool's Python must serve them)"
     sort -u $R/C5r-ps.txt | cut -c1-220 | head -12
     srv=$(sort -u $R/C5r-ps.txt | grep -c -- "${UVT:A}/tools/graftling/bin/python\|$UVT/tools/graftling/bin/python"); onconda=$(sort -u $R/C5r-ps.txt | grep -c -- "$CROOT/")
-    (( srv > 0 && onconda == 0 )) && print "CHECK 593 C5 graftling ran on the uv tool's Python ($srv process lines), none on conda's: PASS" \
-      || print "CHECK 593 C5 graftling ran on the uv tool's Python ($srv process lines), none on conda's: FAIL ($onconda lines under $CROOT)"
+    (( srv > 0 && onconda == 0 )) && print "CHECK 593 C5 graftling ran as the uv tool environment's bin/python ($srv process lines), none naming the conda root: PASS" \
+      || print "CHECK 593 C5 graftling ran as the uv tool environment's bin/python ($srv process lines), none naming the conda root: FAIL ($onconda lines under $CROOT)"
     say "after: USER directories and conda unchanged (no install into conda; codex compared by name and sha256 without logs_*.sqlite* and models_cache.json)"
     $CONDA -I $SD/homesnap593.py snap $R/C5-home-after.json local=$HOME/.local uvtools=$(clean uv tool dir 2>/dev/null || print $HOME/.local/share/uv/tools) pi=$HOME/.pi dsh=$HOME/.dsh codex=$HOME/.codex conda=$CROOT > /dev/null
     $CONDA -I $SD/homesnap593.py compare $R/C5-home-before.json $R/C5-home-after.json && print "CHECK 593 C5 nothing installed into conda and USER directories unchanged: PASS" \

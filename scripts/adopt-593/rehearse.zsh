@@ -493,6 +493,20 @@ ADOPT593_UVT=$F/uvt steps C5 > $F/C5-exists.out 2>&1; C5E=$?
 check "C5 negative: an existing $F/uvt/tools STOPs before any install" sh -c "[ $C5E -ne 0 ] && grep -q 'STOP: $F/uvt/tools exists' $F/C5-exists.out"
 ADOPT593_UVT=$F/uvt steps C5u > $F/C5u.out 2>&1
 check "C5u: the USER trusts $F/uvt/project once ('Yes, proceed'), then Main runs C5r" sh -c "grep -q \"cd $F/uvt/project && claude\" $F/C5u.out && grep -q 'Yes, proceed' $F/C5u.out && grep -q 'steps.zsh C5r' $F/C5u.out"
+head1 "C5 interpreter check (correction 1): sys.prefix = the uv tool environment, graftling 0.9.0; base interpreter class; NOTE only for conda"
+# conda class, REAL: a venv at <uvt>/tools/graftling made from Miniconda's Python with the B graftling 0.9.0 wheel (what uv
+# would make if it chose conda's Python); the conda root is the real one (read only).
+UC=$F/uvc-conda; $CONDA -m venv $UC/tools/graftling && $UC/tools/graftling/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $W/wheels-${NEW[1,8]}/graftling-0.9.0-*.whl
+ADOPT593_UVT=$UC steps _c5interp > $F/c5i-conda.out 2>&1; CI1=$?; cat $F/c5i-conda.out
+check "C5 class conda (real venv on Miniconda's Python): CHECK PASS, REPORT (conda), the NOTE printed, exit 0 (not a FAIL)" sh -c "[ $CI1 -eq 0 ] && grep -q 'CHECK 593 C5 one install from GitHub v0.9.0 in the uv tool environment $UC/tools/graftling (sys.prefix), graftling 0.9.0: PASS' $F/c5i-conda.out && grep -q '^REPORT 593 C5 base interpreter: /Users/luoxiao/miniconda3/.* (conda)$' $F/c5i-conda.out && grep -q '^NOTE 593 C5: the uv tool environment is based on conda.s Python' $F/c5i-conda.out && ! grep -q ': FAIL' $F/c5i-conda.out"
+# uv-managed class, REHEARSAL FIXTURE interpreter: a stand-in bin/python that answers like a uv tool environment whose
+# base is a uv-managed CPython under <uvt>/python (the real one needs uv's network download).
+UM=$F/uvc-uv; mkdir -p $UM/tools/graftling/bin $UM/python/cpython-3.13-macos-aarch64/bin
+print -l '#!/bin/sh' "print_lines() { printf '%s\n' '$UM/tools/graftling' '$UM/python/cpython-3.13-macos-aarch64/bin/python3.13' '0.9.0'; }" 'print_lines' > $UM/tools/graftling/bin/python; chmod +x $UM/tools/graftling/bin/python
+ADOPT593_UVT=$UM steps _c5interp > $F/c5i-uv.out 2>&1; CI2=$?; cat $F/c5i-uv.out
+check "C5 class uv-managed (fixture interpreter under <uvt>/python): CHECK PASS, REPORT (uv-managed), no NOTE" sh -c "[ $CI2 -eq 0 ] && grep -q 'graftling 0.9.0: PASS' $F/c5i-uv.out && grep -q '^REPORT 593 C5 base interpreter: $UM/python/cpython-3.13-macos-aarch64/bin/python3.13 (uv-managed)$' $F/c5i-uv.out && ! grep -q '^NOTE' $F/c5i-uv.out"
+ADOPT593_UVT=$F/uvc-other steps _c5interp $UC/tools/graftling/bin/python > $F/c5i-neg.out 2>&1; CI3=$?
+check "C5 interpreter negative: sys.prefix outside <uvt>/tools/graftling -> CHECK FAIL, nonzero" sh -c "[ $CI3 -ne 0 ] && grep -q 'graftling 0.9.0: FAIL' $F/c5i-neg.out"
 ADOPT593_UVT=$F/uvt-none steps C5r > $F/C5r-none.out 2>&1; C5N=$?
 check "C5r negative: without the uv installation -> STOP (no install attempted, conda not touched), no success text" sh -c "[ $C5N -ne 0 ] && grep -q 'STOP: no uv installation under $F/uvt-none' $F/C5r-none.out && grep -q 'C5r STOP' $F/C5r-none.out && ! grep -q '^成功' $F/C5r-none.out"
 check "C5 negative: no success text after its STOP" sh -c "grep -q 'C5 STOP' $F/C5-exists.out && ! grep -q '^成功' $F/C5-exists.out"

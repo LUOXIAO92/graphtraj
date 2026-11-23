@@ -4,16 +4,16 @@
 REHEARSAL PASS: zsh -n rehearse.zsh
 REHEARSAL PASS: zsh -n steps.zsh
 REHEARSAL PASS: base /private/tmp/claude-501/adopt593-rehearsal/project/tmp/593 absent before 00
-Worktree HEAD 6a715d259bf1a392bc3eaafd8362644172aaba46 | candidate 3eb21101b920d94da057566c9cfdc3c81b6acbfb | graftling repository read only: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (dev 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9, main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9)
+Worktree HEAD fc32ffe07de599a1b7d02437d5e96e29b1add8fb | candidate 3eb21101b920d94da057566c9cfdc3c81b6acbfb | graftling repository read only: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (dev 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9, main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9)
 
 ======== setup: scratch graftling (dev = 49f97004 in a linked worktree, main = v0.8.0, origin = scratch bare), scratch GraphTraj (dev = 3eb21101)
 scratch graftling: dev 49f97004a86cc245ad32515b9dd056d7092b08f7 main 542a81df0c941f5b1a425d9807681b2a38daa87c v0.9.0 absent | origin /private/tmp/claude-501/adopt593-rehearsal/remote.git | worktrees: 2
-scratch GraphTraj: HEAD 6a715d259bf1a392bc3eaafd8362644172aaba46 dev 3eb21101b920d94da057566c9cfdc3c81b6acbfb
+scratch GraphTraj: HEAD fc32ffe07de599a1b7d02437d5e96e29b1add8fb dev 3eb21101b920d94da057566c9cfdc3c81b6acbfb
 
 ======== setup: fake production = graphtraj eb009725 + graftling v0.8.0, plugin, configuration; stubs
 graftling-0.8.0-py3-none-any.whl
 graphtraj-0.1.0-py3-none-any.whl
-Create dev from bff8cdfb9bd38026aa26bc867c281e97031365ba? [y/N]: Created Integration Worktree on dev.
+Create dev from b2fbc39380a2562ea80cc7f118b20a0b78b60369? [y/N]: Created Integration Worktree on dev.
 GraphTraj project setup complete.
   state: .graphtraj/core/state
 fake production .mcp.json servers: ['graphtraj']
@@ -82,35 +82,35 @@ REHEARSAL PASS: rel negative: dev does not contain 49f97004 -> STOP, nothing cha
 REHEARSAL PASS: rel negative: an existing v0.9.0 at another commit -> STOP
 
 ======== rel with dev moved by 570 (clean): merge 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 into dev as the noreply identity
-dev: 8bd3d8a517bb60dedc0f1ba98b92a1c2c083de07 | main: 542a81df0c941f5b1a425d9807681b2a38daa87c | v0.9.0: absent | dev checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved
-### dev moved since dispatch (49f97004a86cc245ad32515b9dd056d7092b08f7 -> 8bd3d8a517bb60dedc0f1ba98b92a1c2c083de07: 1 commits, e.g. 570): merge 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
-dev: merged, now ef8e2fd304beabd92cee4c897cf5dc1af9c04b7a (parents: 8bd3d8a517bb60dedc0f1ba98b92a1c2c083de07 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+dev: 611f00878645980e29fd07a632b2a244ced5cd25 | main: 542a81df0c941f5b1a425d9807681b2a38daa87c | v0.9.0: absent | dev checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved
+### dev moved since dispatch (49f97004a86cc245ad32515b9dd056d7092b08f7 -> 611f00878645980e29fd07a632b2a244ced5cd25: 1 commits, e.g. 570): merge 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+dev: merged, now c1073f0c9767e76eb3facf07df59a6f20127aac3 (parents: 611f00878645980e29fd07a632b2a244ced5cd25 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
 CHECK 593 v0.9.0 peels to 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
 CHECK 593 graftling main == v0.9.0: PASS
-CHECK 593 graftling dev == v0.9.0 (fast-forward) or a noreply merge containing it: PASS (merge ef8e2fd304beabd92cee4c897cf5dc1af9c04b7a)
+CHECK 593 graftling dev == v0.9.0 (fast-forward) or a noreply merge containing it: PASS (merge c1073f0c9767e76eb3facf07df59a6f20127aac3)
 CHECK 593 v0.9.0 is annotated with the noreply tagger: PASS
 version at v0.9.0: __version__ = "0.9.0" | root package.json:  | version on dev: __version__ = "0.9.0"
-dev: 8bd3d8a517bb60dedc0f1ba98b92a1c2c083de07 | main: 542a81df0c941f5b1a425d9807681b2a38daa87c | v0.9.0: absent | dev checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved
-dev: merged, now ef8e2fd304beabd92cee4c897cf5dc1af9c04b7a (parents: 8bd3d8a517bb60dedc0f1ba98b92a1c2c083de07 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+dev: 611f00878645980e29fd07a632b2a244ced5cd25 | main: 542a81df0c941f5b1a425d9807681b2a38daa87c | v0.9.0: absent | dev checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved-dev | main checked out in: /private/tmp/claude-501/adopt593-rehearsal/gmoved
+dev: merged, now c1073f0c9767e76eb3facf07df59a6f20127aac3 (parents: 611f00878645980e29fd07a632b2a244ced5cd25 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
 CHECK 593 v0.9.0 peels to 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
 CHECK 593 graftling main == v0.9.0: PASS
-CHECK 593 graftling dev == v0.9.0 (fast-forward) or a noreply merge containing it: PASS (merge ef8e2fd304beabd92cee4c897cf5dc1af9c04b7a)
+CHECK 593 graftling dev == v0.9.0 (fast-forward) or a noreply merge containing it: PASS (merge c1073f0c9767e76eb3facf07df59a6f20127aac3)
 CHECK 593 v0.9.0 is annotated with the noreply tagger: PASS
 version at v0.9.0: __version__ = "0.9.0" | root package.json:  | version on dev: __version__ = "0.9.0"
 成功: 四行 CHECK 593 PASS（v0.9.0 peels to 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9；main == v0.9.0；dev == v0.9.0 (fast-forward) 或含它的 noreply 合并；annotated, noreply tagger）；version at v0.9.0: __version__ = "0.9.0"；root package.json: "version":"0.9.0"。
 REHEARSAL PASS: rel dev moved: exit 0, four CHECK PASS
-REHEARSAL PASS: rel dev moved: dev is a merge (parents 8bd3d8a5 + 7b5f4e6b) by 89069722+LUOXIAO92@users.noreply.github.com; main = v0.9.0 = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9; worktree clean
-REHEARSAL PASS: rel dev moved, dev checked out nowhere: merge-tree + commit-tree merge by 89069722+LUOXIAO92@users.noreply.github.com (parents 8b247950 + 7b5f4e6b), four CHECK PASS
+REHEARSAL PASS: rel dev moved: dev is a merge (parents 611f0087 + 7b5f4e6b) by 89069722+LUOXIAO92@users.noreply.github.com; main = v0.9.0 = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9; worktree clean
+REHEARSAL PASS: rel dev moved, dev checked out nowhere: merge-tree + commit-tree merge by 89069722+LUOXIAO92@users.noreply.github.com (parents 02829415 + 7b5f4e6b), four CHECK PASS
 
 ======== rel with a conflicting dev (CHANGELOG edited by 570): worktree path and no-worktree path STOP with nothing changed
 [rel] Main. graftling 0.9.0 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/593-graftling-0-9-0-release-and-production-adoption/scripts/adopt-593/graftling-0.9.0.bundle 按 SHA 取 agent/593-graftling-0.9.0（7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9，父提交 49f97004a86cc245ad32515b9dd056d7092b08f7），dev 到 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9（dev 仍为 49f97004 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9，建注释 tag v0.9.0（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt593-rehearsal/gconf-worktree 的 dev、main、agent/593-graftling-0.9.0 与 tag。
-### dev moved since dispatch (49f97004a86cc245ad32515b9dd056d7092b08f7 -> a4cbb0fd2829d79f111aea6040527c7f05158520: 1 commits, e.g. 570): merge 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+### dev moved since dispatch (49f97004a86cc245ad32515b9dd056d7092b08f7 -> b5abda4e969fa680b14844d7223f29da1417fbcd: 1 commits, e.g. 570): merge 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
 conflicted files: CHANGELOG.md 
-REHEARSAL PASS: rel conflict (worktree): STOP; dev still a4cbb0fd, main still v0.8.0, no v0.9.0
+REHEARSAL PASS: rel conflict (worktree): STOP; dev still b5abda4e, main still v0.8.0, no v0.9.0
 [rel] Main. graftling 0.9.0 发布：从 /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/593-graftling-0-9-0-release-and-production-adoption/scripts/adopt-593/graftling-0.9.0.bundle 按 SHA 取 agent/593-graftling-0.9.0（7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9，父提交 49f97004a86cc245ad32515b9dd056d7092b08f7），dev 到 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9（dev 仍为 49f97004 时快进；否则以 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> 合并，冲突即中止并 STOP），main 快进到 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9，建注释 tag v0.9.0（tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>）。不推送。对话框: 无。< 10 秒。只改 /private/tmp/claude-501/adopt593-rehearsal/gconf-plain 的 dev、main、agent/593-graftling-0.9.0 与 tag。
-### dev moved since dispatch (49f97004a86cc245ad32515b9dd056d7092b08f7 -> 943cf611c565336bfdb15a3627d61edfee006dfa: 1 commits, e.g. 570): merge 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
-merge-tree: exit 1 | 587cd53843b4019cccb6bf41d498f978b2d16929 | 100644 f970354b5f8c31048d51b53ab35ca6ca3084510d 1	CHANGELOG.md | 100644 9c8d81ec8c250771f8469b933ffa788aa2ad4b47 2	CHANGELOG.md | 100644 1851b6e37bcde581359afc0d0a368c2046eb8a43 3	CHANGELOG.md |  | Auto-merging CHANGELOG.md | CONFLICT (content): Merge conflict in CHANGELOG.md
-REHEARSAL PASS: rel conflict (plain): STOP; dev still 943cf611, main still v0.8.0, no v0.9.0
+### dev moved since dispatch (49f97004a86cc245ad32515b9dd056d7092b08f7 -> 59391aeec352e934c0f4c78eb1858296f13d9c1d: 1 commits, e.g. 570): merge 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 into dev as LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>; STOP on a conflict
+merge-tree: exit 1 | 77bafa237e0275e9c312272d5567f996a0dc0f2a | 100644 f970354b5f8c31048d51b53ab35ca6ca3084510d 1	CHANGELOG.md | 100644 9c8d81ec8c250771f8469b933ffa788aa2ad4b47 2	CHANGELOG.md | 100644 1851b6e37bcde581359afc0d0a368c2046eb8a43 3	CHANGELOG.md |  | Auto-merging CHANGELOG.md | CONFLICT (content): Merge conflict in CHANGELOG.md
+REHEARSAL PASS: rel conflict (plain): STOP; dev still 59391aee, main still v0.8.0, no v0.9.0
 REHEARSAL PASS: rel conflict (plain): dev checked out nowhere, so rel used git merge-tree (no worktree touched)
 REHEARSAL PASS: rel conflict (worktree): the merge was aborted, dev's worktree clean
 
@@ -154,15 +154,15 @@ CHECK 593 remote main and v0.9.0 = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9, rem
 REHEARSAL PASS: rp confirmed: remote main and v0.9.0 = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9, remote dev = local dev
 
 ======== gh (result 4): GitHub's (here the scratch bare's) main and v0.9.0 resolve to the release commit; nothing installed
-GitHub (/private/tmp/claude-501/adopt593-rehearsal/remote.git): 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/main | 6e965c509e2c24c96f38b29d98607c9a8ffcb4b5	refs/tags/v0.9.0 | 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/tags/v0.9.0^{}
+GitHub (/private/tmp/claude-501/adopt593-rehearsal/remote.git): 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/main | 7b20a4f3c8aa60d40f691fbf21cfeba84faa1771	refs/tags/v0.9.0 | 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/tags/v0.9.0^{}
 CHECK 593 gh: GitHub graftling main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
 CHECK 593 gh: GitHub v0.9.0 resolves to 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
-CHECK 593 gh: GitHub v0.9.0 is the local annotated tag object (6e965c509e2c24c96f38b29d98607c9a8ffcb4b5): PASS
+CHECK 593 gh: GitHub v0.9.0 is the local annotated tag object (7b20a4f3c8aa60d40f691fbf21cfeba84faa1771): PASS
 installed: nothing (no dsh plugin add, no host, dotfile or ~/.dsh change)
-GitHub (/private/tmp/claude-501/adopt593-rehearsal/remote.git): 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/main | 6e965c509e2c24c96f38b29d98607c9a8ffcb4b5	refs/tags/v0.9.0 | 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/tags/v0.9.0^{}
+GitHub (/private/tmp/claude-501/adopt593-rehearsal/remote.git): 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/main | 7b20a4f3c8aa60d40f691fbf21cfeba84faa1771	refs/tags/v0.9.0 | 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/tags/v0.9.0^{}
 CHECK 593 gh: GitHub graftling main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
 CHECK 593 gh: GitHub v0.9.0 resolves to 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
-CHECK 593 gh: GitHub v0.9.0 is the local annotated tag object (6e965c509e2c24c96f38b29d98607c9a8ffcb4b5): PASS
+CHECK 593 gh: GitHub v0.9.0 is the local annotated tag object (7b20a4f3c8aa60d40f691fbf21cfeba84faa1771): PASS
 installed: nothing (no dsh plugin add, no host, dotfile or ~/.dsh change)
 成功: 'CHECK 593 gh: GitHub graftling main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS'；'CHECK 593 gh: GitHub v0.9.0 resolves to 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS'；'CHECK 593 gh: GitHub v0.9.0 is the local annotated tag object (…): PASS'；'installed: nothing'。
 REHEARSAL PASS: gh exit 0: three CHECK PASS (main, tag peels, the local annotated tag object)
@@ -181,8 +181,8 @@ CHANGELOG heading: ## 0.9.0 (incompatible)
 CHECK 593 v0.9.0 has no 0.7.0 install route (root package.json, dsh/plugin_python.py, root marketplace; 581): PASS
   [project.scripts]: subagents subagents-mcp 
 CHECK 593 v0.9.0 console scripts subagents, subagents-mcp and no agents, agents-mcp: PASS
-e532af42798a71e2298542aba8f6c3857387acbad95d6a82ad324ebc68b363b0  graftling-0.9.0-py3-none-any.whl
-940a3080146833672dfc40d3887376fd8021ecf764df00fb7d01e2d259aa2914  graphtraj-0.1.0-py3-none-any.whl
+da864b03267bc52c88556fddff66d23b7aeefd0937ba7dae49595fdcf8e67093  graftling-0.9.0-py3-none-any.whl
+3ea33b4cc06aed892267f222b5b2dbc4e43fdaa51c26802fa433a607402d4ba0  graphtraj-0.1.0-py3-none-any.whl
 CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 satisfied by 0.9.0: PASS
 CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 NOT satisfied by 0.8.0: PASS
 CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 NOT satisfied by 0.10.0: PASS
@@ -205,8 +205,8 @@ CHECK 593 v0.9.0 version strings all 0.9.0: PASS
 CHANGELOG heading: ## 0.9.0 (incompatible)
 CHECK 593 v0.9.0 has no 0.7.0 install route (root package.json, dsh/plugin_python.py, root marketplace; 581): PASS
 CHECK 593 v0.9.0 console scripts subagents, subagents-mcp and no agents, agents-mcp: PASS
-e532af42798a71e2298542aba8f6c3857387acbad95d6a82ad324ebc68b363b0  graftling-0.9.0-py3-none-any.whl
-940a3080146833672dfc40d3887376fd8021ecf764df00fb7d01e2d259aa2914  graphtraj-0.1.0-py3-none-any.whl
+da864b03267bc52c88556fddff66d23b7aeefd0937ba7dae49595fdcf8e67093  graftling-0.9.0-py3-none-any.whl
+3ea33b4cc06aed892267f222b5b2dbc4e43fdaa51c26802fa433a607402d4ba0  graphtraj-0.1.0-py3-none-any.whl
 CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 satisfied by 0.9.0: PASS
 CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 NOT satisfied by 0.8.0: PASS
 CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 NOT satisfied by 0.10.0: PASS
@@ -231,26 +231,26 @@ REHEARSAL PASS: G with a failing ps: STOP before anything starts, exit != 0
 
 ======== G through its real entry (6 shards; -k selects real tests, two with repository fixtures), queued behind a running suite; then GR
 REHEARSAL PASS: GR before any G: STOP 'run G first', FAIL
-G record: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T033712
-pytest temp root: /private/tmp/claude-501/adopt-593-G-20261124T033712 (TMPDIR=/tmp/claude-501, outside the Harness)
+G record: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T034407
+pytest temp root: /private/tmp/claude-501/adopt-593-G-20261124T034407 (TMPDIR=/tmp/claude-501, outside the Harness)
 launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
-candidate: 6a715d259bf1a392bc3eaafd8362644172aaba46 | graftling wheel from git archive 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (v0.9.0, /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graftling-0.9.0-py3-none-any.whl)
+candidate: fc32ffe07de599a1b7d02437d5e96e29b1add8fb | graftling wheel from git archive 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (v0.9.0, /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graftling-0.9.0-py3-none-any.whl)
 python: /private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/gvenv-3eb21101/bin/python
 test interpreter dependencies: click 8.5.0 (/private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/gvenv-3eb21101/lib/python3.13/site-packages/click/__init__.py) | PyYAML 6.0.3 (/private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/gvenv-3eb21101/lib/python3.13/site-packages/yaml/__init__.py) | websockets 16.1.1 (/private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/gvenv-3eb21101/lib/python3.13/site-packages/websockets/__init__.py) | pytest 9.1.1 (/Users/luoxiao/miniconda3/lib/python3.13/site-packages/pytest/__init__.py)
 REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract or test_child_tool_descriptions_match_the_members_entry or test_native_claude_lifecycle_without_a_task or test_extension_still_hands_an_explicit_agents_session_to_graftling or test_the_mcp_server_lists_subagents_and_tasks_only or test_the_claude_hook_copy_names_subagents_and_tasks
-WAITING: Main's suite queue is serial and another suite is running now; G is queued and starts by itself when it ends (checked every 2 s; nothing to do meanwhile; progress: tail -f /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T033712/wait.txt):
+WAITING: Main's suite queue is serial and another suite is running now; G is queued and starts by itself when it ends (checked every 2 s; nothing to do meanwhile; progress: tail -f /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T034407/wait.txt):
   running: 4242 1 /usr/bin/python3 scripts/run_test_shards.py --shards 6 (another Task's suite, simulated)
-queued in the background at 03:37:15; output: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T033712/suite.txt (last line 'exit=N' when it ends; about 25-30 min of run time once started)
+queued in the background at 03:44:10; output: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T034407/suite.txt (last line 'exit=N' when it ends; about 25-30 min of run time once started)
 REHEARSAL PASS: G queued: says WAITING with the running suite, never stops (exit 0)
 REHEARSAL PASS: G record: pytest temp under TMPDIR (outside the Harness), clean launch environment, candidate, graftling commit, click 8.5.0
 REHEARSAL PASS: GR while G waits or runs: 'not finished', FAIL
-03:37:15 waiting for another suite: 4242 
-03:37:17 waiting for another suite: 4242 
-03:37:19 started
-03:37:25 ended (exit=1)
-ABNORMAL /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T033712/shards/shard-2.log: exit 5
+03:44:10 waiting for another suite: 4242 
+03:44:12 waiting for another suite: 4242 
+03:44:14 started
+03:44:20 ended (exit=1)
+ABNORMAL /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T034407/shards/shard-2.log: exit 5
 9 passed, 3752 deselected
-logs: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T033712/shards
+logs: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T034407/shards
 exit=1
 REHEARSAL PASS: G waited then started by itself: wait.txt has 'waiting for another suite: 4242' then 'started' and 'ended'
 REHEARSAL PASS: G rehearsal: the selected real tests PASSED through G's entry (not collect-only), incl. fixture users; no FAILED line
@@ -266,39 +266,39 @@ REHEARSAL PASS: G: repository-fixture users PASSED through G's real entry (built
 REHEARSAL PASS: G rehearsal: no provider credential reached the suite environment (the exported FAKE_PROVIDER_API_KEY value is in no G file)
 totals: 9 passed, 3752 deselected | exit: 1
 node ids read from: 6 shard logs (whole ids)
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T033712/shards/shard-1.log: exit 5
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T033712/shards/shard-2.log: exit 5
-CHECK 593 G record (6a715d25 + v0.9.0) no new failure: FAIL
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T034407/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/G-3eb21101-20261124T034407/shards/shard-2.log: exit 5
+CHECK 593 G record (fc32ffe0 + v0.9.0) no new failure: FAIL
 CHECK 593 GR (guard + G record): FAIL
 totals: 9 passed, 3752 deselected | exit: 1
 node ids read from: 6 shard logs (whole ids)
-CHECK 593 G record (6a715d25 + v0.9.0) no new failure: FAIL
+CHECK 593 G record (fc32ffe0 + v0.9.0) no new failure: FAIL
 CHECK 593 GR (guard + G record): FAIL
 REHEARSAL PASS: GR reads the newest G record by itself: same product, graftling 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9, click 8.5.0; ids from the shard logs; no NEW
 REHEARSAL PASS: GR prints the two named tests: test_wheels_have_separate_owners PASSED (expected now); the budgets test not in 516 (not seen here)
 
 ======== GR / SR mechanics on REHEARSAL FIXTURE records (shard logs with whole ids), and negatives on copies
-product guard: HEAD 6a715d259bf1a392bc3eaafd8362644172aaba46 | git diff 3eb21101 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: HEAD fc32ffe07de599a1b7d02437d5e96e29b1add8fb | git diff 3eb21101 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
 product guard: 3eb21101 pyproject pins "graftling>=0.9.0,<0.10" (593 expects "graftling>=0.9.0,<0.10")
 product guard: PASS (HEAD's src tests plugins pyproject.toml = 3eb21101; only scripts/ differ)
-candidate: 6a715d259bf1a392bc3eaafd8362644172aaba46 | git diff 6a715d25 3eb21101 -- src tests plugins pyproject.toml: empty | same product: yes
+candidate: fc32ffe07de599a1b7d02437d5e96e29b1add8fb | git diff fc32ffe0 3eb21101 -- src tests plugins pyproject.toml: empty | same product: yes
 graftling commit of the wheel: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | = v0.9.0 (7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9): yes
 totals: 1 failed, 3690 passed, 48 skipped | exit: 1
 516 current definition (task.yml current_definition): /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
 node ids read from: 1 shard logs (whole ids)
   known (516): tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
-CHECK 593 G record (6a715d25 + v0.9.0) no new failure: PASS
+CHECK 593 G record (fc32ffe0 + v0.9.0) no new failure: PASS
 CHECK 593 GR (guard + G record): PASS
-product guard: HEAD 6a715d259bf1a392bc3eaafd8362644172aaba46 | git diff 3eb21101 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+product guard: HEAD fc32ffe07de599a1b7d02437d5e96e29b1add8fb | git diff 3eb21101 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
 product guard: 3eb21101 pyproject pins "graftling>=0.9.0,<0.10" (593 expects "graftling>=0.9.0,<0.10")
 product guard: PASS (HEAD's src tests plugins pyproject.toml = 3eb21101; only scripts/ differ)
-candidate: 6a715d259bf1a392bc3eaafd8362644172aaba46 | git diff 6a715d25 3eb21101 -- src tests plugins pyproject.toml: empty | same product: yes
+candidate: fc32ffe07de599a1b7d02437d5e96e29b1add8fb | git diff fc32ffe0 3eb21101 -- src tests plugins pyproject.toml: empty | same product: yes
 graftling commit of the wheel: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | = v0.9.0 (7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9): yes
 totals: 1 failed, 3690 passed, 48 skipped | exit: 1
 516 current definition (task.yml current_definition): /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
 node ids read from: 1 shard logs (whole ids)
   known (516): tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
-CHECK 593 G record (6a715d25 + v0.9.0) no new failure: PASS
+CHECK 593 G record (fc32ffe0 + v0.9.0) no new failure: PASS
 CHECK 593 GR (guard + G record): PASS
 REHEARSAL PASS: GR on the fixture: the 516-named test is known; PASS
 REHEARSAL PASS: GR negative: an unknown FAILED id (with spaces in its parameter) -> NEW as the WHOLE id, FAIL, no PASS left in GR.txt
@@ -322,13 +322,13 @@ REHEARSAL PASS: GR negative: a test interpreter with Miniconda's click 8.2.1 -> 
 ======== suite-base: one real id on GraphTraj 3eb21101 + graftling 49f97004 (wheel) and on the candidate (G's venv)
   id: tests/test_runtime_distribution.py::test_wheels_have_separate_owners
 base: /private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/graphtraj-base (graftling 49f97004a86cc245ad32515b9dd056d7092b08f7 (wheel) + graphtraj 3eb21101b920d94da057566c9cfdc3c81b6acbfb (editable)) | candidate: /private/tmp/claude-501/adopt593-rehearsal/wt with /private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/gvenv-3eb21101 (graftling v0.9.0 wheel)
-base: pytest in /private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/graphtraj-base | pytest temp root /private/tmp/claude-501/adopt-593-sb-base-20261124T033735 (TMPDIR, outside the Harness) | launch environment: HOME USER PATH TERM TMPDIR LANG only
-base: pytest exit=1, 1 failed in 1.69s (output: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/suite-base-20261124T033735/base.txt)
-candidate: pytest in /private/tmp/claude-501/adopt593-rehearsal/wt | pytest temp root /private/tmp/claude-501/adopt-593-sb-candidate-20261124T033738 (TMPDIR, outside the Harness) | launch environment: HOME USER PATH TERM TMPDIR LANG only
-candidate: pytest exit=0, 1 passed in 1.70s (output: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/suite-base-20261124T033735/candidate.txt)
+base: pytest in /private/tmp/claude-501/adopt593-rehearsal/project/tmp/593/graphtraj-base | pytest temp root /private/tmp/claude-501/adopt-593-sb-base-20261124T034429 (TMPDIR, outside the Harness) | launch environment: HOME USER PATH TERM TMPDIR LANG only
+base: pytest exit=1, 1 failed in 1.54s (output: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/suite-base-20261124T034429/base.txt)
+candidate: pytest in /private/tmp/claude-501/adopt593-rehearsal/wt | pytest temp root /private/tmp/claude-501/adopt-593-sb-candidate-20261124T034432 (TMPDIR, outside the Harness) | launch environment: HOME USER PATH TERM TMPDIR LANG only
+candidate: pytest exit=0, 1 passed in 1.48s (output: /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/suite-base-20261124T034429/candidate.txt)
 ### classification (each id: base, then candidate)
 base-only (passes on the candidate): tests/test_runtime_distribution.py::test_wheels_have_separate_owners   [base failed | candidate passed]
-next: give /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/suite-base-20261124T033735/classification.txt to the Leader; a candidate-only id is a regression of this release
+next: give /private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/suite-base-20261124T034429/classification.txt to the Leader; a candidate-only id is a regression of this release
 REHEARSAL PASS: suite-base: both sides ran the id in a clean environment, temp root outside the Harness; classified base-only (base graftling 49f97004 says 0.8.0), candidate passes
 REHEARSAL PASS: GR: earlier GR.txt kept as GR-<time>.txt
 REHEARSAL PASS: real <Harness>/graftling untouched so far (every branch and tag as at the start)
@@ -431,8 +431,8 @@ PASS 258 FAIL 0
 CHECK 593 graftling 0.8.0 dist-info gone: PASS
 CHECK 593 production bin has subagents, subagents-mcp and no agents, agents-mcp: PASS
 ### 593 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
-graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=8ae3cb3a57f6aa48f52f6bd6a3968b14d0f05a7f6d7193f934c2cc9b77692e7d", "hashes": {"sha256": "8ae3cb3a57f6aa48f52f6bd6a3968b14d0f05a7f6d7193f934c2cc9b77692e7d"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graphtraj-0.1.0-py3-none-any.whl"}
-graftling-0.9.0.dist-info direct_url: {"archive_info": {"hash": "sha256=7da443f80531d90e8c6983933a17940b6270a3dd85c544654e31e7733b084b26", "hashes": {"sha256": "7da443f80531d90e8c6983933a17940b6270a3dd85c544654e31e7733b084b26"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graftling-0.9.0-py3-none-any.whl"}
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=712997774f8d05f9b818f22a269ce0d98e5b41aebb9e9ac83a0c599ef212019d", "hashes": {"sha256": "712997774f8d05f9b818f22a269ce0d98e5b41aebb9e9ac83a0c599ef212019d"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.9.0.dist-info direct_url: {"archive_info": {"hash": "sha256=7384f33288f56a794dc07216e7e1b6fa60cf9b61e2d50e70495befa734deb85a", "hashes": {"sha256": "7384f33288f56a794dc07216e7e1b6fa60cf9b61e2d50e70495befa734deb85a"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graftling-0.9.0-py3-none-any.whl"}
 CHECK 593 direct_url of both names the wheels-3eb21101 wheels: PASS
 built from: graphtraj git archive 3eb21101b920d94da057566c9cfdc3c81b6acbfb, graftling git archive v0.9.0 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
 markers expected present: PASS (8/8)
@@ -467,8 +467,8 @@ PASS 258 FAIL 0
 CHECK 593 graftling 0.8.0 dist-info gone: PASS
 CHECK 593 production bin has subagents, subagents-mcp and no agents, agents-mcp: PASS
 ### 593 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from
-graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=8ae3cb3a57f6aa48f52f6bd6a3968b14d0f05a7f6d7193f934c2cc9b77692e7d", "hashes": {"sha256": "8ae3cb3a57f6aa48f52f6bd6a3968b14d0f05a7f6d7193f934c2cc9b77692e7d"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graphtraj-0.1.0-py3-none-any.whl"}
-graftling-0.9.0.dist-info direct_url: {"archive_info": {"hash": "sha256=7da443f80531d90e8c6983933a17940b6270a3dd85c544654e31e7733b084b26", "hashes": {"sha256": "7da443f80531d90e8c6983933a17940b6270a3dd85c544654e31e7733b084b26"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graftling-0.9.0-py3-none-any.whl"}
+graphtraj-0.1.0.dist-info direct_url: {"archive_info": {"hash": "sha256=712997774f8d05f9b818f22a269ce0d98e5b41aebb9e9ac83a0c599ef212019d", "hashes": {"sha256": "712997774f8d05f9b818f22a269ce0d98e5b41aebb9e9ac83a0c599ef212019d"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graphtraj-0.1.0-py3-none-any.whl"}
+graftling-0.9.0.dist-info direct_url: {"archive_info": {"hash": "sha256=7384f33288f56a794dc07216e7e1b6fa60cf9b61e2d50e70495befa734deb85a", "hashes": {"sha256": "7384f33288f56a794dc07216e7e1b6fa60cf9b61e2d50e70495befa734deb85a"}}, "url": "file:///private/tmp/claude-501/adopt593-rehearsal/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-3eb21101/graftling-0.9.0-py3-none-any.whl"}
 CHECK 593 direct_url of both names the wheels-3eb21101 wheels: PASS
 built from: graphtraj git archive 3eb21101b920d94da057566c9cfdc3c81b6acbfb, graftling git archive v0.9.0 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)
 markers expected present: PASS (8/8)
@@ -518,7 +518,7 @@ REHEARSAL PASS: I: header says Main asks the USER first; prints the restart comm
 REHEARSAL PASS: M prompts (593): upgraded by Task 593; one real mcp__graphtraj__subagents status call and one tasks call; dialog predicted none (no allow rule names the old tool); old-name refusal recorded, not failed
 CHECK 593 [Main 11111111-2222-3333-4444-555555555555] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
 CHECK 593 [Main 11111111-2222-3333-4444-555555555555] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
-INFO 593 [Main 11111111-2222-3333-4444-555555555555] old-name calls after the split: 1 in the window, 0 undated; first: mcp__graphtraj__agents at 2026-11-23T18:38:51Z, is_error=True: Error: No such tool available: mcp__graphtraj__agents (recorded, not judged: 590 4.1)
+INFO 593 [Main 11111111-2222-3333-4444-555555555555] old-name calls after the split: 1 in the window, 0 undated; first: mcp__graphtraj__agents at 2026-11-23T18:45:44Z, is_error=True: Error: No such tool available: mcp__graphtraj__agents (recorded, not judged: 590 4.1)
 ### production tool list after I (from I's raw output and the installed hook copy)
 CHECK 593 production-graphtraj-mcp MCP tool agents is unknown (error answer, no alias): PASS
 CHECK 593 production-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS
@@ -528,7 +528,7 @@ installed hook copy: 14:const TOOLS = [TOOL, "tasks"];
 installed hook copy: 22:const SERVER = "graphtraj";
 CHECK 593 [Main 11111111-2222-3333-4444-555555555555] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
 CHECK 593 [Main 11111111-2222-3333-4444-555555555555] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
-INFO 593 [Main 11111111-2222-3333-4444-555555555555] old-name calls after the split: 1 in the window, 0 undated; first: mcp__graphtraj__agents at 2026-11-23T18:38:51Z, is_error=True: Error: No such tool available: mcp__graphtraj__agents (recorded, not judged: 590 4.1)
+INFO 593 [Main 11111111-2222-3333-4444-555555555555] old-name calls after the split: 1 in the window, 0 undated; first: mcp__graphtraj__agents at 2026-11-23T18:45:44Z, is_error=True: Error: No such tool available: mcp__graphtraj__agents (recorded, not judged: 590 4.1)
 CHECK 593 production-graphtraj-mcp MCP tool agents is unknown (error answer, no alias): PASS
 CHECK 593 production-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS
 production-graphtraj-mcp server: /private/tmp/claude-501/adopt593-rehearsal/project/.venv-runtime/bin/graphtraj-mcp | serverInfo: {'name': 'graphtraj', 'version': '0.1.0'} | tools: ['subagents', 'tasks']
@@ -594,6 +594,18 @@ REHEARSAL PASS: X inventory: reviewer and connection names only, never their fie
 ======== C5 (requirement 5): what runs without network: refusal on an existing tool dir; C5u text; the home snapshot is real (rehearsal directories)
 REHEARSAL PASS: C5 negative: an existing /private/tmp/claude-501/adopt593-rehearsal/uvt/tools STOPs before any install
 REHEARSAL PASS: C5u: the USER trusts /private/tmp/claude-501/adopt593-rehearsal/uvt/project once ('Yes, proceed'), then Main runs C5r
+
+======== C5 interpreter check (correction 1): sys.prefix = the uv tool environment, graftling 0.9.0; base interpreter class; NOTE only for conda
+uv tool python: /private/tmp/claude-501/adopt593-rehearsal/uvc-conda/tools/graftling/bin/python | sys.prefix: /private/tmp/claude-501/adopt593-rehearsal/uvc-conda/tools/graftling | base interpreter: /Users/luoxiao/miniconda3/bin/python3.13 | graftling 0.9.0
+CHECK 593 C5 one install from GitHub v0.9.0 in the uv tool environment /private/tmp/claude-501/adopt593-rehearsal/uvc-conda/tools/graftling (sys.prefix), graftling 0.9.0: PASS
+REPORT 593 C5 base interpreter: /Users/luoxiao/miniconda3/bin/python3.13 (conda)
+NOTE 593 C5: the uv tool environment is based on conda's Python (/Users/luoxiao/miniconda3/bin/python3.13); no install into conda was made; Main decides whether this meets requirement 5
+REHEARSAL PASS: C5 class conda (real venv on Miniconda's Python): CHECK PASS, REPORT (conda), the NOTE printed, exit 0 (not a FAIL)
+uv tool python: /private/tmp/claude-501/adopt593-rehearsal/uvc-uv/tools/graftling/bin/python | sys.prefix: /private/tmp/claude-501/adopt593-rehearsal/uvc-uv/tools/graftling | base interpreter: /private/tmp/claude-501/adopt593-rehearsal/uvc-uv/python/cpython-3.13-macos-aarch64/bin/python3.13 | graftling 0.9.0
+CHECK 593 C5 one install from GitHub v0.9.0 in the uv tool environment /private/tmp/claude-501/adopt593-rehearsal/uvc-uv/tools/graftling (sys.prefix), graftling 0.9.0: PASS
+REPORT 593 C5 base interpreter: /private/tmp/claude-501/adopt593-rehearsal/uvc-uv/python/cpython-3.13-macos-aarch64/bin/python3.13 (uv-managed)
+REHEARSAL PASS: C5 class uv-managed (fixture interpreter under <uvt>/python): CHECK PASS, REPORT (uv-managed), no NOTE
+REHEARSAL PASS: C5 interpreter negative: sys.prefix outside <uvt>/tools/graftling -> CHECK FAIL, nonzero
 REHEARSAL PASS: C5r negative: without the uv installation -> STOP (no install attempted, conda not touched), no success text
 REHEARSAL PASS: C5 negative: no success text after its STOP
 REHEARSAL PASS: done: versions, direct_urls, real entries PASS, no key value
@@ -649,5 +661,5 @@ REHEARSAL PASS: R: the old code still reads the state (task graph loads)
 REHEARSAL PASS: 579's backup under tmp/579 unchanged
 REHEARSAL PASS: real <Harness>/graftling untouched by the rehearsal (every branch and tag as at the start)
 
-REHEARSAL SUMMARY: 128 checks, all PASS
+REHEARSAL SUMMARY: 131 checks, all PASS
 rehearsal exit 0

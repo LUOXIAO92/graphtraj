@@ -121,17 +121,25 @@ next command with real values filled in.
 - **C5, C5u, C5r (requirement 5, Claude Code as the host):**
   - C5 snapshots `~/.local`, the USER's uv tool dir, `~/.pi`, `~/.dsh`, `~/.codex` and conda. `~/.codex` is compared by
     name and sha256 without `logs_*.sqlite*` and `models_cache.json`, which the USER's running Codex writes.
-  - C5 runs `uv tool install "git+https://github.com/LUOXIAO92/graftling.git@v0.9.0"` with `UV_TOOL_DIR`,
-    `UV_TOOL_BIN_DIR`, `UV_CACHE_DIR` and `UV_PYTHON_INSTALL_DIR` under `/private/tmp/uvtool-593` and
-    `UV_PYTHON_PREFERENCE=only-managed`, so the Python is uv's own, not conda's.
+  - C5 runs the release's single install method as graftling's README states it,
+    `uv tool install "git+https://github.com/LUOXIAO92/graftling.git@v0.9.0"`. No interpreter preference is set
+    ("uv gets a Python 3.12 or later when it needs one"). Only `UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`, `UV_CACHE_DIR` and
+    `UV_PYTHON_INSTALL_DIR` are isolated under `/private/tmp/uvtool-593`. uv's own interpreter lines are printed as
+    `uv said: …` (full output in `C5-uv.txt`).
+  - CHECK (correction 1): the tool's `sys.prefix` is `/private/tmp/uvtool-593/tools/graftling` and
+    `graftling.__version__` is 0.9.0.
+  - `REPORT 593 C5 base interpreter: <sys._base_executable or sys.base_prefix> (<class>)` gives the class: uv-managed
+    (under `/private/tmp/uvtool-593/python`), conda (under the conda root) or other. For conda it adds
+    `NOTE 593 C5: the uv tool environment is based on conda's Python (…); no install into conda was made; Main decides
+    whether this meets requirement 5`. The NOTE is neither PASS nor FAIL, and C5r still runs.
   - C5 generates `/private/tmp/uvtool-593/project` with `configuration --write` from that installation: project files
     only, no plugin install into the USER's Claude Code, no `~/.claude` change.
   - C5u: the USER trusts that folder once.
   - C5r runs inside `zsh -f`, in a clean environment, with `conda shell.zsh hook` and `conda activate` (default `base`,
     `ADOPT593_CONDA_ENV`). It shows conda's python on PATH and that the `subagents` CLI works. A real `claude -p`
     creates a child through `mcp__graftling__subagents` and waits for it to end.
-  - A ps sampler records the graftling processes: they must run on `/private/tmp/uvtool-593/tools/graftling/bin/python`,
-    none under conda. Then before and after are compared. If a per-environment install proves necessary, C5r installs
+  - A ps sampler records the graftling processes: they must run as `/private/tmp/uvtool-593/tools/graftling/bin/python`
+    (the tool environment's bin/python as invoked), and no process line may name the conda root. Then before and after are compared. If a per-environment install proves necessary, C5r installs
     nothing and says so; Main decides.
 
 ## 588 and 595 (requirement 3)
@@ -171,7 +179,7 @@ adoption.
 | X | Main | none | five `CHECK 593 X …: PASS` |
 | Nt | Main | none | as 579 |
 | scan (after I) | Main | none | `REPORT 593 old-name scan [after-I]: live configuration hits 0` |
-| C5 | Main | none (network) | `uv tool install rc=0`; `CHECK 593 C5 one install from GitHub v0.9.0 under /private/tmp/uvtool-593 …: PASS` |
+| C5 | Main | none (network) | `uv tool install rc=0`; `CHECK 593 C5 one install from GitHub v0.9.0 in the uv tool environment /private/tmp/uvtool-593/tools/graftling (sys.prefix), graftling 0.9.0: PASS`; `REPORT 593 C5 base interpreter: … (<class>)`, plus a `NOTE 593 C5: …` only for conda (neither PASS nor FAIL; Main decides) |
 | C5u | USER (once) | folder trust for /private/tmp/uvtool-593/project → Yes, proceed | — |
 | C5r | Main | none | `conda active: …`; `subagents CLI: …`; four `CHECK 593 C5 …: PASS`; `REPORT 593 <dir> unchanged: yes` for each |
 | done | Main | none | all CHECKs PASS; production bin `subagents subagents-mcp`; scan after-I live 0; key values 0 |
@@ -194,5 +202,7 @@ real test entry and suite-base are real. Main's transcript (Mr), the member and 
 - a real Claude Main, its resume, and the trust and permission dialogs;
 - real member dispatch;
 - X's real `claude -p` with a reviewed child;
-- C5's network install and its conda-activated `claude -p` (only C5's refusals and C5u's text);
+- C5's network install and its conda-activated `claude -p`. What is rehearsed: C5's refusals, C5u's text, and the C5
+  interpreter check per class (a real venv on Miniconda's Python gives conda plus the NOTE; a fixture interpreter
+  under `<uvt>/python` gives uv-managed and no NOTE; a wrong `sys.prefix` FAILs);
 - GitHub.

@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+"""Rehearsal stand-in for dsh (Task 585): only what steps.zsh's DSH preflight calls. No model, no network.
+
+--profile headless --patch P --dump-config: the llm-deepseek entry of patch P (as dsh prints it).
+--profile headless --patch P TASK: one line naming the patched model. Exits 1 with an error when $DSH_HOME/stub-fail
+exists (to rehearse the STOP path). Writes $DSH_HOME/stub-env.txt: the environment NAMES it saw (never values).
+"""
+import os, sys
+from pathlib import Path
+
+args = sys.argv[1:]
+home = Path(os.environ.get('DSH_HOME', ''))
+if home.is_dir():
+    (home / 'stub-env.txt').write_text(' '.join(sorted(os.environ)) + '\n')
+patch = Path(args[args.index('--patch') + 1]).read_text() if '--patch' in args else ''
+if '--dump-config' in args:
+    print('# == @deepseek-ai/dsh-base (stub)\n' + patch.replace('- id: llm-deepseek\n',
+          "- id: llm-deepseek\n  name: '@deepseek-ai/dsh-llm-deepseek-api-key'\n") + '- id: headless-runner')
+    sys.exit(0)
+if (home / 'stub-fail').exists():
+    print('Error: 401 Authentication Fails (stub)', file=sys.stderr)
+    sys.exit(1)
+model = next((line.split('id:')[1].strip() for line in patch.splitlines() if line.strip().startswith('- id:') and 'llm-deepseek' not in line), 'unknown')
+print(f'{model} (stub)')

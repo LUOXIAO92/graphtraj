@@ -8,14 +8,19 @@
 #                 variable NAMES; 'before' state of ~/.pi/agent (names + sha256 prefixes), ~/.dsh (listing) and of
 #                 /private/tmp/pi-584's two plugin agent dirs (listing; only read); the deepseek flash id from
 #                 `pi --list-models deepseek`; a one-line Pi prompt naming its model. Dialog: none. ~1 min.
-#   install       Main. ROOT/venv-base (graftling a4f008f) and ROOT/venv-cand (candidate, from the bundle), each a
-#                 WHEEL, graftling only (graphtraj must not import); no network (PyYAML, websockets copied from
-#                 <Harness>/.venv-runtime). Per variant an isolated PI_CODING_AGENT_DIR=ROOT/agent-<variant>:
-#                 `pi install <that venv's graftling/pi>` (a local directory: no network) and Pi's bundled subagent
-#                 example copied from the installed Pi package with its agents' model: lines removed. graftling's DSH
-#                 model discovery (candidate venv, isolated DSH_HOME) picks the dsh child's model for main-cand.
-#                 No `dsh plugin add` (no pnpm): a dsh child's profile is written by graftling itself. Dialog: none.
-#                 Network: only discovery may ask DeepSeek (api.deepseek.com) for its model list. ~1-2 min.
+#   install       Main. In this order: ROOT/venv-cand (candidate, from the bundle) as a WHEEL, graftling only
+#                 (graphtraj must not import; no network: PyYAML, websockets copied from <Harness>/.venv-runtime);
+#                 graftling's DSH model discovery (candidate venv, DSH_HOME=ROOT/dsh-home) picks the dsh child's
+#                 model for main-cand; then, BEFORE any graftling step, a ONE-LINE DSH PROMPT with that model
+#                 (`dsh --profile headless --patch ROOT/dsh-preflight.patch.yml`, DSH_HOME=ROOT/dsh-home, allowlisted
+#                 env: DEEPSEEK_API_KEY the only credential, DEEPSEEK_BASE_URL absent) printing the configured model,
+#                 DSH's answer and its login source (the env key, never printed); STOP with the fix and the rerun
+#                 command if DSH cannot answer. Then ROOT/venv-base (graftling a4f008f, wheel) and per variant an
+#                 isolated PI_CODING_AGENT_DIR=ROOT/agent-<variant>: `pi install <that venv's graftling/pi>` (a local
+#                 directory) and Pi's bundled subagent example copied from the installed Pi package with its agents'
+#                 model: lines removed. No `dsh plugin add` (no pnpm): a dsh child's profile is written by graftling
+#                 itself; nothing is written outside ROOT (post checks ~/.dsh). Dialog: none.
+#                 Network: api.deepseek.com only (discovery's model list and the DSH prompt). ~1-2 min.
 #   bundled-base  Main. Pi Main (base graftling) uses the bundled subagent (agent worker) in a fresh git project;
 #                 GRAFTLING_PYTHON is a shim that logs every graftling launch (pid, ppid, markers). PASS = the defect
 #                 reproduces: a child-owned graftling.pi.host launch and 'Extension error' in the subagent tool result.
@@ -46,12 +51,14 @@
 #                 (wheel); per node id 'also fails on base' or 'candidate-only'. Dialog: none. No login.
 # Order: pre, install, bundled-base, bundled-cand, main-cand, [third-party], post (push: separately, after asking).
 # suite, SR (and suite-base) need no ROOT and no key; they write only <Harness>/tmp/585 and pytest's temp root.
-# Credentials: every pi process (Main, its subagent children, graftling's children) starts from an ALLOWLISTED
+# Preflight: every host answers a one-line prompt with its configured model and login before the graftling steps:
+# Pi in pre, DSH (the host of main-cand's dsh child) in install, right after the model discovery.
+# Credentials: every pi and dsh process (Main, its subagent children, graftling's children) starts from an ALLOWLISTED
 # environment: PATH, HOME=ROOT/home, TMPDIR, LANG, PI_CODING_AGENT_DIR, DEEPSEEK_API_KEY and the step's own variables
 # (shown by name). DEEPSEEK_API_KEY is the only credential; it is never printed and never on a command line. Every
 # Pi step prints the provider/model it asks for and counts "provider" values in its Session files (expect deepseek).
 # Writes outside ROOT: none expected (HOME, PI_CODING_AGENT_DIR, DSH_HOME and --session-dir are under ROOT).
-# VERIFY585_ROOT / _OUT / _BIN (stub pi first on PATH) / _USERHOME / _PIPKG / _P584 / _DMODEL / _PIMODEL / _T are for
+# VERIFY585_ROOT / _OUT / _BIN (stub pi and dsh first on PATH) / _USERHOME / _PIPKG / _P584 / _DMODEL / _PIMODEL / _T are for
 # the Engineer's rehearsal only.
 emulate -L zsh
 setopt pipe_fail no_unset extended_glob
@@ -244,6 +251,29 @@ p = pathlib.Path(sys.argv[1]) / "settings.json"; s = json.loads(p.read_text()) i
 s.update(defaultProvider="deepseek", defaultModel=sys.argv[2]); p.write_text(json.dumps(s, indent=2))
 print("settings.json: packages", s.get("packages"), "| default", s["defaultProvider"], s["defaultModel"])' $1 $2
 }
+# One-line DSH prompt (as verify-577 pre), with the dsh child's model, before any graftling step: DSH_HOME=$DH,
+# allowlisted env (DEEPSEEK_API_KEY the only credential; DEEPSEEK_BASE_URL absent). The model is pinned by a patch
+# overlay in ROOT (llm-deepseek's config is replaced wholesale: models = that one), as graftling does for a manual model.
+dsh_preflight() {  # model
+  local m=$1 patch=$ROOT/dsh-preflight.patch.yml log=$ROOT/dsh-preflight.txt rc
+  print -r -- "- id: llm-deepseek
+  config:
+    models:
+      - id: $m" > $patch
+  say "one-line DSH prompt: dsh --profile headless --patch $patch (DSH_HOME=$DH; allowlisted env)"
+  local dumped; dumped=$(cd $ROOT && allow $ROOT/agent-probe DSH_HOME=$DH -- dsh --profile headless --patch $patch --dump-config < /dev/null 2>&1)
+  print -r -- "configured models of llm-deepseek (from --dump-config): $(print -r -- $dumped | awk '/^- id: llm-deepseek$/ {f=1; next} f && /^- id:/ {exit} f && /- id:/ {print $3}' | xargs)"
+  print -r -- "login: DEEPSEEK_API_KEY from the allowlisted environment (set, ${#DEEPSEEK_API_KEY} characters, not printed); DEEPSEEK_BASE_URL absent; $DH/.credentials.yaml $([[ -e $DH/.credentials.yaml ]] && print PRESENT || print absent), $DH/.env $([[ -e $DH/.env ]] && print PRESENT || print absent)"
+  (cd $ROOT && allow $ROOT/agent-probe DSH_HOME=$DH -- perl -e 'alarm shift; exec @ARGV' 180 dsh --profile headless --patch $patch \
+     "Reply in one line with the exact model id you are running as, nothing else." < /dev/null) > $log 2>&1; rc=$?
+  tail -5 $log; print -r -- "exit=$rc (full output: $log)"
+  if (( rc != 0 )); then
+    print -r -- "STOP: DSH could not answer with model $m (output above). Check DEEPSEEK_API_KEY (export DEEPSEEK_API_KEY=<your DeepSeek API key>),"
+    print -r -- "  the network to api.deepseek.com and that '$m' is listed by the discovery above; then rerun exactly: zsh $THIS install"
+    return 1
+  fi
+  pass "DSH answered as configured model $m (login: DEEPSEEK_API_KEY)"
+}
 # A fresh pytest temp root under TMPDIR, outside the Harness, with no Harness marker above it; sets RUNTMP.
 run_root() {  # label
   case ${PYTEST_TMP:A}/ in ${H:A}/*) print -r -- "STOP: TMPDIR $PYTEST_TMP is inside the Harness"; return 1 ;; esac
@@ -318,14 +348,9 @@ pre)
   print -r -- "next: zsh $THIS install"
   ;;
 install)
-  say "[install] Main. venv-base ($BASE) and venv-cand ($GCOMMIT) as wheels; agent-base and agent-cand. Dialog: none."
-  need $MODELF pre || return 1
-  build_venv $(venv base) $BASE || return 1
+  say "[install] Main. venv-cand ($GCOMMIT), DSH model discovery, one-line DSH prompt, venv-base ($BASE), agent-base and agent-cand. Dialog: none."
+  need $MODELF pre && key_ready || return 1
   build_venv $(venv cand) $GCOMMIT || return 1
-  grep -c 'PI_SUBAGENT_CHILD' $(pkg base)/extension.mjs | sed 's/^/base extension lines naming PI_SUBAGENT_CHILD (expect 1, sessionEnvironment only): /'
-  grep -c 'PI_SUBAGENT_CHILD' $(pkg cand)/extension.mjs | sed 's/^/candidate extension lines naming PI_SUBAGENT_CHILD (expect 2): /'
-  agent_dir base || return 1
-  agent_dir cand || return 1
   if [[ -n ${VERIFY585_DMODEL:-} ]]; then print -r -- $VERIFY585_DMODEL > $DMODELF; else
     say "graftling's DSH model discovery for main-cand's dsh child ($(venv cand)/bin/python; DSH_HOME=$DH)"
     (cd $ROOT && allow $ROOT/agent-probe DSH_HOME=$DH -- perl -e 'alarm shift; exec @ARGV' 180 $(venv cand)/bin/python -I -c '
@@ -340,7 +365,13 @@ if flash: open(sys.argv[1], "w").write(flash[0]); print("chosen", flash[0])
 ' $DMODELF) 2>&1 | tail -12
   fi
   [[ -s $DMODELF ]] || { print -r -- "STOP: no flash DSH model; see above. Then: zsh $THIS install"; return 1; }
-  pass "installed; dsh child model for main-cand: $(<$DMODELF)"
+  dsh_preflight $(<$DMODELF) || return 1
+  build_venv $(venv base) $BASE || return 1
+  grep -c 'PI_SUBAGENT_CHILD' $(pkg base)/extension.mjs | sed 's/^/base extension lines naming PI_SUBAGENT_CHILD (expect 1, sessionEnvironment only): /'
+  grep -c 'PI_SUBAGENT_CHILD' $(pkg cand)/extension.mjs | sed 's/^/candidate extension lines naming PI_SUBAGENT_CHILD (expect 2): /'
+  agent_dir base || return 1
+  agent_dir cand || return 1
+  pass "installed; dsh child model for main-cand: $(<$DMODELF) (DSH answered with it above)"
   print -r -- "next: zsh $THIS bundled-base"
   ;;
 bundled-base|bundled-cand)

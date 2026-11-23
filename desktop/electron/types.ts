@@ -31,7 +31,7 @@ export type Settings = {
   revision: string; roles: Record<string, RoleFields>; edges: [string, string][]; role_tree: RoleTree; effect: string; applied?: boolean;
   archive?: ArchiveChoices;
 };
-/** The agents tool's switches in <project>/.graphtraj/swarm/config.yml. */
+/** The subagents tool's switches in <project>/.graphtraj/swarm/config.yml. */
 export type ArchiveChoices = { save_normalized_sessions: boolean; backfill_history: boolean };
 export type SettingsDraft = {
   role_tree?: RoleTree; remove_presets?: string[];

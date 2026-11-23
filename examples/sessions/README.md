@@ -12,7 +12,7 @@ covers the shared representation, provenance, RL observations and stream boundar
 native JSON record and `native_record` retrieves it. These remain schema and
 mapping operations. `graphtraj.sessions.storage` provides `SessionStore` for
 project-local archives and `StreamWriter` for compact, checkpointed assistant
-streams. The agents feature `session_read` (graftling PUBLIC_API 1.2) reads an
+streams. The subagents feature `session_read` (graftling PUBLIC_API 1.2) reads an
 archive's ordered events as a slice or a keyword search, with durable unfinished
 output, redacted; GraphTraj's `tasks` `session_read` is a transitional forwarder
 to it that keeps the old `after`/`limit` pages. Live Runtime collection and migration are separate

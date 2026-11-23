@@ -7,7 +7,7 @@ description: Coordinate accepted tasks through dispatch, result submission, acce
 
 Read the project's guidance, current task graph and accepted requirements. Use
 the configured paths, roles, Runtime settings and execution limits.
-Use MCP `agents` / `tasks` and the installed feature schemas.
+Use MCP `subagents` / `tasks` and the installed feature schemas.
 Use the corresponding CLI only for an unavailable or failing MCP entry; retain
 the failure, preserve identity and native permissions, and limit fallback to
 that operation. Return to MCP when it works. CLI examples in references are
@@ -36,10 +36,10 @@ changing the common completion protocol.
 
 Formal dispatch uses MCP `swarm` with the selected role, instruction and ready
 Task ID, following its installed input schema. Reuse the registered definition and
-the returned `alias` or `agent`: the `agents` tool's `status`, `wait`, `send`,
+the returned `alias` or `agent`: the `subagents` tool's `status`, `wait`, `send`,
 `interrupt` and `retire` accept either, and `execution_id` names the launched
-execution. Each end notice names its execution in `execution`. `agents` `status`
-without an Agent lists a member's `agents` children in its `task_sessions` node. Supply external role instructions and explicitly selected
+execution. Each end notice names its execution in `execution`. `subagents` `status`
+without an Agent lists a member's `subagents` children in its `task_sessions` node. Supply external role instructions and explicitly selected
 resources through the configured Runtime's supported mechanisms; GraphTraj
 does not choose a professional Skill by its name.
 If child dispatch returns `registered`, end that dispatch turn so the existing

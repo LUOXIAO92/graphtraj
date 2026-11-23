@@ -5,8 +5,8 @@ description: Use GraphTraj to plan task dependencies, coordinate execution and f
 
 # GraphTraj
 
-Use MCP `agents` / `tasks` for every exposed Agent and Task operation.
-Use `agents` for Agent communication, hierarchy, execution and native permission
+Use MCP `subagents` / `tasks` for every exposed Agent and Task operation.
+Use `subagents` for Agent communication, hierarchy, execution and native permission
 handling, including members participating in Tasks. Use `tasks` for Task graphs,
 participation, scoped member queries and delivery. Independent Agent operations
 must work without GraphTraj Tasks or Worldline. Report an installed entry that

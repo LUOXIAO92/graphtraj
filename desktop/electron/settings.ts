@@ -12,7 +12,7 @@ export class SettingsClient {
     return this.exchange<Settings>(root, draft ? { action: 'save', ...draft } : { action: 'read' });
   }
 
-  /** Write the agents tool's own archive switches; GraphTraj keeps no copy. */
+  /** Write the subagents tool's own archive switches; GraphTraj keeps no copy. */
   archive(root: string, choices: ArchiveChoices): Promise<{ archive: ArchiveChoices }> {
     return this.exchange(root, { action: 'archive', choices });
   }

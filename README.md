@@ -56,7 +56,8 @@ with a separate source repository, or other project conventions, see the
 ## Independent agents without GraphTraj
 
 The `graftling` distribution (Graftling) lets the main Agent of Claude Code, Codex, Pi or DSH
-create and control child Agents through one `agents` tool. No GraphTraj installation,
+create and control child Agents through one `subagents` tool (named `agents` before
+graftling 0.9.0). No GraphTraj installation,
 project, Task or Git repository is needed. Its installation, configuration and
 capability table are in the [Graftling README](https://github.com/LUOXIAO92/graftling/blob/main/README.md), with one note
 per host. Its stable interface and version rules are in
@@ -179,9 +180,9 @@ directory no longer sets it. Main's children and Task-free Agents keep the host'
 directory. If the member's record is unreadable or its Worktree is gone, `create`
 fails with `workspace-denied` rather than starting wider.
 
-Every child created through `agents` in a GraphTraj project also gets a `tasks`
-tool beside `agents`, on all four Runtimes under GraphTraj's server name, as
-`mcp__graphtraj__agents` and `mcp__graphtraj__tasks` like a Task member's. The
+Every child created through `subagents` in a GraphTraj project also gets a `tasks`
+tool beside `subagents`, on all four Runtimes under GraphTraj's server name, as
+`mcp__graphtraj__subagents` and `mcp__graphtraj__tasks` like a Task member's. The
 child's server is its owner's alone: a Claude child loads no other MCP
 configuration, and a Codex child's entry replaces any captured one of that name. It offers only the general methods (`setup-project`,
 `task-breakdown`, `task-delivery`, `research`, `concept-clarification`) through
@@ -255,7 +256,7 @@ capability fails closed.
 A project has one Main working state: the Main-owned root Agents and their
 hierarchy, pending notices and results, and the current summary scope. Each
 verified external Main Session, whether Codex, Claude Code, Pi or DSH, continues
-that state, so default `agents` status and `tasks` views show the existing members
+that state, so default `subagents` status and `tasks` views show the existing members
 rather than an empty list. Continuation is a new associated record in
 `.graphtraj/runner/main-sessions/continuity.jsonl`; original Sessions, member
 identities and parents stay unchanged. Native subagents, GraphTraj members and
@@ -298,14 +299,14 @@ without the shared background server, such as `-c`, `--enable`, `--disable`,
 "Running without the shared background server" at startup. `codex exec`
 runs one turn and exits, so as Main it is only for unattended tests: it
 receives no pushes, neither root Agent ends nor member requests, and you check
-them yourself with `agents` `status` and `requests`. When a push fails, the
+them yourself with `subagents` `status` and `requests`. When a push fails, the
 Agent's `status` shows `last_result.notification` (for example `unavailable`)
 and `last_result.notification_error`, the failure's `code` and `message`
 (a Session the shared server does not hold gives `thread not found`).
 
 ### Claude Code as Main
 
-The Claude Code host serves both `agents` and `tasks` from one project MCP
+The Claude Code host serves both `subagents` and `tasks` from one project MCP
 server, with the same Agent view and control as a Codex Main (every Runtime,
 Task member Sessions) and Main authority for Task operations. A Claude Code
 plugin supplies each call's native Session. Print, or with `--write` write, the
@@ -321,7 +322,7 @@ It produces:
 - `.graphtraj/claude-host/config.json`: the host configuration naming the
   Claude CLI that must launch the host directly;
 - `.mcp.json`: one `graphtraj` server serving both tools, which Claude Code
-  shows as `mcp__graphtraj__agents` and `mcp__graphtraj__tasks` (with
+  shows as `mcp__graphtraj__subagents` and `mcp__graphtraj__tasks` (with
   `--write`, an `agents` entry that starts this host, as written before 514, is
   removed; any other `agents` entry stays);
 - `.claude/settings.local.json` `env`: `GRAFTLING_CLAUDE_HOST_PYTHON` and
@@ -346,14 +347,14 @@ Check it with `claude plugin validate .claude/skills/graphtraj-claude-host`;
 `claude --plugin-dir <dir>` loads it for a temporary session. Claude Code's own
 project MCP approval and trust prompts decide adoption; GraphTraj trusts nothing
 itself. In a session, `/agents-context` shows the current Session, whether the
-`agents` and `tasks` entries are registered, and whether notice push is available.
+`subagents` and `tasks` entries are registered, and whether notice push is available.
 
 Start or resume Claude Code from the project directory. Claude Code reads
 `.mcp.json` from its start directory and the directories above it, so in an
 unrelated directory it loads that directory's own servers, not this project's
 `graphtraj`. Started in a subdirectory, or given this project's `.mcp.json`
 explicitly, the host connects but refuses: it binds no control, Agent or Main,
-and every `agents` and `tasks` call returns `host-unavailable: The agents host
+and every `subagents` and `tasks` call returns `host-unavailable: The subagents host
 did not start: Claude Code was started in <actual>, but this host is configured
 for <expected>. Start or resume Claude Code from <expected>.` A host already
 running for the project (`host-busy`, naming
@@ -363,14 +364,14 @@ way with their own reason. The reason also goes to
 `.graphtraj/claude-host/host.log` as one timestamped JSON line (search for
 `did not start`) and, while that host runs, to the plugin's context failures.
 When Claude Code ends the session (SIGINT) the log gets one
-`agents host stopped: Claude Code ended the session (SIGINT).` line, not a
+`subagents host stopped: Claude Code ended the session (SIGINT).` line, not a
 traceback. Fix the cause, then start Claude Code again from the project.
 
 Member notices for this Main are appended to a durable per-Session queue in
 `.graphtraj/runner/main-sessions/inbox/`. The plugin submits them into the
 Main's turn or idle Session through Claude Code's prompt submission and
 acknowledges them only afterwards; until then they are also returned with the
-next `agents`/`tasks` result. Without prompt submission they arrive only with
+next `subagents`/`tasks` result. Without prompt submission they arrive only with
 that next result.
 
 ### DSH as Main
@@ -399,7 +400,7 @@ moving or reinstalling GraphTraj. At `agent/created` the plugin:
 - continues Main for the project (the entry `dsh:agent/created:startup`, or
   `resume` with `--session-id`); native subagents never do;
 - attaches the MCP server `graphtraj` (`python -I -m graphtraj.interfaces.mcp`),
-  so the Session has the tools `mcp__graphtraj__agents` and
+  so the Session has the tools `mcp__graphtraj__subagents` and
   `mcp__graphtraj__tasks`, both acting as this Main;
 - delivers the project's queued notices, including members' native approval
   requests, as described above, and archives the Session as other Main hooks do.
@@ -408,11 +409,11 @@ The venv need not be on `PATH`: the plugin starts the installation's own
 Python. Members' Runtime commands (`claude`, `codex`, `pi`, `dsh`) must still
 be on the `PATH` DSH starts with.
 
-**graftling-dsh.** The `graftling-dsh` bundle (Graftling's agents host, see
+**graftling-dsh.** The `graftling-dsh` bundle (Graftling's subagents host, see
 [Independent agents](#independent-agents-without-graphtraj)) gives a DSH
-session a Task-free `agents` tool and its own children; it never makes the
+session a Task-free `subagents` tool and its own children; it never makes the
 session GraphTraj Main and has no `tasks` tool. A GraphTraj Main already has
-`agents`, so the profile you start a GraphTraj Main with does not need
+`subagents`, so the profile you start a GraphTraj Main with does not need
 graftling-dsh: keep it out of that profile. Where you do want it, add it only
 from the one graftling installation (`dsh plugin add` of that installation's
 `graftling/dsh` directory, as Graftling's DSH note shows); from graftling 0.8.0
@@ -426,7 +427,9 @@ the directory `GRAFTLING_DATA_ROOT` names.
 
 What happens if graftling-dsh 0.8.0 is in the same profile as the GraphTraj Main
 patch (observed in GraphTraj Task 580 on the `headless` profile with DSH
-0.2.2-rc.5; other profiles were not run):
+0.2.2-rc.5; other profiles were not run). The tool names below are the ones
+observed then; from graftling 0.9.0 and GraphTraj Task 592 the same tools are
+`mcp__graftling__subagents` and `mcp__graphtraj__subagents`:
 
 - **No error and no warning.** The Session starts and runs as GraphTraj Main:
   the continuity claim is written and `mcp__graphtraj__agents` and
@@ -493,9 +496,9 @@ they are off by default and do not change filesystem rules.
 `pi.allow_unix_sockets` allows socket binding and connections beneath the listed
 paths on macOS; it grants no file access and adds no permissions when omitted.
 
-Use the CLI or local stdio MCP entries `agents` and `tasks`. MCP discovers
+Use the CLI or local stdio MCP entries `subagents` and `tasks`. MCP discovers
 features first and returns a selected feature's schema only when requested.
-When several roles in the project use the same Runtime, `agents` `create` must
+When several roles in the project use the same Runtime, `subagents` `create` must
 name the role in `configuration`. `wait` takes `agent` and an explicit finite
 `timeout_seconds`.
 For long arguments, write them once to a UTF-8 JSON file holding the arguments

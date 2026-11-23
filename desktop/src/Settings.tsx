@@ -234,7 +234,7 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
   return <section className="d-team-editor" aria-label="Project settings"><header className="d-config-heading"><div><h1>Teams &amp; roles</h1><p>Configure this project’s organization. Running agents are unchanged.</p></div><span className="memory-badge"><Icon name="shield" size={15}/>Project configuration</span></header>
     {error && !adding && !deleting && <div className="native-notice error" role="alert">{error}<p>Your unsaved changes are retained.</p></div>}
     {busy && <p className="native-notice" role="status">Loading or saving settings…</p>}{message && <div className="toast" role="status"><Icon name="check"/>{message}</div>}
-    {saved?.archive && <fieldset className="d-archive-settings" disabled={busy}><legend>Session archive · agents tool (.graphtraj/swarm/config.yml)</legend>
+    {saved?.archive && <fieldset className="d-archive-settings" disabled={busy}><legend>Session archive · subagents tool (.graphtraj/swarm/config.yml)</legend>
       {([['save_normalized_sessions', 'Save normalized Sessions'], ['backfill_history', 'Backfill history of associated Sessions']] as const).map(([name, label]) =>
         <label key={name}><input type="checkbox" checked={saved.archive![name]} onChange={event => void saveArchive({ [name]: event.target.checked })}/><span>{label}</span></label>)}
       <small>Saved immediately. Turning saving off keeps saved history and never affects native Sessions, messages, stopping or continuing.</small></fieldset>}

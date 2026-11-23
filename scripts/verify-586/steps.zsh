@@ -70,7 +70,16 @@ launch() {  # [VAR=value...] -- command...
     exec "$@"
   )
 }
-others() { ps -axww -o pid=,command= | grep -E 'run_test_shards|-m pytest' | grep -v grep || true; }
+# Other test runs (their command lines). A ps that cannot list processes is itself reported, never read as "none";
+# VERIFY586_NO_PS=1 (Engineer rehearsal in a sandbox without ps) skips the check and says so.
+others() {
+  local listed
+  if ! listed=$(ps -axww -o pid=,command= 2>&1); then
+    [[ ${VERIFY586_NO_PS:-} == 1 ]] && { print -u2 -r -- "NOTE: ps cannot list processes here; check skipped (VERIFY586_NO_PS=1, rehearsal)"; return 0; }
+    print -r -- "ps cannot list processes here ($listed); run this script in your own terminal"; return 0
+  fi
+  print -r -- $listed | grep -E 'run_test_shards|-m pytest' | grep -v grep || true
+}
 outside() {  # STOP unless TMPDIR is outside the Harness
   case ${PYTEST_TMP:A}/ in ${H:A}/*) print -r -- "STOP: TMPDIR $PYTEST_TMP is inside the Harness; run with TMPDIR=/tmp zsh $THIS $STEP"; return 1 ;; esac
 }

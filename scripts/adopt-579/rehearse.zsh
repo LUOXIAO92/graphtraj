@@ -34,7 +34,7 @@ REALSTATE=$REALH/.graphtraj/core/state
 GC=542a81df0c941f5b1a425d9807681b2a38daa87c
 GBASE=fb9db6a6937ae67526cf815ad8da7504c817983a
 GOLD=6a1f18be7e3f6cdf9587d98cb1c541832bcbd9ca   # v0.8.0
-NEW=6aa25a809d04758b57b08a660ea03bfa17405481
+NEW=eb00972580b0f8bb28dfc7f0da57a52ccafeb18f   # correction 1 (6aa25a80 + the Pi attachment test fix)
 OLD=98125982e0d3edbcd11af6de46320524cfc80a56
 DEV=4b20eed7                                     # GraphTraj dev at dispatch
 NR=89069722+LUOXIAO92@users.noreply.github.com
@@ -248,6 +248,7 @@ check "gh: ~/.dsh profiles unchanged; nothing installed" sh -c "cmp -s $F/dsh-be
 
 head1 "B: wheels from git archive v0.8.0 (archive root) and of the candidate; version strings; requirement pairs"
 steps B > $F/B.out 2>&1; BRC=$?; check "B exit 0" [ $BRC -eq 0 ]
+check "B (correction 1): guard says src plugins pyproject.toml of ${NEW[1,8]} = 6aa25a80" grep -q "product guard: src plugins pyproject.toml of ${NEW[1,8]} = 6aa25a80 (correction 1 changed tests only): yes" $F/B.out
 grep -E 'whl|leaked|peels|annotated|CHECK|markers expected|GraphTraj dev|CHANGELOG heading|main:' $F/B.out
 check "B: GraphTraj dev reported as information only; v0.8.0 annotated, peels to $GC" sh -c "grep -q 'dev contains ${NEW[1,8]}: no' $F/B.out && grep -q 'v0.8.0 peels to $GC: yes' $F/B.out && grep -q 'v0.8.0 is an annotated tag (cat-file -t: tag): yes' $F/B.out"
 check "B: every version string 0.8.0; CHANGELOG heading 0.8.0" sh -c "grep -q 'CHECK 579 v0.8.0 version strings all 0.8.0: PASS' $F/B.out && grep -q '^CHANGELOG heading: ## 0.8.0 (incompatible)' $F/B.out"
@@ -277,7 +278,7 @@ check "GR before any G: STOP 'run G first', FAIL" sh -c "[ $GNO -ne 0 ] && grep 
 print -r -- "$HOSTLINE" > $F/ps.txt; print -r -- "4242 1 /usr/bin/python3 scripts/run_test_shards.py --shards 6 (another Task's suite, simulated)" >> $F/ps.txt
 ( sleep 7; print -r -- "$HOSTLINE" > $F/ps.txt ) &!
 export FAKE_PROVIDER_API_KEY=sk-rehearsal-g-123456   # must not reach the suite (clean launch environment)
-ADOPT579_PYTEST_ARGS="-k 'test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract or test_child_tool_descriptions_match_the_members_entry or test_native_claude_lifecycle_without_a_task'" steps G > $F/G.out 2>&1; GRC=$?
+ADOPT579_PYTEST_ARGS="-k 'test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract or test_child_tool_descriptions_match_the_members_entry or test_native_claude_lifecycle_without_a_task or test_extension_still_hands_an_explicit_agents_session_to_graftling'" steps G > $F/G.out 2>&1; GRC=$?
 unset FAKE_PROVIDER_API_KEY
 GO=$(print -l $W/G-${NEW[1,8]}-*(N/om[1])); print "G record: $GO"; cat $GO/run.txt 2>/dev/null; grep -E 'WAITING|running:|queued|started' $F/G.out
 check "G queued: says WAITING with the running suite, never stops (exit 0)" sh -c "[ $GRC -eq 0 ] && grep -q '^WAITING: Main.s suite queue is serial' $F/G.out && grep -q 'running: 4242' $F/G.out && grep -q '^queued in the background' $F/G.out"
@@ -289,6 +290,7 @@ cat $GO/wait.txt; tail -4 $GO/suite.txt
 check "G waited then started by itself: wait.txt has 'waiting for another suite: 4242' then 'started' and 'ended'" sh -c "grep -q 'waiting for another suite: 4242' $GO/wait.txt && grep -q ' started' $GO/wait.txt && grep -q ' ended' $GO/wait.txt"
 check "G rehearsal: the selected real tests PASSED through G's entry (not collect-only), incl. fixture users; no FAILED line" sh -c "[ \$(grep -hoE '^PASSED tests/[a-z_0-9]+\.py::[a-z_0-9]+' $GO/shards/*.log | sort -u | wc -l) -ge 4 ] && grep -qE '^[0-9]+ passed' $GO/suite.txt && ! grep -qhE '^(FAILED|ERROR) ' $GO/shards/*.log"
 grep -hoE '^PASSED tests/[a-z_0-9]+\.py::[a-z_0-9]+' $GO/shards/*.log | sort -u
+check "G (correction 1): the corrected test ran through G's real entry and PASSED, both params" sh -c "[ \$(grep -hoE '^PASSED tests/test_pi_attachment_private_paths\.py::test_extension_still_hands_an_explicit_agents_session_to_graftling\[(agents-config|connection)\]' $GO/shards/*.log | sort -u | wc -l) -eq 2 ]"
 check "G rehearsal: no provider credential reached the suite environment (the exported FAKE_PROVIDER_API_KEY value is in no G file)" sh -c "! grep -rqF 'sk-rehearsal-g-123456' $GO"
 steps GR > $F/GR-G.out 2>&1; GRG=$?
 grep -E '^(node ids|  known|  NEW|  rehearsal|  ABNORMAL|totals|CHECK)' $F/GR-G.out

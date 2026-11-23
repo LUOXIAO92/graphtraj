@@ -71,7 +71,11 @@ GURL=${ADOPT579_GURL:-https://github.com/LUOXIAO92/graftling.git}   # gh: GitHub
 GTBASE=${VERIFY579_GTBASE:-4b20eed7d3013bd2ae5e66d460cf0dbaf59eee00}   # GraphTraj dev at dispatch (suite-base side)
 SUITEIDS=$SD/../verify-581/suiteids.py   # whole pytest node ids from shard logs (581; used by verify-586's SR)
 ARGS575=$BASE/args-575.json   # Ma writes it; Main's tasks MCP reads it through arguments_file (575): inside the project
-TARGET=${VERIFY579_TARGET:-6aa25a809d04758b57b08a660ea03bfa17405481}   # GraphTraj candidate: dev 4b20eed7 + 579's range
+# GraphTraj candidate (correction 1): eb009725 = 6aa25a80 (dev 4b20eed7 + 579's range) + the Pi attachment test's
+# persistent Session file. Its src, plugins and pyproject.toml equal 6aa25a80's (product_guard checks PRODUCT0), so the
+# graphtraj wheel's contents are 6aa25a80's; the raw directory, wheels, G records and V copies follow it (raw-eb009725).
+TARGET=${VERIFY579_TARGET:-eb00972580b0f8bb28dfc7f0da57a52ccafeb18f}
+PRODUCT0=${VERIFY579_PRODUCT0:-6aa25a809d04758b57b08a660ea03bfa17405481}   # first candidate; rel, rp and gh ran with it
 C8=${TARGET[1,8]}   # per-commit names
 OLD=98125982e0d3edbcd11af6de46320524cfc80a56   # production's graphtraj now (571)
 OLDBASE=${ADOPT579_OLDBASE:-$H/tmp/571}   # 571's backup: listed only, never touched
@@ -239,6 +243,9 @@ product_guard() {
   print "product guard: HEAD $head | git diff $C8 HEAD -- ${GUARDED[*]}: ${${names//$'\n'/ }:-empty} | uncommitted there: ${${dirty//$'\n'/ }:-none}"
   [[ -z $names ]] || { print "STOP: the Worktree's ${GUARDED[*]} differ from $C8 (only scripts/ may differ): ${names//$'\n'/ }"; return 1; }
   [[ -z $dirty ]] || { print "STOP: uncommitted changes in the Worktree's ${GUARDED[*]}"; return 1; }
+  local p0=$(git -C $WT diff --name-only $PRODUCT0 $TARGET -- src plugins pyproject.toml 2>&1)
+  print "product guard: src plugins pyproject.toml of $C8 = ${PRODUCT0[1,8]} (correction 1 changed tests only): $([[ -z $p0 ]] && print yes || print "NO (${p0//$'\n'/ })")"
+  [[ -z $p0 ]] || { print "STOP: $C8's product files differ from ${PRODUCT0[1,8]}"; return 1; }
   print "product guard: PASS (HEAD's ${GUARDED[*]} = $C8; only scripts/ differ)"
 }
 # 395: graphtraj/runtimes/graftling.mjs of venv $1 must resolve graftling to the sibling <site-packages>/graftling/.

@@ -28,7 +28,8 @@
 #             empty CLAUDE_CONFIG_DIR under ROOT/probe-state (removed after), and stops at system/init. Prints the
 #             probe argv, the set, its cache file, and for comparison the same argv plus --safe-mode. Writes only
 #             under ROOT (venv, src-cand, wheels-cand, proj, probe-state). Dialog: none. ~1-2 min.
-# Child model (repro/check): claude-haiku-4-5-20251001, because base and candidate predate Task 574 (see CMODEL).
+# Child model (repro/check): claude-opus-5 by default; override with VERIFY576_CHILD_MODEL. Fallback: claude-opus-4-8 if
+#             claude-opus-5 is refused or a child's init reports a different id. See CMODEL for why.
 #   repro     Main. The premise on the BASE (graftling dev cadc419 = 0.7.0): clone at BASE from GitHub, build and
 #             install the wheel into ROOT/venv-base, `configuration --write` into ROOT/proj-base, then one `claude -p`
 #             parent there creates three claude children (model CMODEL): (i) no tools, asked to run
@@ -38,8 +39,9 @@
 #             (-p shows none). ~3-5 min.
 #   check     Main. The same on the CANDIDATE (GCOMMIT, from GitHub after push) in ROOT/venv and ROOT/proj.
 #             Verdicts: (i) Bash PRESENT in the recorded system/init tools AND its Bash call returned output
-#             containing `r576-bash`; (iv) the (i) child's built-in init tools equal the probed set graftling
-#             cached in the data root (printed); (ii) Bash absent, Read present; (iii) Bash absent.
+#             containing `r576-bash` AND its outcome is completed; (iv) the (i) child's built-ins lie within the
+#             no-login probed set its create cached in the data root, and every probed tool the child lacks is
+#             also absent from the logged-in parent's system/init tools (account-level availability); (ii) Bash absent, Read present; (iii) Bash absent.
 #             Dialog: none. ~3-5 min.
 # Order: diagnose (done), pre, push, probe, repro, check.
 # Login for pre/repro/check: by default Claude Code runs isolated in CLAUDE_CONFIG_DIR=ROOT/claude-home with
@@ -64,13 +66,15 @@ path=(${VERIFY576_BIN:+$VERIFY576_BIN} $path)
 URL=${VERIFY576_URL:-https://github.com/LUOXIAO92/graftling.git}
 BASE=cadc419271dabc8f4a0b11da1bb46c70ef598c77      # graftling dev = 0.7.0 + 570 (the production behaviour)
 BRANCH=agent/576-claude-agents-child-without-tools-has-no-bash
-GCOMMIT=e17ccd09a3c74587f9cf207baf23a9594bbe4c0c   # the graftling candidate (base: dev cadc419)
+GCOMMIT=f63cac0e3c80c8bd25d7d6672a1f8abdb8657858   # the graftling candidate (base: dev cadc419)
 BUNDLE=$WT/.scratch/576/graftling-576.bundle        # the candidate branch, from the base
 CH=$ROOT/claude-home                                # isolated CLAUDE_CONFIG_DIR (default login mode)
-# Children: the cheapest model. Base cadc419 and candidate e17ccd09 both predate Task 574's model-id handling, and a
-# create with claude-haiku-5-5 was refused there (invalid-model: the login's candidates were claude-haiku-4-5-20251001
-# and haiku), so the children use the full id the login lists.
-CMODEL=${VERIFY576_CHILD_MODEL:-claude-haiku-4-5-20251001}
+# Children: a full model id on the pre-574 candidate list. Base cadc419 and the candidate both predate Task 574, so
+# claude-haiku-5-5 was refused (invalid-model), and an alias such as `opus` fails the child when its init reports a
+# different id ('Claude selected a different Session or model'). claude-haiku-4-5-20251001 children were not granted
+# auto (requested auto, observed default -> outcome failed, on the base too), so the default is claude-opus-5.
+# Override: VERIFY576_CHILD_MODEL=claude-opus-4-8 if claude-opus-5 is refused or its init reports a different id.
+CMODEL=${VERIFY576_CHILD_MODEL:-claude-opus-5}
 PMODEL=${VERIFY576_PARENT_MODEL:-claude-sonnet-5-5} # the parent follows a 5-call script
 
 say() { print -r -- "== $*"; }
@@ -129,15 +133,26 @@ install_wheel() {
   local tag=$1 commit=$2 src=$ROOT/src-$1 wheels=$ROOT/wheels-$1
   typeset -g V=$ROOT/venv${${tag:#cand}:+-$tag} P=$ROOT/proj${${tag:#cand}:+-$tag}
   [[ -d $P ]] || { print -r -- "STOP: $P missing; run: zsh $THIS pre"; return 1; }
-  if [[ ! -x $V/bin/python ]] || ! $V/bin/python -I -c 'import graftling' 2>/dev/null; then
-    say "install graftling $commit into $V (docs/install/claude-code.md: Install the wheel)"
-    rm -rf $src $wheels
+  # The venv records the commit it was built from; another commit (or none recorded) means reinstall. A venv from
+  # before this record counts as its commit only if its source checkout is at that commit.
+  local mark=$V/.graftling-576-commit installed=''
+  [[ -f $mark ]] && installed=$(<$mark)
+  if [[ -z $installed && -x $V/bin/python ]] && $V/bin/python -I -c 'import graftling' 2>/dev/null \
+       && [[ $(git -C $src rev-parse HEAD 2>/dev/null) == $commit ]]; then
+    installed=$commit; print -r -- $commit > $mark; print -r -- "existing $V was built from $src at $commit; recorded"
+  fi
+  if [[ $installed != $commit ]] || ! $V/bin/python -I -c 'import graftling' 2>/dev/null; then
+    say "install graftling $commit into $V (docs/install/claude-code.md: Install the wheel); was: ${installed:-none}"
+    rm -rf $src $wheels $mark
     git clone -q $URL $src && git -C $src checkout -q $commit || { print "STOP: cannot clone $URL at $commit"; return 1; }
     python3 -m venv $V && $V/bin/python -m pip -q wheel --no-deps -w $wheels $src \
-      && $V/bin/python -m pip -q install $wheels/graftling-*.whl || { print "STOP: the wheel install failed"; return 1; }
+      && $V/bin/python -m pip -q install $wheels/graftling-*.whl \
+      && $V/bin/python -m pip -q install --force-reinstall --no-deps $wheels/graftling-*.whl \
+      || { print "STOP: the wheel install failed"; return 1; }
+    print -r -- $commit > $mark
   fi
   print -r -- "installed: $($V/bin/python -m pip show graftling 2>&1 | grep -E '^(Name|Version|Location)' | tr '\n' ' ')"
-  print -r -- "source commit: $(git -C $src rev-parse HEAD 2>&1)"
+  print -r -- "installed commit ($mark): $(<$mark); source checkout: $(git -C $src rev-parse HEAD 2>&1)"
   CLAUDE=$(command -v claude) || { print "STOP: no claude on PATH"; return 1; }
   say "generated plugin files (docs: Generate the plugin files) in $P"
   (cd $P && $V/bin/python -I -m graftling.claude.host configuration --project $P --claude $CLAUDE --write) \

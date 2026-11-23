@@ -214,6 +214,45 @@ def probed_set(root, model):
     return found[-1] if found else None
 
 
+def parent_init_tools(path: str):
+    """The logged-in host parent's system/init tools from its stream-json, or None."""
+    for line in open(path, errors='replace'):
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get('type') == 'system' and event.get('subtype') == 'init':
+            return event.get('tools') if isinstance(event.get('tools'), list) else None
+    return None
+
+
+def verdict_iv(root, facts: dict, tools: list, parent: str) -> bool:
+    """(iv): child built-ins within the no-login probed set; every probed tool the child lacks is one the
+    logged-in host parent lacks as well (account-level availability), never one the parent offers."""
+    probed = probed_set(root, facts.get('init_model'))
+    parent_tools = parent_init_tools(parent)
+    builtin = sorted(name for name in tools if not name.startswith('mcp__'))
+    print(f'   probed default set (no login; {probed and probed[0]}): {json.dumps(probed and probed[1])}')
+    print(f'   child built-ins: {json.dumps(builtin)}')
+    if probed is None or parent_tools is None:
+        print(f'   FAIL: (iv) {"no probed set for the child in the data root" if probed is None else ""}'
+              f'{"; " if probed is None and parent_tools is None else ""}'
+              f'{"no system/init in the parent stream-json" if parent_tools is None else ""}')
+        return False
+    parent_builtin = sorted(name for name in parent_tools if not name.startswith('mcp__'))
+    print(f'   logged-in parent built-ins: {json.dumps(parent_builtin)}')
+    extra = sorted(set(builtin) - set(probed[1]))
+    missing = sorted(set(probed[1]) - set(builtin))
+    print(f'   child built-ins not in the probed set: {extra}; probed tools the child lacks: {missing}')
+    for name in missing:
+        print(f'     {name}: the logged-in parent {"OFFERS it" if name in parent_tools else "lacks it too"}')
+    offered = [name for name in missing if name in parent_tools]
+    ok = not extra and not offered
+    print(f'   {"PASS" if ok else "FAIL"}: (iv) child built-ins within the probed set: {not extra}; every probed'
+          f' tool the child lacks is absent from the logged-in parent too: {not offered}')
+    return ok
+
+
 def accept(mode: str, root: str, snapshot: str, parent: str) -> int:
     before = set(open(snapshot).read().split())
     children = parent_children(parent)
@@ -256,20 +295,14 @@ def accept(mode: str, root: str, snapshot: str, parent: str) -> int:
                     print('   PASS (premise reproduced): the child without tools has no Bash in its system/init tools'
                           f'; Bash calls in its transcript: {len(facts["bash_calls"])}')
             else:
-                ok = has_bash and facts['bash_output_seen']
+                completed = facts.get('outcome') == 'completed'
+                ok = has_bash and facts['bash_output_seen'] and completed
                 print(f'   {"PASS" if ok else "FAIL"}: {label}: Bash in system/init tools: {has_bash}; a Bash call'
                       f' returned output containing {BASH_TEXT!r}: {facts["bash_output_seen"]};'
-                      f' state {facts.get("state")}, outcome {facts.get("outcome")}')
+                      f' state {facts.get("state")}, outcome {facts.get("outcome")} (must be completed: {completed})')
                 failed += not ok
             if mode == 'check':
-                probed = probed_set(root, facts.get('init_model'))
-                builtin = [name for name in tools if not name.startswith('mcp__')]
-                ok = probed is not None and set(builtin) == set(probed[1])
-                print(f'   probed default set ({probed and probed[0]}): {json.dumps(probed and probed[1])}')
-                print(f'   {"PASS" if ok else "FAIL"}: (iv) the no-tools child\'s built-in init tools equal the probed set'
-                      + ('' if probed is None else f'; only in init: {sorted(set(builtin) - set(probed[1]))};'
-                         f' only probed: {sorted(set(probed[1]) - set(builtin))}'))
-                failed += not ok
+                failed += not verdict_iv(root, facts, tools, parent)
         else:
             ok = not has_bash and (marker != 'R576-II.' or 'Read' in tools)
             print(f'   {"PASS" if ok else "FAIL"}: {label}: Bash absent from system/init tools: {not has_bash}'

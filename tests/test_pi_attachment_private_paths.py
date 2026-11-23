@@ -499,18 +499,46 @@ def test_execution_without_a_worktree_keeps_the_whole_directory(tmp_path: Path) 
     assert list(turn.archive_private_paths) == [tmp_path / '.graphtraj']
 
 
-@pytest.mark.parametrize('owner', ['plugin-child', 'runner', 'agents-driver'])
-def test_extension_in_a_worktree_never_spawns_the_collector(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owner: str,
-) -> None:
-    """``--collect`` exits 1 in a Worktree, and the real extension's session_start never reaches it.
+# The real extension's session_start in a node process with a stub Pi API. argv[1] is the Pi
+# executable (or ''): graftling's loadHostSdk() reads the owning Pi from process.argv[1].
+SESSION_START = """
+import { pathToFileURL } from 'node:url';
+const [, module] = process.argv.slice(1);
+const { default: graphtraj } = await import(pathToFileURL(module).href);
+const handlers = [], notices = [], servers = [], renderers = [];
+const flags = {'agents-config': process.env.TEST_AGENTS_CONFIG || undefined};
+graphtraj({registerFlag() {}, getFlag(name) { return flags[name]; },
+  registerMcpServer(name, config) { servers.push({name, args: config.args ?? []}); },
+  registerEntryRenderer(type) { renderers.push(`entry ${type}`); },
+  registerMessageRenderer(type) { renderers.push(`message ${type}`); },
+  on(name, handler) { if (name === 'session_start') handlers.push(handler); }});
+const header = {type: 'session', version: 3, id: 'attachments', cwd: process.cwd(), timestamp: 0};
+const sessionManager = {getSessionId: () => 'attachments', getSessionFile: () => '', getHeader: () => header,
+  getEntries: () => [], getLeafId: () => null};
+const ctx = {cwd: process.cwd(), hasUI: process.env.TEST_HAS_UI === '1', sessionManager,
+  ui: {notify(message, level) { notices.push({message, level}); }}};
+for (let round = 0; round < Number(process.env.TEST_ROUNDS || 1); round++) {
+  for (const handler of handlers) await handler({reason: 'startup'}, ctx);
+}
+console.log(JSON.stringify({notices, servers: servers.map(server => server.name), args: servers.map(server => server.args),
+  renderers}));
+"""
 
-    A characterisation of existing behaviour: it also passes on the code before the fix.
+
+def extension_session_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owner: str, *,
+                            agents_config: Path | None = None, has_ui: bool = False, rounds: int = 1,
+                            ) -> tuple[subprocess.CompletedProcess, list[str], Path]:
+    """Run the real extension's session_start in a member Worktree with no GraphTraj Config there.
+
+    ``owner`` is the marker the Session carries: plugin-child, runner, agents-driver or unmarked.
+    graphtraj-session is a recording wrapper of the real entry; GRAFTLING_PYTHON, when set, is a
+    recording wrapper of this interpreter in which ``-m graftling.pi.host`` exits 3 at once, so no
+    real graftling host runs. Returns node's result, the recorded graphtraj-session argument lines and
+    the recorded Python lines.
     """
-    if shutil.which('node') is None:
-        pytest.skip('node is not installed')
     root, worktree = member_project(tmp_path, monkeypatch, 'migrated')
     record = tmp_path / 'spawned.txt'
+    pythons = tmp_path / 'pythons.txt'
     bin_dir = tmp_path / 'bin'
     bin_dir.mkdir()
     command = bin_dir / 'graphtraj-session'
@@ -522,10 +550,18 @@ from graphtraj.runtimes.native_entry import main
 main()
 """)
     command.chmod(0o755)
+    python = bin_dir / 'recording-python'
+    python.write_text(f"""#!/bin/sh
+printf '%s\\n' "$*" >> {str(pythons)!r}
+case " $* " in *' -m graftling.pi.host '*) echo 'stub graftling host: not started' >&2; exit 3 ;; esac
+exec {sys.executable!r} "$@"
+""")
+    python.chmod(0o755)
     # The extension registers the MCP server only with a graphtraj-mcp it found (479).
     (bin_dir / 'graphtraj-mcp').symlink_to(command)
     source = Path(__file__).resolve().parents[1] / 'src'
-    for name in ('GRAFTLING_CONNECTION', 'GRAFTLING_PYTHON', 'GRAPHTRAJ_CLI_CONNECTION', 'PI_SUBAGENT_CHILD'):
+    for name in ('GRAFTLING_CONNECTION', 'GRAFTLING_PYTHON', 'GRAFTLING_DATA_ROOT', 'GRAPHTRAJ_CLI_CONNECTION',
+                 'PI_SUBAGENT_CHILD', 'DSH_SESSION_ID', 'DSH_AGENT_SOURCE'):
         monkeypatch.delenv(name, raising=False)
     # Without GRAFTLING_PYTHON, GraphTraj's extension asks python3 on PATH for the
     # installed graftling: the suite's interpreter, which has it.
@@ -543,35 +579,92 @@ main()
         monkeypatch.setenv('PI_SUBAGENT_CHILD', '1')
     elif owner == 'runner':
         monkeypatch.setenv('GRAPHTRAJ_CLI_CONNECTION', 'unused')
-    else:
+    elif owner == 'agents-driver':
         monkeypatch.setenv('GRAFTLING_CONNECTION', 'unused')
-        monkeypatch.setenv('GRAFTLING_PYTHON', sys.executable)
-    script = """
-import { pathToFileURL } from 'node:url';
-const { default: graphtraj } = await import(pathToFileURL(process.argv[1]).href);
-const handlers = [], notices = [], servers = [];
-graphtraj({registerFlag() {}, getFlag() {}, registerMcpServer(name) { servers.push(name); },
-  on(name, handler) { if (name === 'session_start') handlers.push(handler); }});
-const header = {type: 'session', version: 3, id: 'attachments', cwd: process.cwd(), timestamp: 0};
-const sessionManager = {getSessionId: () => 'attachments', getSessionFile: () => '', getHeader: () => header,
-  getEntries: () => [], getLeafId: () => null};
-const ctx = {cwd: process.cwd(), hasUI: false, sessionManager,
-  ui: {notify(message, level) { notices.push({message, level}); }}};
-for (const handler of handlers) await handler({reason: 'startup'}, ctx);
-console.log(JSON.stringify({notices, servers}));
-"""
-    # A rejected session_start exits node nonzero, so check=True pins that the handler resolved.
-    result = subprocess.run(['node', '--input-type=module', '-e', script,
+    if owner == 'agents-driver' or agents_config is not None:
+        monkeypatch.setenv('GRAFTLING_PYTHON', str(python))
+    if agents_config is not None:
+        monkeypatch.setenv('TEST_AGENTS_CONFIG', str(agents_config))
+    monkeypatch.setenv('TEST_HAS_UI', '1' if has_ui else '0')
+    monkeypatch.setenv('TEST_ROUNDS', str(rounds))
+    pi = shutil.which('pi') if has_ui else None
+    result = subprocess.run(['node', '--input-type=module', '-e', SESSION_START, pi or '',
                              str(source / 'graphtraj/runtimes/pi/extension.mjs')],
-                            cwd=worktree, check=True, timeout=30, capture_output=True, text=True)
-    outcome = json.loads(result.stdout)
+                            cwd=worktree, check=False, timeout=60, capture_output=True, text=True)
     spawned = record.read_text().splitlines() if record.exists() else []
     assert not [line for line in spawned if '--collect' in line]
+    return result, spawned, pythons
+
+
+def resolved(result: subprocess.CompletedProcess) -> dict:
+    """node's output; a rejected session_start exits node nonzero, shown with node's stderr."""
+    assert result.returncode == 0, f'node exit {result.returncode}; stderr:\n{result.stderr}\nstdout:\n{result.stdout}'
+    return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize('owner', ['plugin-child', 'runner', 'agents-driver', 'unmarked'])
+def test_extension_in_a_worktree_never_spawns_the_collector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, owner: str,
+) -> None:
+    """``--collect`` exits 1 in a Worktree, and the real extension's session_start never reaches it.
+
+    With no agents connection and no ``--agents-config``, GraphTraj's own entry owns the Session:
+    graftling's default host (graftling 572) does not take it over (583).
+    """
+    if shutil.which('node') is None:
+        pytest.skip('node is not installed')
+    result, spawned, _ = extension_session_start(tmp_path, monkeypatch, owner)
+    outcome = resolved(result)
     if owner == 'agents-driver':
         # extension.mjs returns before any native entry: an agents connection owns the Session.
-        assert (spawned, outcome) == ([], {'notices': [], 'servers': ['graftling']})
+        assert (spawned, outcome['notices'], outcome['servers']) == ([], [], ['graftling'])
     else:
         assert spawned == ['pi']
         assert [notice['level'] for notice in outcome['notices']] == ['error']
         assert 'GraphTraj Config was not found' in outcome['notices'][0]['message']
         assert outcome['servers'] == ['graphtraj']
+    assert not (tmp_path / 'home/project/.graphtraj/core/worktrees' / MEMBER / '.agents-control').exists()
+
+
+@pytest.mark.parametrize('route', ['agents-config', 'connection'])
+def test_extension_still_hands_an_explicit_agents_session_to_graftling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, route: str,
+) -> None:
+    """``--agents-config`` still starts graftling's Pi host and GRAFTLING_CONNECTION still adopts its owner (583).
+
+    Either way GraphTraj's own entry is never called. The stub host exits at once, so with a config
+    session_start rejects with graftling's start error after the host command was run.
+    """
+    if shutil.which('node') is None:
+        pytest.skip('node is not installed')
+    config = tmp_path / 'pi-host.json'
+    config.write_text(json.dumps({'root': str(tmp_path / 'explicit')}))
+    if route == 'agents-config':
+        result, spawned, pythons = extension_session_start(tmp_path, monkeypatch, 'unmarked', agents_config=config)
+        lines = pythons.read_text().splitlines()
+        assert f'-I -m graftling.pi.host --config {config}' in lines, lines
+        assert result.returncode != 0, result.stdout
+        assert spawned == []
+    else:
+        result, spawned, pythons = extension_session_start(tmp_path, monkeypatch, 'agents-driver')
+        outcome = resolved(result)
+        assert spawned == [] and outcome['servers'] == ['graftling']
+        assert outcome['args'] == [['-I', '-m', 'graftling.mcp']]
+        assert not [line for line in pythons.read_text().splitlines() if 'graftling.pi.host' in line]
+
+
+def test_extension_keeps_the_agent_display_for_graphtraj_sessions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A UI Session that GraphTraj owns still draws agents messages, registered once (583).
+
+    Before graftling 572 registerAgents().start registered this display and returned false; the
+    extension now skips start() there, so it registers the display itself.
+    """
+    if shutil.which('node') is None or shutil.which('pi') is None:
+        pytest.skip('Node and an installed Pi are required')
+    result, spawned, _ = extension_session_start(tmp_path, monkeypatch, 'unmarked', has_ui=True, rounds=2)
+    outcome = resolved(result)
+    assert spawned == ['pi', 'pi']
+    assert sorted(outcome['renderers']) == ['entry graftling:agent-communication', 'message graftling:agent-communication']
+    assert outcome['servers'] == ['graphtraj', 'graphtraj']

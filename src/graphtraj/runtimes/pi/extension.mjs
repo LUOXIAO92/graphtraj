@@ -132,6 +132,7 @@ export default function graphtraj(pi) {
   // session_start or shutdown ends the earlier loop.
   let noticeLoop = 0;
   let noticeDisplay = false;
+  let agentDisplay = false;
   const pullNotices = (ctx, environment, loop = ++noticeLoop) => {
     const timer = setTimeout(async () => {
       if (loop !== noticeLoop) return;
@@ -157,7 +158,20 @@ export default function graphtraj(pi) {
         throw new Error('Standalone agents config cannot replace an existing managed Agent context; retain its owning connection.');
       }
     }
-    if (await agents.start(ctx)) return;
+    // Only an existing agents connection or an explicit --agents-config hands the
+    // Session to graftling. Since graftling 572 start() would otherwise start a
+    // default graftling host and take the Session over (582); keep GraphTraj's own
+    // entry, doing what start() did before 572 when it returned false (583).
+    if (Object.hasOwn(process.env, 'GRAFTLING_CONNECTION') || pi.getFlag?.('agents-config')) {
+      if (await agents.start(ctx)) return;
+    } else {
+      await agents.close();
+      independent.delete(ctx.sessionManager);
+      if (ctx.hasUI && !agentDisplay) {
+        registerAgentDisplay(pi, await loadHostSdk(), [childServer?.() ?? 'graftling', 'graphtraj', 'agents']);
+        agentDisplay = true;
+      }
+    }
     const environment = sessionEnvironment(ctx, process.env);
     sessions.set(ctx.sessionManager, environment);
     const result = await nativeEntry(ctx, environment, {

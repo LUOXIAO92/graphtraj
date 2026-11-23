@@ -138,7 +138,7 @@ pre)
 suite)
   setopt local_options no_bg_nice
   say "[suite] Main. GraphTraj full suite of HEAD $HEAD (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. No login."
-  print -r -- "load average: $(sysctl -n vm.loadavg)"
+  print -r -- "load average: $(sysctl -n vm.loadavg 2>/dev/null || print unavailable)"
   local o=$(others); [[ -z $o ]] || { print -r -- "STOP: another test run is running; rerun later: zsh $THIS suite"; print -r -- $o; return 1; }
   local dirty=$(git -C $WT status --porcelain -- src tests)
   [[ -z $dirty ]] || { print -r -- "STOP: uncommitted changes in $WT: $dirty"; return 1; }
@@ -171,8 +171,11 @@ SR)
   cat $g/run.txt; tail -6 $g/suite.txt
   grep -q '^exit=' $g/suite.txt || { print -r -- "suite still running (no exit= line yet); next: zsh $THIS SR (later)"; return 1; }
   # Whole node ids: suiteids.py ends an id at pytest's ' - ' or its matching ']' (file::function if not closed).
+  # Read from the shard logs only: run_test_shards.py's summary in suite.txt cuts an id at its first space, which
+  # would reduce '[fallback-unexplained-Runtime reason: ...]' to file::function. suite.txt only without shard logs.
+  local -a logs=($g/shards/*.log(N.)); (( $#logs )) || logs=($g/suite.txt)
   local line t id new=0 any=0; local -a ids=()
-  for id in ${(f)"$(python3 -I $SUITEIDS ids $g/suite.txt $g/shards/*(N.))"}; do
+  for id in ${(f)"$(python3 -I $SUITEIDS ids $logs)"}; do
     any=1; t=${id%%\[*}
     if grep -qF -- "${t##*::}" $K; then print -r -- "known (516): $id"
     else print -r -- "NEW: $id"; new=1; ids+=$id; fi

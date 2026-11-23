@@ -6,9 +6,14 @@ graftling 0.9.0 (591: MCP tool `agents` → `subagents`, commands `agents`/`agen
 no alias). The user confirmed 0.9.0 (Worldline user-decision 20261124T030013.925262+0900) and pre-approved the push of
 graftling main and v0.9.0 and the use of their Claude login (20261124T030105.522331+0900). No Task-state migration.
 
-**Status of this directory (early HEAD):** the steps Main can run now are final: `00`, `scan`, `scanhome`, `rel`, `rp`,
-`gh`, `B`, `G`, `GR`, `SR`, `suite-base`. The later steps (`V`, `Vc`, `Mpre`, `I`, `M`, `Mr`, `N`, `Nr`, `X`, `C5`,
-`done`, `R`) are still being changed for the new names and are not yet rehearsed; do not run them before the next HEAD.
+**Status:** Main already ran `00`, `scan`, `scanhome`, `rel`, `rp`, `gh` and `B` from the early HEAD 6a715d25. All
+passed, and G is running. Do not rerun rel, rp or gh. Real-host facts used below:
+- before I, the scan found one live hit, the expected hook copy line `const TOOLS = ["agents", "tasks"];`, and no
+  launch scripts or wrappers;
+- scanhome found 0 USER allow rules naming the old names;
+- `.claude/settings.local.json` has no `mcp__` rule.
+
+All steps are now written for the new names and rehearsed (`rehearsal-output.txt`).
 
 ## The two commits
 
@@ -63,6 +68,72 @@ next command with real values filled in.
 - **scanhome (new):** the USER's `~/.claude/settings.json` and `~/.claude.json`; prints only matching rule strings. Main
   asks the USER first (`ADOPT593_HOME_ASKED=yes`).
 
+## Changed from adopt-579 (adoption part)
+
+- **Hook copy (V, I):** production's `.claude/skills/graphtraj-claude-host` is regenerated ONLY through the product:
+  V's `adopt_plugin.py regen` (adoption_material + write_adoption) on a scratch copy, and I's `configuration --write`.
+  `plugin593.py` names the exact 0.8.0→0.9.0 difference, as seen when the 0.9.0 wheel regenerates a copy 0.8.0 wrote:
+  - `hooks/hooks.json` stays the same: it holds `{"modules": [...]}` and no matcher.
+  - `.claude-plugin/plugin.json` changes its description only (592: "subagents and tasks").
+  - `hooks/host_context.mjs` changes by 591's 14 removed and 19 added lines: `const TOOL = "subagents"`,
+    `TOOLS = [TOOL, "tasks"]`, PREFIX, the labels and `name === TOOL`.
+
+  V STOPs on anything else; I checks the installed copy equals V's (SAME-AS-VALIDATED) and the same prediction. **At
+  `claude --continue` the plugin/hooks trust dialog for graphtraj-claude-host is expected: the USER chooses trust.**
+- **New names everywhere:** `mcp593.py` requires tools/list to be exactly `[subagents, tasks]`, and a `tools/call`
+  named `agents` must be refused (`Unknown tool: agents`). It runs in V on the scratch venv, in I and done on production,
+  and Mr prints it. After I, `.venv-runtime/bin` must have `subagents` and `subagents-mcp` and no `agents` or
+  `agents-mcp`; R checks that 0.8.0's are back. `rec593.py` judges `mcp__graphtraj__subagents`/`tasks`, and treats
+  `mcp__graphtraj__agents`, `mcp__<s>__agents` and `mcp__agents__*` as old names.
+- **Mpre and I (requirement 3: no member running):** `members_idle` STOPs while a member Worker
+  (`-m graphtraj.execution.runner_worker`) or swarm batch runs. It never signals. Mpre allows Main's own host; I also
+  needs guard's BLOCKING 0 before the backup and again before pip. 593's own Leader and Engineer must have ended their
+  turns first. (579's I waited; 593's STOPs, as the Leader asked.)
+- **M and Mr (after `claude --continue`):**
+  - M[a]: the tool list holds only `mcp__graphtraj__subagents` and `tasks`.
+  - M[b]: one real `mcp__graphtraj__subagents` status call and one tasks `task_graph` call.
+  - Mr reads Main's own transcript `~/.claude/projects/<Harness path>/<MAIN>.jsonl` after I's install end. It needs a
+    `tool_use` of each with a non-error result. An old-name call there is recorded as `INFO 593 … old-name calls`, not
+    failed: the resumed history holds the old name (590 4.1).
+  - Dialog: none expected. No allow rule names the old tool (scanhome 0, settings.local.json has no `mcp__` rule), so
+    the first new-name call behaves like the earlier agents calls. If a tool-permission dialog shows anyway, choose
+    'Yes' for this once and tell Main.
+  - Optional: the USER's `/agents-context` should show subagents and tasks registered, and no agents.
+  - 575's Ma is removed.
+- **N and Nr:** the member creates the Claude child `n593` through `mcp__graphtraj__subagents`, without `tools`. The
+  child runs Bash and replies DONE-593. Nr checks:
+  - the member's `mcp__graphtraj__subagents` calls are ok and it made no old-name call;
+  - the child was created without tools;
+  - a Bash `tool_use` is archived.
+- **X (review exemption, real):** graftling exempts `mcp__<server>__subagents` (`claude/execution.py` `agents_tool`,
+  `_review_hook`). Review is on only for a connection that names a reviewer in config.yml.
+  - X first prints production's reviewers and reviewed connections, names only.
+  - Production's config is not readable from the Engineer's sandbox, so X does not assume that production reviews. It
+    runs the minimal real check in the isolated `/private/tmp/vproject-593`, which X reconfigures with the INSTALLED
+    `.venv-runtime`. There a local command reviewer (`x593.py reviewer`) records only tool names and allows; it needs
+    no provider.
+  - A real `claude -p` creates the reviewed Claude child `x593` through `mcp__graphtraj__subagents`.
+  - `x593.py judge`: the reviewer saw the create probe under the new name (`subagents/connectivity-check`) and the
+    child's Bash; no `mcp__*__subagents` reached the reviewer or `review.jsonl`; the child's own subagents call ran
+    with a non-error result; the child completed.
+  - `claude-diagnostics-*.yml` keeps no tool list, so the startup registration is shown by that call.
+- **scan after I:** expect 0 live configuration hits.
+- **C5, C5u, C5r (requirement 5, Claude Code as the host):**
+  - C5 snapshots `~/.local`, the USER's uv tool dir, `~/.pi`, `~/.dsh`, `~/.codex` and conda. `~/.codex` is compared by
+    name and sha256 without `logs_*.sqlite*` and `models_cache.json`, which the USER's running Codex writes.
+  - C5 runs `uv tool install "git+https://github.com/LUOXIAO92/graftling.git@v0.9.0"` with `UV_TOOL_DIR`,
+    `UV_TOOL_BIN_DIR`, `UV_CACHE_DIR` and `UV_PYTHON_INSTALL_DIR` under `/private/tmp/uvtool-593` and
+    `UV_PYTHON_PREFERENCE=only-managed`, so the Python is uv's own, not conda's.
+  - C5 generates `/private/tmp/uvtool-593/project` with `configuration --write` from that installation: project files
+    only, no plugin install into the USER's Claude Code, no `~/.claude` change.
+  - C5u: the USER trusts that folder once.
+  - C5r runs inside `zsh -f`, in a clean environment, with `conda shell.zsh hook` and `conda activate` (default `base`,
+    `ADOPT593_CONDA_ENV`). It shows conda's python on PATH and that the `subagents` CLI works. A real `claude -p`
+    creates a child through `mcp__graftling__subagents` and waits for it to end.
+  - A ps sampler records the graftling processes: they must run on `/private/tmp/uvtool-593/tools/graftling/bin/python`,
+    none under conda. Then before and after are compared. If a per-environment install proves necessary, C5r installs
+    nothing and says so; Main decides.
+
 ## 588 and 595 (requirement 3)
 
 Not repeated here. 588's real Engineer `submit_report` check was completed on an installation containing the change
@@ -77,9 +148,51 @@ adoption.
 `cd <Harness> && claude --continue` → M → Mr → Mp → Mps → inbox → Nw → N → Nr → X → Nt → scan (after I) → C5 → done →
 [Leader accepts 593] → [Main integrates this Task's branch] → T. Rollback: R.
 
+## Step table
+
+| Step | Who | Dialog (choice) | PASS lines |
+|---|---|---|---|
+| 00 | Main | none | answer check OK; `CHECK 593 Codex answers CODEX-593-OK …: PASS`; markers absent 8/8; production bin `agents agents-mcp`; `CHECK 593 probe Task 593 ready …: PASS`; conda/uv lines; MAIN=<id> |
+| scan (before I) | Main | none | `REPORT 593 old-name scan [before-I]: …` with each LIVE file:line (expected: the hook copy's TOOLS line) |
+| scanhome | Main, after asking the USER | none | `REPORT 593 USER allow rules naming the old tool or commands: N` (only matching strings printed) |
+| rel / rp / gh | Main (done) | none | as the early HEAD (four rel CHECKs; rp remote = local; three gh CHECKs) |
+| B | Main | none | product guard PASS (pins `graftling>=0.9.0,<0.10`); version strings; console scripts subagents only; Requires-Dist 0.9.0 yes, 0.8.0/0.10.0 no; wheels = archives; markers present 8/8; leaked 0 |
+| G → GR (→ SR → suite-base) | Main | none | `CHECK 593 G record … no new failure: PASS`; `CHECK 593 GR (guard + G record): PASS`; `named:` lines; `shard timeouts …: 0` |
+| V | Main | none | `CHECK 593 plugin differs by exactly 591/592 …: PASS`; `CHECK 593 candidate plugin as predicted …: PASS`; mcp593 two PASS; scratch bin PASS; Codex hooks two PASS; markers 8/8 both ways |
+| Vu (only if Vc asks) | USER | folder trust for /private/tmp/vproject-593 → Yes, proceed | — |
+| Vc | Main | none | `CHECK 515 .mcp.json …: PASS`; `graphtraj-claude-host loaded: YES`; PASS mcp__graphtraj__tasks and mcp__graphtraj__subagents; four `CHECK 593 init …: PASS` |
+| Mpre | Main | none | `GR: PASS`; `members_idle [Mpre]: no member execution is active: PASS` (593's Leader and Engineer have ended their turns) |
+| /exit Main, I | USER (Main asks first) | none | `Successfully installed graftling-0.9.0 graphtraj-0.1.0`; `CHECK 593 production bin has subagents, subagents-mcp and no agents, agents-mcp: PASS`; SAME-AS-VALIDATED; `CHECK 593 installed plugin changed as V predicted …: PASS`; `CHECK 593 production-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS` and `… agents is unknown …: PASS`; Codex hooks two PASS |
+| `cd <Harness> && claude --continue` | USER | **plugin/hooks trust for graphtraj-claude-host → trust** (any other: Esc, tell Main) | — |
+| M | Main | none expected (if a tool-permission dialog shows: Yes once, tell Main) | M[a] only subagents and tasks; M[b] subagents status ok, task_graph ok |
+| Mr | Main | none | `CHECK 593 [Main …] mcp__graphtraj__subagents …: PASS`, `… tasks …: PASS`; `INFO 593 … old-name calls …` (recorded only) |
+| Mp, Mps, inbox | Main | none | four `CHECK 593 init …: PASS`; host on .venv-runtime after the install; duplicate ids 0 |
+| Nw, N, Nr | Main | none | Nr: 576 CHECKs; `CHECK 593 [member …] mcp__graphtraj__subagents …: PASS`; `… no old-name call …: PASS`; notice once |
+| X | Main | none | five `CHECK 593 X …: PASS` |
+| Nt | Main | none | as 579 |
+| scan (after I) | Main | none | `REPORT 593 old-name scan [after-I]: live configuration hits 0` |
+| C5 | Main | none (network) | `uv tool install rc=0`; `CHECK 593 C5 one install from GitHub v0.9.0 under /private/tmp/uvtool-593 …: PASS` |
+| C5u | USER (once) | folder trust for /private/tmp/uvtool-593/project → Yes, proceed | — |
+| C5r | Main | none | `conda active: …`; `subagents CLI: …`; four `CHECK 593 C5 …: PASS`; `REPORT 593 <dir> unchanged: yes` for each |
+| done | Main | none | all CHECKs PASS; production bin `subagents subagents-mcp`; scan after-I live 0; key values 0 |
+| T | Main (after acceptance and integration) | none | as 579 |
+| R | USER (Main asks first) | none at R; at the next `claude --continue` the plugin trust dialog may show again → trust | venv and plugin SAME; restored CHECKs; `CHECK 593 R: bin has 0.8.0's agents, agents-mcp again …: PASS` |
+
 ## Rehearsal
 
-`ADOPT593_PART=release zsh scripts/adopt-593/rehearse.zsh` (output in `rehearsal-output-release.txt`) covers 00, scan,
-scanhome, rel (including negatives: dev moved, conflicts, missing base, wrong tag), rp and gh against a scratch bare
-origin, B, G through its real entry (6 shards; real tests including ones using repository fixtures), GR, SR (including
-a shard timeout) and suite-base on one real id.
+`zsh scripts/adopt-593/rehearse.zsh` (output in `rehearsal-output.txt`; the release part alone, as run for the early
+HEAD, in `rehearsal-output-release.txt`) uses a fake production under `$TMPDIR`:
+- graphtraj eb009725 + the real v0.8.0 wheel, its plugin written by 0.8.0;
+- a scratch graftling clone and a scratch bare origin;
+- stub `claude`, `codex` and `ps`.
+
+The MCP server, Codex hooks entry, plugin regeneration (V and I), the old-name scan, the x593 reviewer command, G's
+real test entry and suite-base are real. Main's transcript (Mr), the member and child records (Nr) and X's data root
+(judge) are labelled REHEARSAL FIXTUREs.
+
+**Not rehearsed:**
+- a real Claude Main, its resume, and the trust and permission dialogs;
+- real member dispatch;
+- X's real `claude -p` with a reviewed child;
+- C5's network install and its conda-activated `claude -p` (only C5's refusals and C5u's text);
+- GitHub.

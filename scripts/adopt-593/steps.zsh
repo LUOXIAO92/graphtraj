@@ -466,6 +466,20 @@ guard() {
   return 1
 }
 
+# 593 (requirement 3: adoption only with no member running): STOP (return 1) while any member Worker or swarm batch
+# runs; Mpre lets Main's own host run (Main exits after it), I and I-before-pip also require guard's BLOCKING 0 (Main has
+# exited). Never signals anything. 593's own Leader and Engineer must have ended their turns before Mpre.
+members_idle() {
+  local phase=$1 listing
+  listing=$(ps -axww -o pid=,etime=,command= 2>&1) || { print "STOP: ps cannot list processes (${listing[1,120]}); run this step in a normal Terminal"; return 2; }
+  local -a workers=(${${(f)"$(print -r -- $listing | grep -E -- '-m graphtraj\.execution\.runner_worker|-m graphtraj\.teams\.team_round' | grep -v -- 'grep -E')"}:#})
+  print -r -- "members_idle [$phase]: Task $TASK_ID's Leader and Engineer must have ended their turns before the adoption; member Workers and swarm batches running now: ${#workers}"
+  (( ${#workers} )) && print -l -- "  "${^workers[1,12]}
+  (( ${#workers} == 0 )) || return 1
+  if [[ $phase != Mpre ]]; then guard || return 1; fi
+  print -r -- "members_idle [$phase]: no member execution is active: PASS"
+}
+
 # USER's Terminal only: wait (never kill) until no BLOCKING process remains. $1 says what Ctrl-C leaves.
 wait_idle() {
   local g
@@ -643,17 +657,18 @@ step_V() {
   local rc=0 C=$(claude_bin) P=$VV/bin/python
   say "product guard (Worktree = $C8 outside scripts/)"; product_guard || return 1
   say "scratch venv: the $C8 graphtraj wheel + the $GTAG graftling wheel plus production's click, yaml, websockets"; scratch_venv || return 1
-  # 579: production's plugin graphtraj-claude-host is written by graftling.claude.claude_host_plugin (claude/plugin.py)
-  # from graftling/claude/host_context.mjs and hooks, with GraphTraj's host configuration. Prediction from the diffs:
-  # graftling 0.7.0..0.8.0 changes claude/host_context.mjs by 577's --data-root lines (plugin593.py names them), and
-  # plugin.py writes version '1' regardless of the graftling version; GraphTraj 98125982..$C8 leaves plugins/ unchanged
-  # (its runtimes/claude/host.py and mcp.py change for 575, not the plugin). So hooks/host_context.mjs is EXPECTED to
-  # change by exactly that, plugin.json and hooks.json to stay, and the plugin/hooks trust dialog for
-  # graphtraj-claude-host is expected at `claude --continue`. Any other difference is shown and STOPS here.
-  say "579 plugin prediction from the diffs (information)"
+  # 593: production's plugin graphtraj-claude-host is written by graftling.claude.claude_host_plugin (claude/plugin.py)
+  # from graftling/claude/host_context.mjs, with GraphTraj's host configuration (runtimes/claude/host.py). Prediction
+  # from the diffs: graftling 0.8.0..0.9.0 changes host_context.mjs and plugin.py (591: TOOL, TOOLS = [TOOL, "tasks"],
+  # PREFIX, labels) and GraphTraj eb009725..$C8 changes the plugin description (592). So hooks/host_context.mjs and
+  # .claude-plugin/plugin.json are EXPECTED to change by exactly what plugin593.py names, hooks.json to stay, and the
+  # plugin/hooks trust dialog for graphtraj-claude-host is expected at `claude --continue`. The copy is regenerated
+  # only through the product (adopt_plugin.py regen = adoption_material + write_adoption here; configuration --write
+  # in I), never by hand. Any other difference is shown and STOPS here.
+  say "593 plugin prediction from the diffs (information)"
   print -r -- "graftling $GOLDTAG..$GTAG under src/graftling/claude: $(git -C $G diff --name-only $GOLDCOMMIT $GCOMMIT -- src/graftling/claude 2>&1 | tr '\n' ' ')"
   print -r -- "graphtraj ${OLD[1,8]}..$C8 under plugins/ and src/graphtraj/runtimes/claude: $(git -C $WT diff --name-only $OLD $TARGET -- plugins src/graphtraj/runtimes/claude 2>&1 | tr '\n' ' ')"
-  say "candidate plugin: new code writes into a scratch copy of production's plugin (579: expected hooks/host_context.mjs changed by 577 only)"
+  say "candidate plugin: new code writes into a scratch copy of production's plugin (593: expected plugin.json description and hooks/host_context.mjs, by 591/592)"
   rm -rf $VPL; mkdir -p $VPL; cp -Rp $PDIR $VPL/ || return 1
   $P -I $SD/adopt_plugin.py regen $H $C $VP || return 1
   local name changed=(); : > $R/V-plugin.diff
@@ -662,22 +677,28 @@ step_V() {
   done
   local extra=$(diff -rq $PDIR $VP 2>&1 | grep -vE 'plugin\.json|hooks\.json|host_context\.mjs' | tr '\n' ' ')
   print -r -- "V-plugin.diff: $(wc -l < $R/V-plugin.diff | tr -d ' ') lines ($R/V-plugin.diff) | other differences: ${extra:-none}"
-  $CONDA -I $SD/plugin593.py $PDIR/hooks/host_context.mjs $VP/hooks/host_context.mjs; local prc=$?
-  if [[ ${changed[*]} == hooks/host_context.mjs && -z $extra ]] && (( prc == 0 )); then
-    print "CHECK 593 candidate plugin as predicted (only hooks/host_context.mjs, by 577): PASS (the plugin/hooks trust dialog for graphtraj-claude-host is expected at claude --continue: USER trusts it)"
-  else print "CHECK 593 candidate plugin as predicted (only hooks/host_context.mjs, by 577): FAIL (changed: ${changed[*]:-none} ${extra}; STOP: give $R/V-plugin.diff to the Leader)"; rc=1; fi
+  $CONDA -I $SD/plugin593.py $PDIR $VP; local prc=$?
+  if [[ ${changed[*]} == '.claude-plugin/plugin.json hooks/host_context.mjs' && -z $extra ]] && (( prc == 0 )); then
+    print "CHECK 593 candidate plugin as predicted (plugin.json description and hooks/host_context.mjs, by 591/592): PASS (the plugin/hooks trust dialog for graphtraj-claude-host is expected at claude --continue: USER trusts it)"
+  else print "CHECK 593 candidate plugin as predicted (plugin.json description and hooks/host_context.mjs, by 591/592): FAIL (changed: ${changed[*]:-none} ${extra}; STOP: give $R/V-plugin.diff to the Leader)"; rc=1; fi
   (( ${#changed} )) && print "plugin dialog expected at claude --continue: yes (one: plugin/hooks trust for graphtraj-claude-host; choose trust)" > $R/V-dialog.txt || print "plugin dialog expected at claude --continue: no (plugin unchanged)" > $R/V-dialog.txt
-  grep -q '^const SERVER = "graphtraj";' $VP/hooks/host_context.mjs && print "candidate host_context.mjs const SERVER = \"graphtraj\": yes (515's, unchanged)" \
-    || { print "STOP: candidate host_context.mjs does not name the server graphtraj"; rc=1; }
+  grep -q '^const SERVER = "graphtraj";' $VP/hooks/host_context.mjs && grep -q '^const TOOL = "subagents";' $VP/hooks/host_context.mjs \
+    && grep -q '^const TOOLS = \[TOOL, "tasks"\];' $VP/hooks/host_context.mjs \
+    && print "candidate host_context.mjs SERVER \"graphtraj\", TOOL \"subagents\", TOOLS [TOOL, \"tasks\"]: yes (the hook handles mcp__graphtraj__subagents and mcp__graphtraj__tasks)" \
+    || { print "STOP: candidate host_context.mjs does not name server graphtraj, TOOL subagents and TOOLS [TOOL, \"tasks\"]"; rc=1; }
   say "graftling: production's $GOLDVERSION vs the $GTAG wheel (information: the files 0.8.0 changes)"
   $CONDA -I $SD/pkgdiff532.py graftling $(wheel_of graftling) $(site) "graftling $GTAG differs from production $GOLDVERSION (information)" - 2>&1 | sed -E 's/^CHECK /INFO /; s/: FAIL \(STOP\)$/: differs (expected; information, not a check)/; s/: FAIL( .*)?$/: differs (expected; information, not a check)\1/; s/: PASS/: same (information)/' | tail -2 | tee $R/V-gldiff.txt
   say "graphtraj: the $C8 wheel vs production's installed ${OLD[1,8]} (information)"
   $CONDA -I $SD/pkgdiff532.py graphtraj $(wheel_of graphtraj) $(site) "graphtraj $C8 differs from production ${OLD[1,8]} (information)" - 2>&1 | sed -E 's/^CHECK /INFO /; s/: FAIL \(STOP\)$/: differs (expected; information, not a check)/; s/: FAIL( .*)?$/: differs (expected; information, not a check)\1/; s/: PASS/: same (information)/' | tail -2 | tee $R/V-gtdiff.txt
-  say "579 real entries in the scratch venv: graphtraj-mcp tools/list and the Codex hooks entry (isolated $VPROJECT)"
+  say "593 real entries in the scratch venv: graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown; the Codex hooks entry (isolated $VPROJECT)"
   vproject_init $VV/bin/graphtraj || rc=1
   (cd ${TMPDIR:-/tmp} && clean $P -I $SD/mcp593.py scratch-graphtraj-mcp $VPROJECT $VV/bin/graphtraj-mcp) || rc=1
   codex_hook_check $VV || rc=1
-  say "579 markers: present in the candidate, absent in production"
+  print -r -- "scratch venv bin: $(print -l $VV/bin/{agents,agents-mcp,subagents,subagents-mcp}(N:t) | tr '\n' ' ')(expect subagents subagents-mcp only)"
+  [[ -x $VV/bin/subagents && -x $VV/bin/subagents-mcp && ! -e $VV/bin/agents && ! -e $VV/bin/agents-mcp ]] \
+    && print "CHECK 593 scratch venv bin has subagents, subagents-mcp and no agents, agents-mcp: PASS" \
+    || { print "CHECK 593 scratch venv bin has subagents, subagents-mcp and no agents, agents-mcp: FAIL"; rc=1; }
+  say "593 markers: present in the candidate, absent in production"
   local VS=($VV/lib/python*/site-packages(N))
   $CONDA -I $SD/markers.py $VS[1] present || rc=1
   $CONDA -I $SD/markers.py $(site) absent || rc=1
@@ -711,10 +732,10 @@ vc_setup() {
 
 vc_stream() {
   local C=$(claude_bin)
-  say "claude -p calls tasks discover and agents status (no dialog)"; cv
-  print -r -- 'Call mcp__graphtraj__tasks once with {"action":"discover"} and mcp__graphtraj__agents once with {"action":"execute","feature":"status","arguments":{}}. Print one line DONE and stop.' \
+  say "claude -p calls tasks discover and subagents status (no dialog)"; cv
+  print -r -- 'Call mcp__graphtraj__tasks once with {"action":"discover"} and mcp__graphtraj__subagents once with {"action":"execute","feature":"status","arguments":{}}. Print one line DONE and stop.' \
     | (cd $VPROJECT && clean /usr/bin/perl -e 'alarm shift; exec @ARGV' 300 $C -p --model $MODEL --output-format stream-json --verbose \
-         --mcp-config $VPROJECT/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__tasks,mcp__graphtraj__agents) > $R/Vc-stream.jsonl
+         --mcp-config $VPROJECT/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__tasks,mcp__graphtraj__subagents) > $R/Vc-stream.jsonl
   print "claude rc=$?"
   $CONDA -I -c 'import json,sys
 names = None
@@ -726,9 +747,9 @@ for line in open(sys.argv[1], errors="replace"):
         break
 print("plugins in init:", names)
 print("graphtraj-claude-host loaded:", "YES" if names and any("graphtraj-claude-host" in str(n) for n in names) else "NO")' $R/Vc-stream.jsonl
-  say "515: init lists mcp server graphtraj only and the new tool names, no mcp__agents__*"
-  local irc=0; $CONDA -I $SD/rec515.py init $R/Vc-stream.jsonl || irc=1
-  tree stream $R/Vc-stream.jsonl mcp__graphtraj__tasks mcp__graphtraj__agents || return 1
+  say "593: init lists mcp server graphtraj only and the tools mcp__graphtraj__subagents and tasks, no mcp__graphtraj__agents or mcp__agents__*"
+  local irc=0; $CONDA -I $SD/rec593.py init $R/Vc-stream.jsonl || irc=1
+  tree stream $R/Vc-stream.jsonl mcp__graphtraj__tasks mcp__graphtraj__subagents || return 1
   (( irc == 0 )) || return 1
   # Information only: a missing host.log must not turn a passed Vc into a failure (492 R1 audit).
   say "host.log tail"; tail -n 20 $VPROJECT/.graphtraj/claude-host/host.log || print "no host.log (information)"
@@ -780,40 +801,48 @@ do_install() {
     done
   done
   say "pip check and imports"; $P -m pip check --disable-pip-version-check || return 1
-  $P -c 'import graftling, graphtraj.runtimes.claude.host as h, graftling.control as c, graftling.tool_descendants as td, graphtraj.execution.runner_worker as rw; print("graftling", graftling.__version__); print(h.__file__); print("457", c._stop_escaped.__name__, "| 459 SAMPLE_SECONDS", td.SAMPLE_SECONDS, "| 460", rw.TOOL_PROCESSES_RECORD); assert graftling.__version__ == "0.8.0"' || return 1
-  $P -c 'import importlib.metadata as md, pathlib, graftling, graphtraj; gs = pathlib.Path(graftling.__file__).parent; print("395 layout graftling", graftling.__version__, "| distributions", sum(1 for d in md.distributions() if (d.metadata["Name"] or "").lower() == "graftling"), "| beside graphtraj:", gs.parent == pathlib.Path(graphtraj.__file__).parent.parent, "| graftling.mjs:", (pathlib.Path(graphtraj.__file__).parent / "runtimes/graftling.mjs").is_file(), "| graphtraj requires", [r for r in md.requires("graphtraj") if r.startswith("graftling")]); assert graftling.__version__ == "0.8.0"' || return 1
-  say "579 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from"
+  $P -c 'import graftling, graphtraj.runtimes.claude.host as h, graftling.control as c, graftling.tool_descendants as td, graphtraj.execution.runner_worker as rw; print("graftling", graftling.__version__); print(h.__file__); print("457", c._stop_escaped.__name__, "| 459 SAMPLE_SECONDS", td.SAMPLE_SECONDS, "| 460", rw.TOOL_PROCESSES_RECORD); from graftling.tool import TOOL_NAME; print("591 TOOL_NAME", TOOL_NAME); assert graftling.__version__ == "0.9.0" and TOOL_NAME == "subagents"' || return 1
+  $P -c 'import importlib.metadata as md, pathlib, graftling, graphtraj; gs = pathlib.Path(graftling.__file__).parent; print("395 layout graftling", graftling.__version__, "| distributions", sum(1 for d in md.distributions() if (d.metadata["Name"] or "").lower() == "graftling"), "| beside graphtraj:", gs.parent == pathlib.Path(graphtraj.__file__).parent.parent, "| graftling.mjs:", (pathlib.Path(graphtraj.__file__).parent / "runtimes/graftling.mjs").is_file(), "| graphtraj requires", [r for r in md.requires("graphtraj") if r.startswith("graftling")]); assert graftling.__version__ == "0.9.0"' || return 1
+  say "593 (591): .venv-runtime/bin has subagents and subagents-mcp, and no agents or agents-mcp (pip removed 0.8.0's scripts)"
+  print -r -- "production bin: $(print -l $RT/bin/{agents,agents-mcp,subagents,subagents-mcp}(N:t) | tr '\n' ' ')"
+  [[ -x $RT/bin/subagents && -x $RT/bin/subagents-mcp && ! -e $RT/bin/agents && ! -e $RT/bin/agents-mcp ]] \
+    && print "CHECK 593 production bin has subagents, subagents-mcp and no agents, agents-mcp: PASS" \
+    || { print "CHECK 593 production bin has subagents, subagents-mcp and no agents, agents-mcp: FAIL"; return 1; }
+  say "593 sources: the wheels graphtraj and graftling were installed from (direct_url.json) and what they were built from"
   local d; for d in $S/graphtraj-0.1.0.dist-info $S/graftling-$GVERSION.dist-info; do print -r -- "${d:t} direct_url: $(cat $d/direct_url.json 2>/dev/null || print none)"; done
   local du=$(cat $S/graphtraj-0.1.0.dist-info/direct_url.json 2>/dev/null) dg=$(cat $S/graftling-$GVERSION.dist-info/direct_url.json 2>/dev/null)
   [[ $du == *"wheels-$C8/graphtraj-0.1.0-"*".whl"* && $dg == *"wheels-$C8/graftling-$GVERSION-"*".whl"* ]] && print "CHECK 593 direct_url of both names the wheels-$C8 wheels: PASS" || { print "CHECK 593 direct_url of both names the wheels-$C8 wheels: FAIL"; return 1; }
   print -r -- "built from: graphtraj git archive $TARGET, graftling git archive $(<$N/GRAFTLING) (B: wheels = archives file by file; proddiff above: installed bytes = these wheels)"
-  say "579 markers in the installed site-packages (expect PASS 8/8)"; $CONDA -I $SD/markers.py $S present || return 1
+  say "593 markers in the installed site-packages (expect PASS 8/8)"; $CONDA -I $SD/markers.py $S present || return 1
   say "395 layout in production: exactly one graftling, from the wheel file"
   $P -I $SD/onegraft.py $RT $GVERSION || return 1
   say "395: production's graftling.mjs resolves graftling to the sibling directory (empty environment: no python fallback)"
   node_resolve $RT || return 1
   date +%s > $R/I-install-end.epoch   # 490: timers started after this run the installed $C8 code (new)
-  say "configuration --write from the new installation (as 515/525/528/532/560/571; 579 expects hooks/host_context.mjs changed by 577 only)"
+  # 593: the hook copy is regenerated ONLY here, through the product (configuration --write), never edited by hand.
+  say "configuration --write from the new installation (as 515/525/528/532/560/571/579; 593 expects plugin.json description and hooks/host_context.mjs changed by 591/592 only)"
   (cd $H && clean $P -m graphtraj.runtimes.claude.host configuration --write --project $H --claude $(claude_bin)) > $R/I-configuration.txt 2>&1
   local crc=$?; print "configuration --write rc=$crc (output lines: $(wc -l < $R/I-configuration.txt); kept in $R/I-configuration.txt)"; (( crc == 0 )) || return 1
   diff -r $PDIR $VP && print SAME-AS-VALIDATED || { print "插件与 V 的副本不同"; return 1; }
   local pch=$(diff -rq $BK/plugin $PDIR 2>&1 | sed -E 's|^Files .*/plugin/([^ ]+) and .*|\1|' | tr '\n' ' ')
   print -r -- "plugin files changed by the install: ${pch:-none} (V expected: $(cat $R/V-dialog.txt 2>/dev/null))"
-  $CONDA -I $SD/plugin593.py $BK/plugin/hooks/host_context.mjs $PDIR/hooks/host_context.mjs
-  [[ $pch == 'hooks/host_context.mjs ' ]] && print "CHECK 593 installed plugin changed as V predicted (only hooks/host_context.mjs): PASS (at claude --continue: the plugin/hooks trust dialog for graphtraj-claude-host; USER trusts it)" \
-    || { print "CHECK 593 installed plugin changed as V predicted (only hooks/host_context.mjs): FAIL (changed: ${pch:-none}; V validated this copy, so I continues; at claude --continue trust the plugin/hooks dialog if it shows, and tell Main)"; }
+  $CONDA -I $SD/plugin593.py $BK/plugin $PDIR
+  [[ $pch == '.claude-plugin/plugin.json hooks/host_context.mjs ' ]] && print "CHECK 593 installed plugin changed as V predicted (plugin.json description and hooks/host_context.mjs): PASS (at claude --continue: the plugin/hooks trust dialog for graphtraj-claude-host; USER trusts it)" \
+    || { print "CHECK 593 installed plugin changed as V predicted (plugin.json description and hooks/host_context.mjs): FAIL (changed: ${pch:-none}; V validated this copy, so I continues; at claude --continue trust the plugin/hooks dialog if it shows, and tell Main)"; }
+  grep -nE '^const (TOOL|TOOLS|SERVER) ' $PDIR/hooks/host_context.mjs | sed 's/^/installed hook copy: /'
   say "CHECKs after configuration --write"
   mcp_keys $H/.mcp.json || return 1
   local f; for f in $ENTRIES; do
     if cmp -s $f $BK/entries/${${f#$H/}//\//__}; then print "bytes unchanged: ${f#$H/}"
-    else print "changed: ${f#$H/} (before -> after, secret-like values hidden; not expected for 579: tell Main)"
+    else print "changed: ${f#$H/} (before -> after, secret-like values hidden; not expected for 593: tell Main)"
       $CONDA -I $SD/adopt_tree.py redactjson $BK/entries/${${f#$H/}//\//__} > $BK/diff.before
       $CONDA -I $SD/adopt_tree.py redactjson $f > $BK/diff.after; diff $BK/diff.before $BK/diff.after; rm -f $BK/diff.before $BK/diff.after; fi
   done
   settings_view $H/.claude/settings.local.json
   tree mcp $H/.mcp.json
   say "also unchanged (information; any FAILED means another writer: tell Main)"; [[ -s $BK/also.sha256 ]] && shasum -a 256 -c $BK/also.sha256
-  say "579 real entries of the installed venv (run in the isolated $VPROJECT): graphtraj-mcp tools/list and the Codex hooks entry"
+  say "593 real entries of the installed venv (run in the isolated $VPROJECT): graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (the same command .mcp.json names); the Codex hooks entry"
+  print -r -- ".mcp.json graphtraj command: $($CONDA -I -c 'import json,sys; s=json.load(open(sys.argv[1]))["mcpServers"]["graphtraj"]; print(s.get("command"), *(s.get("args") or []))' $H/.mcp.json 2>&1)"
   (cd ${TMPDIR:-/tmp} && clean $P -I $SD/mcp593.py production-graphtraj-mcp $VPROJECT $RT/bin/graphtraj-mcp) || return 1
   codex_hook_check $RT || return 1
   return 0
@@ -823,7 +852,7 @@ step_R() {
   local KEEP=$BK/after-install-$(date +%Y%m%dT%H%M%S) rc=0 f
   date '+R start %F %T'; mkdir -p $KEEP
   say "before restoring: how the venv differs from the pre-install manifest"; tree compare $BK/venv.manifest $RT | tail -1
-  # BOTH packages come back from the backup's whole venv (graphtraj ${OLD[1,8]}, graftling $GOLDVERSION). 579 did not
+  # BOTH packages come back from the backup's whole venv (graphtraj ${OLD[1,8]}, graftling $GOLDVERSION). 593 does not
   # touch the Task state, so R does not either.
   local SNOW=($RT/lib/python*/site-packages(N/)) SOLD=($BK/venv/lib/python*/site-packages(N/))
   if [[ -n ${SNOW[1]:-} && -n ${SOLD[1]:-} ]]; then
@@ -845,8 +874,12 @@ step_R() {
   say "archives stay; versions (information)"; tree versions $SESS
   say "graftling and graphtraj after R identical to the backup (expect PASS twice)"
   local SA=($RT/lib/python*/site-packages(N/))
-  $CONDA -I $SD/pkgdiff532.py graftling ${SA[1]:-$RT/missing} ${SOLD[1]:-$BK/venv/missing} "579 graftling restored (after R vs backup)" - | tail -1; (( ${pipestatus[1]} == 0 )) || rc=1
-  $CONDA -I $SD/pkgdiff532.py graphtraj ${SA[1]:-$RT/missing} ${SOLD[1]:-$BK/venv/missing} "579 graphtraj restored (after R vs backup)" - | tail -1; (( ${pipestatus[1]} == 0 )) || rc=1
+  $CONDA -I $SD/pkgdiff532.py graftling ${SA[1]:-$RT/missing} ${SOLD[1]:-$BK/venv/missing} "593 graftling restored (after R vs backup)" - | tail -1; (( ${pipestatus[1]} == 0 )) || rc=1
+  $CONDA -I $SD/pkgdiff532.py graphtraj ${SA[1]:-$RT/missing} ${SOLD[1]:-$BK/venv/missing} "593 graphtraj restored (after R vs backup)" - | tail -1; (( ${pipestatus[1]} == 0 )) || rc=1
+  print -r -- "restored bin: $(print -l $RT/bin/{agents,agents-mcp,subagents,subagents-mcp}(N:t) | tr '\n' ' ')"
+  [[ -x $RT/bin/agents && -x $RT/bin/agents-mcp && ! -e $RT/bin/subagents && ! -e $RT/bin/subagents-mcp ]] \
+    && print "CHECK 593 R: bin has 0.8.0's agents, agents-mcp again and no subagents, subagents-mcp: PASS" \
+    || { print "CHECK 593 R: bin has 0.8.0's agents, agents-mcp again and no subagents, subagents-mcp: FAIL"; rc=1; }
   local gv=$($RT/bin/python -I -c 'import graftling; print(graftling.__version__)' 2>&1)
   [[ $gv == $GOLDVERSION ]] && print "CHECK 593 R: graftling is $GOLDVERSION again: PASS" || { print "CHECK 593 R: graftling is $GOLDVERSION again: FAIL ($gv)"; rc=1; }
   say "a stale channel file would make the restored host refuse with host-busy"
@@ -903,7 +936,7 @@ else:
 # 576 (571 F1): the child was created WITHOUT tools; with graftling 0.8.0 its default set has Bash, so it runs the
 # command and gives the done reply (571's probe expected 0.7.0, where such a child had no Bash).
 check('576 child created without tools (stored selection.tools is null)', sel.get('tools') is None, f"tools={sel.get('tools')!r}")
-done_word = 'DONE-579'
+done_word = 'DONE-593'
 if reply.is_file():
     check(f'576 child without tools ran Bash and replied {done_word} (member quotes the last_message)',
           done_word in reply.read_text(errors='replace'), f'{reply}')
@@ -1419,8 +1452,8 @@ V) cv; print "[V] Main. 安装前校验。对话框: 无。只读真实项目；
   if logged $R/V.txt step_V; then
     touch $R/V.ok
     summary V "$(grep -E '^(SAME|CHANGE)|CHECK|^(PASS|FAIL):|markers expected|STOP|✘ lines|read_session|task graph|product guard: PASS|plugin dialog|^graftling v|^graphtraj [0-9a-f]' $R/V.txt)"
-    print "成功: SAME .claude-plugin/plugin.json 与 SAME hooks/hooks.json、CHANGED hooks/host_context.mjs，'CHECK 593 plugin hooks/host_context.mjs differs by exactly 577's --data-root change: PASS' 与 'CHECK 593 candidate plugin as predicted (only hooks/host_context.mjs, by 577): PASS'（claude --continue 时预计出现 graphtraj-claude-host 的插件/hooks 信任框：选信任）；INFO 行只是信息（differs (expected; …)）；'CHECK 593 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 593 Codex hooks entry …: PASS'；"
-    print "  'markers expected present: PASS (7/7)' 与 'markers expected absent: PASS (7/7)'；'503 layout: PASS' 与两行 node resolves PASS；候选 ✘ 不多于 baseline；read_session failures=0 与 task graph of the clone（生产 Task 状态，只读）；无 STOP。"
+    print "成功: CHANGED .claude-plugin/plugin.json、SAME hooks/hooks.json、CHANGED hooks/host_context.mjs，'CHECK 593 plugin differs by exactly 591/592 (hook module lines, plugin.json description): PASS' 与 'CHECK 593 candidate plugin as predicted (plugin.json description and hooks/host_context.mjs, by 591/592): PASS'（claude --continue 时预计出现 graphtraj-claude-host 的插件/hooks 信任框：选信任）；INFO 行只是信息（differs (expected; …)）；'CHECK 593 scratch-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS' 与 '… tool agents is unknown …: PASS'；'CHECK 593 scratch venv bin has subagents, subagents-mcp …: PASS'；两行 'CHECK 593 Codex hooks entry …: PASS'；"
+    print "  'markers expected present: PASS (8/8)' 与 'markers expected absent: PASS (8/8)'；'503 layout: PASS' 与两行 node resolves PASS；候选 ✘ 不多于 baseline；read_session failures=0 与 task graph of the clone（生产 Task 状态，只读）；无 STOP。"
     next "zsh $THIS Vc"
   else print "\nV 不通过，不要做 I，把 $R/V.txt 交给 Main。本步没有改动生产。"; exit 1; fi ;;
 
@@ -1435,7 +1468,7 @@ Vc) print "[Vc] Main. 隔离项目 $VPROJECT 里用新 wheel 的真实 claude -p
   if (( rc == 0 )); then
     touch $R/Vc.ok
     summary Vc "$(grep -E '^(PASS|FAIL)|loaded:|CHECK 515' $R/Vc.txt | tail -8)"
-    print "成功: 'isolation: OK'，'CHECK 515 .mcp.json has graphtraj, no agents …: PASS'，'answer check: OK'，'graphtraj-claude-host loaded: YES'，PASS mcp__graphtraj__tasks 与 PASS mcp__graphtraj__agents，四行 'CHECK 515 init …: PASS'。"
+    print "成功: 'isolation: OK'，'CHECK 515 .mcp.json has graphtraj, no agents …: PASS'，'answer check: OK'，'graphtraj-claude-host loaded: YES'，PASS mcp__graphtraj__tasks 与 PASS mcp__graphtraj__subagents，四行 'CHECK 593 init …: PASS'。"
     next "zsh $THIS Mpre    （GR 为 PASS 之后；然后 USER: /exit Main，再在 Terminal 运行 zsh $THIS I）"
   else print "\nVc 不通过，不要做 I，把 $R/Vc.txt 与 $R/Vc-stream.jsonl 交给 Main。"; exit 1; fi ;;
 
@@ -1446,9 +1479,10 @@ Vu) print "[Vu] USER（只有 Vc 要求时；需要终端和对话框，Main 做
   print "然后输入 /exit 回车，不要发消息。其它任何框按 Esc 并告诉 Main 标题。"
   next "Main: zsh $THIS Vc" ;;
 
-Mpre) need_main; cv; print "[Mpre] Main，就在 USER /exit Main 之前（V、Vc 通过且 GR 为 PASS 之后）。486：重启前的生产 agents 控制记录快照（只读）。对话框: 无。约 1 分钟。"
+Mpre) need_main; cv; print "[Mpre] Main，就在 USER /exit Main 之前（V、Vc 通过且 GR 为 PASS 之后）。486：重启前的生产 agents 控制记录快照（只读）。593：采用只在没有成员运行时进行：593 的 Leader 与 Engineer 必须已结束各自的回合，其它 Task 也没有成员在运行；有则 STOP（从不发信号）。对话框: 无。约 1 分钟。"
   grep -q "^CHECK 593 GR (guard + G record): PASS" $R/GR.txt 2>/dev/null && print "GR: PASS (CHECK 593 GR (guard + G record): PASS)" || print "GR 还不是 PASS（$R/GR.txt 没有 'CHECK 593 GR (guard + G record): PASS'）：先运行 GR；I 会拒绝运行。"
-  $CONDA -I $SD/ctl497.py snap $H $CTL/Mpre.json 2>&1 | tee $R/Mpre.txt
+  members_idle Mpre 2>&1 | tee -a $R/Mpre.txt; (( ${pipestatus[1]} == 0 )) || { print "\nMpre STOP: 有成员在运行（见上）。等它们结束（593 的 Leader 与 Engineer 先结束回合），再重跑 Mpre；不要结束任何进程。"; exit 1; }
+  $CONDA -I $SD/ctl497.py snap $H $CTL/Mpre.json 2>&1 | tee -a $R/Mpre.txt
   print "成功: 'GR: PASS' 与 'control records snapshot Mpre.json: agents=… executions=…'。Mps 在 claude --continue 之后对比它。"
   print "\n为什么要重启 Main: Main 的 tasks/agents 调用在它的 host 进程（graphtraj.runtimes.claude.host serve）里执行，该进程一直使用启动时载入的 graphtraj ${OLD[1,8]} 与 graftling $GOLDVERSION；安装会在它运行时替换这些文件。所以 Main 在 I 之前退出，I 安装完成后才用 claude --continue 恢复（新 host 载入新代码）。503 的保护也要求安装时 Main 已退出。"
   print "\n下一步是 USER 的，Main 先问 USER（需要 USER 在 Main 里 /exit）：USER 同意后先在这个 Claude Main 里输入 /exit，然后在普通 Terminal 运行 I。I 会等其它 Task（$(active_tasks)）的成员结束（不要结束它们）。"
@@ -1461,11 +1495,11 @@ I) need_main
   grep -q "^CHECK 593 GR (guard + G record): PASS" $R/GR.txt 2>/dev/null || { print "GR 还不是 PASS（$R/GR.txt 没有 'CHECK 593 GR (guard + G record): PASS'）。先由 Main 运行 GR。没有改动任何东西。"; exit 1; }
   product_guard || { print "Worktree 守卫 STOP（见上）。没有改动任何东西。"; exit 1; }
   print "确认已在 Claude Code Main 里输入 /exit。按回车继续，Ctrl-C 放弃。"; read -r REPLY
-  wait_idle "还没有改动任何东西（没有备份、没有安装）。" || exit 1
+  members_idle I 2>&1 | tee -a $R/I.txt; (( ${pipestatus[1]} == 0 )) || { print "\nI STOP: 有成员或 host 在运行（见上）。还没有改动任何东西（没有备份、没有安装）。等它们结束后重跑 I；不要结束任何进程。"; exit 1; }
   date '+I start %F %T' | tee -a $R/I.txt
   logged $R/I.txt do_backup || { print "\n备份失败，生产未被改动。把输出交给 Main；$BK 需要由 Main 决定如何处理。"; exit 1; }
   say "guard again right before pip install (backup done)" | tee -a $R/I.txt
-  wait_idle "备份已完成，生产还没有改动。重来时由 Main 先把 $BK 改名移开。" 2>&1 | tee -a $R/I.txt; (( ${pipestatus[1]} == 0 )) || exit 1
+  members_idle I-before-pip 2>&1 | tee -a $R/I.txt; (( ${pipestatus[1]} == 0 )) || { print "\nI STOP: 备份已完成，生产还没有改动。有成员在运行（见上）。重来时由 Main 先把 $BK 改名移开。"; exit 1; }
   touch $BK/INSTALL-STARTED; INSTALL_FROM=$(date +%T)
   if ! logged $R/I.txt do_install; then
     print "\n安装或校验失败。不要恢复 Main，立刻运行回退:\n  zsh $BK/tools/steps.zsh R"; exit 1
@@ -1474,64 +1508,56 @@ I) need_main
   { say "BLOCKING processes started during the install window ($INSTALL_FROM → $(date +%T)); information for Main"
     guard && print "none" || print "（上面 BLOCKING 列出的进程在安装期间启动，可能载入了新旧混合的文件；告诉 Main。）"; } 2>&1 | tee -a $R/I.txt
   summary I "$(grep -E 'Successfully|^PASS|^FAIL|^graftling 0|^395 layout|direct_url|built from|CHECK|503 layout|control records snapshot|timer pid|zombies|markers expected|SAME-AS-VALIDATED|plugin files|configuration --write rc|bytes unchanged|^changed|BLOCKING|-rw-------' $R/I.txt)"
-  print "成功: Successfully installed graftling-$GVERSION graphtraj-0.1.0；PASS n FAIL 0（两个 wheel）；'CHECK 593 graftling $GOLDVERSION dist-info gone: PASS'；三个 -rw------- 备份入口文件；'graftling $GVERSION'；'CHECK 593 direct_url of both names the wheels-$C8 wheels: PASS'；'markers expected present: PASS (7/7)'；'503 layout: PASS'；两行 node resolves PASS；SAME-AS-VALIDATED；'CHECK 593 plugin hooks/host_context.mjs differs by exactly 577's …: PASS' 与 'CHECK 593 installed plugin changed as V predicted (only hooks/host_context.mjs): PASS'；'CHECK 515 .mcp.json …: PASS'；"
-  print "  'CHECK 593 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS'；两行 'CHECK 593 Codex hooks entry …: PASS'。"
+  print "成功: Successfully installed graftling-$GVERSION graphtraj-0.1.0；PASS n FAIL 0（两个 wheel）；'CHECK 593 graftling $GOLDVERSION dist-info gone: PASS'；'CHECK 593 production bin has subagents, subagents-mcp and no agents, agents-mcp: PASS'；三个 -rw------- 备份入口文件；'591 TOOL_NAME subagents'；'CHECK 593 direct_url of both names the wheels-$C8 wheels: PASS'；'markers expected present: PASS (8/8)'；'503 layout: PASS'；两行 node resolves PASS；SAME-AS-VALIDATED；'CHECK 593 plugin differs by exactly 591/592 …: PASS' 与 'CHECK 593 installed plugin changed as V predicted (plugin.json description and hooks/host_context.mjs): PASS'；'CHECK 515 .mcp.json …: PASS'；"
+  print "  'CHECK 593 production-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS' 与 'CHECK 593 production-graphtraj-mcp MCP tool agents is unknown (error answer, no alias): PASS'；两行 'CHECK 593 Codex hooks entry …: PASS'。"
   print "$R_HINT"
   print "\n下一步（USER，普通 Terminal）恢复 Main（同一个 Session）:\n  cd $H && claude --continue"
   print "预期对话框: $(cat $R/V-dialog.txt 2>/dev/null || print 'see V')。.mcp.json 不变，仍只有 \"$NEWS\"。若仍出现插件/hooks 信任框（graphtraj-claude-host）: 选信任（trust）并告诉 Main（与预测不符）；其它任何框: Esc 并告诉 Main 标题。判断: Main 恢复为原来的对话，然后由 Main 运行 M。"
   print "若 --continue 打开的不是原来的对话: /exit，然后 cd $H && claude --resume $MAIN"
   print "恢复后在 Main 里粘贴第一句（见 M）:"
-  next "Main: zsh $THIS Ma   （然后 zsh $THIS M）" ;;
+  next "Main: zsh $THIS M" ;;
 
 M) need_main; cv; cat <<EOF2 | tee $R/M-prompts.txt
-[M] Main（用 claude --continue 恢复的 Claude Main，Session $MAIN）。逐条粘贴，一次一条。对话框: 无。Main 把原始结果存到 $R/M-<字母>.txt。
+[M] Main（用 claude --continue 恢复的 Claude Main，Session $MAIN）。逐条粘贴，一次一条。Main 把原始结果存到 $R/M-<字母>.txt。
+对话框: 预计无。scanhome 与 00 已表明：USER 的 ~/.claude 允许规则与 .claude/settings.local.json 都没有 mcp__ 规则，所以改名不会丢失允许规则，第一次以新名调用 mcp__graphtraj__subagents 的表现与以前调用 agents 相同。若仍出现 Claude Code 的工具权限框（mcp__graphtraj__subagents 或 tasks）: 选 'Yes'（只本次，不选 always），并告诉 Main（与预测不符）。
+恢复的历史里仍有旧名 mcp__graphtraj__agents（590 4.1）：若 Main 第一次调用用了旧名并被拒（Unknown tool / 没有这个工具），记录下来（原文存 $R/M-old.txt），不算失败；然后用新名。
 
-[a 重启后通知正常、不重复；工具在] 恢复后第一句（粘贴）:
-Production was just upgraded by Task 579 (GraphTraj $C8 with graftling $GVERSION) and this Session was restarted. Before anything else, using no tools: (1) list every GraphTraj/Graftling notice delivered to you since this resume (alias, event, execution if shown in the title, first line), and for each say whether you had already seen that same notice before this resume; (2) state whether your tool list has mcp__graphtraj__agents and mcp__graphtraj__tasks (list every tool whose name starts with mcp__graphtraj__ or mcp__agents__ exactly).
-  成功: (1) 没有重启前已见过的通知再出现（Main 退出期间结束的其它 Task（$(active_tasks)）成员的通知可能到达一次，不能重复）；(2) 有 mcp__graphtraj__agents 与 mcp__graphtraj__tasks，没有 mcp__agents__*。
+[a 重启后通知正常、不重复；工具列表只有新名] 恢复后第一句（粘贴）:
+Production was just upgraded by Task $TASK_ID (GraphTraj $C8 with graftling $GVERSION, which renames the agents tool to subagents with no alias) and this Session was restarted. Before anything else, using no tools: (1) list every GraphTraj/Graftling notice delivered to you since this resume (alias, event, execution if shown in the title, first line), and for each say whether you had already seen that same notice before this resume; (2) list exactly every tool in your current tool list whose name starts with mcp__graphtraj__, mcp__graftling__ or mcp__agents__, and say whether mcp__graphtraj__agents is among them.
+  成功: (1) 没有重启前已见过的通知再出现（Main 退出期间结束的其它 Task（$(active_tasks)）成员的通知可能到达一次，不能重复）；(2) 只有 mcp__graphtraj__subagents 与 mcp__graphtraj__tasks；没有 mcp__graphtraj__agents、mcp__agents__*、mcp__graftling__*。
 
-[b 工具可用] 粘贴:
-Using only mcp__graphtraj__tasks: discover. Print the raw list of feature names, and nothing else. Then using only mcp__graphtraj__agents: status with no agent. Print the raw result. Then using only mcp__graphtraj__tasks: execute task_graph with arguments {"view":"current"} and print only the number of Tasks and whether any error was returned; then execute task_graph with arguments {"view":"current","details":["$TASK_ID"]} and print only Task $TASK_ID's current definition path.
-  成功: discover 有功能列表；status 有结果；task_graph 无错误（560 修正：view 只接受 current 或 full，不用 summary），Task $TASK_ID 的当前定义路径为 definitions/<时间>.md。
+[b 新名的真实调用与 tasks 调用] 粘贴:
+Using only mcp__graphtraj__subagents: execute status with arguments {} (no agent). Print the raw result and whether it was an error. Then using only mcp__graphtraj__tasks: execute task_graph with arguments {"view":"current","details":["$TASK_ID"]} and print only whether an error was returned and Task $TASK_ID's current definition path.
+  成功: subagents status 返回结果且不是错误；task_graph 无错误，Task $TASK_ID 的当前定义路径为 definitions/<时间>.md。可选（USER 在 Main 里输入 /agents-context）: 显示 subagents 与 tasks 已注册，没有 agents。
 
-[d 575：Main 用 arguments_file 调用 tasks MCP] 先确认 Ma 已运行（$ARGS575 存在），然后粘贴:
-$(cat $R/Ma-call.txt 2>/dev/null || print "（还没有 $R/Ma-call.txt：先运行 zsh $THIS Ma）")
-
-[c] Main 的 Bash（无对话框）: zsh $THIS Mp   然后   zsh $THIS Mps   然后   zsh $THIS inbox（每个文件 duplicate ids: 0）
+[c] Main 的 Bash（无对话框）: zsh $THIS Mr   然后   zsh $THIS Mp   然后   zsh $THIS Mps   然后   zsh $THIS inbox（每个文件 duplicate ids: 0）
 EOF2
-  next "zsh $THIS Mp" ;;
+  next "zsh $THIS Mr" ;;
 
-Ma) need_main; cv; print "[Ma] Main，claude --continue 之后、M 之前。575：写 arguments 文件 $ARGS575（Main 的项目 $H 内、.graphtraj 之外，Main 的 host 能读），用已安装的 graphtraj 按 Main 的 host 的同一规则读它一次，并打印 M[d] 里 Main 要做的确切调用。对话框: 无。< 5 秒。"
-  { mkdir -p ${ARGS575:h} || exit 1
-    print -r -- '{"view":"current","details":["'$TASK_ID'"]}' > $ARGS575
-    print -r -- "wrote $ARGS575: $(<$ARGS575)"
-    cdef=${${${(M)${(f)"$(cat $STATE/tasks/$TASK/task.yml 2>/dev/null)"}:#current_definition: *}#current_definition: }//[\'\"]/}
-    print -r -- "Task $TASK_ID current definition now (task.yml): ${cdef:-NOT FOUND}"
-    # Same function and trusted directory as Main's host (runtimes/claude/host.py: read_arguments_file(request, <project>)).
-    (cd $H && clean $RT/bin/python -I -c 'import json, sys
-from pathlib import Path
-from graphtraj.interfaces.gateway import read_arguments_file
-out = read_arguments_file({"action": "execute", "feature": "task_graph", "arguments_file": sys.argv[1]}, Path(sys.argv[2]))
-ok = out.get("arguments") == {"view": "current", "details": [sys.argv[3]]} and "arguments_file" not in out
-print("installed read_arguments_file reads it as Main'"'"'s host will:", json.dumps(out.get("arguments")))
-print("CHECK 593 575 arguments file readable by the installed graphtraj (project root, not .graphtraj):", "PASS" if ok else "FAIL")
-sys.exit(0 if ok else 1)' $ARGS575 $H $TASK_ID); arc=$?
-    print -r -- "Using only mcp__graphtraj__tasks, make exactly one call with this input and no \"arguments\" field: {\"action\":\"execute\",\"feature\":\"task_graph\",\"arguments_file\":\"$ARGS575\"}. Print whether it returned an error (with the error code if any) and Task $TASK_ID's current definition path from its details." > $R/Ma-call.txt
-    print "\nM[d] 的确切调用（Main 粘贴；结果原文存为 $R/M-d.txt）:"; cat $R/Ma-call.txt
-    print -r -- "成功的可观察结果: 调用不返回错误（没有 authority-denied / VALIDATION），并且结果给出 Task $TASK_ID 的当前定义路径 ${cdef:-definitions/<时间>.md}。这个 details 只在文件里，调用本身不带 arguments，所以该路径证明 Main 的 host 读了 arguments_file（575）。"
-  } 2>&1 | tee $R/Ma.txt; (( ${pipestatus[1]} == 0 )) || exit 1
-  grep -q '^CHECK 593 575 .*: PASS' $R/Ma.txt || { print "Ma: 已安装的 graphtraj 读不了 $ARGS575（见上），交 Main/Leader。"; exit 1; }
-  next "zsh $THIS M   （M[d] 就是上面的调用）" ;;
+Mr) need_main; cv; print "[Mr] Main，M[b] 之后。只读：Main 自己的 Session 存档（$PROJECTS/$MAIN.jsonl，以及同目录里更新的 transcript）中、I 安装结束之后的 MCP 调用：必须有 mcp__graphtraj__subagents 与 mcp__graphtraj__tasks 的 tool_use，且结果不是错误；旧名调用只记录（590 4.1：恢复的历史仍有旧名），不判失败。再列出生产的工具清单 = I 对 .mcp.json 同一命令的 tools/list 加上重新生成的 hook 的 TOOLS。对话框: 无。< 10 秒。"
+  { split=$(cat $R/I-install-end.epoch 2>/dev/null)
+    [[ -n $split ]] || { print "STOP: no $R/I-install-end.epoch (I has not finished)"; exit 1; }
+    files=($PROJECTS/$MAIN.jsonl(N) ${(f)"$(find $PROJECTS -maxdepth 1 -name '*.jsonl' -newer $R/I-install-end.epoch 2>/dev/null)"})
+    print -r -- "Main transcripts read (resumed Session and any newer one): ${(u)files}"
+    $CONDA -I $SD/rec593.py calls "Main $MAIN" --after $split --need subagents,tasks --old-info ${(u)files}; mrc=$?
+    say "production tool list after I (from I's raw output and the installed hook copy)"
+    grep -hE "^production-graphtraj-mcp server:|CHECK 593 production-graphtraj-mcp" $R/I.txt | sort -u
+    grep -nE '^const (TOOL|TOOLS|SERVER) ' $PDIR/hooks/host_context.mjs | sed 's/^/installed hook copy: /'
+    exit $mrc
+  } 2>&1 | tee $R/Mr.txt; rc=${pipestatus[1]}
+  summary Mr "$(grep -E '^(Main transcripts|CHECK|INFO|installed hook|production-graphtraj)' $R/Mr.txt)"
+  print "成功: 'CHECK 593 [Main …] mcp__graphtraj__subagents called and answered without error or refusal: PASS' 与 '… mcp__graphtraj__tasks …: PASS'；INFO 行只记录旧名调用；tools/list 是 subagents、tasks；hook copy 的 TOOL = \"subagents\"、TOOLS = [TOOL, \"tasks\"]。NOT OBSERVED: Main 还没做 M[b]。"
+  next "zsh $THIS Mp" ; exit $rc ;;
 
 Mp) cv; print "[Mp] Main，M 之后。Harness 里一次有时限（120 秒）的 claude -p 单行探测，看 init 记录的 MCP 服务器与工具名。对话框: 无。不调用工具。< 2 分钟。"
-  print -r -- 'Reply with exactly one line: PROBE-579-OK. Use no tools.' > $R/Mp-prompt.txt
+  print -r -- 'Reply with exactly one line: PROBE-593-OK. Use no tools.' > $R/Mp-prompt.txt
   (cd $H && clean /usr/bin/perl -e 'alarm shift; exec @ARGV' 120 $(claude_bin) -p --model $MODEL --output-format stream-json --verbose \
       < $R/Mp-prompt.txt > $R/Mp-stream.jsonl 2> $R/Mp.err)
   print "claude -p rc=$? (142 = 120 s timeout) | stderr lines naming untrusted/trust: $(grep -ciE 'untrust|trust' $R/Mp.err)" | tee $R/Mp.txt
-  $CONDA -I $SD/rec515.py init $R/Mp-stream.jsonl 2>&1 | tee -a $R/Mp.txt; rc=${pipestatus[1]}
+  $CONDA -I $SD/rec593.py init $R/Mp-stream.jsonl 2>&1 | tee -a $R/Mp.txt; rc=${pipestatus[1]}
   grep -ciE 'untrust' $R/Mp.err > /dev/null && { print "CHECK 515 Mp stderr has no untrusted-plugin warning: FAIL" | tee -a $R/Mp.txt; rc=1; }
   summary Mp "$(grep -E '^(claude|CHECK|init)' $R/Mp.txt)"
-  print "成功: 四行 'CHECK 515 init …: PASS'（mcp server graphtraj only；两个工具名；没有 mcp__agents__*；没有 untrusted-plugin 警告）。FAIL 交 Main。"
+  print "成功: 四行 'CHECK 593 init …: PASS'（mcp server graphtraj only；mcp__graphtraj__subagents 与 tasks；没有旧名 mcp__graphtraj__agents、mcp__agents__*；没有 untrusted-plugin 警告）。FAIL 交 Main。"
   next "zsh $THIS Mps" ; exit $rc ;;
 
 Mps) need_main; print "[Mps] Main. 运行中的 host 与它的父 claude；重启前后的控制记录。对话框: 无。只读。"; cv | tee -a $R/Mps.txt
@@ -1569,9 +1595,9 @@ Nw) cv; print "[Nw] Main. 在 N 之前启动：后台只读采样 N 派发的成
   next "zsh $THIS N" ;;
 
 N) print "[N] Main. $(cv)"; print -r -- $CHILD > $R/N-child-name; cat <<EOF2 | tee $R/N-prompts.txt
-[N] Main. 一次真实派发（576：成员创建不带 tools 的 Claude 子级 $CHILD，它必须用 Bash 运行命令并回复 DONE-579）：成员创建 agents 子级 $CHILD，等待、读取、清退（通知一次；Worker 在创建前后 30 秒的 CPU 只报告）。先确认 Nw 已启动（tail -n 2 $R/Nw468.txt 有 '468 sampler'），再在 Claude Main 里粘贴这一条。对话框: 无。约 3-5 分钟。
-Using only mcp__graphtraj__tasks: execute swarm with arguments {"tasks":[{"task_id":"$TASK_ID","role":"opus_coding_team.advisor","instruction":"This is a production check. Do NOT call submit_result or submit_report. (a) Using the agents tool (mcp__graphtraj__agents), create ONE claude child named $CHILD with configuration opus_coding_team.advisor, WITHOUT a tools argument (do not pass tools or disallowed_tools: this checks the default tools), and this message: <<This is a scripted probe. Call Bash once with exactly: echo $CHILD-tool && sleep 20 ; then reply with exactly: DONE-579>>. Quote the raw create result (agent id, session, execution id). If the child asks you to approve a Bash command, approve exactly that command. (b) Call agents wait on that agent id with timeout_seconds 300, repeating until the execution has ended; quote the final wait result's last_message. Then call agents status with arguments {agent: <agent id>} and quote its configuration, model and last_message. (c) Retire the child by its agent id and quote the raw result. End your turn."}]}. Print the raw result and end your turn. Do not wait.
-  Main 把 swarm 原始结果存为 $R/N.txt（必须含 "agent"）；Main 收到的这个成员的每一条通知原文（每条一行，通知头与正文同一行，以 '[Graftling notice from <成员 alias> · … · execution <id>]' 开头；说明行以 '# ' 开头）存为 $R/N-main-notice.txt；成员最终回复原文存为 $R/N-reply.txt。
+[N] Main. 一次真实派发（593：成员通过新名 subagents 工具创建不带 tools 的 Claude 子级 $CHILD，它必须用 Bash 运行命令并回复 DONE-593）：成员创建子级 $CHILD，等待、读取、清退（通知一次；Worker 在创建前后 30 秒的 CPU 只报告）。先确认 593 的 Leader 与 Engineer 已结束回合、Nw 已启动（tail -n 2 $R/Nw468.txt 有 '468 sampler'），再在 Claude Main 里粘贴这一条。对话框: 预计无（Main 以前的 swarm 调用不出框；若出现工具权限框: 'Yes' 只本次，并告诉 Main）。约 3-5 分钟。
+Using only mcp__graphtraj__tasks: execute swarm with arguments {"tasks":[{"task_id":"$TASK_ID","role":"opus_coding_team.advisor","instruction":"This is a production check. Do NOT call submit_result or submit_report. (a) Using the subagents tool (mcp__graphtraj__subagents; there is no tool named agents any more), create ONE claude child named $CHILD with configuration opus_coding_team.advisor, WITHOUT a tools argument (do not pass tools or disallowed_tools: this checks the default tools), and this message: <<This is a scripted probe. Call Bash once with exactly: echo $CHILD-tool && sleep 20 ; then reply with exactly: DONE-593>>. Quote the raw create result (agent id, session, execution id). If the child asks you to approve a Bash command, approve exactly that command. (b) Call subagents wait on that agent id with timeout_seconds 300, repeating until the execution has ended; quote the final wait result's last_message. Then call subagents status with arguments {agent: <agent id>} and quote its configuration, model and last_message. (c) Retire the child by its agent id and quote the raw result. End your turn."}]}. Print the raw result and end your turn. Do not wait.
+  Main 把 swarm 原始结果存为 $R/N.txt（必须含 "agent"）；Main 收到的这个成员的每一条通知原文（每条一行，通知头与正文同一行，以 '[GraphTraj notice from <成员 alias> · … · execution <id>]' 或 '[Graftling notice from …]' 开头；说明行以 '# ' 开头）存为 $R/N-main-notice.txt；成员最终回复原文存为 $R/N-reply.txt。
   成员结束（Main 收到 completed 通知）后、清退成员之前，Main 的 Bash（无对话框）: zsh $THIS Nr，然后 zsh $THIS Nt。
 EOF2
   next "zsh $THIS Nr    （然后 zsh $THIS Nt）" ;;
@@ -1594,18 +1620,114 @@ Nr) print "[Nr] Main. 子级与成员记录、通知一次、成员的工具调�
   if [[ -n $MEMBER ]]; then
     mf=(${(f)"$(rs_session_files $MEMBER)"})
     print "member $MEMBER record files: ${#mf}" | tee -a $R/Nr.txt
-    $CONDA -I $SD/rec515.py calls "member $MEMBER" --need agents ${(u)mf} 2>&1 | tee -a $R/Nr.txt; (( ${pipestatus[1]} == 0 )) || rc=1
-  else print "CHECK 515 [member] mcp__graphtraj__agents called and answered without error or refusal: NOT OBSERVED (member alias not found)" | tee -a $R/Nr.txt; rc=1; fi
+    $CONDA -I $SD/rec593.py calls "member $MEMBER" --need subagents ${(u)mf} 2>&1 | tee -a $R/Nr.txt; (( ${pipestatus[1]} == 0 )) || rc=1
+  else print "CHECK 593 [member] mcp__graphtraj__subagents called and answered without error or refusal: NOT OBSERVED (member alias not found)" | tee -a $R/Nr.txt; rc=1; fi
   SWARM_AGENT=$([[ -r $R/N.txt ]] && grep -oE '"agent" *: *"[^"]+"' $R/N.txt | head -1 | sed -E 's/.*: *"([^"]+)"/\1/')
   print "CHECK swarm result has agent: $([[ -n $SWARM_AGENT ]] && print "PASS ($SWARM_AGENT)" || print "FAIL (no \"agent\" in $R/N.txt, or the file is missing)")" | tee -a $R/Nr.txt
   grep -q '^CHECK.*: FAIL' $R/Nr.txt && rc=1
   summary Nr "$(grep -E '^claude:|^child|CHECK|REPORT|BLOCKED|^member|member end|archive|stored selection|Worker pid' $R/Nr.txt)"
-  print "成功: 每一行 CHECK 都是 PASS（455 两行、一个子级 execution、452 子级 completed 与成员结束、通知 delivered、477 没有推送输入、'CHECK 593 Main got exactly one completed notice'、成员 mcp__graphtraj__agents 调用无错误、swarm 有 agent）。"
+  print "成功: 每一行 CHECK 都是 PASS（455 两行、一个子级 execution、452 子级 completed 与成员结束、通知 delivered、477 没有推送输入、'CHECK 593 Main got exactly one completed notice'、成员 mcp__graphtraj__subagents 调用无错误、成员没有旧名调用、swarm 有 agent）。"
   print "  REPORT 行（Worker CPU 两行 'REPORT 525 468 Worker CPU 30 s before/after child creation' 与 'REPORT 532 Worker CPU comparison'（对照 528 的 0.559/0.107 与 531 的 0.488 -> 0.116）；'REPORT 532 526 .gitignore …' 只是信息）是报告，不阻塞；NOT OBSERVED 时把 $R/Nw468.txt 交 Main。PENDING: 子级还在运行或通知尚未保存，稍后重跑 Nr。CHECK BY HAND 用下面的 session_read。"
   [[ -n $SID ]] && print "\n复核（Main 粘贴）:\nUsing only the tasks tool: session_read with {\"session_id\":\"$SID\",\"limit\":400} (page with after until has_more is false). Count, per $CHILD execution id printed by Nr, the user/message events that deliver a parent input with source graphtraj naming it; print the counts by event type and each such input's execution field only."
-  if [[ -n $SWARM_AGENT ]]; then print "\n清退成员（Main 粘贴，Nr 与 Nt 之后）:\nUsing only the agents tool: retire with {\"agent\":\"$SWARM_AGENT\"} (the agent value of the N swarm result, not the alias), and print the raw result."
+  if [[ -n $SWARM_AGENT ]]; then print "\n清退成员（Main 粘贴，Nr、X 与 Nt 之后）:\nUsing only mcp__graphtraj__subagents: retire with {\"agent\":\"$SWARM_AGENT\"} (the agent value of the N swarm result, not the alias), and print the raw result."
   else print "\n清退成员: 先把 N 的 swarm 原始结果存到 $R/N.txt 再重跑 Nr。"; fi
-  next "zsh $THIS Nt    （清退成员后再跑一次 Nt），然后 zsh $THIS done"; exit $rc ;;
+  next "zsh $THIS X    （然后 zsh $THIS Nt；清退成员后再跑一次 Nt，然后 zsh $THIS scan 与 zsh $THIS C5）"; exit $rc ;;
+
+C5) cv; print "[C5] Main，gh 之后（$GTAG 已在 GitHub）。结果 5（单一安装源 + conda）：在隔离目录 $UVT 用 uv tool install 从 GitHub 的 $GTAG 安装一次 graftling（UV_TOOL_DIR、UV_TOOL_BIN_DIR、UV_CACHE_DIR、UV_PYTHON_INSTALL_DIR 都在 $UVT 下，uv 只用自己管理的 Python；不碰 ~/.local 与用户的 uv 工具目录），再用该安装为 $UVT/project 生成 Claude Code 的项目文件（configuration --write，只写这个项目）。之前先对 ~/.local、用户的 uv 工具目录、~/.pi、~/.dsh、~/.codex（按名字与 sha256，不含 logs_*.sqlite* 与 models_cache.json：USER 正在运行的 Codex 会写它们）与 conda（conda-meta 与 dist-info 名单）做快照。对话框: 无。需要网络（github.com、PyPI、uv 的 Python 下载）。约 2-3 分钟。"
+  { [[ -e $UVT/tools ]] && { print "STOP: $UVT/tools exists (an earlier C5). Main moves $UVT aside first, or runs C5r on it."; exit 1; }
+    mkdir -p $UVT/project || exit 1
+    say "before: USER directories that must stay unchanged (read only)"
+    $CONDA -I $SD/homesnap593.py snap $R/C5-home-before.json local=$HOME/.local uvtools=$(clean uv tool dir 2>/dev/null || print $HOME/.local/share/uv/tools) pi=$HOME/.pi dsh=$HOME/.dsh codex=$HOME/.codex conda=${CONDABIN:h:h} || exit 1
+    say "uv tool install from GitHub $GTAG into $UVT only"
+    UVENV=(UV_TOOL_DIR=$UVT/tools UV_TOOL_BIN_DIR=$UVT/bin UV_CACHE_DIR=$UVT/cache UV_PYTHON_INSTALL_DIR=$UVT/python UV_PYTHON_PREFERENCE=only-managed)
+    print -r -- "uv: $(command -v uv) | $(uv --version 2>&1) | environment: ${UVENV[*]}"
+    clean env $UVENV uv tool install "git+https://github.com/LUOXIAO92/graftling.git@$GTAG" 2>&1 | tail -6; urc=${pipestatus[1]}
+    print "uv tool install rc=$urc"; (( urc == 0 )) || exit 1
+    UVPY=$UVT/tools/graftling/bin/python
+    print -r -- "uv tool python: $UVPY -> ${UVPY:A} | version: $($UVPY -I -c 'import graftling, sys; print(graftling.__version__, sys.prefix)')"
+    print -r -- "uv tool bin: $(print -l $UVT/bin/*(N:t) | tr '\n' ' ') | subagents-mcp shebang: $(head -1 $UVT/bin/subagents-mcp)"
+    [[ ${UVPY:A} == ${UVT:A}/* && $($UVPY -I -c 'import graftling; print(graftling.__version__)') == $GVERSION ]] \
+      && print "CHECK 593 C5 one install from GitHub $GTAG under $UVT (uv-managed Python, not conda's): PASS" \
+      || { print "CHECK 593 C5 one install from GitHub $GTAG under $UVT (uv-managed Python, not conda's): FAIL"; exit 1; }
+    say "Claude Code project $UVT/project: configuration --write from the uv installation (writes only that project)"
+    [[ -d $UVT/project/.git ]] || git -C $UVT/project init -q --initial-branch=main
+    (cd $UVT/project && clean $UVPY -m graftling.claude.host configuration --project $UVT/project --claude $(claude_bin) --write) 2>&1 | tail -8 || exit 1
+    print -r -- ".mcp.json graftling command: $($CONDA -I -c 'import json,sys; s=json.load(open(sys.argv[1]))["mcpServers"]["graftling"]; print(s.get("command"), *(s.get("args") or []))' $UVT/project/.mcp.json 2>&1)"
+  } 2>&1 | tee $R/C5.txt; rc=${pipestatus[1]}
+  (( rc == 0 )) || { print "\nC5 STOP（见上）。把 $R/C5.txt 交给 Main。"; exit 1; }
+  summary C5 "$(grep -E '^(uv|uv tool|CHECK|\.mcp\.json|snap)' $R/C5.txt)"
+  print "成功: 'uv tool install rc=0'；'CHECK 593 C5 one install from GitHub $GTAG under $UVT (uv-managed Python, not conda's): PASS'；.mcp.json 的 graftling command 是 $UVT/tools/graftling/bin/python。"
+  next "USER（仅一次）: zsh $THIS C5u    （之后 Main: zsh $THIS C5r）"; exit $rc ;;
+
+C5u) print "[C5u] USER（一次；Claude Code 只在已信任的文件夹加载项目插件，Main 做不了）。$(cv)"
+  print "在普通 Terminal 运行:\n  cd $UVT/project && claude"
+  print "对话框（一个）: 'Do you trust the files in this folder?'（写着 $UVT/project）选 'Yes, proceed'。若再问项目的 MCP server 'graftling' 或插件/hooks，为本项目批准。然后输入 /exit 回车，不要发消息。其它任何框按 Esc 并告诉 Main 标题。"
+  next "Main: zsh $THIS C5r" ;;
+
+C5r) cv; print "[C5r] Main，C5 与 C5u 之后。在 USER 已有的 conda 环境（${ADOPT593_CONDA_ENV:-base}）激活的状态下（conda shell hook + conda activate；只读，不 install/create/config）：命令行 $UVT/bin/subagents 可用；真实 claude -p（Claude 登录已由 USER 预先同意；无 provider 凭据）在 $UVT/project 通过 mcp__graftling__subagents 创建一个 Claude 子级并等到它结束；后台 ps 采样记录 graftling 进程的可执行文件，必须在 $UVT 下、不在 conda 下；之后对比 USER 目录与 conda。对话框: 无。约 3 分钟。"
+  { CENV=${ADOPT593_CONDA_ENV:-base}; CROOT=${CONDABIN:h:h}
+    [[ -x $UVT/tools/graftling/bin/python ]] || { print "STOP: no uv installation under $UVT: run C5 first"; exit 1; }
+    : > $R/C5r-ps.txt
+    ( for i in {1..150}; do ps -axww -o pid=,ppid=,command= 2>/dev/null | grep -E 'graftling|subagents' | grep -vE 'grep -E|C5r' >> $R/C5r-ps.txt; [[ -e $R/C5r.done ]] && break; sleep 2; done ) &!
+    rm -f $R/C5r.done
+    print -r -- "Reply with exactly the agent id after these calls. Using only mcp__graftling__subagents: execute create with arguments {\"runtime\":\"claude\",\"name\":\"c593\",\"instruction\":\"Reply with exactly: C5-CHILD-OK\"}; then execute wait with {\"agent\": <the agent id>, \"timeout_seconds\": 300}, repeating until the execution has ended; print the final last_message; then retire the child. Print one line DONE and stop." > $R/C5r-prompt.txt
+    env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} LANG=${LANG:-en_US.UTF-8} \
+      CONDABIN=$CONDABIN CENV=$CENV UVT=$UVT MODEL=$MODEL CLAUDE=$(claude_bin) PROMPT=$R/C5r-prompt.txt OUT=$R/C5r-stream.jsonl /bin/zsh -f -c '
+        eval "$($CONDABIN shell.zsh hook 2>/dev/null)" && conda activate $CENV || { print "STOP: conda activate $CENV failed"; exit 1; }
+        print -r -- "conda active: CONDA_PREFIX=$CONDA_PREFIX | python on PATH: $(command -v python) | python3: $(command -v python3)"
+        print -r -- "subagents CLI: $($UVT/bin/subagents --help 2>&1 | head -1)"
+        print -r -- "subagents CLI from a plain shell (expected authority-denied, it only forwards to a host): $($UVT/bin/subagents "{\"action\":\"discover\"}" 2>&1 | head -c 200)"
+        cd $UVT/project && /usr/bin/perl -e "alarm shift; exec @ARGV" 600 $CLAUDE -p --model $MODEL --output-format stream-json --verbose \
+          --allowedTools mcp__graftling__subagents < $PROMPT > $OUT 2> $OUT.err
+        print "claude -p rc=$? (142 = 600 s timeout)"'
+    touch $R/C5r.done; sleep 3
+    tree stream $R/C5r-stream.jsonl mcp__graftling__subagents
+    grep -q 'C5-CHILD-OK' $R/C5r-stream.jsonl && print "CHECK 593 C5 the child created through mcp__graftling__subagents ended and replied C5-CHILD-OK: PASS" \
+      || print "CHECK 593 C5 the child created through mcp__graftling__subagents ended and replied C5-CHILD-OK: FAIL"
+    say "graftling processes seen while it ran (executables; the uv tool's Python must serve them)"
+    sort -u $R/C5r-ps.txt | cut -c1-220 | head -12
+    srv=$(sort -u $R/C5r-ps.txt | grep -c -- "${UVT:A}/tools/graftling/bin/python\|$UVT/tools/graftling/bin/python"); onconda=$(sort -u $R/C5r-ps.txt | grep -c -- "$CROOT/")
+    (( srv > 0 && onconda == 0 )) && print "CHECK 593 C5 graftling ran on the uv tool's Python ($srv process lines), none on conda's: PASS" \
+      || print "CHECK 593 C5 graftling ran on the uv tool's Python ($srv process lines), none on conda's: FAIL ($onconda lines under $CROOT)"
+    say "after: USER directories and conda unchanged (no install into conda; codex compared by name and sha256 without logs_*.sqlite* and models_cache.json)"
+    $CONDA -I $SD/homesnap593.py snap $R/C5-home-after.json local=$HOME/.local uvtools=$(clean uv tool dir 2>/dev/null || print $HOME/.local/share/uv/tools) pi=$HOME/.pi dsh=$HOME/.dsh codex=$HOME/.codex conda=$CROOT > /dev/null
+    $CONDA -I $SD/homesnap593.py compare $R/C5-home-before.json $R/C5-home-after.json && print "CHECK 593 C5 nothing installed into conda and USER directories unchanged: PASS" \
+      || print "CHECK 593 C5 nothing installed into conda and USER directories unchanged: FAIL (see REPORT lines; a per-environment install would show under conda)"
+  } 2>&1 | tee $R/C5r.txt; rc=${pipestatus[1]}
+  (( rc == 0 )) || { print "\nC5r STOP（见上）。没有安装任何东西，conda 未被改动。把 $R/C5r.txt 交给 Main。"; exit 1; }
+  grep -q '^CHECK 593 C5 .*: FAIL' $R/C5r.txt && rc=1
+  summary C5r "$(grep -E '^(conda active|subagents CLI|claude -p rc|PASS|FAIL|CHECK|REPORT)' $R/C5r.txt)"
+  print "成功: 'conda active: …'（python 在 conda 下）；'subagents CLI: …' 有 usage 行；四行 'CHECK 593 C5 …: PASS'（PASS mcp__graftling__subagents；子级回复；graftling 进程在 uv 工具的 Python 上；conda 与 USER 目录不变）。若发现必须在 conda 环境里另装才能工作: 本步不安装，如实报告并 STOP，交 Main。"
+  next "zsh $THIS done" ; exit $rc ;;
+
+X) cv; print "[X] Main，Nr 之后。审查豁免在新名下（真实）。1) 只读列出生产 graftling 配置里的 reviewer 与指向 reviewer 的 connection（只列名字）；2) 在隔离项目 $VPROJECT（不是生产）里用已安装的 $RT 重写其入口，并在它自己的 .graphtraj/swarm/config.yml 加一个本地命令 reviewer（x593.py reviewer：只记录工具名并允许，不需要 provider）与使用它的 connection/preset x593；3) 一次真实的 claude -p（Claude 登录已由 USER 预先同意；干净环境，无 provider 凭据）以 mcp__graphtraj__subagents 创建带审查的 Claude 子级 x$TASK_ID，子级先调用自己的 subagents 工具（status），再用 Bash 运行 echo x$TASK_ID-tool，回复 DONE-X$TASK_ID；4) 只读判定。为什么在隔离项目: 生产若没有声明 reviewer，生产的成员与子级不经审查，豁免无从观察；这里是让审查真正开启的最小真实检查。对话框: 无（claude -p，--allowedTools 只含 mcp__graphtraj__subagents 与 tasks）。约 3 分钟。"
+  : > $R/X.txt
+  { say "production reviewers (names only; read only)"
+    $CONDA -I $SD/x593.py inventory $H/.graphtraj/swarm/config.yml $HOME/.graphtraj/config.yml
+    print "(production review is on only for a connection that names a reviewer; when none is listed, production members and children run without review, so X checks the exemption in the isolated project)"
+    say "isolated project $VPROJECT with the INSTALLED $RT (configuration --write there; never production)"
+    vproject_init $RT/bin/graphtraj || exit 1
+    (cd $VPROJECT && clean $RT/bin/python -m graphtraj.runtimes.claude.host configuration --project $VPROJECT --claude $(claude_bin) --write) || exit 1
+    vsettings
+    XC=$VPROJECT/.graphtraj/swarm/config.yml XLOG=$R/X-reviewer.jsonl; : > $XLOG
+    if ! grep -q '^  x593-review:' $XC 2>/dev/null; then
+      cp -p $XC $R/X-config-before.yml 2>/dev/null
+      print -l -- "connections:" "  x593c:" "    runtime: claude" "    review: x593-review" "presets:" "  x593:" "    connection: x593c" \
+        "reviewers:" "  x593-review:" "    command: [$CONDA, -I, $SD/x593.py, reviewer, $XLOG]" >> $XC
+    fi
+    print -r -- "isolated config.yml sections: $(grep -E '^(connections|presets|reviewers):' $XC | tr '\n' ' ')"
+    say "real claude -p in $VPROJECT: create the reviewed child x$TASK_ID with preset x593 through mcp__graphtraj__subagents"; cv
+    print -r -- "Using only mcp__graphtraj__subagents: (1) execute create with arguments {\"runtime\":\"claude\",\"preset\":\"x593\",\"name\":\"x$TASK_ID\",\"instruction\":\"Scripted probe. First call your own subagents tool (its name ends with __subagents) with {\\\"action\\\":\\\"execute\\\",\\\"feature\\\":\\\"status\\\",\\\"arguments\\\":{}}. Then call Bash once with exactly: echo x$TASK_ID-tool . Then reply with exactly: DONE-X$TASK_ID\"}. (2) execute wait with {\"agent\": <the agent id>, \"timeout_seconds\": 300}, repeating until the execution has ended; if the child asks you to approve a Bash command, reply to approve exactly that command. (3) Print the final last_message, then retire the child. Print one line DONE and stop." > $R/X-prompt.txt
+    (cd $VPROJECT && clean /usr/bin/perl -e 'alarm shift; exec @ARGV' 600 $(claude_bin) -p --model $MODEL --output-format stream-json --verbose \
+        --mcp-config $VPROJECT/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__subagents,mcp__graphtraj__tasks < $R/X-prompt.txt > $R/X-stream.jsonl 2> $R/X.err)
+    print "claude -p rc=$? (142 = 600 s timeout)"
+    tree stream $R/X-stream.jsonl mcp__graphtraj__subagents
+    say "judge (read only): reviewer log, review.jsonl, the child's archive and record"
+    $CONDA -I $SD/x593.py judge $VPROJECT/.graphtraj/swarm $XLOG x$TASK_ID
+  } 2>&1 | tee -a $R/X.txt; rc=${pipestatus[1]}
+  summary X "$(grep -E '^(/|child|reviewer log|review.jsonl|archived|CHECK|claude -p rc|PASS|FAIL)' $R/X.txt)"
+  print "成功: 五行 'CHECK 593 X …: PASS'（reviewer 收到 create 的 subagents/connectivity-check 与子级的 Bash；没有任何 mcp__*__subagents 调用进入 reviewer 或 review.jsonl；子级的 subagents 调用有非错误结果；子级 completed）。FAIL 交 Main/Leader。"
+  next "zsh $THIS Nt" ; exit $rc ;;
 
 Nt) cv; print "[Nt] Main，N 的成员结束之后、清退之前；清退之后再跑一次。490：Task $TASK_ID 的 Session 的预算计时器（只读，从不发信号）。对话框: 无。< 30 秒。"
   { print "at $(date '+%F %T')"
@@ -1618,7 +1740,7 @@ Nt) cv; print "[Nt] Main，N 的成员结束之后、清退之前；清退之后
   print "成功: 'CHECK 490 a timer started by the new version for a Task $TASK_ID Session is listed …: PASS'。FAIL 且成员刚结束: 30 秒后重跑 Nt。清退成员后重跑 Nt: 成员的计时器应变为 absent。"
   next "zsh $THIS done" ; exit $rc ;;
 
-T) cv; print "[T] Main，在 Leader 接受 579（状态变为 awaiting-integration）并集成之后。490：本 Task 的 Session 中由新版启动的计时器全部消失，Task 结束后没有预算通知（只读，从不发信号）。对话框: 无。< 30 秒。"
+T) cv; print "[T] Main，在 Leader 接受 593（状态变为 awaiting-integration）并集成之后。490：本 Task 的 Session 中由新版启动的计时器全部消失，Task 结束后没有预算通知（只读，从不发信号）。对话框: 无。< 30 秒。"
   ST=$STATE/tasks/$TASK
   tstat=$(sed -n 's/^status: //p' $ST/task.yml)
   if [[ ! -s $R/T-end.epoch ]]; then
@@ -1645,28 +1767,30 @@ done) print "[done] Main. 结束状态。对话框: 无。只读。"; cv | tee -
     print -r -- "graftling direct_url: $(cat $S/graftling-$GVERSION.dist-info/direct_url.json 2>/dev/null || print none) | built from: graftling git archive $(<$N/GRAFTLING)"
     # 579: counted with count() (560's `print -l <glob>(N) | wc -l` printed 1 for no match).
     print -r -- "graftling $GOLDVERSION dist-info left: $(count $S/graftling-$GOLDVERSION.dist-info(N)) (expect 0)"
-    print -r -- "Task state now: task.md $(count $STATE/tasks/*/task.md(N)) (expect 0; 579 does not touch it) | Tasks $(count $STATE/tasks/[^.]*(N/))"
+    print -r -- "Task state now: task.md $(count $STATE/tasks/*/task.md(N)) (expect 0; 593 does not touch it) | Tasks $(count $STATE/tasks/[^.]*(N/))"
     (cd ${TMPDIR:-/tmp} && clean $RT/bin/python -I $SD/mcp593.py production-graphtraj-mcp $VPROJECT $RT/bin/graphtraj-mcp); codex_hook_check $RT
     $CONDA -I $SD/markers.py $S present | tail -1
     $RT/bin/python -I $SD/onegraft.py $RT $GVERSION | grep -E '^CHECK|layout:'
     node_resolve $RT
     shasum -a 256 $ENTRIES; tree versions $SESS
     mcp_keys $H/.mcp.json; settings_view $H/.claude/settings.local.json
-    print "GR/Mp/Nr: $(grep -hE '^CHECK 5' $R/GR.txt $R/Mp.txt $R/Nr.txt 2>/dev/null | sed -E 's/^CHECK 5[0-9]+ //; s/:? (PASS|FAIL|PENDING|NOT OBSERVED).*/ \1/' | tr '\n' ';')"
+    print "GR/Mp/Mr/Nr/X/C5r: $(grep -hE '^CHECK 5' $R/GR.txt $R/Mp.txt $R/Mr.txt $R/Nr.txt $R/X.txt $R/C5r.txt 2>/dev/null | sed -E 's/^CHECK 5[0-9]+ //; s/:? (PASS|FAIL|PENDING|NOT OBSERVED).*/ \1/' | tr '\n' ';')"
     grep -hE '^CHECK 593' $R/I.txt 2>/dev/null | sort -u
+    grep -hE '^REPORT 593 old-name scan' $R/scan-before-I.txt $R/scan-after-I.txt 2>/dev/null
+    print -r -- "production bin now: $(print -l $RT/bin/{agents,agents-mcp,subagents,subagents-mcp}(N:t) | tr '\n' ' ')"
     grep -hE '^REPORT (525 468|532)' $R/Nr.txt 2>/dev/null
     vals=("${(@f)$(key_values)}"); hits=0
     for v in $vals; do [[ -n $v ]] && hits=$(( hits + $(grep -rlF -- "$v" $R 2>/dev/null | wc -l) )); done
     print "raw files containing an exported key value: $hits"
     ls -la $R; } 2>&1 | tee -a $R/done.txt
-  summary done "$(grep -E '^PASS|^FAIL|^Version|CHECK|direct_url|dist-info left|Task state now|markers expected|layout:|mcp.json servers|enabledMcpjsonServers|^GR/Mp|^REPORT|archives=|containing an exported key' $R/done.txt)"
-  print "成功: PASS n FAIL 0（两个 wheel）；Version 0.1.0 与 $GVERSION；两个 direct_url 指向 wheels-$C8；'graftling $GOLDVERSION dist-info left: 0'；'Task state now: task.md 0'；markers expected present: PASS (7/7)；'503 layout: PASS' 与两行 node resolves PASS；MCP tools/list 与两行 Codex hooks CHECK 为 PASS；'CHECK 515 .mcp.json …: PASS'；I 的 CHECK 593 都是 PASS；GR/Mp/Nr 的 CHECK 都是 PASS；raw files containing an exported key value: 0。把 $R 的路径交给 Main。$R_HINT"
-  print "\nLeader 接受 579 之后（Main，按集成流程）: 把本 Task 的分支 $(git -C $WT rev-parse --abbrev-ref HEAD)（产品 = $C8）集成进 GraphTraj dev；然后运行 T。"
-  next "（Leader 接受 579 并集成之后，Main）zsh $THIS T" ;;
+  summary done "$(grep -E '^PASS|^FAIL|^Version|CHECK|direct_url|dist-info left|Task state now|markers expected|layout:|mcp.json servers|enabledMcpjsonServers|^GR/Mp|^REPORT|production bin now|archives=|containing an exported key' $R/done.txt)"
+  print "成功: PASS n FAIL 0（两个 wheel）；Version 0.1.0 与 $GVERSION；两个 direct_url 指向 wheels-$C8；'graftling $GOLDVERSION dist-info left: 0'；'Task state now: task.md 0'；markers expected present: PASS (8/8)；'503 layout: PASS' 与两行 node resolves PASS；MCP tools/list（subagents, tasks；agents unknown）与两行 Codex hooks CHECK 为 PASS；'CHECK 515 .mcp.json …: PASS'；I 的 CHECK 593 都是 PASS；GR/Mp/Mr/Nr/X/C5r 的 CHECK 都是 PASS；old-name scan after-I: live configuration hits 0；production bin now: subagents subagents-mcp；raw files containing an exported key value: 0。把 $R 的路径交给 Main。$R_HINT"
+  print "\nLeader 接受 593 之后（Main，按集成流程）: 把本 Task 的分支 $(git -C $WT rev-parse --abbrev-ref HEAD)（产品 = $C8）集成进 GraphTraj dev；然后运行 T。"
+  next "（Leader 接受 593 并集成之后，Main）zsh $THIS T" ;;
 
 R) need_main; print "[R] USER（Main 先问 USER；USER 同意后先在 Main 里 /exit，再在普通 Terminal 运行本步）。回退到安装前：venv 整体（graphtraj ${OLD[1,8]} 与 graftling $GOLDVERSION）、.mcp.json、settings.local.json、插件，都从 $BK 恢复（579 不动 Task 状态）；当前文件移到 $BK/after-install-*。对话框: 无。先在 Main 里 /exit。按回车继续，Ctrl-C 放弃。"; cv; read -r REPLY
   [[ -e $BK/COMPLETE ]] || { print "$BK 没有完整备份（没有 COMPLETE）。安装只在备份完成后开始，所以生产没有被安装改动；告诉 Main。"; exit 1; }
-  wait_idle "还没有回退任何东西。" || exit 1
+  members_idle R 2>&1 | tee -a $R/R.txt; (( ${pipestatus[1]} == 0 )) || { print "\nR STOP: 有成员或 host 在运行（见上）。还没有回退任何东西；它们结束后重跑 R，不要结束任何进程。"; exit 1; }
   if logged $R/R.txt step_R; then
     summary R "$(grep -E '^(SAME|DIFF)|restored|already as|^Version|CHECK|graphtraj package|before R' $R/R.txt)"
     print "成功: venv 与 plugin 都是 SAME differences=0；三个入口文件 OK；pip check 通过；'CHECK 593 graftling restored …: PASS' 与 'CHECK 593 graphtraj restored …: PASS'；'CHECK 593 R: graftling is $GOLDVERSION again: PASS'；Version graphtraj 0.1.0 与 graftling $GOLDVERSION。"

@@ -92,7 +92,7 @@ case "$1" in
 import json, os
 try: servers = sorted((json.load(open(".mcp.json")).get("mcpServers") or {}))
 except Exception: servers = []
-tools = ["Bash"] + [f"mcp__{s}__{t}" for s in servers for t in ("agents", "tasks")]
+tools = ["Bash"] + [f"mcp__{s}__{t}" for s in servers for t in ("subagents", "tasks")]
 print(json.dumps({"type": "system", "subtype": "init", "plugins": [], "mcp_servers": [{"name": s, "status": "connected"} for s in servers], "tools": tools, "plugin_warnings": []}))'
       print -r -- "{\"type\":\"result\",\"is_error\":false,\"result\":\"${tag:-PROBE-593-OK} claude-opus-5-5, logged in\\nFILES: NONE\",\"modelUsage\":{\"claude-opus-5-5\":{}}}" ;;
   *) print "stub claude: $*" ;;
@@ -357,18 +357,25 @@ if [[ ${ADOPT593_PART:-all} == release ]]; then
   exit $FAILED
 fi
 
-head1 "V: plugin hooks/host_context.mjs changed by exactly 577 (predicted); real MCP tools/list and Codex hooks entry; markers both ways"
+head1 "V: plugin regenerated through the product, changed by exactly 591/592 (predicted); real MCP tools/list and Codex hooks entry; markers both ways"
 steps V > $F/V.out 2>&1; VRC=$?; check "V exit 0" [ $VRC -eq 0 ]
-grep -E '^(SAME|CHANGED)|CHECK|^(PASS|FAIL):|^INFO|markers expected|plugin dialog|^graftling v|^graphtraj [0-9a-f]|task graph|host_context.mjs differences' $F/V.out
-check "V: plugin as predicted (plugin.json and hooks.json SAME, host_context.mjs CHANGED by 577 only); dialog expected" sh -c "grep -q 'CHECK 593 candidate plugin as predicted (only hooks/host_context.mjs, by 577): PASS' $F/V.out && grep -q \"CHECK 593 plugin hooks/host_context.mjs differs by exactly 577's --data-root change: PASS\" $F/V.out && [ \$(grep -E '^SAME +(\.claude-plugin/plugin\.json|hooks/hooks\.json)$' $F/V.out | sort -u | wc -l) -eq 2 ] && grep -q '^CHANGED hooks/host_context.mjs' $F/V.out && grep -q 'plugin dialog expected at claude --continue: yes' $RW/V-dialog.txt"
+grep -E '^(SAME|CHANGED)|CHECK|^(PASS|FAIL):|^INFO|markers expected|plugin dialog|^graftling v|^graphtraj [0-9a-f]|task graph|host_context.mjs differences|plugin.json keys|scratch venv bin' $F/V.out
+check "V: plugin as predicted (hooks.json SAME; plugin.json description and host_context.mjs CHANGED by 591/592 only); dialog expected" sh -c "grep -q 'CHECK 593 candidate plugin as predicted (plugin.json description and hooks/host_context.mjs, by 591/592): PASS' $F/V.out && grep -q 'CHECK 593 plugin differs by exactly 591/592 (hook module lines, plugin.json description): PASS' $F/V.out && grep -qE '^SAME +hooks/hooks\.json$' $F/V.out && grep -q '^CHANGED .claude-plugin/plugin.json' $F/V.out && grep -q '^CHANGED hooks/host_context.mjs' $F/V.out && grep -q 'plugin dialog expected at claude --continue: yes' $RW/V-dialog.txt && grep -q 'TOOL \"subagents\", TOOLS \[TOOL, \"tasks\"\]: yes' $F/V.out"
 check "V (579 F3): information lines read as information, no 'FAIL (STOP)' on an INFO line" sh -c "[ \$(grep -c '^INFO .*differs (expected; information, not a check)' $F/V.out) -ge 2 ] && ! grep -q '^INFO .*FAIL' $F/V.out"
-check "V: real graphtraj-mcp lists exactly agents, tasks; Codex hooks entry two CHECKs PASS" sh -c "grep -q 'CHECK 593 scratch-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS' $F/V.out && [ \$(grep '^CHECK 593 Codex hooks entry .*: PASS' $F/V.out | sort -u | wc -l) -eq 2 ]"
-check "V: markers present in the candidate and absent in production (7/7)" sh -c "grep -q 'markers expected present: PASS (7/7)' $F/V.out && grep -q 'markers expected absent: PASS (7/7)' $F/V.out"
+check "V: real graphtraj-mcp lists exactly subagents, tasks and refuses agents; scratch bin subagents only; Codex hooks two CHECKs PASS" sh -c "grep -q 'CHECK 593 scratch-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS' $F/V.out && grep -q 'CHECK 593 scratch-graphtraj-mcp MCP tool agents is unknown (error answer, no alias): PASS' $F/V.out && grep -q 'CHECK 593 scratch venv bin has subagents, subagents-mcp and no agents, agents-mcp: PASS' $F/V.out && [ \$(grep '^CHECK 593 Codex hooks entry .*: PASS' $F/V.out | sort -u | wc -l) -eq 2 ]"
+check "V: markers present in the candidate and absent in production (8/8)" sh -c "grep -q 'markers expected present: PASS (8/8)' $F/V.out && grep -q 'markers expected absent: PASS (8/8)' $F/V.out"
 check "V: read check of production Task state (task graph) by the candidate" grep -q 'task graph of the clone: tasks =' $F/V.out
 check "V wrote nothing to production entry files" shasum -a 256 -c --quiet $F/entries0.sha256
 cp -Rp $RW/../vplug-${NEW[1,8]}/graphtraj-claude-host $F/vneg-plugin && print '// drift' >> $F/vneg-plugin/hooks/host_context.mjs
-$CONDA -I $SD/plugin593.py $FH/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs $F/vneg-plugin/hooks/host_context.mjs > $F/vneg.out 2>&1; VN=$?
-check "V negative: any change beyond 577's lines -> plugin593 FAIL (V would STOP)" sh -c "[ $VN -eq 1 ] && grep -q ': FAIL' $F/vneg.out"
+$CONDA -I $SD/plugin593.py $FH/.claude/skills/graphtraj-claude-host $F/vneg-plugin > $F/vneg.out 2>&1; VN=$?
+check "V negative: any change beyond 591/592's lines -> plugin593 FAIL (V would STOP)" sh -c "[ $VN -eq 1 ] && grep -q ': FAIL' $F/vneg.out"
+cp -Rp $RW/../vplug-${NEW[1,8]}/graphtraj-claude-host $F/vneg-plugin2 && print '{"modules": ["./host_context.mjs"], "matcher": "x"}' > $F/vneg-plugin2/hooks/hooks.json
+$CONDA -I $SD/plugin593.py $FH/.claude/skills/graphtraj-claude-host $F/vneg-plugin2 > $F/vneg2.out 2>&1; VN2=$?
+check "V negative: a changed hooks.json -> plugin593 FAIL" sh -c "[ $VN2 -eq 1 ] && grep -q ': FAIL' $F/vneg2.out"
+$CONDA -I $SD/plugin593.py $FH/.claude/skills/graphtraj-claude-host $FH/.claude/skills/graphtraj-claude-host > $F/vneg3.out 2>&1; VN3=$?
+check "V negative: no difference at all -> plugin593 exit 2 (prediction wrong the other way)" sh -c "[ $VN3 -eq 2 ]"
+$FRT/bin/python -I $SD/mcp593.py old-production $FH $FRT/bin/graphtraj-mcp > $F/mcpneg.out 2>&1; MN=$?
+check "mcp593 negative: production's 0.8.0 graphtraj-mcp (tools agents, tasks) FAILs both CHECKs" sh -c "[ $MN -ne 0 ] && grep -q 'tools/list is exactly subagents, tasks: FAIL' $F/mcpneg.out && grep -q 'tool agents is unknown (error answer, no alias): FAIL' $F/mcpneg.out"
 
 head1 "negatives: 0.8.0 left installed; markers both ways"
 VS=($FB/vvenv-${NEW[1,8]}/lib/python*/site-packages(N))
@@ -394,33 +401,51 @@ cp -p $RW/GR.txt $F/GR-good.txt; print 'CHECK 593 GR (guard + G record): FAIL' >
 print | steps I > $F/I-noGR.out 2>&1; INR=$?
 check "I negative: refuses while GR.txt has no PASS, and creates no backup" sh -c "[ $INR -ne 0 ] && grep -q 'GR 还不是 PASS' $F/I-noGR.out && [ ! -e $FB/backup ]"
 cp -p $F/GR-good.txt $RW/GR.txt
+print -r -- "$HOSTLINE" > $F/ps.txt; print -r -- "78 1 $FRT/bin/python -m graphtraj.execution.runner_worker $FH/.graphtraj/core/runner/sessions/593-x@engineer/launch.yml" >> $F/ps.txt
+steps Mpre > $F/Mpre-busy.out 2>&1; MPB=$?
+check "Mpre negative (593): a member Worker running (e.g. 593's Engineer) -> STOP, nothing signalled" sh -c "[ $MPB -ne 0 ] && grep -q 'member Workers and swarm batches running now: 1' $F/Mpre-busy.out && grep -q 'Mpre STOP' $F/Mpre-busy.out"
 print -r -- "$HOSTLINE" > $F/ps.txt
 steps Mpre > $F/Mpre.out 2>&1
+check "Mpre (593): no member execution active -> PASS with Main's own host running; states Leader and Engineer must have ended their turns" sh -c "grep -q 'members_idle \[Mpre\]: no member execution is active: PASS' $F/Mpre.out && grep -q \"Task 593's Leader and Engineer must have ended their turns\" $F/Mpre.out"
 check "Mpre: the next command says Main asks the USER before I" sh -c "grep -q 'Main 先问 USER' $F/Mpre.out"
 check "Mpre: GR PASS shown; restart reason names the loaded old modules" sh -c "grep -q '^GR: PASS (CHECK 593 GR (guard + G record): PASS)' $F/Mpre.out && grep -q '安装会在它运行时替换这些文件' $F/Mpre.out"
 : > $F/ps.txt
 print | steps I > $F/I.out 2>&1; IRC=$?; check "I exit 0" [ $IRC -eq 0 ]
 grep -E 'Successfully|^PASS|^FAIL|CHECK|direct_url|built from|configuration --write rc|plugin files|SAME-AS-VALIDATED|markers expected|bytes unchanged' $F/I.out
-check "I: both wheels installed together, proddiff PASS, 0.8.0 dist-info gone, markers 8/8" sh -c "grep -q '^Successfully installed graftling-0.9.0 graphtraj-0.1.0' $F/I.out && grep -q '^PASS' $F/I.out && grep -q 'CHECK 593 graftling 0.8.0 dist-info gone: PASS' $F/I.out && grep -q 'markers expected present: PASS (7/7)' $F/I.out"
+check "I: both wheels installed together, proddiff PASS, 0.8.0 dist-info gone, markers 8/8" sh -c "grep -q '^Successfully installed graftling-0.9.0 graphtraj-0.1.0' $F/I.out && grep -q '^PASS' $F/I.out && grep -q 'CHECK 593 graftling 0.8.0 dist-info gone: PASS' $F/I.out && grep -q 'markers expected present: PASS (8/8)' $F/I.out"
 check "I: direct_url of both names wheels-${NEW[1,8]}; built from both archives" sh -c "grep -q 'CHECK 593 direct_url of both names the wheels-${NEW[1,8]} wheels: PASS' $F/I.out && grep -q 'built from: graphtraj git archive $NEW, graftling git archive v0.9.0 $GC' $F/I.out"
-check "I: configuration --write rc=0, plugin changed as V predicted (577 only), .mcp.json PASS, SAME-AS-VALIDATED" sh -c "grep -q 'configuration --write rc=0' $F/I.out && grep -q 'CHECK 593 installed plugin changed as V predicted (only hooks/host_context.mjs): PASS' $F/I.out && grep -q 'CHECK 515 .mcp.json has graphtraj' $F/I.out && grep -q SAME-AS-VALIDATED $F/I.out"
-check "I: real entries of the installed venv: MCP tools/list and Codex hooks PASS" sh -c "grep -q 'CHECK 593 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS' $F/I.out && [ \$(grep '^CHECK 593 Codex hooks entry .*: PASS' $F/I.out | sort -u | wc -l) -eq 2 ]"
+check "I: configuration --write rc=0, plugin changed as V predicted (591/592), .mcp.json PASS, SAME-AS-VALIDATED; hook copy TOOL subagents" sh -c "grep -q 'configuration --write rc=0' $F/I.out && grep -q 'CHECK 593 installed plugin changed as V predicted (plugin.json description and hooks/host_context.mjs): PASS' $F/I.out && grep -q 'CHECK 515 .mcp.json has graphtraj' $F/I.out && grep -q SAME-AS-VALIDATED $F/I.out && grep -q 'installed hook copy: .*const TOOL = \"subagents\";' $F/I.out"
+check "I: real entries of the installed venv: MCP tools/list subagents, tasks; agents unknown; Codex hooks PASS" sh -c "grep -q 'CHECK 593 production-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS' $F/I.out && grep -q 'CHECK 593 production-graphtraj-mcp MCP tool agents is unknown (error answer, no alias): PASS' $F/I.out && [ \$(grep '^CHECK 593 Codex hooks entry .*: PASS' $F/I.out | sort -u | wc -l) -eq 2 ]"
+check "I (591): production bin has subagents and subagents-mcp, no agents or agents-mcp; TOOL_NAME subagents" sh -c "grep -q 'CHECK 593 production bin has subagents, subagents-mcp and no agents, agents-mcp: PASS' $F/I.out && grep -q '591 TOOL_NAME subagents' $F/I.out && [ -x $FRT/bin/subagents-mcp ] && [ ! -e $FRT/bin/agents-mcp ]"
+check "I (593): members_idle PASS before backup and before pip" sh -c "[ \$(grep -c 'members_idle \[I.*\]: no member execution is active: PASS' $F/I.out) -eq 2 ]"
+steps scan > $F/scan-after.out 2>&1; grep -E 'REPORT|LIVE|console scripts' $F/scan-after.out
+check "scan after I: 0 live configuration hits; console scripts subagents, subagents-mcp only; next C5" sh -c "grep -q 'REPORT 593 old-name scan \[after-I\]: live configuration hits 0' $F/scan-after.out && grep -q \"console scripts: \\['subagents', 'subagents-mcp'\\]\" $F/scan-after.out && grep -q \"next.*: zsh $SD/steps.zsh C5\" $F/scan-after.out"
 check "I: no Task-state migration ran (no migrate lines)" sh -c "! grep -qE 'migrate-task-definitions|CHECK 593 563|preview rc=' $F/I.out"
 check "I: backup holds venv, plugin, entries, tools; COMPLETE" sh -c "[ -e $FB/backup/COMPLETE ] && [ -f $FB/backup/entries/.mcp.json ] && [ -f $FB/backup/plugin/hooks/host_context.mjs ] && [ -f $FB/backup/tools/steps.zsh ] && [ -f $FB/backup/tools/pkgdiff532.py ] && [ -d $FB/backup/venv ]"
-check "I: header says Main asks the USER first; prints the restart command, V's expected dialog (plugin/hooks trust: yes) and Ma next" sh -c "grep -q '\\[I\\] USER（Main 先问 USER' $F/I.out && grep -q \"cd $FH && claude --continue\" $F/I.out && grep -q '预期对话框: plugin dialog expected at claude --continue: yes' $F/I.out && grep -q 'steps.zsh Ma' $F/I.out"
+check "I: header says Main asks the USER first; prints the restart command, V's expected dialog (plugin/hooks trust: yes) and M next" sh -c "grep -q '\\[I\\] USER（Main 先问 USER' $F/I.out && grep -q \"cd $FH && claude --continue\" $F/I.out && grep -q '预期对话框: plugin dialog expected at claude --continue: yes' $F/I.out && grep -q 'Main: zsh .*steps.zsh M\$' $F/I.out"
 
-head1 "M / Mp after the restart; N; done"
+head1 "M / Mr / Mp after the restart; N; done"
 print -r -- "$HOSTLINE" > $F/ps.txt
-steps Ma > $F/Ma.out 2>&1; MAR=$?; grep -E 'wrote|installed read_arguments_file|CHECK|arguments_file' $F/Ma.out
-check "Ma (575): the arguments file is inside the fake project, read by the INSTALLED graphtraj as Main's host reads it" sh -c "[ $MAR -eq 0 ] && [ -f $FB/args-575.json ] && grep -q 'CHECK 593 575 arguments file readable by the installed graphtraj (project root, not .graphtraj): PASS' $F/Ma.out"
-check "Ma: prints the exact call with the real path and the observable" sh -c "grep -qF '\"arguments_file\":\"$FB/args-575.json\"' $F/Ma.out && grep -q '成功的可观察结果' $F/Ma.out && grep -q 'definitions/' $F/Ma.out"
 steps M > $F/M.out 2>&1
-check "M[d]: the 575 call is in M's prompts with the real path" sh -c "grep -q '^\\[d 575' $F/M.out && grep -qF '\"arguments_file\":\"$FB/args-575.json\"' $F/M.out"
-check "M prompt: upgraded by Task 593; task_graph with view current (560's 'summary' fixed)" sh -c "grep -q 'Production was just upgraded by Task 593' $F/M.out && grep -q '{\"view\":\"current\"}' $F/M.out && ! grep -q '\"view\":\"summary\"' $F/M.out"
+check "M prompts (593): upgraded by Task 593; one real mcp__graphtraj__subagents status call and one tasks call; dialog predicted none (no allow rule names the old tool); old-name refusal recorded, not failed" sh -c "grep -q 'Production was just upgraded by Task 593' $F/M.out && grep -q 'Using only mcp__graphtraj__subagents: execute status' $F/M.out && grep -q 'Then using only mcp__graphtraj__tasks: execute task_graph' $F/M.out && grep -q '对话框: 预计无' $F/M.out && grep -q '590 4.1' $F/M.out && ! grep -q 'mcp__graphtraj__agents: status' $F/M.out && grep -q 'next.*steps.zsh Mr' $F/M.out"
+# REHEARSAL FIXTURE: Main's resumed transcript: one refused old-name call, then the new-name and tasks calls, after I.
+SPLIT=$(<$RW/I-install-end.epoch); AFTER=$(date -u -r $(( SPLIT + 60 )) '+%Y-%m-%dT%H:%M:%SZ'); BEFORE=$(date -u -r $(( SPLIT - 600 )) '+%Y-%m-%dT%H:%M:%SZ')
+MT=$F/projects/-fake/$MAINID.jsonl
+print -r -- '{"type":"assistant","timestamp":"'$BEFORE'","message":{"content":[{"type":"tool_use","id":"o0","name":"mcp__graphtraj__agents","input":{"action":"execute","feature":"status"}}]}}' > $MT
+print -r -- '{"type":"assistant","timestamp":"'$AFTER'","message":{"content":[{"type":"tool_use","id":"o1","name":"mcp__graphtraj__agents","input":{"action":"execute","feature":"status"}},{"type":"tool_use","id":"n1","name":"mcp__graphtraj__subagents","input":{"action":"execute","feature":"status"}},{"type":"tool_use","id":"t1","name":"mcp__graphtraj__tasks","input":{"action":"execute","feature":"task_graph"}}]}}' >> $MT
+print -r -- '{"type":"user","timestamp":"'$AFTER'","message":{"content":[{"type":"tool_result","tool_use_id":"o1","is_error":true,"content":[{"type":"text","text":"Error: No such tool available: mcp__graphtraj__agents"}]},{"type":"tool_result","tool_use_id":"n1","content":[{"type":"text","text":"{\"agents\": []}"}]},{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"{\"tasks\": []}"}]}]}}' >> $MT
+steps Mr > $F/Mr.out 2>&1; MRR=$?; grep -E 'CHECK|INFO|installed hook|production-graphtraj' $F/Mr.out
+check "Mr (fixture transcript): subagents and tasks called after I without error -> PASS; the refused old-name call is INFO, not a failure" sh -c "[ $MRR -eq 0 ] && grep -q 'CHECK 593 \[Main $MAINID\] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)' $F/Mr.out && grep -q 'CHECK 593 \[Main $MAINID\] mcp__graphtraj__tasks called and answered without error or refusal: PASS' $F/Mr.out && grep -q 'INFO 593 \[Main $MAINID\] old-name calls after the split: 1 in the window.*first: mcp__graphtraj__agents.*is_error=True: Error: No such tool available' $F/Mr.out"
+check "Mr: production tool list printed from I's tools/list and the installed hook copy" sh -c "grep -q \"production-graphtraj-mcp server: .*tools: \\['subagents', 'tasks'\\]\" $F/Mr.out && grep -q 'installed hook copy: .*const TOOLS = \[TOOL, \"tasks\"\];' $F/Mr.out"
+print -r -- '{"type":"assistant","timestamp":"'$AFTER'","message":{"content":[{"type":"tool_use","id":"n2","name":"mcp__graphtraj__subagents","input":{}}]}}' > $MT
+print -r -- '{"type":"user","timestamp":"'$AFTER'","message":{"content":[{"type":"tool_result","tool_use_id":"n2","is_error":true,"content":[{"type":"text","text":"authority-denied"}]}]}}' >> $MT
+steps Mr > $F/Mr-neg.out 2>&1; MRN=$?
+check "Mr negative: a refused subagents call and no tasks call -> FAIL / NOT OBSERVED" sh -c "[ $MRN -ne 0 ] && grep -q 'mcp__graphtraj__subagents called and answered without error or refusal: FAIL' $F/Mr-neg.out"
+: > $MT
 steps Mp > $F/Mp.out 2>&1; MPR=$?
-check "Mp exit 0: four init CHECKs PASS" sh -c "[ $MPR -eq 0 ] && [ \$(grep -c 'CHECK 515 init .*: PASS' $RW/Mp.txt) -eq 4 ]"
+check "Mp exit 0: four init CHECKs PASS (stub init lists subagents and tasks)" sh -c "[ $MPR -eq 0 ] && [ \$(grep -c 'CHECK 593 init .*: PASS' $RW/Mp.txt) -eq 4 ]"
 steps N > $F/N.out 2>&1
-check "N (576, 579 F1): the child is created WITHOUT tools and must run Bash and reply DONE-593" sh -c "grep -q 'WITHOUT a tools argument' $F/N.out && grep -q 'reply with exactly: DONE-593' $F/N.out"
+check "N (576, 593): the member uses mcp__graphtraj__subagents; the child is created WITHOUT tools and must run Bash and reply DONE-593" sh -c "grep -q 'WITHOUT a tools argument' $F/N.out && grep -q 'reply with exactly: DONE-593' $F/N.out && grep -q 'Using the subagents tool (mcp__graphtraj__subagents' $F/N.out && ! grep -q 'mcp__graphtraj__agents)' $F/N.out"
 check "N: one advisor member of Task 593 creates n593" sh -c "grep -q '\"task_id\":\"593\",\"role\":\"opus_coding_team.advisor\"' $F/N.out && grep -q 'create ONE claude child named n593' $F/N.out"
 head1 "Nr (576 and 579 F2) on a REHEARSAL FIXTURE child record, member mapping and archives"
 CA=$FH/.graphtraj/swarm/control/agents; mkdir -p $CA $FH/.graphtraj/core/runner/sessions/593-x@advisor $FH/.graphtraj/swarm/sessions/s-member $FH/.graphtraj/swarm/sessions/s-child
@@ -428,7 +453,7 @@ print -r -- '{"name":"n593","agent":"ag-1","parent":"593-x@advisor","selection":
 print -l 'session: {id: "claude:m-1"}' 'task_id: "593"' 'role: opus_coding_team.advisor' 'execution_id: me-1' > $FH/.graphtraj/core/runner/sessions/593-x@advisor/mapping.yml
 print -l 'execution_id: me-1' 'outcome: completed' 'terminal_confirmed: true' > $FH/.graphtraj/core/runner/sessions/593-x@advisor/execution.yml
 print -r -- '{"header":{"id":"claude:m-1"}}' > $FH/.graphtraj/swarm/sessions/s-member/session.jsonl
-print -r -- '{"type":"assistant","timestamp":"2026-11-23T12:00:00Z","message":{"content":[{"type":"tool_use","id":"tu1","name":"mcp__graphtraj__agents","input":{"action":"execute","feature":"create"}},{"type":"tool_use","id":"tu2","name":"mcp__graphtraj__agents","input":{"action":"execute","feature":"answer"}}]}}' >> $FH/.graphtraj/swarm/sessions/s-member/session.jsonl
+print -r -- '{"type":"assistant","timestamp":"2026-11-23T12:00:00Z","message":{"content":[{"type":"tool_use","id":"tu1","name":"mcp__graphtraj__subagents","input":{"action":"execute","feature":"create"}},{"type":"tool_use","id":"tu2","name":"mcp__graphtraj__subagents","input":{"action":"execute","feature":"answer"}}]}}' >> $FH/.graphtraj/swarm/sessions/s-member/session.jsonl
 print -r -- '{"type":"user","timestamp":"2026-11-23T12:00:01Z","message":{"content":[{"type":"tool_result","tool_use_id":"tu1","content":[{"type":"text","text":"{\"agent\":\"ag-1\"}"}]},{"type":"tool_result","tool_use_id":"tu2","is_error":true,"content":[{"type":"text","text":"not-running: The Agent is in standby; no native request is pending."}]}]}}' >> $FH/.graphtraj/swarm/sessions/s-member/session.jsonl
 print -r -- '{"header":{"id":"claude:c-1","native":{"agentId":"ag-1"}}}' > $FH/.graphtraj/swarm/sessions/s-child/session.jsonl
 print -r -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"echo n593-tool && sleep 20"}}]}}' >> $FH/.graphtraj/swarm/sessions/s-child/session.jsonl
@@ -437,23 +462,52 @@ print -r -- '[Graftling notice from 593-x@advisor · completed · execution me-1
 print -r -- '{"agent": "ag-member"}' > $RW/N.txt
 steps Nr > $F/Nr.out 2>&1; grep -E '^CHECK|^\[member' $F/Nr.out
 check "Nr (576): created without tools, DONE-593 quoted, a Bash tool_use running echo n593-tool archived -> three PASS" sh -c "grep -q 'CHECK 576 child created without tools (stored selection.tools is null): PASS' $F/Nr.out && grep -q 'CHECK 576 child without tools ran Bash and replied DONE-593 (member quotes the last_message): PASS' $F/Nr.out && grep -q 'CHECK 576 a Bash tool_use running echo n593-tool is in a Session archive: PASS' $F/Nr.out"
-check "Nr (579 F2): the member's informative not-running answer is not counted as an error" sh -c "grep -q 'CHECK 515 \[member 593-x@advisor\] mcp__graphtraj__agents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)' $F/Nr.out && grep -q 'info: not-running' $F/Nr.out"
+check "Nr (593; 579 F2): the member called mcp__graphtraj__subagents, no old name; the informative not-running answer is not counted as an error" sh -c "grep -q 'CHECK 593 \[member 593-x@advisor\] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)' $F/Nr.out && grep -q 'CHECK 593 \[member 593-x@advisor\] no old-name call (mcp__graphtraj__agents, mcp__agents__\*): PASS' $F/Nr.out && grep -q 'info: not-running' $F/Nr.out"
 print -r -- '{"name":"n593","agent":"ag-1","parent":"593-x@advisor","selection":{"configuration":"opus_coding_team.advisor","model":"claude-opus-5-5","tools":["Read"]},"executions":[{"id":"ex-1","state":"ended","outcome":"completed","error":null,"notification":"delivered"}]}' > $CA/ag-1.json
 print -r -- 'member reply (fixture): the child said it has no Bash' > $RW/N-reply.txt
 steps Nr > $F/Nr-neg.out 2>&1; NRN=$?
 check "Nr negative: a child created WITH tools, or without DONE-593, FAILs the 576 checks" sh -c "[ $NRN -ne 0 ] && grep -q 'CHECK 576 child created without tools (stored selection.tools is null): FAIL' $F/Nr-neg.out && grep -q 'CHECK 576 child without tools ran Bash and replied DONE-593 (member quotes the last_message): FAIL' $F/Nr-neg.out"
 rm -rf $CA $FH/.graphtraj/core/runner/sessions/593-x@advisor $FH/.graphtraj/swarm/sessions/s-member $FH/.graphtraj/swarm/sessions/s-child $RW/N-reply.txt $RW/N-main-notice.txt $RW/N.txt
 
+head1 "X judge (review exemption) on a REHEARSAL FIXTURE data root; the reviewer command itself is real; inventory reads names only"
+XR=$F/xroot; mkdir -p $XR/control/agents $XR/control/agents/ag-x $XR/sessions/s-x
+print -r -- '{"name":"x593","agent":"ag-x","selection":{"review":"x593-review"},"executions":[{"id":"ex-x","outcome":"completed"}]}' > $XR/control/agents/ag-x.json
+print -r -- '{"version":1,"runtime":"subagents","tool":"subagents/connectivity-check","input":{}}' | $CONDA -I -c 'import json,sys; print(json.dumps({"policy":"p","request":json.loads(sys.stdin.read())}))' | $CONDA -I $SD/x593.py reviewer $F/x-review.jsonl > $F/x-answer.txt
+print -r -- '{"policy":"p","request":{"runtime":"claude","tool":"Bash","input":{"command":"echo x593-tool"}}}' | $CONDA -I $SD/x593.py reviewer $F/x-review.jsonl >> $F/x-answer.txt
+check "x593 reviewer (real command): answers one valid allow decision per request and logs only the tool name, never the input" sh -c "[ \$(grep -c '\"decision\": \"allow\"' $F/x-answer.txt) -eq 2 ] && ! grep -q 'echo x593-tool' $F/x-review.jsonl && grep -q 'subagents/connectivity-check' $F/x-review.jsonl"
+print -r -- '{"at":1,"runtime":"claude","tool":"Bash","request_id":"r1","decision":"allow","reason":"ok"}' > $XR/control/agents/ag-x/review.jsonl
+print -r -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"s1","name":"mcp__graphtraj__subagents","input":{}},{"type":"tool_use","id":"b1","name":"Bash","input":{}}]}}' > $XR/sessions/s-x/session.jsonl
+print -r -- '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"s1","content":"{}"}]}}' >> $XR/sessions/s-x/session.jsonl
+$CONDA -I $SD/x593.py judge $XR $F/x-review.jsonl x593 > $F/xjudge.out 2>&1; XJ=$?; grep CHECK $F/xjudge.out
+check "X judge (fixture): review active (probe under the new name, Bash), subagents exempt, child ran it, completed -> five PASS" sh -c "[ $XJ -eq 0 ] && [ \$(grep -c '^CHECK 593 X .*: PASS' $F/xjudge.out) -eq 5 ]"
+print -r -- '{"at":2,"tool":"mcp__graphtraj__subagents","runtime":"claude"}' >> $F/x-review.jsonl
+$CONDA -I $SD/x593.py judge $XR $F/x-review.jsonl x593 > $F/xjudge-neg.out 2>&1; XJN=$?
+check "X judge negative: a subagents call that reached the reviewer -> FAIL (not exempt)" sh -c "[ $XJN -ne 0 ] && grep -q 'CHECK 593 X exempt: no subagents call reached the reviewer or review.jsonl: FAIL' $F/xjudge-neg.out"
+print -l 'connections:' '  a:' '    runtime: claude' '    review: r1' '    api_key_env: SECRET_NAME_NOT_PRINTED' 'reviewers:' '  r1:' '    command: [/x/secret-path-not-printed]' > $F/x-config.yml
+$CONDA -I $SD/x593.py inventory $F/x-config.yml $F/none.yml > $F/xinv.out 2>&1
+check "X inventory: reviewer and connection names only, never their fields" sh -c "grep -q \"reviewers \\['r1'\\] | connections naming a reviewer: \\['a -> r1'\\]\" $F/xinv.out && ! grep -q 'secret-path-not-printed\|SECRET_NAME' $F/xinv.out && grep -q 'none.yml: absent' $F/xinv.out"
+
+head1 "C5 (requirement 5): what runs without network: refusal on an existing tool dir; C5u text; the home snapshot is real (rehearsal directories)"
+mkdir -p $F/uvt/tools
+ADOPT593_UVT=$F/uvt steps C5 > $F/C5-exists.out 2>&1; C5E=$?
+check "C5 negative: an existing $F/uvt/tools STOPs before any install" sh -c "[ $C5E -ne 0 ] && grep -q 'STOP: $F/uvt/tools exists' $F/C5-exists.out"
+ADOPT593_UVT=$F/uvt steps C5u > $F/C5u.out 2>&1
+check "C5u: the USER trusts $F/uvt/project once ('Yes, proceed'), then Main runs C5r" sh -c "grep -q \"cd $F/uvt/project && claude\" $F/C5u.out && grep -q 'Yes, proceed' $F/C5u.out && grep -q 'steps.zsh C5r' $F/C5u.out"
+ADOPT593_UVT=$F/uvt-none steps C5r > $F/C5r-none.out 2>&1; C5N=$?
+check "C5r negative: without the uv installation -> STOP (no install attempted, conda not touched), no success text" sh -c "[ $C5N -ne 0 ] && grep -q 'STOP: no uv installation under $F/uvt-none' $F/C5r-none.out && grep -q 'C5r STOP' $F/C5r-none.out && ! grep -q '^成功' $F/C5r-none.out"
+check "C5 negative: no success text after its STOP" sh -c "grep -q 'C5 STOP' $F/C5-exists.out && ! grep -q '^成功' $F/C5-exists.out"
+
 export FAKE_PROBE_API_KEY=sk-rehearsal-value-123456
 steps done > $F/done.out 2>&1
-check "done: versions, direct_urls, real entries PASS, no key value" sh -c "grep -q '^Version: 0.9.0' $F/done.out && grep -q 'graftling direct_url: .*wheels-${NEW[1,8]}' $F/done.out && grep -q 'CHECK 593 production-graphtraj-mcp MCP tools/list is exactly agents, tasks: PASS' $F/done.out && grep -q 'raw files containing an exported key value: 0' $F/done.out"
+check "done: versions, direct_urls, real entries PASS, no key value" sh -c "grep -q '^Version: 0.9.0' $F/done.out && grep -q 'graftling direct_url: .*wheels-${NEW[1,8]}' $F/done.out && grep -q 'CHECK 593 production-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS' $F/done.out && grep -q 'raw files containing an exported key value: 0' $F/done.out && grep -q '^production bin now: subagents subagents-mcp' $F/done.out && grep -q 'REPORT 593 old-name scan \[after-I\]: live configuration hits 0' $F/done.out"
 check "done: counts are 0 when nothing matches (560's miscount fixed): '0.8.0 dist-info left: 0', 'task.md 0'" sh -c "grep -q 'graftling 0.8.0 dist-info left: 0 (expect 0)' $F/done.out && grep -q 'Task state now: task.md 0 ' $F/done.out"
 
 head1 "R (rollback from the backup's own tools): both packages, plugin and entries restored"
 : > $F/ps.txt
 print | zsh $FB/backup/tools/steps.zsh R > $F/R.out 2>&1; RR2=$?; check "R header says Main asks the USER first" grep -q "\[R\] USER（Main 先问 USER" $F/R.out; grep -E '^(SAME|DIFF)|restored|already as|^Version|CHECK|graphtraj package|before R' $F/R.out
 check "R exit 0; venv and plugin SAME" sh -c "[ $RR2 -eq 0 ] && [ \$(grep -c 'SAME differences=0' $F/R.out) -ge 2 ]"
-check "R: graftling and graphtraj restored (vs backup); graftling is 0.8.0 again" sh -c "grep -q 'CHECK 593 graftling restored (after R vs backup): PASS' $F/R.out && grep -q 'CHECK 593 graphtraj restored (after R vs backup): PASS' $F/R.out && grep -q 'CHECK 593 R: graftling is 0.8.0 again: PASS' $F/R.out"
+check "R: graftling and graphtraj restored (vs backup); graftling is 0.8.0 again; bin has agents, agents-mcp again" sh -c "grep -q 'CHECK 593 graftling restored (after R vs backup): PASS' $F/R.out && grep -q 'CHECK 593 graphtraj restored (after R vs backup): PASS' $F/R.out && grep -q 'CHECK 593 R: graftling is 0.8.0 again: PASS' $F/R.out && grep -q 'CHECK 593 R: bin has 0.8.0.s agents, agents-mcp again and no subagents, subagents-mcp: PASS' $F/R.out"
+check "R: the 0.8.0 hook copy is back (TOOLS = [\"agents\", \"tasks\"]), so the before-I scan state returns" grep -q 'const TOOLS = \["agents", "tasks"\];' $FH/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
 check "R: production graftling 0.8.0, graphtraj ${OLD[1,8]} markers absent again; entries as before" sh -c "$FRT/bin/python -m pip show graftling 2>/dev/null | grep -q 'Version: 0.8.0' && $CONDA -I $SD/markers.py $D absent > /dev/null && shasum -a 256 -c --quiet $F/entries0.sha256"
 check "R: the old code still reads the state (task graph loads)" sh -c "cd $FH && $FRT/bin/python -I -c 'from pathlib import Path; from graphtraj.graph.task_graph import read_graph; g = read_graph(Path(\"$FS\"), view=\"full\"); print(\"old code task graph:\", len(g[\"tasks\"]))'"
 check "579's backup under tmp/579 unchanged" sh -c "cd $FH && shasum -a 256 -c --quiet $F/evidence0.sha256"

@@ -1,13 +1,17 @@
-"""515: MCP tool names in real Claude records (read only; never prints tool contents beyond a short error).
+"""593 (from 515's rec515.py): MCP tool names in real Claude records (read only; never prints tool contents beyond a
+short error). 591/592 renamed graftling's tool agents -> subagents with no alias.
 
-  rec515.py init <stream.jsonl>
+  rec593.py init <stream.jsonl>
       The first system/init record of a `claude -p --output-format stream-json --verbose` run. Only GraphTraj's and
       graftling's own server entries are judged (517): `graphtraj` is present and connected, and there is no `agents`
       or `graftling` entry beside it (also in plugin form `plugin:<p>:<name>`). Other servers (the user's own
-      connectors, e.g. 'claude.ai Claude Docs') are listed, not judged. Tools must hold mcp__graphtraj__agents and
-      mcp__graphtraj__tasks and no mcp__agents__*; plugin_warnings empty and no record naming an untrusted plugin.
-      Exit 0 only when all hold.
-  rec515.py calls <label> [--after <epoch seconds or ISO time>] [--need agents,tasks] <path>...
+      connectors, e.g. 'claude.ai Claude Docs') are listed, not judged. Tools must hold mcp__graphtraj__subagents and
+      mcp__graphtraj__tasks and no old name (mcp__graphtraj__agents, mcp__<s>__agents, mcp__agents__*); plugin_warnings
+      empty and no record naming an untrusted plugin. Exit 0 only when all hold.
+  rec593.py calls <label> [--after <epoch seconds or ISO time>] [--need subagents,tasks] [--old-info] <path>...
+      --old-info (593, Main's resumed Session): an old-name call in the window is reported (count, first time and its
+      first answer line) as information and does not fail the check. A resumed history still holds the old name
+      (590 4.1), so Main's first call after the resume may use it and be refused; that is recorded, not judged.
       Every MCP tool call (name mcp__<server>__<tool>) in the JSONL records under the paths, counted by its full
       name. A call is a dict with type tool_use (Claude stream/transcript) or tool-call (graftling archive) and an
       id; its result is the dict with type tool_result and the same tool_use_id. A result is a refusal or error only
@@ -29,9 +33,9 @@ import json
 import sys
 from pathlib import Path
 
-NEW = ('mcp__graphtraj__agents', 'mcp__graphtraj__tasks')
+NEW = ('mcp__graphtraj__subagents', 'mcp__graphtraj__tasks')
 OLD_PREFIX = 'mcp__agents__'
-OWN_SERVERS = ('graphtraj', 'agents', 'graftling')   # GraphTraj's and graftling's own entries; others are not judged
+OWN_SERVERS = ('graphtraj', 'agents', 'graftling', 'subagents')   # GraphTraj's and graftling's own entries
 
 
 def server_of(tool: str) -> str:
@@ -40,8 +44,10 @@ def server_of(tool: str) -> str:
 
 
 def is_old(tool: str) -> bool:
+    """An old graftling name: server agents (515), the plugin form, or the tool agents on any server (591/592)."""
     server = server_of(tool)
-    return server == 'agents' or (server.startswith('plugin_') and server.endswith('_agents'))
+    return (server == 'agents' or (server.startswith('plugin_') and server.endswith('_agents'))
+            or (tool.startswith('mcp__') and tool.rsplit('__', 1)[-1] == 'agents'))
 
 
 def epoch(value: float) -> float | None:
@@ -130,12 +136,13 @@ def init(stream: str) -> int:
     checks = [
         ('mcp server graphtraj connected, no agents/graftling entry beside it',
          len(own) == 1 and own[0][0] == 'graphtraj' and own[0][1] in ('connected', None), f'{own}'),
-        ('tools mcp__graphtraj__agents and mcp__graphtraj__tasks', all(n in tools for n in NEW), ''),
-        ('no mcp__agents__* tool', not any(t.startswith(OLD_PREFIX) for t in tools), ''),
+        ('tools mcp__graphtraj__subagents and mcp__graphtraj__tasks', all(n in tools for n in NEW), ''),
+        ('no old-name tool (mcp__graphtraj__agents, mcp__<s>__agents, mcp__agents__*)',
+         not any(is_old(t) for t in tools), f'{[t for t in tools if is_old(t)]}'),
         ('no untrusted-plugin warning', not warnings and not untrusted, ''),
     ]
     for name, ok, detail in checks:
-        print(f"CHECK 515 init {name}: {'PASS' if ok else 'FAIL'}{' (' + detail + ')' if detail and not ok else ''}")
+        print(f"CHECK 593 init {name}: {'PASS' if ok else 'FAIL'}{' (' + detail + ')' if detail and not ok else ''}")
     return 0 if all(ok for _, ok, _ in checks) else 1
 
 
@@ -144,10 +151,12 @@ def stamp(when: float | None) -> str:
 
 
 def calls(label: str, args: list[str]) -> int:
-    after, need, paths = None, list(NEW), []
+    after, need, paths, old_info = None, list(NEW), [], False
     while args:
         head = args.pop(0)
-        if head == '--after':
+        if head == '--old-info':
+            old_info = True
+        elif head == '--after':
             value = args.pop(0)
             after = parse_time(value)
             if after is None:
@@ -208,10 +217,22 @@ def calls(label: str, args: list[str]) -> int:
         ok = window.get(name, []).count('ok')
         bad = [o for o in window.get(name, []) if o.startswith('error')]
         verdicts.append(ok > 0 and not bad)
-        print(f"CHECK 515 [{label}] {name} called and answered without error or refusal: "
+        print(f"CHECK 593 [{label}] {name} called and answered without error or refusal: "
               f"{'PASS' if ok and not bad else 'FAIL' if found else 'NOT OBSERVED'} (ok {ok}, errors/refusals {len(bad)})")
+    if old_info:
+        firsts = sorted((w or 0, n, i) for i, (n, w) in found.items() if is_old(n) and (after is None or w is None or w > after))
+        if firsts:
+            when, name, ident = firsts[0]
+            result = results.get(ident)
+            answer = (text_of(result).strip().splitlines() or [''])[0][:200] if result else 'no result'
+            print(f"INFO 593 [{label}] old-name calls{' after the split' if after else ''}: {old} in the window, "
+                  f"{old_undated} undated; first: {name} at {stamp(when or None)}, "
+                  f"is_error={bool(result and result.get('is_error'))}: {answer} (recorded, not judged: 590 4.1)")
+        else:
+            print(f"INFO 593 [{label}] old-name calls{' after the split' if after else ''}: none")
+        return 0 if all(verdicts) else 1
     verdicts.append(old == 0 and old_undated == 0)
-    print(f"CHECK 515 [{label}] no mcp__agents__* call{' after the split' if after else ''}: "
+    print(f"CHECK 593 [{label}] no old-name call (mcp__graphtraj__agents, mcp__agents__*){' after the split' if after else ''}: "
           f"{'PASS' if old == 0 and old_undated == 0 else 'FAIL'} ({old} in the window, {old_undated} undated"
           f"{'; times ' + str(old_times[:6]) if old_times else ''})")
     return 0 if all(verdicts) else 1

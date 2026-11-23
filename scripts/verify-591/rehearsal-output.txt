@@ -1,4 +1,102 @@
-Task 591 verify-591 rehearsal (Engineer B, 2026-11-23 23:14 JST). REHEARSAL ONLY: not acceptance evidence.
+Task 591 verify-591 rehearsal (Engineer B). REHEARSAL ONLY: not acceptance evidence.
+PART 1 (2026-11-23 23:24 JST): the CANDIDATE 2440d75d37838327217c3f8e9eba04ef0165051a from Engineer A's bundle
+.scratch/591/graftling-591.bundle (GCOMMIT and BUNDLE as committed in steps.zsh, no override). VERIFY591_ROOT/OUT/SUITE_ROOT
+under $TMPDIR=/tmp/claude-501; pre/install with scripts/verify-585/stub pi and dsh (VERIFY591_BIN), a fake user home, VERIFY591_DMODEL,
+a dummy DEEPSEEK_API_KEY. cli and suite are real (no stub: the installed candidate wheel; real graftling tests).
+installed hook template TOOL lines in venv-cand: const TOOL = "subagents"; const TOOLS = [TOOL]; 
+
+################ step pre (candidate)
+== [pre] Main. Preflight; creates /tmp/claude-501/v591c/root. Dialog: none. ~1 min.
+zsh 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh)
+node: /opt/homebrew/bin/node v26.5.0
+git: /usr/bin/git git version 2.50.1 (Apple Git-155)
+pi: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-585/stub/pi 1.4.0 (stub)
+dsh: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-585/stub/dsh unknown (stub)
+PASS: bundle /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/.scratch/591/graftling-591.bundle verifies
+PASS: bundle head is 2440d75d37838327217c3f8e9eba04ef0165051a
+DEEPSEEK_API_KEY: set (19 characters; not printed).
+allowlisted environment of every pi/dsh process (names only): DEEPSEEK_API_KEY EXAMPLE_STEP_VAR HOME LANG PATH PI_CODING_AGENT_DIR TMPDIR
+your locations before (read only; names, hashes, mtimes):
+pi settings.json 73cb3858a687a849
+pi directories:  
+dsh 11月 23 23:24:22 2026 .
+== the Pi Main's model: pi --list-models deepseek (PI_CODING_AGENT_DIR=/tmp/claude-501/v591c/root/agent-probe)
+provider model
+deepseek deepseek-v4-flash
+deepseek deepseek-v4-pro
+== one-line Pi prompt: pi -p --provider deepseek --model deepseek-v4-flash --no-session --no-extensions --no-tools
+deepseek/deepseek-v4-flash (stub)
+exit=0 (login: DEEPSEEK_API_KEY from the allowlisted environment)
+PASS: Pi Main model: deepseek/deepseek-v4-flash
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh install
+STEP-END pre rc=0
+
+################ step install (candidate)
+== [install] Main. venv-cand (2440d75d37838327217c3f8e9eba04ef0165051a), DSH model discovery, one-line DSH prompt, agent-cand. Dialog: none.
+/tmp/claude-501/v591c/root/venv-cand: 2440d75d37838327217c3f8e9eba04ef0165051a 0.8.0 /tmp/claude-501/v591c/root/venv-cand/lib/python3.13/site-packages/graftling/__init__.py | graphtraj importable: False
+== one-line DSH prompt: dsh --profile headless --patch /tmp/claude-501/v591c/root/dsh-preflight.patch.yml (DSH_HOME=/tmp/claude-501/v591c/root/dsh-home; allowlisted env)
+configured models of llm-deepseek (from --dump-config): deepseek-v4-flash
+login: DEEPSEEK_API_KEY from the allowlisted environment (set, 19 characters, not printed); DEEPSEEK_BASE_URL absent; /tmp/claude-501/v591c/root/dsh-home/.credentials.yaml absent, /tmp/claude-501/v591c/root/dsh-home/.env absent
+deepseek-v4-flash (stub)
+exit=0 (full output: /tmp/claude-501/v591c/root/dsh-preflight.txt)
+PASS: DSH answered as configured model deepseek-v4-flash (login: DEEPSEEK_API_KEY)
+== PI_CODING_AGENT_DIR=/tmp/claude-501/v591c/root/agent-cand pi install /tmp/claude-501/v591c/root/venv-cand/lib/python3.13/site-packages/graftling/pi
+Installed /tmp/claude-501/v591c/root/venv-cand/lib/python3.13/site-packages/graftling/pi (stub)
+settings.json: packages ['/tmp/claude-501/v591c/root/venv-cand/lib/python3.13/site-packages/graftling/pi'] | default deepseek deepseek-v4-flash
+/tmp/claude-501/v591c/root/venv-cand/lib/python3.13/site-packages/graftling/pi
+candidate plugin.json mcpServers keys: ['subagents']
+PASS: installed; dsh child model: deepseek-v4-flash (DSH answered with it above)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh cli
+STEP-END install rc=0
+
+################ step cli (candidate)
+== [cli] Main. The candidate's console scripts in /tmp/claude-501/v591c/root/venv-cand/bin. Dialog: none. No network, no login.
+console scripts in /tmp/claude-501/v591c/root/venv-cand/bin: {'subagents': True, 'subagents-mcp': True, 'agents': False, 'agents-mcp': False}
+PASS: subagents and subagents-mcp are installed
+PASS: agents and agents-mcp are not installed
+graftling console_scripts metadata: subagents-mcp=graftling.mcp:main subagents=graftling.cli:main
+PASS: the metadata declares exactly subagents=graftling.cli:main and subagents-mcp=graftling.mcp:main
+subagents --help: exit 0; ['usage: subagents [-h] request']
+PASS: subagents --help runs as subagents
+subagents '{"action":"discover"}' with no host: exit 1; {"error": {"code": "authority-denied", "message": "The owning Agent connection is unavailable."}}
+PASS: without an owner connection subagents refuses with a JSON authority-denied (the documented behaviour)
+subagents-mcp: exit 0; serverInfo {'name': 'subagents', 'version': '0.8.0'}; tools/list ['subagents']; tools/call agents -> {'code': -32602, 'message': 'Unknown tool: agents'}
+PASS: subagents-mcp names itself subagents
+PASS: subagents-mcp lists exactly the tool subagents
+PASS: subagents-mcp refuses a call of the old name agents as an unknown tool
+judge: ALL PASS
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh pi-main
+STEP-END cli rc=0
+
+################ step suite (candidate)
+== [suite] Main. graftling full suite on 2440d75d37838327217c3f8e9eba04ef0165051a (clean clone from the bundle in /tmp/claude-501/v591c/suite/cand). TMPDIR=/tmp/claude-501. Dialog: none. No login. ~5-15 min.
+pytest temp: TMPDIR=/tmp/claude-501 -> run root /private/tmp/claude-501/verify-591-suite-20261123T232434 (outside the Harness)
+suite source: /tmp/claude-501/v591c/suite/cand/src at 2440d75d37838327217c3f8e9eba04ef0165051a (clean: yes)
+imports graftling 0.8.0 from /private/tmp/claude-501/v591c/suite/cand/src/src/graftling/__init__.py | pytest 9.1.1 | graphtraj importable: False
+REHEARSAL: extra pytest args: tests/test_dsh_mcp.py tests/test_claude_marketplace_plugin.py tests/test_agents_server_name.py (a filtered run is not the full suite)
+pytest: cd /tmp/claude-501/v591c/suite/cand/src && TMPDIR=/private/tmp/claude-501/verify-591-suite-20261123T232434 /tmp/claude-501/v591c/suite/cand/venv/bin/python -m pytest -q -p no:cacheprovider -rfE tests/test_dsh_mcp.py tests/test_claude_marketplace_plugin.py tests/test_agents_server_name.py
+candidate 2440d75d37838327217c3f8e9eba04ef0165051a | TMPDIR /private/tmp/claude-501/verify-591-suite-20261123T232434 | extra: tests/test_dsh_mcp.py tests/test_claude_marketplace_plugin.py tests/test_agents_server_name.py
+..ss............................                                         [100%]
+30 passed, 2 skipped in 3.45s
+exit=0
+(full output: /tmp/claude-501/v591c/suite/suite-20261123T232437.txt)
+SUCCESS: graftling suite passed on 2440d75d37838327217c3f8e9eba04ef0165051a (FILTERED rehearsal run)
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/591-graftling-rename-agents-to-subagents/scripts/verify-591/steps.zsh SR
+STEP-END suite rc=0
+
+################ step SR (candidate)
+== [SR] read only: the newest suite log. Dialog: none.
+log: /tmp/claude-501/v591c/suite/suite-20261123T232437.txt
+candidate 2440d75d37838327217c3f8e9eba04ef0165051a | TMPDIR /private/tmp/claude-501/verify-591-suite-20261123T232434 | extra: tests/test_dsh_mcp.py tests/test_claude_marketplace_plugin.py tests/test_agents_server_name.py
+..ss............................                                         [100%]
+30 passed, 2 skipped in 3.45s
+exit=0
+SR verdict: PASS (no FAILED/ERROR line, exit 0) — FILTERED rehearsal run
+STEP-END SR rc=0
+
+======================================================================================================
+PART 2 (earlier): rehearsal against base 542a81df and A's then-uncommitted WIP, before the candidate existed
+======================================================================================================
 Environment: Engineer sandbox; VERIFY591_ROOT/OUT/SUITE_ROOT under $TMPDIR=/tmp/claude-501; VERIFY591_BUNDLE = a bundle of
 the branch head 542a81df (graftling dev BASE; Engineer A had no candidate commit yet) with VERIFY591_GCOMMIT=542a81df;
 pre/install with scripts/verify-585/stub pi and dsh (VERIFY591_BIN), VERIFY591_USERHOME a fake home, VERIFY591_DMODEL set,

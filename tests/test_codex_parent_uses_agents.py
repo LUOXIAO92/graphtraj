@@ -77,7 +77,7 @@ def test_the_note_example_names_agents_and_its_calls_create_and_wait(
 ) -> None:
     """The note's settings, an empty config.yml and its literal calls give operations the child."""
     instruction = note_instruction()
-    assert 'only the MCP tool agents' in instruction and 'not spawn_agent' in instruction
+    assert 'only the MCP tool subagents' in instruction and 'not spawn_agent' in instruction
     calls = literal_calls(instruction)
     assert [call['feature'] for call in calls] == ['create', 'wait']
     assert 'model' not in calls[0]['arguments']
@@ -96,7 +96,7 @@ def test_the_note_example_names_agents_and_its_calls_create_and_wait(
     assert wait['result']['result']['last_result']['outcome'] == 'completed'
     assert lines[-1] == {'run_summary': {'agents_calls': 2, 'native_subagents': 0}}
     # The note's empty developerInstructions: the passage alone, with nothing before it.
-    assert client_messages(log, 'thread/start')[0]['developerInstructions'].startswith('The MCP tool `agents`')
+    assert client_messages(log, 'thread/start')[0]['developerInstructions'].startswith('The MCP tool `subagents`')
 
 
 def test_only_the_parent_gets_the_guidance_after_the_users_text_on_start_and_resume(
@@ -127,8 +127,8 @@ def test_only_the_parent_gets_the_guidance_after_the_users_text_on_start_and_res
     [server] = start['config']['mcp_servers']
     for params in (start, resume):
         text = params['developerInstructions']
-        assert text.startswith(USER_TEXT + '\n\nThe MCP tool `agents`')
-        assert f'`mcp__{server}__agents`' in text and '`spawn_agent`' in text
+        assert text.startswith(USER_TEXT + '\n\nThe MCP tool `subagents`')
+        assert f'`mcp__{server}__subagents`' in text and '`spawn_agent`' in text
         assert not {'multi_agent', 'collab', 'collaboration'} & set(params['config'].get('features', {}))
 
 
@@ -151,7 +151,7 @@ def test_a_native_subagent_shows_without_changing_stdout_or_the_exit_status(
     assert output['operations'] == []
     summary = lines[-1]['run_summary']
     assert (summary['agents_calls'], summary['native_subagents']) == (0, 1)
-    assert 'made no agents call' in summary['note']
+    assert 'made no subagents call' in summary['note']
 
 
 def test_a_run_with_no_notification_and_no_agents_call_still_says_so(
@@ -189,7 +189,7 @@ def test_a_refused_start_has_no_summary(tmp_path: Path, native_settings: dict) -
 
 
 @pytest.mark.parametrize(('note', 'native'), [
-    ('claude-code', "not Claude Code's own subagents"),
+    ('claude-code', "not Claude Code's own Task subagents"),
     ('dsh', "not DSH's own subagents"),
     ('pi', None),  # Pi has no native subagents to exclude.
 ])
@@ -198,5 +198,5 @@ def test_every_other_install_note_child_example_names_the_tool(note: str, native
     example = re.search(r'^- Ask .*?(?=^- |^$)', section((INSTALL / f'{note}.md').read_text(), 'See that it worked'),
                         re.M | re.S).group(0)
     words = ' '.join(example.split())
-    assert 'use the `agents` tool' in words and 'child that answers one word' in words
+    assert 'use the `subagents` tool' in words and 'child that answers one word' in words
     assert native is None or native in words

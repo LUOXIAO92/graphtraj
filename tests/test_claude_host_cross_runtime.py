@@ -42,7 +42,7 @@ def main_call(host: IndependentCalls, cwd: Path):
     shown: list[dict] = []
 
     def invoke(feature: str, **arguments) -> dict:
-        result = call('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
+        result = call('subagents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
         assert not result.failed, result.document
         shown.extend(result.document.get('main_notices', []))
         return result.document
@@ -146,7 +146,7 @@ def test_a_codex_childs_end_reaches_the_claude_main_once(tmp_path: Path, native_
         (agent, 'completed', 'codex says hi')]
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
     assert host.context({'operation': 'notices', 'session': str(uuid4())})['notices'] == []
-    assert 'main_notices' not in call('agents', {'action': 'discover'}).document
+    assert 'main_notices' not in call('subagents', {'action': 'discover'}).document
 
 
 @pytest.mark.parametrize('arguments, code', [
@@ -162,7 +162,7 @@ def test_invalid_choices_for_a_codex_child_are_refused(
     """Each refusal keeps its code and prepares no Agent."""
     host = IndependentCalls(tmp_path / 'agents', tmp_path, {}, {'codex': native_settings})
     _, call, _, _ = main_call(host, tmp_path)
-    result = call('agents', {'action': 'execute', 'feature': 'create',
+    result = call('subagents', {'action': 'execute', 'feature': 'create',
                              'arguments': {'instruction': 'work', **arguments}})
     assert result.failed and result.document['error']['code'] == code, result.document
     assert not (tmp_path / 'agents' / 'control' / 'agents').exists() or not any(
@@ -173,7 +173,7 @@ def test_without_a_runtimes_entry_codex_is_unsupported(tmp_path: Path) -> None:
     """A Runtime with no entry has no driver in this host."""
     host = IndependentCalls(tmp_path / 'agents', tmp_path, {})
     _, call, _, _ = main_call(host, tmp_path)
-    result = call('agents', {'action': 'execute', 'feature': 'create',
+    result = call('subagents', {'action': 'execute', 'feature': 'create',
                              'arguments': {'runtime': 'codex', 'instruction': 'work'}})
     assert result.document['error']['code'] == 'unsupported-runtime'
 
@@ -237,7 +237,7 @@ def test_host_start_refusals_keep_their_code(
     root = write_host(project, runtimes, config_yml)
     messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                 'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
+                 'params': {'name': 'subagents', 'arguments': {'action': 'discover'}}}]
     launcher = ('import subprocess, sys\n'
                 'done = subprocess.run([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'

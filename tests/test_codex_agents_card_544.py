@@ -22,7 +22,7 @@ def call(monkeypatch: pytest.MonkeyPatch, document: dict, meta: dict | None, *, 
     monkeypatch.setattr(mcp, '_caller_notices', lambda params: nullcontext(None))
     monkeypatch.setattr(graftling, 'handle_request',
                         lambda arguments, dispatch: SimpleNamespace(document=copy.deepcopy(document), failed=failed))
-    params = {'name': 'agents', 'arguments': {
+    params = {'name': 'subagents', 'arguments': {
         'action': 'execute', 'feature': feature,
         'arguments': given if given is not None else {'agent': 'reader', 'message': MESSAGE}}}
     if meta is not None:

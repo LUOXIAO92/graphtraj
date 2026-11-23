@@ -32,7 +32,7 @@ def mcp(*calls: tuple[str, dict]) -> list[dict]:
 
 def agents(feature: str, **arguments: object) -> tuple[str, dict]:
     """Return one public ``agents`` call."""
-    return 'agents', {'action': 'execute', 'feature': feature, 'arguments': arguments}
+    return 'subagents', {'action': 'execute', 'feature': feature, 'arguments': arguments}
 
 
 def as_pi(project: Path, monkeypatch: pytest.MonkeyPatch, session: str) -> dict:

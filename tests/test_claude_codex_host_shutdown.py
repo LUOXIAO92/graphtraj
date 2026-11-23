@@ -32,7 +32,7 @@ KINDS = ['agents-claude', 'graphtraj-claude', 'codex']
 CLAUDE_KINDS = KINDS[:2]
 # How long a host process may take to end, its 10-second stop included.
 HOST_LIMIT = 25
-RECORDED = 'agents host recorded its children stopped.'
+RECORDED = 'subagents host recorded its children stopped.'
 
 HOST = r'''
 import faulthandler, importlib, importlib.util, json, os, subprocess, sys, threading, time
@@ -131,7 +131,7 @@ if kind == 'agents-claude':
     def serve(*arguments):
         """The Main's association comes from the native mod; everything after it is real."""
         call = made[0].make_call(SESSION, Path.cwd())
-        made[0].call = lambda request: call('agents', request)
+        made[0].call = lambda request: call('subagents', request)
         real_serve(*arguments)
 
     host.serve_concurrent = serve
@@ -153,7 +153,7 @@ elif kind == 'graphtraj-claude':
     def serve(*arguments, **options):
         """As above, for the GraphTraj association."""
         call = bind(made[0].control, Caller('claude-native', None, SESSION, 'claude'))
-        options['native_call'] = lambda request, tool='agents': handle_request(request, call)
+        options['native_call'] = lambda request, tool='subagents': handle_request(request, call)
         real_serve(*arguments, **options)
 
     host.serve = serve
@@ -228,12 +228,12 @@ class Host:
 def tool_call(identity: int, feature: str, **arguments: object) -> dict:
     """One real MCP ``tools/call`` of the agents tool."""
     return {'jsonrpc': '2.0', 'id': identity, 'method': 'tools/call',
-            'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
+            'params': {'name': 'subagents', 'arguments': {'action': 'execute', 'feature': feature, 'arguments': arguments}}}
 
 
 # Not status: a result that shows an end settles it, so no notice would be attached.
 DISCOVER = [{'jsonrpc': '2.0', 'id': 20, 'method': 'tools/call',
-             'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
+             'params': {'name': 'subagents', 'arguments': {'action': 'discover'}}}]
 CREATES = [tool_call(10 + number, 'create', runtime='claude', instruction='work') for number in range(3)]
 
 
@@ -472,7 +472,7 @@ def test_claude_codes_sigint_reports_the_same_way(tmp_path: Path, kind: str) -> 
     """How Claude Code ends a Session: the stop line, then the report, in host.log."""
     host = run_host(kind, tmp_path, 'stuck', end='sigint')
     assert host.returncode != 0
-    assert 'agents host stopped: Claude Code ended the session (SIGINT).' in host.report
+    assert 'subagents host stopped: Claude Code ended the session (SIGINT).' in host.report
     names_only(stop_line(host.report), [target_of(host)], host.agents[1:])
 
 

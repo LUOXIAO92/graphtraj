@@ -517,7 +517,7 @@ for line in sys.stdin:
                 'subtype': 'mcp_message', 'server_name': sdk_servers[0],
                 'message': {'jsonrpc': '2.0', 'id': 11, 'method': 'tools/list'}}})
         elif response['request_id'] == 'sdk-initial-tools':
-            assert response['response']['mcp_response']['result']['tools'][0]['name'] == 'agents'
+            assert response['response']['mcp_response']['result']['tools'][0]['name'] == 'subagents'
             sdk_ready = True
         elif response['request_id'] == 'startup':
             started = True
@@ -526,7 +526,7 @@ for line in sys.stdin:
                     log.write(f'{time.monotonic() - hook_sent}\n')
             init = {'type': 'system', 'subtype': 'init', 'session_id': session, 'model': model}
             if sdk_servers:
-                init['tools'] = [f'mcp__{sdk_servers[0]}__agents']
+                init['tools'] = [f'mcp__{sdk_servers[0]}__subagents']
             observed_mode = os.environ.get('CLAUDE_FIXTURE_PERMISSION_MODE', permission_mode)
             if observed_mode is not None:
                 init['permissionMode'] = observed_mode
@@ -537,11 +537,11 @@ for line in sys.stdin:
             result(json.dumps(response['response']))
         elif response['request_id'] == 'sdk-list':
             tools = response['response']['mcp_response']['result']['tools']
-            assert [tool['name'] for tool in tools] == ['agents', 'tasks']
+            assert [tool['name'] for tool in tools] == ['subagents', 'tasks']
             call_request = {'type': 'control_request', 'request_id': 'sdk-call', 'request': {
                 'subtype': 'mcp_message', 'server_name': sdk_servers[0], 'message': {
                     'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                    'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}}
+                    'params': {'name': 'subagents', 'arguments': sdk_request_arguments}}}}
             emit(call_request)
             if sdk_request_arguments['feature'] == 'create' and not sdk_display:
                 emit({**call_request, 'request_id': 'sdk-call-copy'})
@@ -553,7 +553,7 @@ for line in sys.stdin:
                     'subtype': 'hook_callback', 'callback_id': 'graftling_agents_display', 'input': {
                         'hook_event_name': 'PostToolUse', 'session_id': session,
                         'tool_use_id': 'display-' + sdk_request_arguments['feature'],
-                        'tool_name': f'mcp__{sdk_servers[0]}__agents', 'tool_input': sdk_request_arguments,
+                        'tool_name': f'mcp__{sdk_servers[0]}__subagents', 'tool_input': sdk_request_arguments,
                         'tool_response': reply}}})
             elif sdk_request_arguments['feature'] == 'create':
                 sdk_create_results.append(reply)
@@ -570,7 +570,7 @@ for line in sys.stdin:
                 emit({'type': 'control_request', 'request_id': 'sdk-call', 'request': {
                     'subtype': 'mcp_message', 'server_name': sdk_servers[0], 'message': {
                         'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
-                        'params': {'name': 'agents', 'arguments': sdk_request_arguments}}}})
+                        'params': {'name': 'subagents', 'arguments': sdk_request_arguments}}}})
             else:
                 result(json.dumps(sdk_display_reply))
     elif event['type'] == 'user':

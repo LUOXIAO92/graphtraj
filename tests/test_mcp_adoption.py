@@ -108,7 +108,7 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
                     assert report['service']['mcp']['sha256'] == 'still-old-code'
                 assert report['reload_requested'] is not observe_only
                 assert 'adopted' not in report and 'features' not in report
-                assert report['servers'][0]['tools'] == ['agents', 'tasks']
+                assert report['servers'][0]['tools'] == ['subagents', 'tasks']
 
     asyncio.run(check())
     assert [item['method'] for item in requests] == [

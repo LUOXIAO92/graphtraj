@@ -84,7 +84,7 @@ def clients():
 
 def blocked_until(release: threading.Event, started: threading.Event | None = None):
     """Return a native call whose ``wait`` holds until released; others answer at once."""
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         if request['feature'] == 'wait':
             if started is not None:
                 started.set()
@@ -119,10 +119,10 @@ def test_independent_host_uses_the_concurrent_loop(tmp_path: Path) -> None:
     def call(identity: object, params: dict) -> dict:
         return result_response(identity, {'isError': False, 'structuredContent': native(params['arguments']).document})
 
-    client = Client(serve_concurrent, lambda message: respond(message, tool_documents, call, {'name': 'agents'}))
+    client = Client(serve_concurrent, lambda message: respond(message, tool_documents, call, {'name': 'subagents'}))
     try:
-        client.call(1, 'wait', tool='agents')
-        client.call(2, 'status', tool='agents')
+        client.call(1, 'wait', tool='subagents')
+        client.call(2, 'status', tool='subagents')
         assert client.next()['id'] == 2
     finally:
         release.set()
@@ -134,7 +134,7 @@ def test_cancel_stops_the_wait_at_once_and_sends_no_response(clients, tmp_path: 
     """Required result 2: the wait ends now, nothing answers it and the host keeps serving."""
     started, ended = threading.Event(), threading.Event()
 
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         if request['feature'] == 'wait':
             started.set()
             try:
@@ -162,7 +162,7 @@ def test_cancelled_call_returns_what_its_result_had_claimed(clients, tmp_path: P
     """A result nobody reads gives its claimed notices back through ``on_discard``."""
     claimed, returned, release = threading.Event(), threading.Event(), threading.Event()
 
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         on_discard(returned.set)
         claimed.set()
         release.wait(LONG)
@@ -183,7 +183,7 @@ def test_input_eof_wakes_every_wait_and_the_host_returns(tmp_path: Path) -> None
     """A client that went away holds nothing: a review and a wait both end."""
     states: list[str] = []
 
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         try:
             if request['feature'] == 'approved_recovery':
                 review_proposal(proposal('eof'), tmp_path, tmp_path)
@@ -218,7 +218,7 @@ def test_call_that_ignores_its_stop_cannot_hold_the_host_past_close(tmp_path: Pa
         client.close()
         client.host.join(QUICK)
         assert not client.host.is_alive(), 'serve still waits for the stuck call'
-        assert 'agents-call still-running-at-close id=1 tool=tasks feature=wait' in capfd.readouterr().err
+        assert 'subagents-call still-running-at-close id=1 tool=tasks feature=wait' in capfd.readouterr().err
     finally:
         release.set()
 
@@ -228,7 +228,7 @@ def test_sigint_does_not_wait_for_a_call_that_ignores_its_stop(tmp_path: Path) -
     started, release, finished = threading.Event(), threading.Event(), threading.Event()
     raised: list[float] = []
 
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         started.set()
         release.wait(LONG)
         finished.set()
@@ -266,7 +266,7 @@ def proposal(alias: str) -> dict:
 
 def reviewing(tmp_path: Path):
     """Return a native call whose ``alias`` argument names its reviewed change."""
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         return AgentsResult(review_proposal(proposal(request['arguments']['alias']), tmp_path, tmp_path))
     return native_call
 
@@ -339,7 +339,7 @@ def test_concurrent_large_outputs_stay_whole_lines(clients, tmp_path: Path) -> N
     """Results larger than a pipe buffer never interleave."""
     size = 300_000
 
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         return AgentsResult({'blob': request['feature'] * size})
 
     client = clients(tmp_path, native_call=native_call)
@@ -361,8 +361,8 @@ def test_call_log_names_each_call_without_its_arguments(clients, tmp_path: Path,
     client.close()
     client.host.join(QUICK)
     logged = capfd.readouterr().err
-    assert 'agents-call received id=7 tool=tasks feature=status' in logged
-    assert 'agents-call finished id=7 tool=tasks feature=status seconds=' in logged
+    assert 'subagents-call received id=7 tool=tasks feature=status' in logged
+    assert 'subagents-call finished id=7 tool=tasks feature=status seconds=' in logged
     assert 'outcome=ok' in logged and 'do-not-log-this-value' not in logged
 
 
@@ -380,7 +380,7 @@ def native_calls(tmp_path: Path, invocations: list | None = None) -> NativeCalls
     return NativeCalls(bind, tmp_path)
 
 
-def prepared(host: NativeCalls, tmp_path: Path, feature: str, session: str, tool: str = 'agents') -> dict:
+def prepared(host: NativeCalls, tmp_path: Path, feature: str, session: str, tool: str = 'subagents') -> dict:
     """Prepare one native call as the mod does during Claude's permission check."""
     request = {'action': 'execute', 'feature': feature, 'arguments': {}}
     host.context({'operation': 'prepare', 'tool': tool, 'session': session, 'cwd': str(tmp_path),
@@ -400,7 +400,7 @@ def test_several_associations_are_each_consumed_once(tmp_path: Path) -> None:
     # The same request through the other entry is a different call.
     tasks = prepared(host, tmp_path, 'status', session, tool='tasks')
     with pytest.raises(AgentsError, match='No matching'):
-        host.call(tasks, 'agents')
+        host.call(tasks, 'subagents')
     assert host.call(tasks, 'tasks').document == {'native': session}
 
 
@@ -433,7 +433,7 @@ def test_another_session_cannot_prepare_or_consume_meanwhile(tmp_path: Path) -> 
     # A subagent never adopts Main, also with other calls in flight.
     prepared(host, tmp_path, 'wait', other)
     with pytest.raises(AgentsError, match='subagent'):
-        host.context({'operation': 'prepare', 'tool': 'agents', 'session': other, 'cwd': str(tmp_path),
+        host.context({'operation': 'prepare', 'tool': 'subagents', 'session': other, 'cwd': str(tmp_path),
                       'agent': 'native-child', 'request': request})
 
 
@@ -441,12 +441,12 @@ def test_end_names_its_own_call_and_a_bare_end_keeps_its_old_meaning(tmp_path: P
     """One call's end leaves the others; a mod adopted earlier still clears everything."""
     host, session = native_calls(tmp_path), str(uuid4())
     kept, ended = prepared(host, tmp_path, 'status', session), prepared(host, tmp_path, 'wait', session)
-    host.context({'operation': 'end', 'tool': 'agents', 'session': session, 'request': ended})
+    host.context({'operation': 'end', 'tool': 'subagents', 'session': session, 'request': ended})
     with pytest.raises(AgentsError, match='No matching'):
         host.call(ended)
     # An end naming another Session's or entry's call changes nothing.
     host.context({'operation': 'end', 'tool': 'tasks', 'session': session, 'request': kept})
-    host.context({'operation': 'end', 'tool': 'agents', 'session': str(uuid4()), 'request': kept})
+    host.context({'operation': 'end', 'tool': 'subagents', 'session': str(uuid4()), 'request': kept})
     assert host.call(kept).document == {'native': session}
     prepared(host, tmp_path, 'status', session)
     prepared(host, tmp_path, 'wait', session)
@@ -455,7 +455,7 @@ def test_end_names_its_own_call_and_a_bare_end_keeps_its_old_meaning(tmp_path: P
         with pytest.raises(AgentsError, match='No matching'):
             host.call(request)
     with pytest.raises(AgentsError, match='per-call end'):
-        host.context({'operation': 'end', 'tool': 'agents'})
+        host.context({'operation': 'end', 'tool': 'subagents'})
 
 
 def test_ended_association_waits_for_its_request_while_its_session_runs(tmp_path: Path) -> None:
@@ -476,11 +476,11 @@ def test_ended_association_waits_for_its_request_while_its_session_runs(tmp_path
     worker.start()
     assert running.wait(QUICK)
     late = prepared(host, tmp_path, 'status', session)
-    host.context({'operation': 'end', 'tool': 'agents', 'session': session, 'request': late})
+    host.context({'operation': 'end', 'tool': 'subagents', 'session': session, 'request': late})
     assert host.call(late).document == {'native': session}
     # Another Session's preparation drops it.
     gone = prepared(host, tmp_path, 'requests', session)
-    host.context({'operation': 'end', 'tool': 'agents', 'session': session, 'request': gone})
+    host.context({'operation': 'end', 'tool': 'subagents', 'session': session, 'request': gone})
     prepared(host, tmp_path, 'status', str(uuid4()))
     release.set()
     worker.join()
@@ -557,25 +557,25 @@ def test_mod_lets_calls_overlap_and_each_ends_only_itself(tmp_path: Path) -> Non
 const long = {action: 'execute', feature: 'wait', arguments: {agent: 'a', timeout_seconds: 5}};
 const short = {action: 'describe', feature: 'status', schema: true};
 const gate = held();
-const running = call('agents')(host, {tool: 'mcp__graphtraj__agents', ...long}, async () => {
-  await check('agents')(host, {input: long}, async () => ({decision: 'allow'}));
+const running = call('subagents')(host, {tool: 'mcp__graphtraj__subagents', ...long}, async () => {
+  await check('subagents')(host, {input: long}, async () => ({decision: 'allow'}));
   await gate.promise;
   return {result: '{}'};
 });
 await tick();
-const second = await call('agents')(host, {tool: 'mcp__graphtraj__agents', ...short}, async () => {
-  await check('agents')(host, {input: short}, async () => ({decision: 'allow'}));
+const second = await call('subagents')(host, {tool: 'mcp__graphtraj__subagents', ...short}, async () => {
+  await check('subagents')(host, {input: short}, async () => ({decision: 'allow'}));
   return {result: '{}'};
 });
 assert.ok(!second.deny, 'the overlapping call was refused');
 assert.deepEqual(operations, [
-  {operation: 'prepare', tool: 'agents', session: 'main-session', cwd: '/p', agent: null, request: long},
-  {operation: 'prepare', tool: 'agents', session: 'main-session', cwd: '/p', agent: null, request: short},
-  {operation: 'end', tool: 'agents', request: short, session: 'main-session'},
+  {operation: 'prepare', tool: 'subagents', session: 'main-session', cwd: '/p', agent: null, request: long},
+  {operation: 'prepare', tool: 'subagents', session: 'main-session', cwd: '/p', agent: null, request: short},
+  {operation: 'end', tool: 'subagents', request: short, session: 'main-session'},
 ]);
 gate.release();
 await running;
-assert.deepEqual(operations.at(-1), {operation: 'end', tool: 'agents', request: long, session: 'main-session'});
+assert.deepEqual(operations.at(-1), {operation: 'end', tool: 'subagents', request: long, session: 'main-session'});
 ''')
 
 
@@ -586,7 +586,7 @@ await handlers.get('session.start')(host, {}, async () => 'started');
 const notice = {at: 1, id: 'e1:completed', event: {alias: 'leader@l1', event: 'completed', message: 'done'}};
 const gates = [held(), held()];
 const request = {action: 'execute', feature: 'status', arguments: {}};
-const running = gates.map(gate => call('agents')(host, {tool: 'mcp__graphtraj__agents', ...request}, async () => {
+const running = gates.map(gate => call('subagents')(host, {tool: 'mcp__graphtraj__subagents', ...request}, async () => {
   await gate.promise; return {result: '{}'};
 }));
 await tick();

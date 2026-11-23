@@ -23,7 +23,7 @@ def ask(root: Path, alias: str | None, timeout: float, kind: str = 'decision', q
     """Call ask_parent through the gateway every member's agents call enters."""
     arguments = {'action': 'ask_parent', 'kind': kind, 'question': question, 'timeout_seconds': timeout}
     with runtime_caller(runner_directory(root), alias):
-        return handle_request({'action': 'execute', 'feature': 'agents', 'arguments': arguments}, cwd=root).document
+        return handle_request({'action': 'execute', 'feature': 'subagents', 'arguments': arguments}, cwd=root).document
 
 
 class Asking:
@@ -47,7 +47,7 @@ def pending(call, alias: str, count: int = 1) -> list[dict]:
     """Wait until the parent can read ``count`` requests of ``alias``."""
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
-        requests = call('agents', ['requests', {'agent': alias}, 'main-a'])['result']['requests']
+        requests = call('subagents', ['requests', {'agent': alias}, 'main-a'])['result']['requests']
         if len(requests) == count:
             return requests
         time.sleep(0.1)
@@ -74,25 +74,25 @@ def test_a_members_question_is_answered_by_its_parent(managed_project: ManagedPr
     request, = pending(call, alias)
     assert request['method'] == 'agents/decision' and request['params'] == {'kind': kind, 'question': question}
     assert (request['session'], request['execution_id']) == (mapping['session'], mapping['execution_id'])
-    assert call('agents', ['wait', {'agent': alias, 'timeout_seconds': 10}, 'main-a'])['result']['timed_out'] is False
+    assert call('subagents', ['wait', {'agent': alias, 'timeout_seconds': 10}, 'main-a'])['result']['timed_out'] is False
     assert call('status', [alias])['aliases'][0]['pending_requests'] == 1
 
-    invalid = call('agents', ['reply', {'agent': alias, 'request': request, 'response': {'decision': 'accept'}}, 'main-a'],
+    invalid = call('subagents', ['reply', {'agent': alias, 'request': request, 'response': {'decision': 'accept'}}, 'main-a'],
                    returncode=1)
     assert invalid['error']['code'] == 'invalid-input'
     assert pending(call, alias) == [request]
 
-    reply = call('agents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Use B.'}}, 'main-a'])
+    reply = call('subagents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Use B.'}}, 'main-a'])
     assert reply['result']['reply_status'] == 'answered' and reply['result']['answer'] == 'Use B.'
 
     document = asking.result()
     assert document['action'] == 'ask_parent' and document['agent'] == mapping['agent']
     assert document['result']['answer'] == 'Use B.' and document['result']['timed_out'] is False
     assert document['result']['request']['params'] == {'kind': kind, 'question': question}
-    assert call('agents', ['requests', {'agent': alias}, 'main-a'])['result']['requests'] == []
+    assert call('subagents', ['requests', {'agent': alias}, 'main-a'])['result']['requests'] == []
     assert 'pending_requests' not in call('status', [alias])['aliases'][0]
 
-    repeat = call('agents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Other.'}}, 'main-a'])
+    repeat = call('subagents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Other.'}}, 'main-a'])
     assert repeat['result']['duplicate'] is True and repeat['result']['answer'] == 'Use B.'
 
 
@@ -108,7 +108,7 @@ def test_an_answer_to_a_resources_request_grants_nothing(managed_project: Manage
 
     asking = Asking(root, alias, kind='resources', question='Two more hours?')
     request, = pending(call, alias)
-    call('agents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Yes, take them.'}}, 'main-a'])
+    call('subagents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Yes, take them.'}}, 'main-a'])
     assert asking.result()['result']['answer'] == 'Yes, take them.'
 
     assert {path: path.read_bytes() for path in before} == before
@@ -129,7 +129,7 @@ def test_no_answer_in_time_is_an_explicit_no_answer_and_stays_pending(managed_pr
     again = Asking(root, alias)
     time.sleep(0.3)
     assert pending(call, alias) == [request]
-    call('agents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Late.'}}, 'main-a'])
+    call('subagents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Late.'}}, 'main-a'])
     assert again.result()['result']['answer'] == 'Late.'
     assert ask(root, alias, 0.2)['result']['answer'] == 'Late.'
 
@@ -138,7 +138,7 @@ def test_a_caller_without_a_reference_or_execution_is_refused(managed_project: M
     """Main has nothing to ask; an unknown caller and an ended execution are refused too."""
     root, _, call, _ = managed_project
     alias, _ = launched(call)
-    main = call('agents', ['ask_parent', {'kind': 'decision', 'question': '?', 'timeout_seconds': 1}, 'main-a'],
+    main = call('subagents', ['ask_parent', {'kind': 'decision', 'question': '?', 'timeout_seconds': 1}, 'main-a'],
                 returncode=1)
     assert main['error']['code'] == 'authority-denied'
 
@@ -170,7 +170,7 @@ def test_a_member_cannot_answer_its_own_question(managed_project: ManagedProject
         GraphTrajAgents(root).operate('reply', arguments, Binding(Caller('graphtraj-gateway', alias)))
     assert refused.value.code == 'authority-denied'
     assert pending(call, alias) == [request]
-    call('agents', ['reply', {**arguments, 'response': {'answer': 'Parent.'}}, 'main-a'])
+    call('subagents', ['reply', {**arguments, 'response': {'answer': 'Parent.'}}, 'main-a'])
     assert asking.result()['result']['answer'] == 'Parent.'
 
 
@@ -276,5 +276,5 @@ def test_main_is_kept_going_by_a_root_members_unanswered_question(managed_projec
     assert 'Secret option' not in output['reason']
 
     request, = pending(call, alias)
-    call('agents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Done.'}}, 'main-a'])
+    call('subagents', ['reply', {'agent': alias, 'request': request, 'response': {'answer': 'Done.'}}, 'main-a'])
     assert asyncio.run(finalize._owned_request_result({'cwd': str(root), 'connection': connection})) is None

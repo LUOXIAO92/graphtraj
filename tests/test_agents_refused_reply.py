@@ -91,7 +91,7 @@ class Client:
         request = {'action': 'execute', 'feature': feature, 'arguments': arguments}
         if self.prepare is not None:
             self.prepare(request)
-        params = {'name': 'agents', 'arguments': request}
+        params = {'name': 'subagents', 'arguments': request}
         if self.meta is not None:
             params['_meta'] = self.meta
         result = self.send({'method': 'tools/call', 'params': params}, timeout)['result']
@@ -195,7 +195,7 @@ def claude_host(tmp_path: Path) -> Iterator[tuple[Client, Path]]:
 
     def prepare(request: dict) -> None:
         """The native mod's per-call context step, as a direct child of the same parent."""
-        native = {'operation': 'prepare', 'tool': 'agents', 'session': session, 'cwd': str(project),
+        native = {'operation': 'prepare', 'tool': 'subagents', 'session': session, 'cwd': str(project),
                   'agent': None, 'request': request}
         done = subprocess.run([sys.executable, '-m', 'graftling.claude.host', 'context', '--config', str(config)],
                               input=json.dumps(native), capture_output=True, text=True, timeout=PROMPT, env=env)
@@ -204,7 +204,7 @@ def claude_host(tmp_path: Path) -> Iterator[tuple[Client, Path]]:
     client = Client([sys.executable, '-m', 'graftling.claude.host', 'serve', '--config', str(config)],
                     env, project)
     try:
-        assert client.send({'method': 'initialize', 'params': {}}, WAIT)['result']['serverInfo']['name'] == 'agents'
+        assert client.send({'method': 'initialize', 'params': {}}, WAIT)['result']['serverInfo']['name'] == 'subagents'
         client.prepare = prepare
         yield client, root
     finally:

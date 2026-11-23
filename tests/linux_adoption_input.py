@@ -100,7 +100,7 @@ def main() -> None:
                                 connection.sendall(b'finish')
                         assert terminal.wait(30), 'Runner did not deliver completion to the retained host'
                         assert result['events'][-1]['event'] == 'completed', result['events']
-                        result['afterCompletion'] = operate(host, 'agents', {
+                        result['afterCompletion'] = operate(host, 'subagents', {
                             'action': 'status', 'agent': task['alias']})['result']
                         final = result['afterCompletion']['aliases'][0]
                         assert final['activity'] == 'idle' and final['last_outcome'] == 'completed', final
@@ -113,7 +113,7 @@ def main() -> None:
                         raise
                     finally:
                         if not terminal.is_set():
-                            result['cleanup'] = operate(host, 'agents', {
+                            result['cleanup'] = operate(host, 'subagents', {
                                 'action': 'interrupt', 'agent': task['alias']})['result']
     except Exception as error:
         result['failure'] = str(error)

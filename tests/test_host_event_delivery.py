@@ -121,7 +121,7 @@ async def main():
         tool = bind(root, event_receiver=receiver)
         def invoke(feature, arguments):
             """The owning host binds agents to its already created native Session."""
-            if feature == 'agents':
+            if feature == 'subagents':
                 with parent_connection(tool.address), runtime_caller(root / '.graphtraj/runner', None):
                     return agents_callback(root, Caller('native-host', None,
                         runtime='codex', session=session.thread_id))(arguments)
@@ -139,7 +139,7 @@ async def main():
             try:
                 with budget_notice_output(write_fd):
                     launched = call('swarm', {'tasks':[{'task_id':'76','role':'researcher','instruction':'initial'}]})
-                    call('agents', {'action':'wait','agent':launched['tasks'][0]['alias'],'timeout_seconds':30})
+                    call('subagents', {'action':'wait','agent':launched['tasks'][0]['alias'],'timeout_seconds':30})
                     return launched
             finally:
                 os.close(write_fd)
@@ -222,7 +222,7 @@ async def main():
             (scratch/'initial-release').touch()
             (scratch/'later-release').touch()
             if alias:
-                await asyncio.to_thread(call,'agents',{'action':'interrupt','agent':alias})
+                await asyncio.to_thread(call,'subagents',{'action':'interrupt','agent':alias})
             await asyncio.to_thread(tool.close)
             await asyncio.to_thread(connections.close)
 
@@ -275,7 +275,7 @@ def test_owning_host_processes_events_during_and_after_tool_call(
             details=json.loads(event['message'].split('\n')[-1])
             arguments.update(request=details,response=({'decision':'accept'} if event['event'].endswith('requestApproval') else {'answers':{'color':{'answers':['blue']}}}))
         command=([os.environ['HOST_RUNNER'],'reports',event['alias']] if operation=='reports'
-                 else [str(Path(os.environ['HOST_RUNNER']).with_name('agents')),json.dumps({
+                 else [str(Path(os.environ['HOST_RUNNER']).with_name('subagents')),json.dumps({
                      'action':'execute','feature':operation,'arguments':arguments})])
         action = subprocess.run(command,
                                 cwd=os.environ['HOST_PROJECT'], capture_output=True, text=True,

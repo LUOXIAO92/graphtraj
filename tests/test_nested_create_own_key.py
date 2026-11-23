@@ -134,7 +134,7 @@ def test_the_entry_runs_the_create_in_the_owner_holding_the_childs_key(tmp_path:
 
     messages = [
         {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
-        {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'agents', 'arguments': {
+        {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'subagents', 'arguments': {
             'action': 'execute', 'feature': 'create', 'arguments': {'runtime': 'dsh', 'instruction': 'pwd'}}}},
     ]
     # What DSH's MCP client leaves a stdio server: no credential-class name at all.

@@ -84,14 +84,14 @@ def test_native_main_agents_call_reads_its_arguments_file(project: Path) -> None
     """The agents entry of the same Main matches the raw input and reads the file afterwards."""
     host, session = native_host(project), str(uuid4())
     status = {'action': 'execute', 'feature': 'status', 'arguments_file': write(project / 'status.json', {})}
-    prepare(host, project, 'agents', status, session)
-    answer = call(project, 'agents', status, host.call)
+    prepare(host, project, 'subagents', status, session)
+    answer = call(project, 'subagents', status, host.call)
     assert 'error' not in answer, answer
 
     wait = {'action': 'execute', 'feature': 'wait',
             'arguments_file': write(project / 'wait.json', {'seconds': 'soon', 'bogus': 1})}
-    prepare(host, project, 'agents', wait, session)
-    refused = call(project, 'agents', wait, host.call)['error']
+    prepare(host, project, 'subagents', wait, session)
+    refused = call(project, 'subagents', wait, host.call)['error']
     assert refused['code'] == 'invalid-input'
     assert {'arguments.seconds', 'arguments.bogus'} <= {item['path'] for item in refused['errors']}
 
@@ -112,7 +112,7 @@ def test_unprepared_or_foreign_arguments_file_calls_stay_refused(project: Path) 
         prepare(host, project, 'tasks', register, other)
     # A call whose native call ended before it was served is refused, also for the other entry.
     host.context({'operation': 'end'})
-    prepare(host, project, 'agents', register, other)
+    prepare(host, project, 'subagents', register, other)
     assert call(project, 'tasks', register, host.call)['error']['code'] == 'authority-denied'
     host.context({'operation': 'end'})
     assert call(project, 'tasks', register, host.call)['error']['code'] == 'authority-denied'
@@ -124,7 +124,7 @@ def test_unprepared_or_foreign_arguments_file_calls_stay_refused(project: Path) 
 def test_prepared_call_with_a_bad_file_is_invalid_input(project: Path, named: str, reason: str) -> None:
     """The file rules are unchanged on the native path: one request.arguments_file problem."""
     host = native_host(project)
-    for tool, feature in (('tasks', 'task_graph'), ('agents', 'status')):
+    for tool, feature in (('tasks', 'task_graph'), ('subagents', 'status')):
         request = {'action': 'execute', 'feature': feature, 'arguments_file': named}
         prepare(host, project, tool, request, str(uuid4()))
         error = call(project, tool, request, host.call)['error']
@@ -143,5 +143,5 @@ def test_member_path_reads_arguments_files(project: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(claude_mcp, 'agents_dispatch',
                         lambda request, cwd: forwarded.append(dict(request)) or claude_mcp.AgentsResult({}))
     status = {'action': 'execute', 'feature': 'status', 'arguments_file': write(project / 'status.json', {})}
-    assert 'error' not in call(project, 'agents', status)
+    assert 'error' not in call(project, 'subagents', status)
     assert forwarded and 'arguments_file' not in json.dumps(forwarded)

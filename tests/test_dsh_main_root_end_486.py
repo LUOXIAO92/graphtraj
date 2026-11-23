@@ -58,7 +58,7 @@ def start_server(project: Path, call: dict) -> tuple[subprocess.Popen, dict]:
     server = subprocess.Popen([sys.executable, '-c', SERVER], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, text=True, cwd=project, env=environment)
     server.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                                   'params': {'name': 'agents', 'arguments': call}}) + '\n')
+                                   'params': {'name': 'subagents', 'arguments': call}}) + '\n')
     server.stdin.flush()
     return server, json.loads(server.stdout.readline())['result']
 

@@ -299,7 +299,7 @@ def test_grandchild_under_a_codex_child_keeps_its_parentage(
     log = tmp_path / 'host-events.jsonl'
     monkeypatch.setenv('PEER_HOST_EVENTS', str(log))
     monkeypatch.setenv('PEER_MCP_REQUESTS', json.dumps([
-        {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents', 'arguments': {
+        {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'subagents', 'arguments': {
             'action': 'execute', 'feature': 'create', 'arguments': {'runtime': runtime, 'instruction': 'hello'}}}},
     ]))
     running = Running(CodexHost(host_settings, tmp_path / 'host', 'hold'))

@@ -97,7 +97,7 @@ def test_claude_main_ignores_late_answer_and_serves_later_calls(client, tmp_path
     output  = Output()
     applied = []
 
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         """Review and apply as approved_recovery does with a bound host reviewer."""
         if review_proposal(PROPOSAL, tmp_path, tmp_path) != {'decision': 'accept'}:
             return AgentsResult({'recovery_status': 'denied'}, failed=True)

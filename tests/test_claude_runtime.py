@@ -285,7 +285,7 @@ def test_claude_public_launch_diagnostics_are_bounded_and_correlated(
     launch = diagnostics['launch']
     assert launch['permission_mode'] == argv[argv.index('--permission-mode') + 1] == 'auto'
     settings = json.loads(argv[argv.index('--settings') + 1])
-    # 514: a Runner member's own server is graphtraj, so the model sees mcp__graphtraj__agents/tasks.
+    # 514: a Runner member's own server is graphtraj, so the model sees mcp__graphtraj__subagents/tasks.
     assert list(json.loads(argv[argv.index('--mcp-config') + 1])['mcpServers']) == ['graphtraj']
     assert launch['inline_default_mode'] == settings['permissions']['defaultMode'] == 'auto'
     assert launch['model'] == argv[argv.index('--model') + 1] == 'claude-opus-5-5'

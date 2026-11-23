@@ -111,7 +111,7 @@ def main() -> None:
 
     def shown(text: str) -> None:
         """Show one user message as Pi does when it takes it (agent-loop.js message_start)."""
-        if text.startswith('[agents · ') and os.environ.get('PI_FIXTURE_REWRITE_NOTICES'):
+        if text.startswith('[subagents · ') and os.environ.get('PI_FIXTURE_REWRITE_NOTICES'):
             text = 'rewritten ' + text  # as a user extension's input handler can
         message = {'role': 'user', 'content': [{'type': 'text', 'text': text}], 'timestamp': 1791936000000}
         emit({'type': 'message_start', 'message': message})
@@ -282,7 +282,7 @@ def main() -> None:
                 response['data'] = {'entries': list(entries),
                                     'leafId': entries[-1]['id'] if entries else None}
         elif kind == 'prompt':
-            notice = request['message'].startswith('[agents · ')
+            notice = request['message'].startswith('[subagents · ')
             if notice and gated('PI_FIXTURE_REFUSE_NOTICES'):
                 response.update(success=False, error='fixture refused the notice')
                 emit(response)

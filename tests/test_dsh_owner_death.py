@@ -144,7 +144,7 @@ real_serve = host.serve_concurrent
 def serve(*arguments):
     """The Main's association comes from the native mod; everything after it is real."""
     call = made[0].make_call(os.environ['TEST_SESSION'], Path.cwd())
-    made[0].call = lambda request: call('agents', request)
+    made[0].call = lambda request: call('subagents', request)
     real_serve(*arguments)
 
 

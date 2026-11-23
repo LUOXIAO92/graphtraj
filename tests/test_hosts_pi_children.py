@@ -64,7 +64,7 @@ class ClaudeMain:
 
     def attempt(self, feature: str, **arguments: object):
         """Return the raw result of one call, failed or not."""
-        return self.raw('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
+        return self.raw('subagents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
 
     def call(self, feature: str, **arguments: object) -> dict:
         """Call one feature and require success."""
@@ -258,7 +258,7 @@ def test_a_pi_child_stopped_with_the_claude_host_reaches_the_next_run_once(proje
     def run() -> list:
         """One result of the same Session in a new host process."""
         host = IndependentCalls(root, project, {}, {'pi': dict(ENTRY)})
-        return host.make_call(first.session, project)('agents', {'action': 'status'}).document.get('main_notices', [])
+        return host.make_call(first.session, project)('subagents', {'action': 'status'}).document.get('main_notices', [])
 
     [notice] = run()
     assert (notice['event']['alias'], notice['event']['event']) == (agent, 'interrupted')
@@ -302,7 +302,7 @@ def serve_claude_host(config: Path, project: Path) -> str:
     """Run the real ``serve`` under a launcher standing in for Claude; return the first tool answer's text."""
     messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                 'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
+                 'params': {'name': 'subagents', 'arguments': {'action': 'discover'}}}]
     launcher = ('import subprocess, sys\n'
                 'done = subprocess.run([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'

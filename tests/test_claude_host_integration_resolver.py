@@ -77,9 +77,9 @@ def test_host_serves_main_while_the_conflict_resolver_waits_for_its_reply(
         monkeypatch.setattr(task_integration, '_resolve', launched_before_its_trace)
     connection = {'runtime': 'claude', 'session': str(uuid4()), 'runner': str(runner)}
 
-    def native_call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def native_call(request: dict, tool: str = 'subagents') -> AgentsResult:
         """Run Main's calls as the host's main_calls does; reply answers the resolver."""
-        if tool == 'agents':
+        if tool == 'subagents':
             assert request['feature'] == 'reply'
             answered.touch()
             return AgentsResult({'replied': True})
@@ -114,7 +114,7 @@ def test_host_serves_main_while_the_conflict_resolver_waits_for_its_reply(
     try:
         send(1, 'tasks', 'task_integrate', {**integrate, 'resolve_conflict': 'Preserve both document requirements',
                                             'role': 'editor'})
-        send(2, 'agents', 'reply', {'agent': 'resolver', 'request': 'permission',
+        send(2, 'subagents', 'reply', {'agent': 'resolver', 'request': 'permission',
                                     'response': {'decision': 'accept'}})
         send(3, 'tasks', 'task_members', {})
         send(4, 'tasks', 'task_register', _task('90', 'unrelated'))

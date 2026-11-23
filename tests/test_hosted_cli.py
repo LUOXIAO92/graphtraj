@@ -307,7 +307,7 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
     directory = own_process(runner)
     monkeypatch.delenv('GRAFTLING_CONNECTION', raising=False)
     expected = {'runtime': 'dsh', 'session': 'owned-dsh-session', 'source': 'main', 'cwd': str(tmp_path)}
-    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents',
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'subagents',
         'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}
     with hold_ownership(directory, os.getpid()), cli_connection(
         tmp_path, 'research@x1', native_operation_features(), native_context=lambda: expected,
@@ -315,7 +315,7 @@ def test_shared_mcp_command_consumes_bound_graphtraj_dsh_channel(tmp_path: Path,
         listed = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
                          input_text=json.dumps({'jsonrpc': '2.0', 'id': 0, 'method': 'tools/list'})+'\n',
                          DSH_SESSION_ID=expected['session'], DSH_AGENT_SOURCE='main')
-        assert [tool['name'] for tool in json.loads(listed.stdout)['result']['tools']] == ['agents', 'tasks']
+        assert [tool['name'] for tool in json.loads(listed.stdout)['result']['tools']] == ['subagents', 'tasks']
         discovery = run_cli('graphtraj.interfaces.mcp', tmp_path, address,
                             input_text=json.dumps({**request, 'params': {'name': 'tasks',
                                 'arguments': {'action': 'discover'}}})+'\n',

@@ -1272,7 +1272,7 @@ def test_external_checker_cli_identity_needs_metadata_not_rollout(
         monkeypatch.setattr(finalize, 'proxy', failed_proxy)
     monkeypatch.chdir(root)
     monkeypatch.delenv('GRAFTLING_CONNECTION', raising=False)
-    monkeypatch.setattr(sys, 'argv', ['agents', json.dumps({
+    monkeypatch.setattr(sys, 'argv', ['subagents', json.dumps({
         'action': 'execute', 'feature': 'status', 'arguments': {'agent': 'requested-current-alias'},
     })])
     with pytest.raises(SystemExit) as exited:

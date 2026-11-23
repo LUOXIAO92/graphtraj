@@ -126,7 +126,7 @@ def test_unverifiable_caller_returns_mcp_error_without_closing_server(
     monkeypatch.setenv('GRAFTLING_NATIVE_RUNTIME', 'pi')
     requests = [
         {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'agents', 'arguments': {
+            'name': 'subagents', 'arguments': {
                 'action': 'execute', 'feature': 'status', 'arguments': {},
             },
         }},

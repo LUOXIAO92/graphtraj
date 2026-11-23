@@ -25,7 +25,7 @@ from test_task_graph import _configure, _task, _write
 
 
 # The original gateway remains alongside the two public function names.
-TOOL_NAMES = {"agents", "tasks"}
+TOOL_NAMES = {"subagents", "tasks"}
 MCP_TOOL_NAME = "tasks"
 AGENT_ACTIONS = frozenset({'status', 'send', 'interrupt', 'requests', 'reply'})
 
@@ -129,7 +129,7 @@ class McpServerProcess:
         host sends as ``params._meta.threadId`` on its own tool request.
         """
 
-        params = {"name": 'agents' if name in AGENT_ACTIONS else MCP_TOOL_NAME,
+        params = {"name": 'subagents' if name in AGENT_ACTIONS else MCP_TOOL_NAME,
                   "arguments": tool_envelope(name, arguments)}
         if thread_id is not None:
             params["_meta"] = {"threadId": thread_id}
@@ -185,7 +185,7 @@ def _agents(
 ) -> subprocess.CompletedProcess[str]:
     """Call the installed agents CLI with the same verified host as MCP."""
     return run_process(
-        [str(commands.product.with_name('agents')), json.dumps(tool_envelope(action, arguments))],
+        [str(commands.product.with_name('subagents')), json.dumps(tool_envelope(action, arguments))],
         cwd=project, env=environment,
     )
 
@@ -280,7 +280,7 @@ def test_mcp_agents_preserves_verified_main_and_helper_authority(
         """Exercise a full newline-delimited MCP tools/call exchange."""
         output = StringIO()
         serve(StringIO(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                                  'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': arguments['action'], 'arguments': {key: value for key, value in arguments.items() if key != 'action'}}}}) + '\n'), output)
+                                  'params': {'name': 'subagents', 'arguments': {'action': 'execute', 'feature': arguments['action'], 'arguments': {key: value for key, value in arguments.items() if key != 'action'}}}}) + '\n'), output)
         return json.loads(output.getvalue())['result']
 
     assert call({'action': 'status'})['isError'] is False
@@ -318,7 +318,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         descriptor = descriptors['tasks']
         assert descriptor["description"]
         # Tasks retains the gateway envelope; agents uses its independent contract.
-        assert descriptors['agents']['inputSchema'] == gateway.INPUT_SCHEMA
+        assert descriptors['subagents']['inputSchema'] == gateway.INPUT_SCHEMA
         assert descriptors['tasks']['inputSchema'] == gateway.INPUT_SCHEMA
         assert descriptor["inputSchema"] == gateway.INPUT_SCHEMA
         assert set(descriptor["inputSchema"]["properties"]) == {
@@ -375,7 +375,7 @@ def test_installed_mcp_server_discovers_tools_and_reads_the_same_graph_as_the_cl
         })
         assert tasks_call['result'] == call['result']
         agents_call = server.request('tools/call', {
-            'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}},
+            'name': 'subagents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}},
         })
         assert agents_call['result']['isError'] is True
         assert agents_call['result']['structuredContent']['error']['code'] == 'authority-unavailable'
@@ -1187,7 +1187,7 @@ def test_real_codex_host_discovers_and_calls_the_mcp_graph_tools_offline(
             {
                 "server":    "graphtraj",
                 "threadId":  host.thread_id,
-                "tool":      "agents",
+                "tool":      "subagents",
                 "arguments": tool_envelope(
                     'status', {'agent': "missing@l1", 'baseline': "abc123"}
                 ),
@@ -1248,7 +1248,7 @@ def _host_tool(host: "CodexHost", probe: Path, tool: str, arguments: dict) -> di
         {
             "server":    "graphtraj",
             "threadId":  host.thread_id,
-            "tool":      'agents' if tool in AGENT_ACTIONS else MCP_TOOL_NAME,
+            "tool":      'subagents' if tool in AGENT_ACTIONS else MCP_TOOL_NAME,
             "arguments": tool_envelope(tool, arguments),
         },
         timeout=60,

@@ -102,7 +102,7 @@ class Tree:
     def notices(self) -> list[str]:
         """Every notice the fake Pi took as input, in order."""
         lines = self.log.read_text().splitlines() if self.log.exists() else []
-        return [text for text in map(json.loads, lines) if text.startswith('[agents · ')]
+        return [text for text in map(json.loads, lines) if text.startswith('[subagents · ')]
 
     def took(self, *expected: str) -> None:
         """Wait until the fake Pi has taken these notices; it logs just after its acknowledgement."""
@@ -110,7 +110,7 @@ class Tree:
 
     def notice(self, agent: str, body: str) -> str:
         """The text one notice has as the parent's input."""
-        return f'[agents · {agent} → {self.parent}]\n{body}'
+        return f'[subagents · {agent} → {self.parent}]\n{body}'
 
     def close(self) -> None:
         """Stop what this host still runs."""
@@ -444,7 +444,7 @@ def test_a_pi_parent_gets_the_end_of_a_child_on_another_runtime(
         tool = bind(running.host.control, Caller('pi', created['agent'], created['session'], 'pi'))
         made = tool({'action': 'create', 'runtime': runtime, 'instruction': 'hello'})
         assert not made.failed, made.document
-        expected = f"[agents · {made.document['agent']} → {created['agent']}]\nhello"
+        expected = f"[subagents · {made.document['agent']} → {created['agent']}]\nhello"
         log = tmp_path / 'input.jsonl'
         until(lambda: expected in map(json.loads, log.read_text().splitlines()))
         record = tmp_path / 'data' / 'control' / 'agents' / f"{made.document['agent']}.json"
@@ -546,6 +546,6 @@ def test_each_host_holds_a_standby_pi_parents_notice_for_its_next_run(host_main,
 
     host_main.call('resume', agent=child, message='wait-take')
     log = tmp_path / 'input.jsonl'
-    expected = f'[agents · {grandchild} → {child}]\n{PERMISSION}'
+    expected = f'[subagents · {grandchild} → {child}]\n{PERMISSION}'
     until(lambda: expected in map(json.loads, log.read_text().splitlines()))
     until(lambda: list(executions(grandchild)[-1]['request_notices'].values()) == ['delivered'])

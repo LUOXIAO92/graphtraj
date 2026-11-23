@@ -321,7 +321,7 @@ def test_agents_control_dsh_without_task_or_archive(
     result = subprocess.run(
         [sys.executable, '-m', 'graftling.mcp'],
         input=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}) + '\n',
+            'name': 'subagents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}}) + '\n',
         env={**first.environment, 'DSH_SESSION_ID': first.session, 'DSH_AGENT_SOURCE': 'main',
              'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
         cwd=tmp_path, capture_output=True, text=True, timeout=10,

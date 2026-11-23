@@ -295,7 +295,7 @@ def claude_main(host: IndependentCalls, cwd: Path):
 
     def invoke(feature: str, **arguments) -> dict:
         """Call as the Main; ``invoke.shown`` keeps the notices its results carried."""
-        result = call('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
+        result = call('subagents', {'action': 'execute', 'feature': feature, 'arguments': arguments})
         assert not result.failed, result.document
         invoke.shown.extend(result.document.get('main_notices', []))
         return result.document

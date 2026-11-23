@@ -29,7 +29,7 @@ const contexts = [], log = [];
 const host = {
  session: {id: async () => 'first', cwd: async () => '/work'},
  command: {register: async () => {}},
- tool: {list: async () => [{name: 'mcp__graftling__agents'}, {name: 'mcp__graftling__notes'}, {name: 'mcp__graftling__tasks'}]},
+ tool: {list: async () => [{name: 'mcp__graftling__subagents'}, {name: 'mcp__graftling__notes'}, {name: 'mcp__graftling__tasks'}]},
  env: {get: async key => key.endsWith('PYTHON') ? '/python' : '/config'},
  process: {run: async (argv, options) => {contexts.push(JSON.parse(options.stdin)); return {exitCode: 0, stdout: '{}', stderr: ''};}},
  ui: {log: async line => log.push(line)},
@@ -54,9 +54,9 @@ def test_a_standalone_plugin_associates_and_lists_only_agents(tmp_path: Path) ->
     assert text == (GRAFTLING / 'claude/host_context.mjs').read_text()
     run_module(tmp_path, text, r'''
 assert.deepEqual([...handlers.keys()].filter(key => key.startsWith('tool.')).sort(),
-                 ['tool.call:mcp__graftling__agents', 'tool.check:mcp__graftling__agents']);
+                 ['tool.call:mcp__graftling__subagents', 'tool.check:mcp__graftling__subagents']);
 await handlers.get('command.run')(host);
-assert.deepEqual(log.filter(line => line.startsWith('MCP ')), ['MCP agents registered']);
+assert.deepEqual(log.filter(line => line.startsWith('MCP ')), ['MCP subagents registered']);
 ''')
 
 
@@ -75,14 +75,16 @@ assert.equal(await handlers.get('tool.call:mcp__graftling__notes')(host, {...req
 assert.deepEqual(contexts.at(-1), {operation: 'end', tool: 'notes', request, session: 'first'});
 assert.deepEqual(log, []);
 await handlers.get('command.run')(host);
-assert.deepEqual(log.filter(line => line.startsWith('MCP ')), ['MCP agents registered', 'MCP notes registered']);
+assert.deepEqual(log.filter(line => line.startsWith('MCP ')), ['MCP subagents registered', 'MCP notes registered']);
 ''')
 
 
 def test_only_the_declared_tools_are_written(tmp_path: Path) -> None:
-    """GraphTraj declares tasks like any other package; agents alone declares nothing."""
-    assert 'const TOOLS = ["agents"];' in module_of(agents_material(tmp_path, Path('/claude')))
-    assert 'const TOOLS = ["agents", "tasks"];' in module_of(graphtraj_material(tmp_path, Path('/claude')))
+    """GraphTraj declares tasks like any other package; subagents alone declares nothing."""
+    standalone = module_of(agents_material(tmp_path, Path('/claude'))).splitlines()
+    written = module_of(graphtraj_material(tmp_path, Path('/claude'))).splitlines()
+    assert 'const TOOL = "subagents";' in standalone and 'const TOOLS = [TOOL];' in standalone
+    assert 'const TOOL = "subagents";' in written and 'const TOOLS = [TOOL, "tasks"];' in written
     # 514: GraphTraj's module handles only its own server's calls, mcp__graphtraj__<tool>.
     assert 'const SERVER = "graphtraj";' in module_of(graphtraj_material(tmp_path, Path('/claude')))
     assert 'const SERVER = "graftling";' in module_of(agents_material(tmp_path, Path('/claude')))
@@ -92,7 +94,7 @@ def test_only_the_declared_tools_are_written(tmp_path: Path) -> None:
     json.dumps({path: value for path, value in files.items() if not isinstance(value, str)})
 
 
-@pytest.mark.parametrize('tools', [['agents'], ['notes', 'notes'], ['a b'], [''], ["x'];"], [3]])
+@pytest.mark.parametrize('tools', [['subagents'], ['notes', 'notes'], ['a b'], [''], ["x'];"], [3]])
 def test_a_tool_the_module_cannot_carry_is_refused(tmp_path: Path, tools: list) -> None:
     """A declared name reaches JavaScript and an MCP tool name, so it stays plain."""
     with pytest.raises(ValueError):
@@ -105,12 +107,12 @@ def prepare_document(tool: str, cwd: Path) -> dict:
 
 
 def test_a_standalone_host_refuses_an_undeclared_tool(tmp_path: Path) -> None:
-    """A standalone association names agents only, however the plugin was written."""
+    """A standalone association names subagents only, however the plugin was written."""
     host = NativeCalls(lambda session, cwd: None, tmp_path)
     with pytest.raises(AgentsError) as refused:
         host.context(prepare_document('tasks', tmp_path))
-    assert (refused.value.code, refused.value.message) == ('invalid-input', 'Expected the agents entry.')
-    assert host.context(prepare_document('agents', tmp_path)) == {'prepared': True}
+    assert (refused.value.code, refused.value.message) == ('invalid-input', 'Expected the subagents entry.')
+    assert host.context(prepare_document('subagents', tmp_path)) == {'prepared': True}
 
 
 def test_a_declared_tool_is_associated_and_served(tmp_path: Path) -> None:
@@ -133,5 +135,6 @@ def test_graphtraj_declares_tasks_to_its_host(tmp_path: Path) -> None:
     """GraphTraj's association keeps both of its entries and no other."""
     host = GraphTrajCalls(lambda session, cwd: None, tmp_path)
     assert host.context(prepare_document('tasks', tmp_path)) == {'prepared': True}
-    with pytest.raises(AgentsError, match='agents or tasks'):
-        host.context(prepare_document('notes', tmp_path))
+    for tool in ('notes', 'agents'):
+        with pytest.raises(AgentsError, match='Expected the subagents or tasks entry'):
+            host.context(prepare_document(tool, tmp_path))

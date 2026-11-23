@@ -108,19 +108,19 @@ def test_gateway_serves_agents_through_the_core(tmp_path: Path, monkeypatch) -> 
     configuration.write_text(default_configuration_content(tmp_path, tmp_path))
     monkeypatch.chdir(tmp_path)
 
-    discovered = gateway.handle_request({'action': 'discover', 'query': 'agents'})
-    schema     = gateway.handle_request({'action': 'describe', 'feature': 'agents', 'schema': True})
-    create     = {'action': 'execute', 'feature': 'agents', 'arguments': {
+    discovered = gateway.handle_request({'action': 'discover', 'query': 'subagents'})
+    schema     = gateway.handle_request({'action': 'describe', 'feature': 'subagents', 'schema': True})
+    create     = {'action': 'execute', 'feature': 'subagents', 'arguments': {
         'action': 'create', 'runtime': 'codex', 'instruction': 'Summarize.',
     }}
     anonymous  = gateway.handle_request(create, cwd=tmp_path)
     with runtime_caller(tmp_path / '.graphtraj/runner', 'main-a'):
         created = gateway.handle_request(create, cwd=tmp_path)
-    forged     = gateway.handle_request({'action': 'execute', 'feature': 'agents', 'arguments': {
+    forged     = gateway.handle_request({'action': 'execute', 'feature': 'subagents', 'arguments': {
         'action': 'status', 'caller': 'main',
     }}, cwd=tmp_path)
 
-    assert 'agents' in {item['feature'] for item in discovered.document['features']}
+    assert 'subagents' in {item['feature'] for item in discovered.document['features']}
     assert schema.document['input_schema'] == graftling.INPUT_SCHEMA
     assert anonymous.failed and anonymous.document['error']['code'] == 'authority-unavailable'
     assert created.failed

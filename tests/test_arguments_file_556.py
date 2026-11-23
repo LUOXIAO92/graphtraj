@@ -110,7 +110,7 @@ def test_file_refusals_name_the_path_only(project: Path, tmp_path: Path) -> None
                           ('.graphtraj/config.yml', 'GraphTraj private state'),
                           ('private.json', 'GraphTraj private state'),
                           ('missing.json', 'does not exist')):
-        for name in ('tasks', 'agents'):
+        for name in ('tasks', 'subagents'):
             refused = call(name, {'action': 'execute', 'feature': 'task_graph' if name == 'tasks' else 'status',
                                   'arguments_file': named})
             assert refused['isError'] is True
@@ -123,7 +123,7 @@ def test_file_refusals_name_the_path_only(project: Path, tmp_path: Path) -> None
 def test_agents_file_arguments_report_every_schema_error(project: Path) -> None:
     """The agents entry reads the same file and returns graftling's full error list."""
     name = write(project / 'wait.json', {'seconds': 'soon', 'bogus': 1})
-    result = call('agents', {'action': 'execute', 'feature': 'wait', 'arguments_file': name})
+    result = call('subagents', {'action': 'execute', 'feature': 'wait', 'arguments_file': name})
     assert result['isError'] is True
     found = {item['path'] for item in result['structuredContent']['error']['errors']}
     assert {'arguments.seconds', 'arguments.bogus'} <= found

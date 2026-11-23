@@ -77,11 +77,11 @@ def test_calls_run_as_the_child_itself(tmp_path: Path, monkeypatch: pytest.Monke
 
 
 def test_member_identities_and_agents_requests_are_refused(tmp_path: Path) -> None:
-    """A Runner alias is never a Task-free child's identity, and agents keeps its own entry."""
+    """A Runner alias is never a Task-free child's identity, and subagents keeps its own entry."""
     alias = '551-task_free-handover0-engineer@engineer_3'
     assert serve_task_free(tmp_path, alias, {'action': 'discover'}).document['error']['code'] == 'authority-denied'
     assert serve_task_free(tmp_path, '', {'action': 'discover'}).failed
-    refused = serve_task_free(tmp_path, CHILD, {'action': 'describe', 'feature': 'agents'})
+    refused = serve_task_free(tmp_path, CHILD, {'action': 'describe', 'feature': 'subagents'})
     assert refused.document['error']['code'] == 'invalid-input'
     assert serve_task_free(tmp_path, CHILD, ['not', 'an', 'object']).failed
 

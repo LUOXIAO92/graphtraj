@@ -50,7 +50,7 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
         {'action': 'execute', 'feature': 'status', 'arguments': {}},
     ], 2):
         requests.append({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call',
-                         'params': {'name': 'agents', 'arguments': arguments}})
+                         'params': {'name': 'subagents', 'arguments': arguments}})
     if host == 'main':
         directory = tmp_path / '.graphtraj/runner/sessions/child@e1'
         directory.mkdir(parents=True)
@@ -65,7 +65,7 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
             'outcome': 'completed', 'terminal_confirmed': True,
         }))
         requests.append({'jsonrpc': '2.0', 'id': 5, 'method': 'tools/call',
-                         'params': {'name': 'agents', 'arguments': {'action': 'execute',
+                         'params': {'name': 'subagents', 'arguments': {'action': 'execute',
                          'feature': 'status', 'arguments': {'agent': 'child@e1'}}}})
     monkeypatch.setenv('PEER_MCP_REQUESTS', json.dumps(requests))
 
@@ -85,7 +85,7 @@ def test_codex_uses_progressive_mcp_with_native_session_authority(
         observed = json.loads(done.document['result']['last_result']['last_message'])
     tools = observed[0]['result']['tools']
     # Task-free children reach the tasks methods as Main does (551).
-    assert {tool['name'] for tool in tools} == {'agents', 'tasks'}
+    assert {tool['name'] for tool in tools} == {'subagents', 'tasks'}
     assert all(set(tool['inputSchema']['properties'])
                == {'action', 'query', 'feature', 'schema', 'arguments', 'arguments_file'}
                for tool in tools)

@@ -45,12 +45,12 @@ class Entry:
 
 ENTRIES = {
     'agents': Entry('graftling.claude.host', '.agents-control/claude-host.json', 'agents-claude-host',
-                    'Native Claude context for independent agents MCP.', ('agents',), 'graftling', (('settings', {}),),
+                    'Native Claude context for independent agents MCP.', (), 'graftling', (('settings', {}),),
                     (('settings', {'model': 'chosen'}),
                      ('runtimes', {'pi': {'provider': 'deepseek', 'model': 'deepseek-flash'}}))),
     'graphtraj': Entry('graphtraj.runtimes.claude.host', '.graphtraj/claude-host/config.json',
-                       'graphtraj-claude-host', 'GraphTraj Main host context for the agents and tasks MCP entries.',
-                       ('agents', 'tasks'), 'graphtraj', (), (('note', 'mine'),)),
+                       'graphtraj-claude-host', 'GraphTraj Main host context for the subagents and tasks MCP entries.',
+                       ('tasks',), 'graphtraj', (), (('note', 'mine'),)),
 }
 
 
@@ -273,7 +273,8 @@ def test_first_install_content_is_unchanged(entry: Entry, project: Path) -> None
             {'name': entry.plugin, 'version': '1', 'description': entry.description}, indent=2) + '\n',
         f'{plugin}/hooks/hooks.json': json.dumps({'modules': ['./host_context.mjs']}, indent=2) + '\n',
         f'{plugin}/hooks/host_context.mjs': module.replace(
-            'const TOOLS = ["agents"];', f'const TOOLS = {json.dumps(list(entry.tools))};').replace(
+            'const TOOLS = [TOOL];', 'const TOOLS = [{0}];'.format(
+                ', '.join(['TOOL', *map(json.dumps, entry.tools)]))).replace(
             'const SERVER = "graftling";', f'const SERVER = {json.dumps(entry.server)};'),
     }
     written = {path: content.decode('utf-8') for path, content in snapshot(project).items() if content is not None}

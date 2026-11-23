@@ -31,13 +31,13 @@ def test_main_default_status_lists_only_its_dispatched_members(
     broken.mkdir()
     (broken / 'mapping.yml').write_text('not: a mapping\n', encoding='utf-8')
 
-    status = call('agents', ['status', {}, 'main-a'])
+    status = call('subagents', ['status', {}, 'main-a'])
     nodes  = status['result']['task_sessions']['agents']
     assert [node['alias'] for node in nodes] == [own]
     assert not status['failed'] and 'error' not in nodes[0]
 
     # The other Main's member is still readable by explicit reference.
-    explicit = call('agents', ['status', {'agent': other}, 'main-a'])
+    explicit = call('subagents', ['status', {'agent': other}, 'main-a'])
     assert explicit['result']['aliases'][0]['alias'] == other
     for alias in (own, other):
         call('interrupt', [alias])
@@ -54,24 +54,24 @@ def test_task_member_agent_reference_uses_its_session_controls(
     agent   = mapping['agent']
     assert agent.startswith('agent-')
 
-    status = call('agents', ['status', {'agent': agent}, 'main-a'])
+    status = call('subagents', ['status', {'agent': agent}, 'main-a'])
     assert status['agent'] == agent and status['result']['aliases'][0]['alias'] == alias
 
     # A pending native request ends a wait; the reply goes through agents too.
-    waited = call('agents', ['wait', {'agent': agent, 'timeout_seconds': 10}, 'main-a'])
+    waited = call('subagents', ['wait', {'agent': agent, 'timeout_seconds': 10}, 'main-a'])
     assert waited['result']['timed_out'] is False
-    request, = call('agents', ['requests', {'agent': agent}, 'main-a'])['result']['requests']
-    call('agents', ['reply', {'agent': agent, 'request': request, 'response': {'decision': 'decline'}}, 'main-a'])
-    waited = call('agents', ['wait', {'agent': alias, 'timeout_seconds': 10}, 'main-a'])
+    request, = call('subagents', ['requests', {'agent': agent}, 'main-a'])['result']['requests']
+    call('subagents', ['reply', {'agent': agent, 'request': request, 'response': {'decision': 'decline'}}, 'main-a'])
+    waited = call('subagents', ['wait', {'agent': alias, 'timeout_seconds': 10}, 'main-a'])
     assert waited['result']['timed_out'] is False and waited['result']['activity'] == 'idle'
 
-    sent = call('agents', ['send', {'agent': agent, 'message': 'hold'}, 'main-a'])
+    sent = call('subagents', ['send', {'agent': agent, 'message': 'hold'}, 'main-a'])
     assert sent['result']['send_status'] == 'sent'
     assert read_alias_mapping(root / '.graphtraj/runner', alias)[0]['session'] == mapping['session']
     observe(call, alias, 'running')
-    resumed = call('agents', ['resume', {'agent': alias, 'message': 'hold'}, 'main-a'])
+    resumed = call('subagents', ['resume', {'agent': alias, 'message': 'hold'}, 'main-a'])
     assert resumed['result']['send_status'] == 'sent'
-    call('agents', ['interrupt', {'agent': agent}, 'main-a'])
+    call('subagents', ['interrupt', {'agent': agent}, 'main-a'])
 
 
 def test_default_tree_keeps_current_seats_and_bounds_messages(tmp_path: Path, monkeypatch) -> None:

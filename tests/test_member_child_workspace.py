@@ -171,9 +171,9 @@ def test_a_members_child_starts_in_the_members_worktree(harness: SimpleNamespace
 @pytest.mark.parametrize('runtime', RUNTIMES)
 def test_the_channel_entry_starts_the_child_in_the_worktree(harness: SimpleNamespace, runtime: str) -> None:
     """``cli_connection`` enters the gateway with ``cwd`` at the project root."""
-    envelope = {'action': 'execute', 'feature': 'agents', 'arguments': request(runtime)}
+    envelope = {'action': 'execute', 'feature': 'subagents', 'arguments': request(runtime)}
     with runtime_caller(harness.runner, MEMBER):
-        result = handle_request(envelope, cwd=harness.root, allowed_features={'agents'})
+        result = handle_request(envelope, cwd=harness.root, allowed_features={'subagents'})
     assert not result.failed, result.document
     assert_starts_in(runtime, harness.worktree)
 
@@ -292,9 +292,9 @@ def test_a_native_identity_keeps_its_default_and_its_refusal(harness: SimpleName
 
 def test_the_gateway_reaches_create_as_a_native_identity_with_the_old_default(harness: SimpleNamespace) -> None:
     """A Codex native helper is bound by its thread ID and reaches ``create``."""
-    envelope = {'action': 'execute', 'feature': 'agents', 'arguments': request('claude')}
+    envelope = {'action': 'execute', 'feature': 'subagents', 'arguments': request('claude')}
     with runtime_caller(harness.runner, '01a1ffff-native-thread'):
-        result = handle_request(envelope, cwd=harness.root, allowed_features={'agents'})
+        result = handle_request(envelope, cwd=harness.root, allowed_features={'subagents'})
     assert not result.failed, result.document
     assert_starts_in('claude', harness.root.resolve())
 

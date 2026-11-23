@@ -38,7 +38,7 @@ def test_native_status_uses_authenticated_mcp_identity(
                 assert features == native_operation_features()
             else:
                 assert alias == 'helper'
-                assert features == {'task_graph', 'agents'}
+                assert features == {'task_graph', 'subagents'}
 
     asyncio.run(exercise())
 

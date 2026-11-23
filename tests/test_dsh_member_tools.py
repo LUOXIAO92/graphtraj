@@ -231,7 +231,7 @@ def test_a_member_uses_both_tools_and_its_round_completes(tmp_path: Path, monkey
     monkeypatch.setattr(MemberTurn, 'answers', [])
     monkeypatch.setattr(MemberTurn, 'failure', [])
     monkeypatch.setattr(MemberTurn, 'calls_to_make', [
-        ('agents', 'status', {}),
+        ('subagents', 'status', {}),
         ('tasks', 'discover', {}),
         ('tasks', 'submit_report', {'name': 'researcher-x1.md', 'text': 'Member evidence'}),
         ('tasks', 'submit_result', {'commit': commit, 'result_refs': ['result.md'], 'evidence_refs': [report],

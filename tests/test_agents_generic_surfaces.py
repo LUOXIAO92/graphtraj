@@ -131,7 +131,7 @@ def test_agents_entry_ignores_a_graphtraj_connection(tmp_path: Path) -> None:
                 command.append(json.dumps(request))
             else:
                 payload = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                                      'params': {'name': 'agents', 'arguments': request}}) + '\n'
+                                      'params': {'name': 'subagents', 'arguments': request}}) + '\n'
             child = subprocess.Popen(command, cwd=tmp_path, env=env, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = child.communicate(payload, timeout=10)
@@ -144,7 +144,7 @@ def test_graphtraj_forwarding_refuses_both_connections(tmp_path: Path, monkeypat
     monkeypatch.setenv('GRAPHTRAJ_CLI_CONNECTION', str(tmp_path / 'graphtraj-host'))
     monkeypatch.setenv('GRAFTLING_CONNECTION', str(tmp_path / 'agents-host'))
     with pytest.raises(RunnerError) as rejected:
-        forward_request({'action': 'execute', 'feature': 'agents', 'arguments': {}}, tmp_path)
+        forward_request({'action': 'execute', 'feature': 'subagents', 'arguments': {}}, tmp_path)
     assert rejected.value.code == 'authority-denied'
 
 

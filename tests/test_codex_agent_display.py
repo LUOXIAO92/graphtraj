@@ -23,7 +23,7 @@ def event() -> dict:
     """Provide actual request/result fields consumed by the PostToolUse contract."""
     return {
         'hook_event_name': 'PostToolUse', 'session_id': 'native-session', 'tool_use_id': 'call-1',
-        'tool_name': 'mcp__graphtraj__agents',
+        'tool_name': 'mcp__graphtraj__subagents',
         'tool_input': {'action': 'execute', 'feature': 'create', 'arguments': {'instruction': 'Remember red.'}},
         'tool_response': {'isError': False, 'structuredContent': {
             'action': 'create', 'agent': 'agent-child', 'result': {'name': 'reader',
@@ -33,12 +33,12 @@ def event() -> dict:
 
 
 def test_sent_message_and_reply_are_left_to_the_tool_card(tmp_path: Path) -> None:
-    """544: the agents card shows the send and the reply, so the hook adds no copy of either."""
+    """544: the subagents card shows the send and the reply, so the hook adds no copy of either."""
     source = event()
     original = copy.deepcopy(source)
     assert invoke(source, tmp_path) == {}
     assert source == original
-    for name in ('mcp__graftling__agents', 'mcp__agents__agents'):
+    for name in ('mcp__graftling__subagents', 'mcp__agents__subagents'):
         assert invoke({**source, 'tool_name': name, 'session_id': name}, tmp_path) == {}
     assert not list(tmp_path.iterdir())
 
@@ -54,7 +54,7 @@ def test_unrelated_and_cancelled_operations_add_no_chat_entry(tmp_path: Path, ki
     elif kind == 'stop':
         source['hook_event_name'] = 'Stop'
     elif kind == 'other-tool':
-        source['tool_name'] = 'mcp__other__agents'
+        source['tool_name'] = 'mcp__other__subagents'
     else:
         source['tool_input'] = {'action': 'execute', 'feature': 'interrupt', 'arguments': {'agent': 'agent-child'}}
         source['tool_response']['structuredContent']['result']['last_result']['last_message'] = None

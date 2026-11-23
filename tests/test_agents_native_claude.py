@@ -32,7 +32,7 @@ def project(tmp_path: Path) -> Path:
 
 def agents(project: Path, cwd: Path, identity: str | None, **request):
     """Call the registered gateway feature as the verified ``identity``."""
-    envelope = {'action': 'execute', 'feature': 'agents', 'arguments': request}
+    envelope = {'action': 'execute', 'feature': 'subagents', 'arguments': request}
     if identity is None:
         result = gateway.handle_request(envelope, cwd=cwd)
     else:
@@ -315,9 +315,9 @@ def test_real_claude_sdk_registration(
     records = [item['event']['native']['record']
                for item in [*session.pending(), *session.observations()]]
     native = next(r for r in records if r.get('type') == 'system' and r.get('subtype') == 'init')
-    assert 'mcp__graftling__agents' in native['tools']
+    assert 'mcp__graftling__subagents' in native['tools']
     outcome = done.document['result']['last_result']
-    print(json.dumps({'session': created.document['session'], 'registered_tool': 'mcp__graftling__agents',
+    print(json.dumps({'session': created.document['session'], 'registered_tool': 'mcp__graftling__subagents',
                       'permissionMode': native.get('permissionMode'), 'outcome': outcome['outcome'],
                       'error_code': (outcome.get('error') or {}).get('code')}))
     # A provider error is retained as such. This probe accepts only registration,
@@ -354,7 +354,7 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
     call = bind(AgentControl(root, {'claude': AdapterDriver(project, project)}),
                 Caller('native-auto-probe', None, 'task332-auto-probe'), archive=archive)
     created = call({'action': 'create', 'runtime': 'claude', 'instruction':
-        'Call mcp__graftling__agents with action status once. Then attempt exactly one Read tool call '
+        'Call mcp__graftling__subagents with action status once. Then attempt exactly one Read tool call '
         f'on {denied}. The file is a synthetic permission-test fixture. '
         'If denied, do not retry or use another tool to access it. Reply with TASK332-DONE.'})
     assert not created.failed, created.document
@@ -381,7 +381,7 @@ def test_real_claude_auto_and_native_denial(project: Path, monkeypatch: pytest.M
         blocks = [block for entry in entries for block in entry.get('message', {}).get('content', [])
                   if isinstance(block, dict)]
         calls = [b for b in blocks if b.get('type') == 'tool_use']
-        assert any(b.get('name') == 'mcp__graftling__agents' for b in calls), calls
+        assert any(b.get('name') == 'mcp__graftling__subagents' for b in calls), calls
         read = next(b for b in calls if b.get('name') == 'Read' and b.get('input', {}).get('file_path') == str(denied))
         assert any(b.get('type') == 'tool_result' and b.get('tool_use_id') == read['id']
                    and b.get('is_error') is True for b in blocks), blocks

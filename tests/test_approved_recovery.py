@@ -526,7 +526,7 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
         # continuation, rather than rejecting the retained original launch.
         monkeypatch.setenv('PATH', str(fake_codex.executable.parent) + os.pathsep + os.environ['PATH'])
         monkeypatch.setenv('FAKE_CODEX_LOG', str(fake_codex.log_file))
-        # agents needs a verified caller since 9c0a208: present this host as the
+        # subagents needs a verified caller since 9c0a208: present this host as the
         # verified Main Session at the gateway's caller seam.
         from graphtraj.execution import runner_status
         from graphtraj.runtimes import runtime_adapter
@@ -534,7 +534,7 @@ def test_administrative_recovery_routes_reports_to_the_actual_current_host(
             verified.setattr(runner_status, 'caller_alias', lambda directory: None)
             verified.setattr(runtime_adapter, 'current_host_connection',
                              lambda: {'runtime': 'codex', 'session': 'current-main'})
-            continued = host({'action': 'execute', 'feature': 'agents', 'arguments': {
+            continued = host({'action': 'execute', 'feature': 'subagents', 'arguments': {
                 'action': 'send', 'agent': original['alias'], 'message': 'Return the retained validation result.',
             }}).document['result']
         assert continued['send_status'] == 'sent'
@@ -1194,7 +1194,7 @@ def test_parent_interrupt_recovery_reuses_existing_authority(
     monkeypatch.setattr(recovery, '_send_session_locked', resume)
     call = local_tool.bind(root, recovery_reviewer=unexpected_review)
     with runtime_caller(runner, parent['alias']):
-        stopped = call({'action': 'execute', 'feature': 'agents',
+        stopped = call({'action': 'execute', 'feature': 'subagents',
                         'arguments': {'action': 'interrupt', 'agent': child['alias']}}).document['result']
         assert stopped['interrupt_status'] == 'interrupted'
         stop_file = runner / 'sessions' / child['alias'] / 'stop.yml'
@@ -1899,7 +1899,7 @@ def test_claude_main_recovery_is_decided_by_claude_code_elicitation(
                 source.messages.append(json.dumps(reply) + '\n')
             return len(text)
 
-    serve(source, ClientOutput(), root, native_call=lambda request, tool='agents': call(tool, request))
+    serve(source, ClientOutput(), root, native_call=lambda request, tool='subagents': call(tool, request))
 
     elicitations = [message for message in observed if message.get('method') == 'elicitation/create']
     result = next(message for message in observed if message.get('id') == 2)['result']

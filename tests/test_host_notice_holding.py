@@ -509,7 +509,7 @@ def claude_main(tmp_path: Path, native_settings: dict, session: str | None = Non
         """Call the tool as the Main does; no feature means ``discover``."""
         request = ({'action': 'discover'} if feature is None
                    else {'action': 'execute', 'feature': feature, 'arguments': arguments})
-        result = run('agents', request)
+        result = run('subagents', request)
         assert not result.failed, result.document
         return result.document
 
@@ -668,7 +668,7 @@ def test_claude_a_child_ending_before_its_create_returns_reaches_the_main_once(t
 
     def invoke(feature: str, **arguments: object) -> dict:
         """Call the tool as the Main does."""
-        return run('agents', {'action': 'execute', 'feature': feature, 'arguments': arguments}).document
+        return run('subagents', {'action': 'execute', 'feature': feature, 'arguments': arguments}).document
 
     created = invoke('create', runtime='fake', instruction='work')
     assert [notice['event']['message'] for notice in created['main_notices']] == ['quick answer']
@@ -690,7 +690,7 @@ def test_a_result_sent_to_a_client_already_gone_gives_its_notices_back() -> None
             time.sleep(0.01)
         return result_response(message['id'], {})
 
-    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'agents', 'arguments': {}}}
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'subagents', 'arguments': {}}}
     serve_concurrent(io.StringIO(json.dumps(request) + '\n'), io.StringIO(), responder)
     assert undone == [True]
 

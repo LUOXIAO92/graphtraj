@@ -65,7 +65,7 @@ def test_a_running_codex_parent_takes_its_childs_end_into_the_turn(
         grandchild = tree.create(runtime, 'hello')
         parent = tree.standby(tree.child)
         assert len(tree.executions()) == 1
-        assert tree.executions()[0]['last_message'] == f'[agents · {grandchild} → {tree.child}]\nhello'
+        assert tree.executions()[0]['last_message'] == f'[subagents · {grandchild} → {tree.child}]\nhello'
         assert tree.status(grandchild)['last_result']['notification'] == 'delivered'
         assert parent['state'] == 'standby'
     finally:
@@ -82,7 +82,7 @@ def test_a_standby_codex_parent_is_continued_with_its_childs_answer(tmp_path: Pa
         assert not tree.running.call('send', agent=grandchild, message='late answer')['result'].get('error')
         until(lambda: len(tree.executions()) == 2 and tree.executions()[1]['state'] == 'ended')
         first, second = tree.executions()
-        assert second['last_message'] == f'[agents · {grandchild} → {tree.child}]\nlate answer'
+        assert second['last_message'] == f'[subagents · {grandchild} → {tree.child}]\nlate answer'
         assert second['session'] == first['session'] and second['operation'] == 'receive'
         assert tree.status(grandchild)['last_result']['notification'] == 'delivered'
         tree.standby(tree.child)
@@ -101,7 +101,7 @@ def test_a_running_codex_parent_is_told_of_a_childs_request_once(
         grandchild = tree.create(runtime, instruction)
         tree.standby(tree.child)
         [first] = tree.executions()
-        assert first['last_message'].startswith(f'[agents · {grandchild} → {tree.child}]\nPermission request ')
+        assert first['last_message'].startswith(f'[subagents · {grandchild} → {tree.child}]\nPermission request ')
         assert first['last_message'].endswith('answer once with reply.')
         assert tree.status(grandchild)['pending_requests'] == 1
     finally:
@@ -123,7 +123,7 @@ def test_a_standby_codex_parents_request_is_held_and_arrives_when_it_resumes(
         tree.running.call('resume', agent=tree.child, message='hold')
         tree.standby(tree.child)
         steered = tree.executions()[1]['last_message']
-        assert steered.startswith(f'[agents · {grandchild} → {tree.child}]\nPermission request ')
+        assert steered.startswith(f'[subagents · {grandchild} → {tree.child}]\nPermission request ')
         assert list(tree.record(grandchild)['executions'][-1]['request_notices'].values()) == ['delivered']
 
         tree.running.call('resume', agent=tree.child, message='ordinary work')
@@ -147,7 +147,7 @@ def test_a_codex_parents_held_end_is_delivered_across_a_host_restart(tmp_path: P
             """Return the child's last answer once its latest turn ended."""
             last = tree.executions()[-1]
             return last.get('last_message') if last['state'] == 'ended' else None
-        assert until(steered) == f'[agents · {grandchild} → {tree.child}]\ninterrupted'
+        assert until(steered) == f'[subagents · {grandchild} → {tree.child}]\ninterrupted'
         assert tree.record(grandchild)['executions'][-1]['notification'] == 'delivered'
         running.call('resume', agent=tree.child, message='ordinary work')
         assert until(lambda: steered() == 'ordinary work')

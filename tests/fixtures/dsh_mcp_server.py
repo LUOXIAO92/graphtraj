@@ -29,7 +29,7 @@ for line in sys.stdin:
         result = {'protocolVersion': params['protocolVersion'], 'capabilities': {'tools': {}},
                   'serverInfo': {'name': 'controlled-peer', 'version': '1'}}
     elif method == 'tools/list':
-        result = {'tools': [{'name': 'agents', 'description': 'Controlled progressive peer', 'inputSchema': schema}]}
+        result = {'tools': [{'name': 'subagents', 'description': 'Controlled progressive peer', 'inputSchema': schema}]}
     elif method == 'tools/call':
         args = params['arguments']
         if args['action'] == 'discover':

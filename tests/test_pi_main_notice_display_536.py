@@ -90,9 +90,9 @@ def test_pi_main_receives_notice_text_and_draws_who_and_markdown(
     # What the user sees: who and the rendered Markdown, no type label, title, Facts or JSON.
     drawn_end, drawn_request = shown['drawn']
     lines = [line.strip() for line in drawn_end.splitlines() if line.strip()]
-    assert lines[0] == '[agents · n536@advisor · completed]'
+    assert lines[0] == '[subagents · n536@advisor · completed]'
     assert 'Reply from n536' in lines[1] and '- one agents' in lines and not re.search(r'##|`|Facts|\{', drawn_end)
-    assert drawn_request.splitlines()[2].strip() == '[agents · w@engineer · claude/can_use_tool]'
+    assert drawn_request.splitlines()[2].strip() == '[subagents · w@engineer · claude/can_use_tool]'
     assert 'graphtraj:main-notice' not in drawn_end + drawn_request
     # Acknowledged once Pi took them.
     assert native('pi', {'event': 'notices'})['notices'] == 0

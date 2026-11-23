@@ -43,27 +43,27 @@ def test_mcp_bridge_verifies_process_and_projects_selected_schema(tmp_path: Path
                                  text=True)
         try:
             listed = exchange(child, {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
-            assert [tool['name'] for tool in listed['result']['tools']] == ['agents']
+            assert [tool['name'] for tool in listed['result']['tools']] == ['subagents']
             assert 'runtime' not in listed['result']['tools'][0]['inputSchema']['properties']
             for feature in ('create', 'status'):
                 described = exchange(child, {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                    'params': {'name': 'agents', 'arguments': {'action': 'describe', 'feature': feature}}})
+                    'params': {'name': 'subagents', 'arguments': {'action': 'describe', 'feature': feature}}})
                 schema = described['result']['structuredContent']['input_schema']
                 assert ('runtime' in schema['properties']) == (feature == 'create')
             assert calls == []
             response = exchange(child, {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
-                'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})
+                'params': {'name': 'subagents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})
             assert response['result']['structuredContent']['result']['seen'] == 'bound-agent'
             assert calls == [{'action': 'status'}]
             rejected = exchange(child, {'jsonrpc': '2.0', 'id': 4, 'method': 'tools/call',
-                'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status',
+                'params': {'name': 'subagents', 'arguments': {'action': 'execute', 'feature': 'status',
                                                          'arguments': {'caller': 'other'}}}})
             assert rejected['result']['isError']
             assert calls == [{'action': 'status'}]
             # Same channel path does not authorize a sibling process.
             attacker = subprocess.run([sys.executable, '-m', 'graftling.mcp'], env=env, text=True,
                 input=json.dumps({'jsonrpc': '2.0', 'id': 5, 'method': 'tools/call',
-                    'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})+'\n',
+                    'params': {'name': 'subagents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})+'\n',
                 capture_output=True, check=True, timeout=10)
             assert json.loads(attacker.stdout)['result']['structuredContent']['error']['code'] == 'authority-denied'
             assert calls == [{'action': 'status'}]
@@ -107,7 +107,7 @@ def test_dsh_native_assertions_constrain_the_existing_bound_caller(tmp_path: Pat
                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             result = exchange(child, {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                'params': {'name': 'agents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})['result']
+                'params': {'name': 'subagents', 'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})['result']
             if case in {'match', 'both-connections'}:
                 # Another host's connection variable does not concern agents.
                 assert result['structuredContent']['result']['bound_agent'] == 'actual-child'
@@ -144,7 +144,7 @@ def test_codex_metadata_uses_the_shared_owner_connection(tmp_path: Path) -> None
         try:
             for session in (expected['session'], 'forged-session'):
                 result = exchange(child, {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                    'params': {'name': 'agents', '_meta': {'threadId': session},
+                    'params': {'name': 'subagents', '_meta': {'threadId': session},
                                'arguments': {'action': 'execute', 'feature': 'status', 'arguments': {}}}})['result']
                 assert result['isError'] is (session != expected['session'])
                 if result['isError']:
@@ -186,7 +186,7 @@ mcp.main()
     result = subprocess.run([sys.executable, str(probe)], env=env, text=True,
                             capture_output=True, timeout=30)
     assert result.returncode == 0, result.stderr
-    assert [tool['name'] for tool in json.loads(result.stdout)['result']['tools']] == ['agents']
+    assert [tool['name'] for tool in json.loads(result.stdout)['result']['tools']] == ['subagents']
 
 
 def graphtraj_imports(source: str) -> list[int]:
@@ -248,7 +248,7 @@ def test_mcp_server_version_is_the_single_package_version(tmp_path: Path) -> Non
                             capture_output=True, timeout=30)
     assert result.returncode == 0, result.stderr
     server = json.loads(result.stdout)['result']['serverInfo']
-    assert server == {'name': 'agents', 'version': graftling.__version__}
+    assert server == {'name': 'subagents', 'version': graftling.__version__}
     assert graftling.__version__ == version('graftling')
     plugin = json.loads((Path(graftling.__file__).parent / 'dsh' / 'package.json').read_text())
     assert plugin['version'] == graftling.__version__

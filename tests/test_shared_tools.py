@@ -53,12 +53,12 @@ def test_both_transports_consume_shared_schema_and_handler(
     ))
     monkeypatch.chdir(tmp_path)
     listed = mcp_request('tools/list', {})['tools']
-    assert [tool['name'] for tool in listed] == ['agents', 'tasks']
+    assert [tool['name'] for tool in listed] == ['subagents', 'tasks']
     discovered = mcp_request('tools/call', {
         'name': 'tasks', 'arguments': {'action': 'discover'},
     })['structuredContent']['features']
     assert 'approved_recovery' in {item['feature'] for item in discovered}
-    assert {item['feature'] for item in discovered} == set(tools.TOOLS) - {'agents'}
+    assert {item['feature'] for item in discovered} == set(tools.TOOLS) - {'subagents'}
     assert listed[0]['inputSchema'] == gateway.INPUT_SCHEMA
     described = mcp_request('tools/call', {
         'name': 'tasks',

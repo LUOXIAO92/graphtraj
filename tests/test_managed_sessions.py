@@ -73,8 +73,8 @@ try:
             sys.exit(1)
     elif operation == 'send':
         result = send_instruction(arguments[0], arguments[1], root, tuple(arguments[2]))
-    elif operation == 'agents':
-        # The independent agents action as the host's verified native Main.
+    elif operation == 'subagents':
+        # The independent subagents action as the host's verified native Main.
         from graftling import Binding, Caller
         from graphtraj.interfaces.agents import GraphTrajAgents
         action, request, session = arguments
@@ -460,7 +460,7 @@ def test_interrupt_is_targeted_and_keeps_the_session_for_continuation(managed_pr
     second = call('launch', launch_document(role='second-probe'))['tasks'][0]
     before = observe(call, first['alias'], 'running')
     # The public (ordinary) interrupt, which the same direct parent may continue after.
-    assert call('agents', ['interrupt', {'agent': first['alias']}, 'main-a'])['result'] == {
+    assert call('subagents', ['interrupt', {'agent': first['alias']}, 'main-a'])['result'] == {
         'alias': first['alias'], 'interrupt_status': 'interrupted',
         'members': [{'alias': first['alias'], 'interrupt_status': 'interrupted'}],
     }
@@ -610,11 +610,11 @@ def test_bound_agents_declines_the_same_request_as_runner(managed_project: Manag
     alias = launched['alias']
     call('send', [alias, 'unhandled request', [cause]])
     queried = call('requests', [alias])
-    assert call('agents', ['requests', {
+    assert call('subagents', ['requests', {
         'agent': alias, 'execution': queried['execution_id'],
     }, 'main-a'])['result'] == queried
     request, = queried['requests']
-    reply = call('agents', ['reply', {
+    reply = call('subagents', ['reply', {
         'agent': alias, 'request': request, 'response': {'decision': 'decline'},
     }, 'main-a'])['result']
     assert reply == {
@@ -700,7 +700,7 @@ def test_multiple_native_requests_keep_input_and_trace_contents(managed_project:
     assert call('status', [alias])['aliases'][0]['waiting_for'] == 'runtime-request'
     assert call('requests', [alias])['requests'] == [user_input]
     answer = {'answers': {'color': {'answers': ['蓝色']}}}
-    call('agents', ['reply', {
+    call('subagents', ['reply', {
         'agent': alias, 'request': user_input, 'response': answer,
     }, 'main-a'])
     observe(call, alias, 'idle', 'completed')

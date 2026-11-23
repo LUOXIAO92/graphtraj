@@ -105,7 +105,7 @@ REQUEST = {'action': 'execute', 'feature': 'status', 'arguments': {}}
 
 def prepare(session: str, cwd: Path | str, request: object = REQUEST) -> dict:
     """One mod preparation as ``host_context.mjs`` sends it."""
-    return {'operation': 'prepare', 'tool': 'agents', 'session': session, 'cwd': str(cwd),
+    return {'operation': 'prepare', 'tool': 'subagents', 'session': session, 'cwd': str(cwd),
             'agent': None, 'request': request}
 
 

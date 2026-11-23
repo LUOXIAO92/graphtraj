@@ -544,7 +544,7 @@ def test_check_uses_a_real_review_request(tmp_path):
                                               f'print({ALLOW!r})'))
     document = json.loads(seen.read_text())
     assert document['policy'] == review.review_policy()
-    assert set(document['request']) == set(REQUEST) and document['request']['tool'] == 'agents/connectivity-check'
+    assert set(document['request']) == set(REQUEST) and document['request']['tool'] == 'subagents/connectivity-check'
 
 
 def test_check_raises_review_unavailable_with_the_reason(endpoint, tmp_path):
@@ -600,7 +600,7 @@ def test_create_checks_once_and_send_does_not_repeat(tmp_path):
     assert not failed
     _, failed = call(control, action='resume', agent=agent, message='and again')
     assert not failed
-    assert calls.read_text() == 'agents/connectivity-check\n'
+    assert calls.read_text() == 'subagents/connectivity-check\n'
     assert call(control, action='status', agent=agent)[0]['result']['review'] == 'chosen'
 
 
@@ -652,7 +652,7 @@ def plugin(tmp_path, native):
             'import json, sys\n'
             'request = json.load(sys.stdin)["request"]\n'
             f'open({str(tmp_path / "requests.jsonl")!r}, "a").write(json.dumps(request) + "\\n")\n'
-            'if request["tool"] == "agents/connectivity-check":\n'
+            'if request["tool"] == "subagents/connectivity-check":\n'
             f'    print({ALLOW!r})\n'
             '    raise SystemExit(0)\n'
             + source))
@@ -678,7 +678,7 @@ def decided(decision, reason='Judged.'):
 def reviewed(tmp_path):
     """Return the review requests the reviewer received, probes excluded."""
     requests = map(json.loads, (tmp_path / 'requests.jsonl').read_text().splitlines())
-    return [item for item in requests if item['tool'] != 'agents/connectivity-check']
+    return [item for item in requests if item['tool'] != 'subagents/connectivity-check']
 
 
 def records(control, agent):
@@ -863,7 +863,7 @@ def test_review_continues_on_a_later_execution_without_a_new_check(tmp_path, plu
     assert finished(control, agent)['last_message'] == 'request accepted'
     assert len(reviewed(tmp_path)) == 2 and len(records(control, agent)) == 2
     tools = [json.loads(line)['tool'] for line in (tmp_path / 'requests.jsonl').read_text().splitlines()]
-    assert tools.count('agents/connectivity-check') == 1
+    assert tools.count('subagents/connectivity-check') == 1
 
 
 def test_the_reviewer_is_user_only_with_review(tmp_path, plugin, native):

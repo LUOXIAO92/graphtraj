@@ -74,11 +74,11 @@ def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_en
     session = str(uuid4())
     request = {'action': 'execute', 'feature': 'create',
                'arguments': {'runtime': 'claude', 'instruction': 'hello'}}
-    host.context({'operation': 'prepare', 'tool': 'agents', 'session': session,
+    host.context({'operation': 'prepare', 'tool': 'subagents', 'session': session,
                   'cwd': str(tmp_path), 'agent': None, 'request': request})
     created = host.call(request)
     assert not created.failed, created.document
-    wait = host.make_call(session, tmp_path)('agents', {'action': 'execute', 'feature': 'wait',
+    wait = host.make_call(session, tmp_path)('subagents', {'action': 'execute', 'feature': 'wait',
         'arguments': {'agent': created.document['agent'], 'timeout_seconds': 20}})
     assert not wait.failed
     # Once: by this wait, or by the create result when the child ended before it returned.
@@ -91,7 +91,7 @@ def test_native_main_notice_is_scoped_and_acknowledged(tmp_path: Path, claude_en
     assert host.context({'operation': 'notices', 'session': str(uuid4())})['notices'] == []
 
     second = {**request, 'arguments': {'runtime': 'claude', 'instruction': 'again'}}
-    host.context({'operation': 'prepare', 'tool': 'agents', 'session': session,
+    host.context({'operation': 'prepare', 'tool': 'subagents', 'session': session,
                   'cwd': str(tmp_path), 'agent': None, 'request': second})
     assert not host.call(second).failed
     import time
@@ -111,15 +111,15 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
     host = IndependentCalls(tmp_path / 'agents', tmp_path, {})
     session = str(uuid4())
     call = host.make_call(session, tmp_path)
-    created = call('agents', {'action': 'execute', 'feature': 'create',
+    created = call('subagents', {'action': 'execute', 'feature': 'create',
         'arguments': {'runtime': 'claude', 'instruction': 'remembered352'}})
     assert not created.failed, created.document
     agent = created.document['agent']
-    replies = [call('agents', {'action': 'execute', 'feature': 'wait',
+    replies = [call('subagents', {'action': 'execute', 'feature': 'wait',
         'arguments': {'agent': agent, 'timeout_seconds': 20}}).document]
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline - 4.5:
-        replies.append(call('agents', {'action': 'execute', 'feature': 'status',
+        replies.append(call('subagents', {'action': 'execute', 'feature': 'status',
                                       'arguments': {'agent': agent}}).document)
         time.sleep(0.01)
     # The body reached the Main as a notice at most once: on the create result when the
@@ -131,7 +131,7 @@ def test_native_print_result_delivers_queued_notice_once(tmp_path: Path, claude_
              if reply.get('result', {}).get('last_result')]
     assert notices in ([], ['remembered352'])
     assert shown and set(shown) == {'remembered352'}
-    assert 'main_notices' not in call('agents', {'action': 'discover'}).document
+    assert 'main_notices' not in call('subagents', {'action': 'discover'}).document
     assert host.context({'operation': 'notices', 'session': session})['notices'] == []
 
 
@@ -196,7 +196,7 @@ def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: s
         (root / 'config.yml').write_text('save_normalized_sessions: true\n')
     messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
-                 'params': {'name': 'agents', 'arguments': {'action': 'discover'}}}]
+                 'params': {'name': 'subagents', 'arguments': {'action': 'discover'}}}]
     launcher = ('import subprocess, sys\n'
                 'done = subprocess.run([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], input=sys.stdin.read(), capture_output=True, text=True, timeout=30)\n'
@@ -207,7 +207,7 @@ def test_refused_host_start_is_readable_in_calls_and_log(tmp_path: Path, case: s
         input=''.join(json.dumps(message) + '\n' for message in messages), capture_output=True, text=True,
         timeout=60, env={**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', '')})
     replies = [json.loads(line) for line in finished.stdout.splitlines()]
-    assert replies[0]['result']['serverInfo']['name'] == 'agents'
+    assert replies[0]['result']['serverInfo']['name'] == 'subagents'
     called = replies[1]['result']
     if case == 'archive':
         # 384: archiving on no longer refuses the host at start. (This bare
@@ -262,13 +262,13 @@ def test_session_end_is_logged_as_a_stop_not_a_traceback(tmp_path: Path, case: s
         capture_output=True, text=True, timeout=60,
         env={**os.environ, 'PYTHONPATH': source + os.pathsep + os.environ.get('PYTHONPATH', '')})
     reply, returncode = finished.stdout.splitlines()
-    assert json.loads(reply)['result']['serverInfo']['name'] == 'agents'
+    assert json.loads(reply)['result']['serverInfo']['name'] == 'subagents'
     assert returncode == '0', finished.stderr
     log = (root / 'host.log').read_text()
     assert 'Traceback' not in log and 'KeyboardInterrupt' not in log
-    assert 'agents host stopped: Claude Code ended the session (SIGINT).' in log
+    assert 'subagents host stopped: Claude Code ended the session (SIGINT).' in log
     if case == 'refused':
-        assert 'The agents host did not start: Claude Code was started in' in log
+        assert 'The subagents host did not start: Claude Code was started in' in log
     else:
         assert 'did not start' not in log and not channel.exists()
 
@@ -299,7 +299,7 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
 
     idle = context()
     assert idle.returncode == 1 and 'Traceback' not in idle.stderr
-    assert idle.stderr.splitlines() == [f"The agents host for this project is not running; see {root / 'host.log'}."]
+    assert idle.stderr.splitlines() == [f"The subagents host for this project is not running; see {root / 'host.log'}."]
     launcher = ('import json, signal, subprocess, sys\n'
                 'host = subprocess.Popen([sys.executable, "-m", "graftling.claude.host", "serve", "--config",'
                 ' sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,'
@@ -312,7 +312,7 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
                 'print(host.wait(timeout=30))\n')
     host = subprocess.Popen([sys.executable, '-c', launcher, str(config)], cwd=elsewhere, env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-    assert json.loads(host.stdout.readline())['result']['serverInfo']['name'] == 'agents'
+    assert json.loads(host.stdout.readline())['result']['serverInfo']['name'] == 'subagents'
     refused = context()
     host.stdin.write('stop\n')
     host.stdin.flush()
@@ -320,6 +320,6 @@ def test_context_reports_a_refused_host_in_one_line(tmp_path: Path) -> None:
     host.wait(timeout=30)
     assert refused.returncode == 1 and 'Traceback' not in refused.stderr
     [line] = refused.stderr.splitlines()
-    assert line.startswith('host-unavailable: The agents host did not start: ')
+    assert line.startswith('host-unavailable: The subagents host did not start: ')
     assert f'started in {elsewhere.resolve()}' in line
     assert not (root / 'host-refusal.json').exists() and not (root / 'live').exists()

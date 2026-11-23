@@ -120,12 +120,12 @@ host.ui.log = line => { logged.push(line); };
 await handlers.get('session.start')(host, {}, async () => 'started');
 const request = {action: 'execute', feature: 'wait', arguments: {agent: 'a'}};
 const aborted = {...host, process: {run: async () => { throw new Error('aborted'); }}};
-await call('agents')(aborted, {tool: 'mcp__graphtraj__agents', ...request}, async () => ({result: '{}'}));
+await call('subagents')(aborted, {tool: 'mcp__graphtraj__subagents', ...request}, async () => ({result: '{}'}));
 assert.deepEqual(logged.filter(line => line.includes('cleanup failed')), []);
 assert.equal(operations.length, 0);
 await timers.shift()();
 assert.deepEqual(operations.filter(item => item.operation === 'end'),
-                 [{operation: 'end', tool: 'agents', request, session: 'main-session'}]);
+                 [{operation: 'end', tool: 'subagents', request, session: 'main-session'}]);
 // Ended once: a later tick does not send it again.
 await timers.shift()();
 assert.equal(operations.filter(item => item.operation === 'end').length, 1);
@@ -140,7 +140,7 @@ const logged = [];
 host.ui.log = line => { logged.push(line); };
 await handlers.get('session.start')(host, {}, async () => 'started');
 host.process.run = async () => { throw new Error('host gone'); };
-await call('agents')(host, {tool: 'mcp__graphtraj__agents', action: 'execute'}, async () => ({result: '{}'}));
+await call('subagents')(host, {tool: 'mcp__graphtraj__subagents', action: 'execute'}, async () => ({result: '{}'}));
 await timers.shift()();
 await timers.shift()();
 assert.equal(logged.filter(line => line.includes('cleanup failed')).length, 1);

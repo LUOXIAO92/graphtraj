@@ -35,14 +35,14 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
     first, second = str(uuid4()), str(uuid4())
-    context = {'operation': 'prepare', 'tool': 'agents', 'session': first, 'cwd': str(tmp_path),
+    context = {'operation': 'prepare', 'tool': 'subagents', 'session': first, 'cwd': str(tmp_path),
                'agent': None, 'request': request}
     host.context(context)
-    assert host.call(request).document == {'native': first, 'tool': 'agents'}
+    assert host.call(request).document == {'native': first, 'tool': 'subagents'}
     with pytest.raises(AgentsError, match='No matching'):
         host.call(request)
     host.context({**context, 'session': second})
-    assert host.call(request).document == {'native': second, 'tool': 'agents'}
+    assert host.call(request).document == {'native': second, 'tool': 'subagents'}
     # One association serves only the entry it was prepared for.
     host.context({**context, 'tool': 'tasks'})
     with pytest.raises(AgentsError, match='No matching'):
@@ -68,7 +68,7 @@ def test_progressive_mcp_consumes_current_context_once(tmp_path: Path) -> None:
     serve(StringIO(json.dumps({'id': 1, 'method': 'tools/list'}) + '\n'), output,
           tmp_path, native_call=host.call)
     tools = json.loads(output.getvalue())['result']['tools']
-    assert [tool['name'] for tool in tools] == ['agents', 'tasks']
+    assert [tool['name'] for tool in tools] == ['subagents', 'tasks']
     assert tools[0]['inputSchema']['properties']['action']['enum'] == ['discover', 'describe', 'execute']
     assert 'runtime' not in tools[0]['inputSchema']['properties']
 
@@ -94,7 +94,7 @@ def test_call_queued_behind_a_running_call_keeps_its_own_association(tmp_path: P
     def prepare(feature: str, native: str = session) -> dict:
         """Prepare one native call as the mod does during Claude's permission check."""
         request = {'action': 'execute', 'feature': feature, 'arguments': {}}
-        host.context({'operation': 'prepare', 'tool': 'agents', 'session': native,
+        host.context({'operation': 'prepare', 'tool': 'subagents', 'session': native,
                       'cwd': str(tmp_path), 'agent': None, 'request': request})
         return request
 
@@ -285,7 +285,7 @@ def test_host_survives_failing_task_operations(tmp_path: Path) -> None:
     failures = iter([ValueError('Task 901 is already registered'), RuntimeError('boom')])
     lock = threading.Lock()
 
-    def call(request: dict, tool: str = 'agents') -> AgentsResult:
+    def call(request: dict, tool: str = 'subagents') -> AgentsResult:
         """Fail twice, then answer, like a Task write followed by a status read."""
         with lock:
             failure = next(failures, None)
@@ -395,7 +395,7 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
     messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list', 'params': {}},
                 {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
-                 'params': {'name': 'agents', 'arguments': {'action': 'discover'}}},
+                 'params': {'name': 'subagents', 'arguments': {'action': 'discover'}}},
                 {'jsonrpc': '2.0', 'id': 4, 'method': 'tools/call',
                  'params': {'name': 'tasks', 'arguments': {'action': 'discover'}}}]
     launcher = ('import subprocess, sys\n'
@@ -411,20 +411,20 @@ def test_refused_graphtraj_host_answers_both_tools_with_the_reason(tmp_path: Pat
                               capture_output=True, text=True, timeout=60, env=env)
     replies = [json.loads(line) for line in finished.stdout.splitlines()]
     assert replies[0]['result']['serverInfo'] == {'name': 'graphtraj', 'version': '1'}
-    assert [tool['name'] for tool in replies[1]['result']['tools']] == ['agents', 'tasks']
+    assert [tool['name'] for tool in replies[1]['result']['tools']] == ['subagents', 'tasks']
     errors = []
     for reply in replies[2:]:
         assert reply['result']['isError'] is True
         errors.append(reply['result']['structuredContent']['error'])
     assert errors[0] == errors[1]
     error = errors[0]
-    assert error['message'].startswith('The agents host did not start: ')
+    assert error['message'].startswith('The subagents host did not start: ')
     expected = {'elsewhere': ('host-unavailable', [f'started in {elsewhere.resolve()}',
                                                    f'configured for {project.resolve()}',
                                                    f'Start or resume Claude Code from {project.resolve()}']),
                 'bound-child': ('authority-denied', ['bound child']),
                 'agents-child': ('authority-denied', ['bound child']),
-                'live-occupant': ('host-busy', [str(channel), 'another agents host', 'Claude Code pid 4242',
+                'live-occupant': ('host-busy', [str(channel), 'another subagents host', 'Claude Code pid 4242',
                                                 'Close that Claude Code session']),
                 'bad-config': ('host-unavailable', [str(config), 'Expected root, cwd, claude and channel_file'])}
     code, parts = expected[case]
@@ -474,10 +474,10 @@ def test_graphtraj_session_end_is_one_stop_line(tmp_path: Path, case: str) -> No
     assert returncode == '0', finished.stderr
     log = (config.parent / 'host.log').read_text()
     assert 'Traceback' not in log and 'KeyboardInterrupt' not in log
-    assert log.count('agents host stopped: Claude Code ended the session (SIGINT).') == 1
+    assert log.count('subagents host stopped: Claude Code ended the session (SIGINT).') == 1
     assert not channel.exists() and not stale.exists()
     if case == 'refused':
-        assert 'The agents host did not start: Claude Code was started in' in log
+        assert 'The subagents host did not start: Claude Code was started in' in log
     else:
         assert 'did not start' not in log
 
@@ -499,7 +499,7 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
     idle = context()
     assert idle.returncode == 1 and 'Traceback' not in idle.stderr
     assert idle.stderr.splitlines() == [
-        f"The agents host for this project is not running; see {config.parent / 'host.log'}."]
+        f"The subagents host for this project is not running; see {config.parent / 'host.log'}."]
     # Like Claude Code, the launcher starts the host with the default SIGINT
     # disposition: a suite run as a background job would otherwise pass SIGINT
     # ignored (372, as in test_independent_claude 4003528).
@@ -526,13 +526,13 @@ def test_graphtraj_context_reports_a_refused_host_in_one_line(tmp_path: Path, mo
     host.wait(timeout=30)
     assert refused.returncode == 1 and 'Traceback' not in refused.stderr
     [line] = refused.stderr.splitlines()
-    assert line.startswith('host-unavailable: The agents host did not start: Claude Code was started in ')
+    assert line.startswith('host-unavailable: The subagents host did not start: Claude Code was started in ')
     assert f'configured for {project.resolve()}' in line
     assert not (config.parent / 'host-refusal.json').exists()
 
 
 HOST_MODULES = ['graphtraj.runtimes.claude.host', 'graftling.claude.host']
-REPLACED_LINE = 'agents host replaced a stale channel of a dead host'
+REPLACED_LINE = 'subagents host replaced a stale channel of a dead host'
 # The verified Claude parent: it owns one host and runs the mod's context entry as its direct child.
 CLAUDE_PARENT = '''
 import json, signal, subprocess, sys, time
@@ -581,7 +581,7 @@ class ClaudeParent:
     def __init__(self, module: str, project: Path, config: Path) -> None:
         self.project = project
         # graftling's own host keeps its serverInfo name; GraphTraj's is graphtraj (514).
-        self.server = 'graphtraj' if module.startswith('graphtraj.') else 'agents'
+        self.server = 'graphtraj' if module.startswith('graphtraj.') else 'subagents'
         self.process = subprocess.Popen([sys.executable, '-c', CLAUDE_PARENT, module, str(config)], cwd=project,
                                         env=_source_env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         self.pid = self.process.pid
@@ -623,10 +623,10 @@ class ClaudeParent:
     def discover(self) -> dict:
         """Call agents as the mod and Claude Code do: prepare the context, then the MCP call."""
         request = {'action': 'discover'}
-        prepared = self.context({'operation': 'prepare', 'tool': 'agents', 'session': str(uuid4()),
+        prepared = self.context({'operation': 'prepare', 'tool': 'subagents', 'session': str(uuid4()),
                                  'cwd': str(self.project.resolve()), 'agent': None, 'request': request})
         assert prepared['code'] == 0, prepared
-        return self.send('tools/call', {'name': 'agents', 'arguments': request})['result']
+        return self.send('tools/call', {'name': 'subagents', 'arguments': request})['result']
 
     def close(self) -> None:
         """End the parent; its host ends with the closed input."""
@@ -734,7 +734,7 @@ def test_context_after_the_host_alone_was_killed(tmp_path: Path, claude_parents,
     parent.do(do='kill')
     assert json.loads(_channel_of(config).read_text())['parent'] == parent.pid
     _assert_one_line(parent.context(),
-                     f"The agents host for this project is not running; see {config.parent / 'host.log'}.")
+                     f"The subagents host for this project is not running; see {config.parent / 'host.log'}.")
 
 
 @pytest.mark.parametrize('module', HOST_MODULES)
@@ -747,10 +747,10 @@ def test_second_start_is_refused_while_the_occupant_lives(tmp_path: Path, claude
     occupied = channel.read_text()
     second = claude_parents(module, project, config)
     # Before its own host starts, the second Claude is told who owns the project.
-    _assert_one_line(second.context(), f'The agents host of another Claude Code session '
+    _assert_one_line(second.context(), f'The subagents host of another Claude Code session '
                                        f'(Claude Code pid {first.pid}) owns this project.')
     second.start()
-    refused = second.send('tools/call', {'name': 'agents', 'arguments': {'action': 'discover'}})['result']
+    refused = second.send('tools/call', {'name': 'subagents', 'arguments': {'action': 'discover'}})['result']
     assert refused['isError'] is True
     error = refused['structuredContent']['error']
     assert error['code'] == 'host-busy' and f'Claude Code pid {first.pid}' in error['message'], error
@@ -789,7 +789,7 @@ def test_concurrent_starts_over_a_stale_channel_serve_once(tmp_path: Path, claud
     winner, loser = parents if owner['parent'] == parents[0].pid else parents[::-1]
     assert owner['parent'] == winner.pid
     _assert_real_discover(winner.discover())
-    refused = loser.send('tools/call', {'name': 'agents', 'arguments': {'action': 'discover'}})['result']
+    refused = loser.send('tools/call', {'name': 'subagents', 'arguments': {'action': 'discover'}})['result']
     error = refused['structuredContent']['error']
     assert refused['isError'] is True and error['code'] == 'host-busy', refused
     assert f'Claude Code pid {winner.pid}' in error['message']
@@ -797,7 +797,7 @@ def test_concurrent_starts_over_a_stale_channel_serve_once(tmp_path: Path, claud
         ['channel.json', Path(owner['address']).name])
     log = (config.parent / 'host.log').read_text()
     assert log.count(REPLACED_LINE) == 1 and 'Traceback' not in log
-    assert log.count('The agents host did not start') == 1
+    assert log.count('The subagents host did not start') == 1
     _assert_one_line(loser.context(), f"host-busy: {error['message']}")
     assert json.loads(channel.read_text()) == owner
 
@@ -816,9 +816,9 @@ def test_context_over_a_stale_file_names_the_real_cause(
                                    'address': str(channel.parent / 'control-dead')}))
     if recorded:
         (config.parent / 'host-refusal.json').write_text(json.dumps(
-            {'code': 'host-unavailable', 'message': 'The agents host did not start: recorded'}))
-    _assert_one_line(parent.context(), 'host-unavailable: The agents host did not start: recorded' if recorded
-                     else f"The agents host for this project is not running; see {config.parent / 'host.log'}.")
+            {'code': 'host-unavailable', 'message': 'The subagents host did not start: recorded'}))
+    _assert_one_line(parent.context(), 'host-unavailable: The subagents host did not start: recorded' if recorded
+                     else f"The subagents host for this project is not running; see {config.parent / 'host.log'}.")
 
 
 @pytest.mark.parametrize('module', HOST_MODULES)
@@ -831,7 +831,7 @@ def test_context_from_another_claude_forwards_nothing(
     parent = claude_parents(module, project, config)
     channel.write_text(json.dumps({'parent': 4242, 'executable': sys.executable, 'address': str(control)}))
     _assert_one_line(parent.context(),
-                     'The agents host of another Claude Code session (Claude Code pid 4242) owns this project.')
+                     'The subagents host of another Claude Code session (Claude Code pid 4242) owns this project.')
     assert list(control.iterdir()) == []
 
 

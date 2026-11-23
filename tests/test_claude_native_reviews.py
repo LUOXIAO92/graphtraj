@@ -52,11 +52,11 @@ def converse(
                 source.messages.append(json.dumps(reply) + '\n')
             return len(text)
 
-    def native_call(arguments: dict, tool: str = 'agents') -> object:
+    def native_call(arguments: dict, tool: str = 'subagents') -> object:
         """Run the call as the verified Main host does: Runner caller ``None``."""
         with runtime_caller(root / '.graphtraj/runner', None):
-            if tool == 'agents':
-                # A Task member's agents retire uses the Runner retirement.
+            if tool == 'subagents':
+                # A Task member's subagents retire uses the Runner retirement.
                 return AgentsResult(runner_retirement.retire_session(arguments['arguments']['agent'], root))
             return handle_task(arguments, cwd=root)
 
@@ -156,7 +156,7 @@ def test_claude_main_retirement_review_uses_claude_dialog(
 
     elicitations, result = converse(
         tmp_path, {'action': 'execute', 'feature': 'retire', 'arguments': {'agent': parent}},
-        decision, check, tool='agents')
+        decision, check, tool='subagents')
     assert len(elicitations) == 1
     assert result['isError'] is (decision != 'accept'), result
     assert retired == ([parent] if decision == 'accept' else [])

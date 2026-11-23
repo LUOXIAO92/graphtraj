@@ -29,7 +29,7 @@ const userData = path.join(root, 'preferences');
 
 /** Compare the public Session identity after each GUI lifecycle boundary. */
 function runningTask(project) {
-  const status = fixtures.operate(project, 'agents', {
+  const status = fixtures.operate(project, 'subagents', {
     action: 'status', agent: process.env.ADOPTION_AGENT_ALIAS,
   }).result;
   const task = status.aliases[0];

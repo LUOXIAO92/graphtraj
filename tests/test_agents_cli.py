@@ -36,7 +36,7 @@ def test_independent_entry_controls_same_core(tmp_path: Path, surface: str) -> N
                 command.append(json.dumps(document))
             else:
                 payload = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
-                                      'params': {'name': 'agents', 'arguments': document}}) + '\n'
+                                      'params': {'name': 'subagents', 'arguments': document}}) + '\n'
             child = subprocess.Popen(command, cwd=tmp_path, env=env, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = child.communicate(payload, timeout=10)

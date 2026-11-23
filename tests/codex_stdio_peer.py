@@ -400,7 +400,7 @@ for line in incoming():
                                if key not in {'GRAFTLING_CONNECTION', 'GRAPHTRAJ_CLI_CONNECTION'}}
                 environment.update(server['env'])
                 request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-                    'name': 'agents', '_meta': {'threadId': thread_id},
+                    'name': 'subagents', '_meta': {'threadId': thread_id},
                     'arguments': {'action': 'execute', 'feature': 'create', 'arguments': {
                         'runtime': 'codex', 'instruction': 'child body',
                     }},
@@ -438,7 +438,7 @@ for line in incoming():
                 agents = []
                 for index, arguments in enumerate(json.loads(os.environ['PEER_MCP_CALLS']), 1):
                     text = json.dumps({'jsonrpc': '2.0', 'id': index, 'method': 'tools/call', 'params': {
-                        'name': 'agents', '_meta': {'threadId': thread_id}, 'arguments': arguments}})
+                        'name': 'subagents', '_meta': {'threadId': thread_id}, 'arguments': arguments}})
                     for number, agent in enumerate(agents, 1):
                         text = text.replace(f'<agent from {number}>', str(agent))
                     process.stdin.write(text + '\n')

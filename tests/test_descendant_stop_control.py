@@ -61,7 +61,7 @@ def test_native_owner_retains_control_of_its_recorded_root(
 
     def agents(feature: str, alias: str, **arguments: str):
         """Use the public agents Tool, not a caller-selected identity parameter."""
-        return bind(root)({'action': 'execute', 'feature': 'agents', 'arguments': {
+        return bind(root)({'action': 'execute', 'feature': 'subagents', 'arguments': {
             'action': feature, 'agent': alias, **arguments,
         }})
 
@@ -81,7 +81,7 @@ def test_native_owner_retains_control_of_its_recorded_root(
     assert sent['agent'] == target and sent['result']['send_status'] == 'sent', sent
     refused(child, 'direct parent')
     # Another native identity gets no control of the recorded root.
-    other_owner = 'direct parent|association is unavailable|read-only agents access'
+    other_owner = 'direct parent|association is unavailable|read-only subagents access'
     connection['session'] = 'different-native-child'
     refused(target, other_owner)
     connection['session'] = 'external-owner'
@@ -175,10 +175,10 @@ def test_native_root_owner_outlives_historical_checker_membership(
     # Use public retirement, which is also the last-child cleanup path. The
     # owning Main must still organize roles and dispatch after the active
     # mapping has moved into the Task's retained Trace.
-    stopped = tool({'action': 'execute', 'feature': 'agents',
+    stopped = tool({'action': 'execute', 'feature': 'subagents',
                     'arguments': {'action': 'interrupt', 'agent': target}})
     assert not stopped.failed, stopped.document
-    retired = tool({'action': 'execute', 'feature': 'agents',
+    retired = tool({'action': 'execute', 'feature': 'subagents',
                     'arguments': {'action': 'retire', 'agent': target}})
     assert not retired.failed, retired.document
     assert not list((root / '.graphtraj/runner/sessions').glob('*/mapping.yml'))
@@ -298,7 +298,7 @@ def test_stray_directory_does_not_hide_a_retired_roots_owner(
 
     tool = bind(root, recovery_reviewer=lambda proposal: {'decision': 'accept'})
     for action in ('interrupt', 'retire'):
-        done = tool({'action': 'execute', 'feature': 'agents',
+        done = tool({'action': 'execute', 'feature': 'subagents',
                      'arguments': {'action': action, 'agent': target}})
         assert not done.failed, done.document
 

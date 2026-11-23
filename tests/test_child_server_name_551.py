@@ -63,7 +63,7 @@ def test_claude_child_serves_mcp_graphtraj_tools_and_loads_no_other_server(
         turn, _, _ = execution(tmp_path, stack, 'unused')
         turn.configure_independent(archive=None, agents_callback=lambda request: AgentsResult({}),
                                    extra_tools=task_free_tools(tmp_path, CHILD))
-        assert turn.agents_tool == 'mcp__graphtraj__agents'
+        assert turn.agents_tool == 'mcp__graphtraj__subagents'
         argv, _ = turn._prepare(str(tmp_path / 'connection.sock'))
         assert '--strict-mcp-config' in argv
         assert json.loads(argv[argv.index('--mcp-config') + 1]) == {'mcpServers': {}}
@@ -72,7 +72,7 @@ def test_claude_child_serves_mcp_graphtraj_tools_and_loads_no_other_server(
         turn._sdk_message({'request_id': '1', 'request': {'server_name': 'graphtraj', 'message': {
             'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}}})
         listed = replies.get(timeout=5)['mcp_response']['result']['tools']
-        assert [tool['name'] for tool in listed] == ['agents', 'tasks']
+        assert [tool['name'] for tool in listed] == ['subagents', 'tasks']
         with pytest.raises(Exception):
             turn._sdk_message({'request_id': '2', 'request': {'server_name': 'graftling', 'message': {
                 'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}}})
@@ -118,7 +118,7 @@ def test_codex_child_disallowing_tasks_drops_it_and_keeps_agents(denied: str) ->
     from graphtraj.runtimes.codex.managed_session import CodexManagedExecution
 
     request = {'session_parameters': {'config': {}}}
-    apply_child_tools('codex', request, {'tools': ['mcp__graphtraj__agents'], 'disallowed_tools': [denied]})
+    apply_child_tools('codex', request, {'tools': ['mcp__graphtraj__subagents'], 'disallowed_tools': [denied]})
     assert request['session_parameters']['config'] == {'web_search': 'disabled'}
     pairs = task_free_tools(Path('/project'), CHILD)
     assert owner_tools_kept(pairs, [denied], CodexManagedExecution.mcp_server) == []

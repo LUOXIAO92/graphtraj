@@ -260,7 +260,7 @@ def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Pa
     codex({'action': 'wait', 'agent': agent, 'timeout_seconds': 5})
 
     call = main_calls(tmp_path, control, None)('claude-main', tmp_path)
-    listed = call('agents', {'action': 'execute', 'feature': 'status', 'arguments': {}})
+    listed = call('subagents', {'action': 'execute', 'feature': 'status', 'arguments': {}})
     assert [item['agent'] for item in listed.document['result']['agents']] == [agent]
     assert current_main(runner)['session'] == 'codex-main'
     features = call('tasks', {'action': 'discover'}).document['features']
@@ -268,7 +268,7 @@ def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Pa
     assert current_main(runner)['session'] == 'codex-main'
 
     queue_notice(runner, {**CLAUDE, 'runner': str(runner)}, {'alias': 'leader@l1', 'message': 'done'})
-    sent = call('agents', {'action': 'execute', 'feature': 'send', 'arguments': {'agent': agent, 'message': 'go'}})
+    sent = call('subagents', {'action': 'execute', 'feature': 'send', 'arguments': {'agent': agent, 'message': 'go'}})
     assert not sent.failed
     assert current_main(runner)['session'] == 'claude-main'
     assert sent.document['main_notices'][0]['event']['alias'] == 'leader@l1'
@@ -287,7 +287,7 @@ def test_claude_host_serves_agents_and_tasks_as_the_continuing_main(tmp_path: Pa
 
     # Codex resumes Main; the same Claude host process no longer controls.
     claim_main(runner, CODEX, 'codex:SessionStart:resume')
-    refused = call('agents', {'action': 'execute', 'feature': 'send', 'arguments': {'agent': agent, 'message': 'again'}})
+    refused = call('subagents', {'action': 'execute', 'feature': 'send', 'arguments': {'agent': agent, 'message': 'again'}})
     assert refused.document['error']['code'] == 'main-continued'
     assert current_main(runner)['session'] == 'codex-main'
     assert len(driver.started) == 2

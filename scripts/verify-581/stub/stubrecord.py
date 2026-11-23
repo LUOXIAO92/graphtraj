@@ -7,7 +7,9 @@ runs while the stub answers (it inherits the Main's environment, as a host does)
 it; the ps stand-in learns its environment NAMES from the registry ($STUB581_PSFILE).
 STUB581_OTHER_PYTHON=1: run that process with the stub's own Python instead (the verdict must FAIL).
 STUB581_NO_NOTICE=1: the record's notification stays 'pending' (the notice verdicts must FAIL).
-STUB581_LEAK=NAME: that host process also holds NAME (a leaked credential; observable 2 must FAIL).
+STUB581_LEAK=NAME: that host process also holds NAME (set inside the tree; observable 2 FAILs if NAME is a
+provider name, else NOTE). STUB581_MAIN_EXTRA=NAME: the Main process itself (and so the host) holds NAME
+(observable 2 must FAIL: it came in from outside).
 STUB581_CHILD_PROVIDER=<p>: the child's native Session names provider <p> (observable 3 must FAIL unless deepseek).
 The child's provider files: <root>/native/<agent>/dsh-native/session.jsonl (provider, model) and the record's
 executions[].process.resolved_model, the fields providers.py reads.
@@ -30,8 +32,13 @@ def run_host(kind: str, python: str | None) -> None:
     env = dict(os.environ)
     if os.environ.get('STUB581_LEAK'):
         env[os.environ['STUB581_LEAK']] = 'leak'
+    main_env = set(os.environ)
+    if os.environ.get('STUB581_MAIN_EXTRA'):  # the Main holds it, so its host inherits it
+        main_env.add(os.environ['STUB581_MAIN_EXTRA'])
+        env[os.environ['STUB581_MAIN_EXTRA']] = 'inherited'
     child = subprocess.Popen(argv, env=env)
-    register([(os.getpid(), os.getppid(), f'{kind} (stub Main)', os.environ),
+    flag = '--profile headless' if kind == 'dsh' else '-p'
+    register([(os.getpid(), os.getppid(), f'{kind} {flag} (stub Main)', main_env),
               (child.pid, os.getpid(), ' '.join(argv), env)])
     child.wait()
 

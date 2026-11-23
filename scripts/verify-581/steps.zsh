@@ -281,7 +281,7 @@ host_step() {  # kind dir
   python3 -I $PROCS judge $PROCF $UVT/graftling/ "$kind host" || OK=0
   [[ ! -e $DH/graftling-python ]] && pass "$DH/graftling-python does not exist" || fail "$DH/graftling-python exists"
   say "observable 2: credential-like names of every process under the Session (names only; from ps -E)"
-  python3 -I $PROCS creds $PROCF.env $ROOT/$kind-user-creds.txt $(allowed $kind) "$kind Session" || OK=0
+  python3 -I $PROCS creds $PROCF.env $ROOT/$kind-user-creds.txt $(allowed $kind) "$kind Session" $kind || OK=0
   say "observable 3: provider, model and endpoint of the Main and of the child (DeepSeek only)"
   case $kind in
     dsh) python3 -I $PROVIDERS scan "dsh Main (files under DSH_HOME $DH)" $DH || OK=0 ;;

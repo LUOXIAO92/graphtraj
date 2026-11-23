@@ -8,10 +8,12 @@ usage:
                                           values are dropped before anything is written
   procs.py judge <out> <prefix> <label>   PASS when at least one Python process ran graftling and every such
                                           process's interpreter (argv[0]) lies under <prefix> (the uv install)
-  procs.py creds <out.env> <user names file> <allowed,...> <label>
+  procs.py creds <out.env> <user names file> <allowed,...> <label> [<kind>]
                                           FAIL when a descendant holds a credential-like name that is not allowed
-                                          and either came from your environment (the names file) or names a provider
-                                          credential (PROVIDER below); another host-set token-like name is a NOTE
+                                          and either the Session's Main process (the <kind> host: claude -p,
+                                          dsh --profile, pi -p) holds it too, or it names a provider credential
+                                          (PROVIDER below); another name a host set inside the tree is a NOTE.
+                                          If the Main is not identified, your shell's names (the file) count instead
   procs.py names                          stdin: `env` output; prints the credential-like names, one per line
   procs.py pattern                        prints CRED (for steps.zsh's clean(), which matches upper-cased names)
 Only descendants of the Session are kept, so other processes on the machine (another Harness, an IDE) never count.
@@ -110,21 +112,45 @@ def judge(out, prefix, label):
     return 0 if ok else 1
 
 
-def creds(out, user_file, allowed, label):
+def is_main(kind, command):
+    """The Session's own host process: `claude -p ...`, `dsh --profile ...` or `pi -p ...` (node scripts included)."""
+    tokens = command.split()
+    if not tokens:
+        return False
+    first = os.path.basename(tokens[0])
+    prog = os.path.basename(tokens[1]) if first == 'node' and len(tokens) > 1 else first
+    flag = {'claude': '-p', 'pi': '-p', 'dsh': '--profile'}.get(kind)
+    return prog == kind and flag in tokens[:4]
+
+
+def creds(out, user_file, allowed, label, kind=''):
+    """A non-allowed name FAILs when the Session's Main process itself holds it (it came in from outside) or when it
+    is a provider name (PROVIDER); otherwise a host set it inside the tree (e.g. Claude Code's own
+    CLAUDE_CODE_MESSAGING_TOKEN for its plugin processes) and it is a NOTE. Without an identified Main process, the
+    stricter rule applies: your shell's names (user_file) count as inherited."""
     allowed = set(filter(None, allowed.split(',')))
     user = set(open(user_file).read().split()) if os.path.exists(user_file) else set()
     rows = [l.rstrip('\n') for l in open(out, errors='replace')] if os.path.exists(out) else []
     read = [r for r in rows if r.split(' ', 2)[1:2] != ['0']]
+    main = next((r for r in rows if is_main(kind, r.split(' ', 3)[3] if len(r.split(' ', 3)) > 3 else '')), None)
+    if main:
+        pid, _, names, _ = main.split(' ', 3)
+        inherited = set() if names == '-' else set(names.split(','))
+        print(f'  {label}: the Main process is pid {pid}; names it holds count as inherited: {sorted(inherited)}')
+    else:
+        inherited = user
+        print(f'  {label}: the Main process ({kind or "kind not given"}) was not identified in {out}; stricter rule: '
+              f'any name from your shell counts as inherited')
     leaks, notes = [], []
     for row in rows:
         pid, count, names, *command = row.split(' ', 3)
         for name in ([] if names == '-' else names.split(',')):
             if name in allowed:
                 continue
-            (leaks if name in user or PROVIDER.search(name) else notes).append(f'{name} (pid {pid}: {" ".join(command).strip()[:80]})')
+            (leaks if name in inherited or PROVIDER.search(name) else notes).append(f'{name} (pid {pid}: {" ".join(command).strip()[:80]})')
         print(f'  {label} process {pid}: {count} variables; credential-like names: {names}  | {" ".join(command).strip()[:90]}')
     for note in notes:
-        print(f'NOTE: {label}: a host set a token-like name not from your environment and not a provider credential: {note}')
+        print(f'NOTE: {label}: a host set a token-like name inside the Session (not held by the Main process, or not in your shell when no Main was identified) and not a provider credential: {note}')
     if not read:
         print(f'FAIL: {label}: no descendant environment could be read ({len(rows)} rows in {out})')
         return 1
@@ -141,7 +167,7 @@ if __name__ == '__main__':
         sys.exit(watch(int(a[1]), a[2]))
     if a[:1] == ['judge'] and len(a) == 4:
         sys.exit(judge(a[1], a[2], a[3]))
-    if a[:1] == ['creds'] and len(a) == 5:
+    if a[:1] == ['creds'] and len(a) in (5, 6):
         sys.exit(creds(*a[1:]))
     if a == ['names']:
         print('\n'.join(sorted({m.group(1) for m in re.finditer(r'^([A-Za-z_][A-Za-z0-9_]*)=', sys.stdin.read(), re.M)

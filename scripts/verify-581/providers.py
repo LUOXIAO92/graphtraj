@@ -6,7 +6,7 @@ usage:
                                            provider/providerId values, model/modelId/resolved_model values,
                                            baseURL/base_url/baseUrl hosts and llm-* plugin ids (DSH's LLM plugins)
   providers.py child <root> <agent>        the agent's record (runtime, executions[].process.resolved_model and model)
-                                           plus `scan` of <root>/native (graftling composes a dsh child's own profile
+                                           plus `scan` of <root>/native/<agent> (else <root>/native) (graftling composes a dsh child's own profile
                                            there with the llm-deepseek plugin, graftling dsh/execution.py)
 In YAML (DSH profile patches) `provider:` is not read: there it is a tool plugin's process mode (spawn | fork).
 PASS when something was found and every provider names deepseek, every endpoint host ends in deepseek.com, every
@@ -132,8 +132,11 @@ def child(root, agent):
                 found.append(('model', process[key], str(path)))
     if isinstance(record.get('model'), str):
         found.append(('model', record['model'], str(path)))
-    scan_dirs([Path(root, 'native')], found)
-    print(f'  child {agent}: runtime {record.get("runtime")}')
+    # Only this child's own native directory (<root>/native/<agent>/, as on the real host), so an earlier child's
+    # files in the same data root never decide this child's verdict; the whole native/ only if that is missing.
+    own = Path(root, 'native', agent)
+    scan_dirs([own if own.is_dir() else Path(root, 'native')], found)
+    print(f'  child {agent}: runtime {record.get("runtime")}; native files read from {own if own.is_dir() else Path(root, "native")}')
     return verdict(f'child {agent} (runtime {record.get("runtime")})', found)
 
 

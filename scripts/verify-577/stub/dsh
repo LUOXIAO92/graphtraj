@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Rehearsal stand-in for dsh (Task 577): only what steps.zsh calls. It checks the script, not graftling.
+
+--version; plugin --profile P add DIR (profile package.json names graftling-dsh); --profile P PROMPT: a one-line
+answer, or for a create prompt one completed dsh-native record where the candidate host would put it:
+GRAFTLING_DSH_CONFIG's root, else GRAFTLING_DATA_ROOT, else ./.agents-control (with live/dsh-host/<id>).
+"""
+import os, sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stubrecord
+
+args = sys.argv[1:]
+home = Path(os.environ.get('DSH_HOME') or Path.home() / '.dsh')
+if args == ['--version']:
+    print('0.2.2-rc.5 (stub)'); sys.exit(0)
+if args[:1] == ['plugin']:
+    manifest = home / 'profiles' / args[2] / 'package.json'
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text('{"dependencies": {"graftling-dsh": "file:%s"}}\n' % args[-1])
+    print('added (stub)'); sys.exit(0)
+print(stubrecord.answer(args[-1], 'dsh', os.environ.get('GRAFTLING_DSH_CONFIG')))

@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+// Rehearsal stand-in for pi (Task 585). Only what steps.zsh calls. No model: answers are canned, but the
+// graftling extension is the REAL installed one (from PI_CODING_AGENT_DIR/settings.json packages), driven
+// through its default export's session_start/session_shutdown with a Session file, or none for
+// --no-session. A refused start prints "Extension error (<path>): <message>" to stderr, as Pi 1.4.0 does.
+// "subagent" in the prompt, with PI_CODING_AGENT_DIR/extensions/subagent present: spawns `pi --mode json -p
+// --no-session <task>` (this stub, via PATH, inheriting the environment, as Pi's bundled example does) and
+// records its stderr in a toolResult entry of the Main's Session file. A create prompt writes one completed
+// record under <cwd>/.agents-control (where a real Main with no flag would).
+import {appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {join, resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {randomUUID} from 'node:crypto';
+
+const args = process.argv.slice(2);
+const agentDir = process.env.PI_CODING_AGENT_DIR;
+const settingsFile = join(agentDir || '.', 'settings.json');
+const settings = () => (existsSync(settingsFile) ? JSON.parse(readFileSync(settingsFile, 'utf8')) : {});
+const value = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+if (args[0] === '--version') { console.log('1.4.0 (stub)'); process.exit(0); }
+if (args[0] === '--list-models') { console.log('provider model\ndeepseek deepseek-v4-flash\ndeepseek deepseek-v4-pro'); process.exit(0); }
+if (args[0] === 'install') {
+  const s = settings(); s.packages = [...(s.packages || []), args.at(-1)];
+  mkdirSync(agentDir, {recursive: true}); writeFileSync(settingsFile, JSON.stringify(s, null, 2));
+  console.log(`Installed ${args.at(-1)} (stub)`); process.exit(0);
+}
+if (args[0] === 'list') { console.log((settings().packages || []).join('\n')); process.exit(0); }
+
+const prompt = args.at(-1);
+const noSession = args.includes('--no-session');
+const model = {id: value('--model') || settings().defaultModel || 'deepseek-v4-flash', provider: value('--provider') || settings().defaultProvider || 'deepseek'};
+const id = randomUUID();
+let file;
+if (!noSession) {
+  const dir = value('--session-dir') || join(agentDir, 'sessions'); mkdirSync(dir, {recursive: true});
+  file = join(dir, `${new Date().toISOString().replace(/[:.]/g, '-')}_${id}.jsonl`);
+  writeFileSync(file, JSON.stringify({type: 'session', version: 3, id, cwd: process.cwd()}) + '\n');
+}
+const entry = message => file && appendFileSync(file, JSON.stringify({type: 'message', message}) + '\n');
+const handlers = {};
+const pi = new Proxy({
+  on: (name, handler) => { handlers[name] = handler; },
+  getFlag: name => (name === 'agents-config' ? value('--agents-config') : undefined),
+}, {get: (target, name) => target[name] ?? (() => {})});
+const ctx = {hasUI: false, cwd: process.cwd(), model, sessionManager: {
+  getSessionId: () => id, getSessionFile: () => file, getHeader: () => ({type: 'session', version: 3, id, cwd: process.cwd()}),
+  getEntries: () => []}};
+const extensions = args.includes('--no-extensions') ? [] : (settings().packages || []).map(p => resolve(agentDir, p)).filter(p => existsSync(join(p, 'extension.mjs')));
+for (const pkg of extensions) {
+  const path = join(pkg, 'extension.mjs');
+  try { (await import(pathToFileURL(path).href)).default(pi); await handlers.session_start?.({type: 'session_start'}, ctx); }
+  catch (error) { console.error(`Extension error (${path}): ${error.message}`); }
+}
+let answer = `${model.provider}/${model.id} (stub)`;
+if (!prompt.includes('"feature":"create"') && /subagent/.test(prompt) && existsSync(join(agentDir, 'extensions', 'subagent'))) {
+  // Rehearsal of a plugin: <agent dir>/stub-child.json {"env": {...}, "session": true} sets the child's markers.
+  const plugin = existsSync(join(agentDir, 'stub-child.json')) ? JSON.parse(readFileSync(join(agentDir, 'stub-child.json'), 'utf8')) : {};
+  const child = spawnSync('pi', ['--mode', 'json', '-p', ...(plugin.session ? ['--session-dir', join(agentDir, 'child-sessions')] : ['--no-session']),
+    'Task: Answer with exactly one word: ready.'], {encoding: 'utf8', env: {...process.env, ...(plugin.env || {})}});
+  entry({role: 'assistant', provider: model.provider, model: model.id, content: [{type: 'toolCall', name: 'subagent'}]});
+  entry({role: 'toolResult', toolName: 'subagent', details: {results: [{agent: 'worker', exitCode: child.status, stderr: child.stderr}]}});
+  answer = "The worker agent's answer: ready";
+} else if (prompt.includes('"feature":"create"')) {
+  const root = join(process.cwd(), '.agents-control'), agent = `agent-${randomUUID().replace(/-/g, '')}`;
+  mkdirSync(join(root, 'control', 'agents'), {recursive: true});
+  writeFileSync(join(root, 'control', 'agents', `${agent}.json`), JSON.stringify({agent, runtime: 'dsh', session: randomUUID(),
+    creator: {host: 'pi-native', session: id}, executions: [{state: 'ended', outcome: 'completed', last_message: 'ready'}]}));
+  answer = `AGENT: ${agent}\nANSWER: ready\nSTATUS: standby; delivered\nLISTED: ${agent}`;
+} else if (/one word: ready/.test(prompt)) answer = 'ready';
+entry({role: 'assistant', provider: model.provider, model: model.id, content: [{type: 'text', text: answer}]});
+if (args.includes('--mode')) console.log(JSON.stringify({type: 'agent_end', text: answer})); else console.log(answer);
+// The create branch's record is fake, so the real host's shutdown may refuse it (stop-unconfirmed): reported only.
+try { await handlers.session_shutdown?.({type: 'session_shutdown'}, ctx); }
+catch (error) { console.error(`stub: session_shutdown refused (expected after a fake record): ${error.message.slice(0, 120)}`); }

@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Rehearsal stand-in for pi (Task 592; VERIFY592_BIN only). Only what steps.zsh calls. No model and no network.
+
+-p with a Session: it does NOT load the GraphTraj extension (so there is no Main association); it starts the REAL
+installed graphtraj-mcp (first on PATH) in the working directory, declares Pi's four built-in tools plus
+mcp__graphtraj__<each tools/list name> in a system message (toolsAdded), makes the prompt's numbered calls
+('<n>. <tool> <json>') in order, and writes them as Pi's toolCall/toolResult entries (provider deepseek). The verdicts
+on that file are the real judge's; only the model is missing.
+"""
+import json, os, re, subprocess, sys, uuid
+from pathlib import Path
+
+args = sys.argv[1:]
+value = lambda name: args[args.index(name) + 1] if name in args else None
+if args[:1] == ['--version']:
+    print('0.0.0 (verify-592 stub)'); sys.exit(0)
+if args[:1] == ['--list-models']:
+    print('provider model\ndeepseek deepseek-v4-flash\ndeepseek deepseek-v4-pro'); sys.exit(0)
+if args[:1] == ['install']:
+    settings = Path('.pi/settings.json') if '-l' in args else Path(os.environ['PI_CODING_AGENT_DIR']) / 'settings.json'
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    s = json.loads(settings.read_text()) if settings.exists() else {}
+    s['packages'] = [*s.get('packages', []), args[-1]]
+    settings.write_text(json.dumps(s, indent=2))
+    print(f'Installed {args[-1]} (stub)'); sys.exit(0)
+prompt, model = args[-1], value('--model') or 'deepseek-v4-flash'
+if '--no-session' in args:
+    print(f'{model} deepseek (verify-592 stub)'); sys.exit(0)
+
+sdir = Path(value('--session-dir') or '.')
+sdir.mkdir(parents=True, exist_ok=True)
+sid = str(uuid.uuid4())
+session = sdir / f'stub_{sid}.jsonl'
+entries = [{'type': 'session', 'version': 3, 'id': sid, 'cwd': os.getcwd()}]
+message = lambda m: entries.append({'type': 'message', 'id': uuid.uuid4().hex[:8], 'message': m})
+
+calls = [(m.group(1), json.loads(m.group(2))) for m in re.finditer(r'^\d+\. (\S+) (\{.*\})$', prompt, re.M)]
+lines = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-06-18',
+          'capabilities': {}, 'clientInfo': {'name': 'pi-stub', 'version': '0'}}},
+         {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+         {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}]
+lines += [{'jsonrpc': '2.0', 'id': 10 + i, 'method': 'tools/call',
+           'params': {'name': tool.split('__')[-1], 'arguments': arguments}} for i, (tool, arguments) in enumerate(calls)]
+run = subprocess.run(['graphtraj-mcp'], input=''.join(json.dumps(x) + '\n' for x in lines),
+                     capture_output=True, text=True, timeout=120)
+replies = {}
+for raw in run.stdout.splitlines():
+    try:
+        r = json.loads(raw); replies[r.get('id')] = r
+    except ValueError:
+        pass
+names = [t['name'] for t in ((replies.get(2) or {}).get('result') or {}).get('tools') or []]
+message({'role': 'system', 'content': '', 'toolsAdded': [{'name': n} for n in
+         ['read', 'bash', 'edit', 'write', *('mcp__graphtraj__' + n for n in names)]]})
+message({'role': 'user', 'content': [{'type': 'text', 'text': prompt}]})
+report = []
+for i, (tool, arguments) in enumerate(calls):
+    cid = f'call_{i}_{uuid.uuid4().hex[:6]}'
+    message({'role': 'assistant', 'provider': 'deepseek', 'model': model,
+             'content': [{'type': 'toolCall', 'id': cid, 'name': tool, 'arguments': arguments}]})
+    reply = replies.get(10 + i) or {}
+    result = reply.get('result') or {}
+    content = result.get('content') or [{'type': 'text', 'text': str(reply.get('error'))}]
+    error = bool(result.get('isError', 'error' in reply))
+    message({'role': 'toolResult', 'toolCallId': cid, 'toolName': tool, 'isError': error, 'content': content})
+    report.append(f'CALL {i + 1}: ' + ('ok' if not error else (content[0].get('text') or '').splitlines()[0][:120]))
+report.append('TOOLS: ' + ', '.join('mcp__graphtraj__' + n for n in names))
+message({'role': 'assistant', 'provider': 'deepseek', 'model': model, 'content': [{'type': 'text', 'text': '\n'.join(report)}]})
+session.write_text(''.join(json.dumps(e) + '\n' for e in entries))
+print('\n'.join(report))
+if run.returncode not in (0, None) or not names:
+    print(f'graphtraj-mcp exit {run.returncode}: {run.stderr[-400:]}', file=sys.stderr)

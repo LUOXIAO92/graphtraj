@@ -30,10 +30,13 @@ graphtraj task graph
 
 GraphTraj and `graftling` are separate distributions from separate repositories.
 GraphTraj declares the `graftling` versions it supports (currently `>=0.7.0,<0.8`).
-From checkouts of both repositories, build both wheels with
-`python -m pip wheel --no-deps -w dist /path/to/graftling .` (run in
-the GraphTraj checkout; graftling before 0.6.3 builds from its `src/graftling`), then install both wheels in your dedicated environment. The independent distribution can also
-be installed on its own; see [Independent agents](#independent-agents-without-graphtraj).
+The command above installs both into one uv tool environment, and that environment's
+graftling is your one graftling installation: where Graftling's host notes use
+`$AGENTS_PYTHON`, use its Python, `"$(uv tool dir)/graphtraj/bin/python"`, and do not
+install graftling a second time. From checkouts of both repositories, the same command
+takes their paths: `uv tool install --with /path/to/graftling /path/to/graphtraj`.
+The independent distribution can also be installed on its own; see
+[Independent agents](#independent-agents-without-graphtraj).
 
 Setup shows its plan and asks before creating the `dev` branch. It creates or
 registers a separate worktree for integration and stores configuration and task
@@ -60,6 +63,13 @@ per host. Its stable interface and version rules are in
 [`PUBLIC_API.md`](https://github.com/LUOXIAO92/graftling/blob/main/PUBLIC_API.md) and its history in the
 [changelog](https://github.com/LUOXIAO92/graftling/blob/main/CHANGELOG.md). The wheel ships `PUBLIC_API.md`
 and the install guides beside its code; the README and changelog stay in the repository.
+
+On its own, Graftling is installed once with
+`uv tool install "git+https://github.com/LUOXIAO92/graftling.git@<graftling-tag>"`, and
+every host's MCP server and hook plugin (Claude Code, Codex, Pi, DSH) come from that
+one installation. If GraphTraj is installed as in [Get started](#get-started), its
+environment already holds graftling: attach the hosts from that environment instead
+of installing graftling again.
 
 ## Use it with your Agent
 
@@ -400,7 +410,11 @@ be on the `PATH` DSH starts with.
 **graftling-dsh.** The `graftling-dsh` bundle (Graftling's agents host, see
 [Independent agents](#independent-agents-without-graphtraj)) gives a DSH
 session a Task-free `agents` tool and its own children; it never makes the
-session GraphTraj Main and has no `tasks` tool. With graftling 0.7.0 it may stay
+session GraphTraj Main and has no `tasks` tool. Add it only from the one graftling
+installation (`dsh plugin add` of that installation's `graftling/dsh` directory, as
+Graftling's DSH note shows); later graftling versions (unreleased, graftling Task 581)
+no longer install it from the graftling GitHub address or build their own copy of
+graftling under the DSH home. With graftling 0.7.0 it may stay
 installed in the same profile: without `GRAFTLING_DSH_CONFIG` its row starts no
 agents host and attaches no tool (it still installs its message relay). Later
 graftling versions (unreleased, graftling Tasks 570 and 577) start its host in every

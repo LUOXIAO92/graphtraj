@@ -218,22 +218,31 @@ def check(project: Path) -> int:
     listed = sorted(member.get('session_ref') for member in (team.get('members') or {}).values())
     verdict(listed == sorted(path.name for path in assigned), f'team.yml lists all members: {listed}')
 
-    # Registration interval: the Worker writes mapping.yml just before it registers,
-    # and the Worldline event's captured_at is the commit under the lock.
+    # Registration window per member: from the Worker spawning Claude (its
+    # claude-settings.yml, written before the spawn; mapping.yml is rewritten
+    # later) to the Worldline commit (captured_at, under the lock). Registration
+    # itself starts inside that window, after Claude reports its native Session.
     intervals = []
     for event in events:
         alias = event['evidence_refs'][0].split('/')[-2]
-        mapping = Path(discover_runner_directory(project)) / 'sessions' / alias / 'mapping.yml'
-        begin = datetime.fromtimestamp(mapping.stat().st_mtime).astimezone()
+        settings = Path(discover_runner_directory(project)) / 'sessions' / alias / 'claude-settings.yml'
+        begin = datetime.fromtimestamp(settings.stat().st_mtime).astimezone() if settings.is_file() else None
         end = datetime.fromisoformat(event['captured_at'])
-        intervals.append((begin, end, alias, event['event']))
-    intervals.sort()
+        intervals.append((begin or end, end, alias, event['event']))
+    intervals.sort(key=lambda item: item[1])
     for begin, end, alias, kind in intervals:
-        print(f'registration {alias}: mapping.yml {begin.isoformat(timespec="microseconds")} -> '
+        print(f'registration {alias}: Claude spawned {begin.isoformat(timespec="microseconds")} -> '
               f'{kind} {end.isoformat(timespec="microseconds")} ({(end - begin).total_seconds():.3f} s)')
+    gaps = [f'{(b[1] - a[1]).total_seconds():.3f}' for a, b in zip(intervals, intervals[1:])]
+    print('gaps between consecutive commits (s): ' + ', '.join(gaps))
     overlaps = [(a[2], b[2]) for i, a in enumerate(intervals) for b in intervals[i + 1:] if b[0] < a[1]]
-    print('registrations overlapped: ' + (f'yes {overlaps}' if overlaps else
-          'no (each began after the previous commit; the race window was not exercised)'))
+    print('spawn-to-commit windows overlapped: ' + (f'yes {overlaps}' if overlaps else 'no'))
+    retried = {path.parent.name: path.read_text().count('member registration: the Task or Team changed')
+               for path in Path(discover_runner_directory(project), 'sessions').glob(f'{TASK_ID}-*/worker-stderr.log')}
+    retried = {alias: count for alias, count in retried.items() if count}
+    print('registration retries after a sibling commit (Worker stderr): '
+          + (', '.join(f'{alias} x{count}' for alias, count in retried.items()) if retried
+             else 'none (no member read before a sibling commit: the race did not occur naturally in this run)'))
     print('verdict: ' + ('PASS' if ok else 'FAIL'))
     return 0 if ok else 1
 

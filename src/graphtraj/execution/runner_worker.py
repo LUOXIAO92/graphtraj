@@ -534,6 +534,9 @@ def _register_created_member(
             )
             if not stale or registered or attempt == MEMBER_REGISTRATION_ATTEMPTS:
                 raise
+            # The Worker's stderr log keeps the evidence that a sibling won the lock.
+            print(f"member registration: the Task or Team changed before the Worldline lock; rebuilding "
+                  f"(attempt {attempt + 1} of {MEMBER_REGISTRATION_ATTEMPTS})", file=sys.stderr, flush=True)
 
 
 def _delivery_files(task_file: Path, team_file: Path) -> tuple[bytes, bytes | None]:

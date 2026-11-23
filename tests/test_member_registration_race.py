@@ -169,3 +169,6 @@ def test_concurrent_members_all_register(
     # The window was crossed: some member read before a sibling's lock and retried.
     pids = [wait['pid'] for wait in waits]
     assert any(pids.count(pid) > 1 for pid in pids), detail
+    notices = [path for path in (root / '.graphtraj/runner/sessions').glob('*/worker-stderr.log')
+               if 'member registration: the Task or Team changed' in path.read_text()]
+    assert notices, detail

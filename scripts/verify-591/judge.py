@@ -162,6 +162,10 @@ def pi(sessions, output, root, snap, tool, host, word, runtime):
     calls_and_results(calls, results, tool)
     text = Path(output).read_text(errors='replace')
     check('Extension error' not in text, 'no Extension error in the Main\'s output')
+    raw = ''.join(f.read_text(errors='replace') for f in files)
+    print(f'notice labels in the Session file: [subagents notice from: {raw.count("[subagents notice from")} '
+          '(informational; a notice need not arrive in -p mode)')
+    check('[agents notice from' not in raw, 'no old label [agents notice from in the Session file')
     child(root, snap, host, word, [t for _, _, t in results], runtime)
 
 

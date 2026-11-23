@@ -95,7 +95,7 @@ URL=https://github.com/LUOXIAO92/graftling.git
 BASE=542a81df0c941f5b1a425d9807681b2a38daa87c       # graftling dev v0.8.0, this Task's base
 GREPO=$H/graftling                                  # the local graftling repository (read only): holds BASE
 BRANCH=agent/591-graftling-rename-agents-to-subagents
-GCOMMIT=${VERIFY591_GCOMMIT:-2440d75d37838327217c3f8e9eba04ef0165051a}  # the graftling candidate (parent e952fc62, base dev 542a81df)
+GCOMMIT=${VERIFY591_GCOMMIT:-49f97004a86cc245ad32515b9dd056d7092b08f7}  # the graftling candidate (parents cca7af84, 2440d75d; base dev 542a81df)
 BUNDLE=${VERIFY591_BUNDLE:-$WT/.scratch/591/graftling-591.bundle}
 RTSP=$H/.venv-runtime/lib/python3.13/site-packages  # read only: PyYAML and websockets are copied from here
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
@@ -514,7 +514,7 @@ SR)
   if (( $#ids )); then
     print -l -- "FAILED/ERROR: "${^ids}
     print -r -- "SR verdict: $#ids failing node id(s); compare with base (paste):"
-    print -r -- "  zsh $THIS suite-base ${(j: :)${(q)ids}}"
+    print -r -- "  zsh $THIS suite-base ${(j: :)${(@q)ids}}"
     return 1
   fi
   grep -q '^exit=0$' $g && { print -r -- "SR verdict: PASS (no FAILED/ERROR line, exit 0)$(head -1 $g | grep -q 'extra: .' && print ' — FILTERED rehearsal run')"; return 0; }

@@ -28,6 +28,7 @@
 #             empty CLAUDE_CONFIG_DIR under ROOT/probe-state (removed after), and stops at system/init. Prints the
 #             probe argv, the set, its cache file, and for comparison the same argv plus --safe-mode. Writes only
 #             under ROOT (venv, src-cand, wheels-cand, proj, probe-state). Dialog: none. ~1-2 min.
+# Child model (repro/check): claude-haiku-4-5-20251001, because base and candidate predate Task 574 (see CMODEL).
 #   repro     Main. The premise on the BASE (graftling dev cadc419 = 0.7.0): clone at BASE from GitHub, build and
 #             install the wheel into ROOT/venv-base, `configuration --write` into ROOT/proj-base, then one `claude -p`
 #             parent there creates three claude children (model CMODEL): (i) no tools, asked to run
@@ -66,7 +67,10 @@ BRANCH=agent/576-claude-agents-child-without-tools-has-no-bash
 GCOMMIT=e17ccd09a3c74587f9cf207baf23a9594bbe4c0c   # the graftling candidate (base: dev cadc419)
 BUNDLE=$WT/.scratch/576/graftling-576.bundle        # the candidate branch, from the base
 CH=$ROOT/claude-home                                # isolated CLAUDE_CONFIG_DIR (default login mode)
-CMODEL=${VERIFY576_CHILD_MODEL:-claude-haiku-5-5}   # children: the cheapest model
+# Children: the cheapest model. Base cadc419 and candidate e17ccd09 both predate Task 574's model-id handling, and a
+# create with claude-haiku-5-5 was refused there (invalid-model: the login's candidates were claude-haiku-4-5-20251001
+# and haiku), so the children use the full id the login lists.
+CMODEL=${VERIFY576_CHILD_MODEL:-claude-haiku-4-5-20251001}
 PMODEL=${VERIFY576_PARENT_MODEL:-claude-sonnet-5-5} # the parent follows a 5-call script
 
 say() { print -r -- "== $*"; }
@@ -161,9 +165,11 @@ accept() {
   local mode=$1 snap=$ROOT/$1-before.ids out=$ROOT/$1-parent-$(date +%H%M%S).jsonl mark=$ROOT/$1-start.mark
   $V/bin/python -I $JUDGE snap $P/.agents-control > $snap 2>/dev/null || : > $snap
   : > $mark
-  say "parent: claude -p --model $PMODEL --output-format stream-json --verbose --allowedTools mcp__graftling__agents (in $P)"
-  (cd $P && claude_env $CLAUDE -p --model $PMODEL --output-format stream-json --verbose \
-     --allowedTools mcp__graftling__agents "${PARENT_PROMPT//CMODEL/$CMODEL}" < /dev/null > $out 2> $out.stderr)
+  # --allowedTools takes several values, so `--` ends the options: the prompt is the last argv element (576 c2).
+  local -a cargv=($CLAUDE -p --model $PMODEL --output-format stream-json --verbose
+                  --allowedTools mcp__graftling__agents -- "${PARENT_PROMPT//CMODEL/$CMODEL}")
+  say "parent argv (in $P): ${(j: :)${(@q-)cargv[1,-2]}} <prompt, ${#cargv[-1]} characters>"
+  (cd $P && claude_env $cargv < /dev/null > $out 2> $out.stderr)
   local prc=$?
   print -r -- "parent exit=$prc; stream-json $out; stderr: $(tail -5 $out.stderr)"
   python3 -I -c 'import json, sys

@@ -80,8 +80,9 @@ def probes_verdict(calls):
     print(f'tool calls made ({len(calls)}): {[(n, json.dumps(a, sort_keys=True)) for n, a, _, _ in calls]}')
     check(not [n for n, *_ in calls if OLD.match(str(n))], 'no call used an old tool name')
     texts = [t for _, _, _, t in calls]
-    for form in OLD_FORMS:
-        check(not any(form in t for t in texts), f'no result text says the old form {form!r} (Leader decision)')
+    for form in OLD_FORMS:  # a whole word: 'subagents needs a verified caller' is the new form, not the old one
+        old = re.compile(r'(?<![\w-])' + re.escape(form))
+        check(not any(old.search(t) for t in texts), f'no result text says the old form {form!r} (Leader decision)')
     labels = sorted({m.group(0) for t in texts for m in OLD_LABEL.finditer(t)} - set(OLD_FORMS))
     if labels:
         print(f'NOTE: result texts still carry other old human-facing labels (information, not a verdict): {labels}')

@@ -373,7 +373,8 @@ cli)
   print -r -- "exit=$? | ${cli[1,400]}"
   [[ $cli != *(#i)unknown\ feature* && $cli != *'does not belong'* ]] && pass "the hosted subagents CLI is routed through GraphTraj with no routing error" \
     || fail "the hosted subagents CLI hit a routing error"
-  [[ $cli != *'agents needs a verified caller'* && $cli != *'read-only agents access'* ]] \
+  # Whole words: the new form 'subagents needs a verified caller' contains the old one as a substring.
+  [[ $cli != (*[^[:alnum:]_-]|)'agents needs a verified caller'* && $cli != *'read-only agents access'* ]] \
     && pass "the hosted CLI's answer has neither old form ('agents needs a verified caller', 'read-only agents access')" \
     || fail "the hosted CLI's answer still says an old form (Leader decision: FAIL)"
   local rd=$V/lib/python3.13/site-packages/graphtraj/configuration/role_definitions.py

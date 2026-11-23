@@ -30,6 +30,10 @@
 #               validation.md holds 'probe path' (path form); the engineer-budget refusal is authority-denied and
 #               lists "Assigned reports: engineer.md, validation.md"; Round 1 holds only those two files; nothing was
 #               written elsewhere. Verdict line "realhost: PASS".
+#   check       Main: `zsh <this file> check <alias>` (realhost prints it). Never dispatches. Waits <= 600 s for the
+#               Engineer's current execution to end (STOP with the same command if not), then the five checks above,
+#               with the venv that dispatched (no new install; it prints the venv and its GraphTraj commit).
+#               Dialog: none. No new login use.
 #   suite       Main. GraphTraj full suite of HEAD (scripts/run_test_shards.py, 6 shards, --timeout 1500, -rA,
 #               background ~25 min) in a venv under $T with graftling 542a81df as a WHEEL and GraphTraj editable.
 #               pytest's temp root is a fresh directory under TMPDIR=${TMPDIR:-/tmp}, outside the Harness (checked;
@@ -248,19 +252,38 @@ print(yaml.safe_dump({"tasks": [{"task_id": "1", "task_name": "submit-report-nam
                      sort_keys=False, width=100000), end="")' "$(inroot $PY -I $X588 instruction $ROOT)" > $batch
   print -r -- "batch: $batch"; cat $batch
   [[ ${VERIFY588_DRY:-} == 1 ]] && { print -r -- "DRY (rehearsal): stopped before agent-runner --swarm-input"; return 0; }
+  print -r -- $VROOT > $ROOT/.graphtraj/probe-588/venv   # check reuses the venv that dispatched
   inroot $VROOT/bin/agent-runner --swarm-input $batch > $OUT/realhost-launch.yml 2>&1
   local alias=$(grep -m1 "alias:" $OUT/realhost-launch.yml | awk '{print $NF}')
   [[ -n $alias ]] || { print -r -- "STOP: launch failed:"; cat $OUT/realhost-launch.yml; return 1; }
   print -r -- "Engineer alias: $alias"
-  inroot $PY -I $X588 ended $ROOT $alias 600 || { print -r -- "STOP: $alias did not end; later: zsh $THIS check $alias"; return 1; }
   IDS=($alias); STEP=check; run_step
   ;;
 check)
+  # Main, after realhost dispatched the Engineer; never dispatches. Waits (<= 600 s) for the Session's current
+  # execution to end, then the five checks. Reuses the venv that dispatched (no new install): the one realhost
+  # recorded in $ROOT/.graphtraj/probe-588/venv, else the newest $T/venv-root-* whose installed GraphTraj commit
+  # has the same product files (src, pyproject.toml) as HEAD.
   local alias=${IDS[1]:-}
   [[ -n $alias ]] || { print -r -- "usage: zsh $THIS check <Engineer alias>"; return 2; }
-  say "[check] read only: $alias's reports through session_reports, its reply and its own transcript. Dialog: none."
+  say "[check] Main. Read only: waits for $alias to end (<= 600 s), then its reports through session_reports, its reply and its own transcript. Dialog: none. No login (the Engineer already runs)."
+  [[ -d $ROOT/.graphtraj ]] || { print -r -- "STOP: no project $ROOT; run realhost first"; return 1; }
+  local V= c cand
+  [[ -f $ROOT/.graphtraj/probe-588/venv ]] && V=$(<$ROOT/.graphtraj/probe-588/venv)
+  if [[ -z $V || ! -f $V/installed ]]; then
+    V=
+    for cand in $T/venv-root-*(N/om); do
+      c=$(cat $cand/installed 2>/dev/null) || continue
+      [[ -n $c ]] && git -C $WT diff --quiet $c HEAD -- src pyproject.toml 2>/dev/null && { V=$cand; break; }
+    done
+  fi
+  [[ -n $V && -x $V/bin/python ]] || { print -r -- "STOP: no install venv for $ROOT found under $T; run: zsh $THIS install"; return 1; }
+  c=$(<$V/installed)
+  print -r -- "venv: $V | holds GraphTraj $c (wheel) | product files (src, pyproject.toml) equal to HEAD ${HEAD[1,8]}: $(git -C $WT diff --quiet $c HEAD -- src pyproject.toml && print yes || print NO)"
   mkdir -p $OUT
-  inroot $VROOT/bin/python -I $X588 check $ROOT $alias 2>&1 | tee $OUT/realhost-check.txt; local rc=${pipestatus[1]}
+  inroot $V/bin/python -I $X588 ended $ROOT $alias 600 \
+    || { print -r -- "STOP: $alias has not ended (or its Session cannot be read; text above). Later (paste): zsh ${(qq)THIS} check ${(qq)alias}"; return 1; }
+  inroot $V/bin/python -I $X588 check $ROOT $alias 2>&1 | tee $OUT/realhost-check.txt; local rc=${pipestatus[1]}
   print -r -- "realhost: $( (( rc == 0 )) && print PASS || print FAIL) (copy: $OUT/realhost-check.txt)"
   print -r -- "writes: $OUT/realhost-check.txt only (ROOT is left as it is for inspection). dialog: none."
   print -r -- "next (paste): zsh $THIS suite"

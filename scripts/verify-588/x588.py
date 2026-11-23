@@ -23,6 +23,7 @@ import yaml
 
 from graphtraj.configuration.project_configuration import load_project_configuration
 from graphtraj.configuration.project_roles import roles_file
+from graphtraj.workspace.runner_project import discover_runner_directory
 
 CONNECTION = 'claude/anthropic/opus-5_5'   # the production opus_coding_team presets' connection (user catalog)
 ROLE = 'opus_coding_team.engineer'
@@ -81,7 +82,7 @@ def task_directory(project: Path) -> Path:
 
 
 def session_dir(project: Path, alias: str) -> Path:
-    return load_project_configuration(project).runner / 'sessions' / alias
+    return Path(discover_runner_directory(project)) / 'sessions' / alias
 
 
 def prepare(project: Path) -> int:

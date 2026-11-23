@@ -1,18 +1,37 @@
-"""Task 581: which Python ran graftling during one host Session, read from the process table (never from canned text).
+"""Task 581: what ran under one host Session, read from the process table (never from canned text).
 
 usage:
   procs.py watch <pid> <out>              until <pid> exits, every 0.3 s: each descendant of <pid> whose command line
-                                          names graftling, one line per new (pid, command) to <out>
+                                          names graftling, one line per new (pid, command) to <out>; and for EVERY
+                                          descendant, once, the NAMES of its credential-like environment variables
+                                          to <out>.env ("<pid> <n variables> <names|->  <command, 120 chars>");
+                                          values are dropped before anything is written
   procs.py judge <out> <prefix> <label>   PASS when at least one Python process ran graftling and every such
                                           process's interpreter (argv[0]) lies under <prefix> (the uv install)
-Only descendants of the Session are kept, so other graftling processes on the machine (another Harness, an IDE)
-never count. A Python process is one whose argv[0] file name starts with 'python'.
+  procs.py creds <out.env> <user names file> <allowed,...> <label>
+                                          FAIL when a descendant holds a credential-like name that is not allowed
+                                          and either came from your environment (the names file) or names a provider
+                                          credential (PROVIDER below); another host-set token-like name is a NOTE
+  procs.py names                          stdin: `env` output; prints the credential-like names, one per line
+  procs.py pattern                        prints CRED (for steps.zsh's clean(), which matches upper-cased names)
+Only descendants of the Session are kept, so other processes on the machine (another Harness, an IDE) never count.
+A Python process is one whose argv[0] file name starts with 'python'.
 """
-import os, subprocess, sys, time
+import os, re, subprocess, sys, time
+
+# Credential-like variable names (user decision for 581: DeepSeek is the only provider). Upper case; matched
+# case-insensitively.
+CRED = ('API_KEY|_KEY$|TOKEN|SECRET|PASSWORD|CREDENTIAL|_BASE_URL$|^OPENAI|^OPENROUTER|^OPEN_ROUTER|^OPENCODE|'
+        '^GEMINI|^GOOGLE_|^AWS_|^AZURE_|^HF_|^MISTRAL|^GROQ|^XAI|^ALI_|^DASHSCOPE|^MOONSHOT|^ZHIPU|^ANTHROPIC_API')
+CRED_RE = re.compile(CRED, re.I)
+# Names that are a provider credential or endpoint whoever set them.
+PROVIDER = re.compile('API_KEY|_BASE_URL$|^OPENAI|^OPENROUTER|^OPEN_ROUTER|^OPENCODE|^GEMINI|^GOOGLE_|^AWS_|^AZURE_|'
+                      '^HF_|^MISTRAL|^GROQ|^XAI|^ALI_|^DASHSCOPE|^MOONSHOT|^ZHIPU|^ANTHROPIC|OAUTH', re.I)
+ENV_NAME = re.compile(r'(?:^| )([A-Za-z_][A-Za-z0-9_]*)=')
 
 
-def table():
-    out = subprocess.run(['ps', '-axww', '-o', 'pid=,ppid=,command='], capture_output=True, text=True).stdout
+def ps(flags):
+    out = subprocess.run(['ps', flags, '-o', 'pid=,ppid=,command='], capture_output=True, text=True).stdout
     rows = {}
     for line in out.splitlines():
         parts = line.split(None, 2)
@@ -34,21 +53,36 @@ def descendants(rows, root):
     return found
 
 
+def env_names(command, with_env):
+    """The names in `ps -E`'s environment part (after the command), never the values."""
+    if not with_env.startswith(command):
+        return None
+    return ENV_NAME.findall(with_env[len(command):])
+
+
 def watch(pid, out):
-    seen = set()
-    with open(out, 'a') as sink:
+    seen, envs = set(), set()
+    with open(out, 'a') as sink, open(out + '.env', 'a') as env_sink:
         while True:
             try:
                 os.kill(pid, 0)
             except OSError:
                 return 0
-            rows = table()
+            rows, with_env = ps('-axww'), ps('-axwwE')
             for child in sorted(descendants(rows, pid)):
                 command = rows[child][1]
                 if 'graftling' in command and (child, command) not in seen:
                     seen.add((child, command))
                     sink.write(f'{child} {command}\n')
                     sink.flush()
+                if child not in envs and child in with_env:
+                    names = env_names(command, with_env[child][1])
+                    if names is None:
+                        continue
+                    envs.add(child)
+                    creds = sorted({n for n in names if CRED_RE.search(n)})
+                    env_sink.write(f'{child} {len(names)} {",".join(creds) or "-"}  {command[:120]}\n')
+                    env_sink.flush()
             time.sleep(0.3)
 
 
@@ -76,11 +110,45 @@ def judge(out, prefix, label):
     return 0 if ok else 1
 
 
+def creds(out, user_file, allowed, label):
+    allowed = set(filter(None, allowed.split(',')))
+    user = set(open(user_file).read().split()) if os.path.exists(user_file) else set()
+    rows = [l.rstrip('\n') for l in open(out, errors='replace')] if os.path.exists(out) else []
+    read = [r for r in rows if r.split(' ', 2)[1:2] != ['0']]
+    leaks, notes = [], []
+    for row in rows:
+        pid, count, names, *command = row.split(' ', 3)
+        for name in ([] if names == '-' else names.split(',')):
+            if name in allowed:
+                continue
+            (leaks if name in user or PROVIDER.search(name) else notes).append(f'{name} (pid {pid}: {" ".join(command).strip()[:80]})')
+        print(f'  {label} process {pid}: {count} variables; credential-like names: {names}  | {" ".join(command).strip()[:90]}')
+    for note in notes:
+        print(f'NOTE: {label}: a host set a token-like name not from your environment and not a provider credential: {note}')
+    if not read:
+        print(f'FAIL: {label}: no descendant environment could be read ({len(rows)} rows in {out})')
+        return 1
+    if leaks:
+        print(f'FAIL: {label}: credential names other than {sorted(allowed)} under the Session: {leaks}')
+        return 1
+    print(f'PASS: {label}: {len(read)} descendant environment(s) read; credential-like names only from {sorted(allowed)}')
+    return 0
+
+
 if __name__ == '__main__':
     a = sys.argv[1:]
     if a[:1] == ['watch'] and len(a) == 3:
         sys.exit(watch(int(a[1]), a[2]))
     if a[:1] == ['judge'] and len(a) == 4:
         sys.exit(judge(a[1], a[2], a[3]))
+    if a[:1] == ['creds'] and len(a) == 5:
+        sys.exit(creds(*a[1:]))
+    if a == ['names']:
+        print('\n'.join(sorted({m.group(1) for m in re.finditer(r'^([A-Za-z_][A-Za-z0-9_]*)=', sys.stdin.read(), re.M)
+                                if CRED_RE.search(m.group(1))})))
+        sys.exit(0)
+    if a == ['pattern']:
+        print(CRED)
+        sys.exit(0)
     print(__doc__)
     sys.exit(2)

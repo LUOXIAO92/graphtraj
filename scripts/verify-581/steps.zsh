@@ -59,7 +59,18 @@
 # login, nothing under ~/.claude or ~/.claude.json. The Codex host has no isolated login with this key: it would use
 # ~/.codex (CODEX_HOME) and your Codex login, and write Session files there.
 # Login and credentials: only DEEPSEEK_API_KEY (never printed), for the DSH, Pi and Claude Code Mains and every dsh
-# child. DEEPSEEK_BASE_URL, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL and CLAUDE_CODE_OAUTH_TOKEN are removed.
+# child (user decision: DeepSeek is the only provider). clean() removes EVERY exported variable whose name matches
+# procs.py's CRED pattern (API_KEY, _KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL, _BASE_URL, provider prefixes...),
+# known or not, except DEEPSEEK_API_KEY (and for Claude Code the ANTHROPIC_AUTH_TOKEN derived from it). `push` does
+# not use clean(): git keeps your usual GitHub login. Each host step also checks, names only, never values:
+#   observable 1  the credential-like names in the exact environment the Main gets ({DEEPSEEK_API_KEY}; Claude Code
+#                 also ANTHROPIC_AUTH_TOKEN and its endpoint ANTHROPIC_BASE_URL, host printed); pre checks the same
+#                 for its one-liners and install's model discovery; a failure STOPs before anything starts;
+#   observable 2  every process under the Session (ps -E): FAIL if one holds another name from your environment or
+#                 any provider-credential name; a token-like name a host set itself is printed as NOTE;
+#   observable 3  provider/model/endpoint of the Main (DSH: files under DSH_HOME; Pi: --provider/--model and its
+#                 Session files; Claude Code: ANTHROPIC_BASE_URL host and the init model) and of the child (its
+#                 record's resolved_model and the files under <data root>/native): FAIL unless DeepSeek.
 # Your locations, only read: ~/.pi/agent (names + sha256 prefixes), ~/.dsh (listing), ~/.claude/projects and
 # ~/.claude.json project keys naming ROOT, ~/.local/share/uv/tools and ~/.local/bin/agents* (names), ~/.codex
 # (files written since pre that name ROOT). `dsh plugin add` runs pnpm, which may add files to pnpm's own content
@@ -84,6 +95,8 @@ GCOMMIT=${VERIFY581_GCOMMIT:-$PINNED}
 NOREPLY='89069722+LUOXIAO92@users.noreply.github.com'
 JUDGE=$WT/scripts/verify-570/judge.py               # records on disk + the answer's lines (Task 570, unchanged)
 PROCS=${0:A:h}/procs.py                             # which Python ran graftling under a Session (process table)
+PROVIDERS=${0:A:h}/providers.py                     # provider, model and endpoint of each Main and child (files)
+CREDRE=$(python3 -I $PROCS pattern)                 # credential-like names (one definition, in procs.py)
 CSTREAM=${0:A:h}/claude_stream.py                   # a claude -p stream-json run -> summary + text for the judge
 ISO=$WT/scripts/verify-common/claude_isolation.py   # Task 489 rule for Claude hosts in isolated projects
 RTPY=$H/.venv-runtime/bin/python                    # read only: runs claude_isolation.py (no graftling use)
@@ -127,8 +140,17 @@ clean() {
       GRAFTLING_CLAUDE_HOST_CHANNEL GRAFTLING_CLAUDE_HOST_PYTHON DSH_AGENT_PACKAGE DSH_SESSION_ID DSH_AGENT_SOURCE \
       GRAFTLING_NATIVE_RUNTIME CLAUDECODE CLAUDE_CODE_ENTRYPOINT PI_SUBAGENT_CHILD DEEPSEEK_BASE_URL ANTHROPIC_API_KEY \
       ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CODEX_HOME VIRTUAL_ENV PYTHONPATH
-    [[ ${KEEP_TOKEN:-} == 1 ]] || unset ANTHROPIC_AUTH_TOKEN
-    unset KEEP_TOKEN
+    # DeepSeek is the only provider (user decision, Worldline 20261123T172123.471127+0900): every exported variable
+    # whose upper-cased name matches procs.py's CRED goes, known or not, except DEEPSEEK_API_KEY and, for claude_run
+    # (KEEP_TOKEN=1), the ANTHROPIC_AUTH_TOKEN derived from it. Endpoints claude_run sets are exported after this.
+    # (KEEP_TOKEN itself matches TOKEN: read it before the loop can unset it.)
+    local n keep=${KEEP_TOKEN:-}; unset KEEP_TOKEN
+    for n in ${(k)parameters[(R)*export*]}; do
+      [[ ${(U)n} =~ $CREDRE ]] || continue
+      [[ $n == DEEPSEEK_API_KEY || ( $n == ANTHROPIC_AUTH_TOKEN && $keep == 1 ) ]] && continue
+      unset $n
+    done
+    [[ $keep == 1 ]] || unset ANTHROPIC_AUTH_TOKEN
     export DSH_HOME=$DH PI_CODING_AGENT_DIR=$PIAGENT CLAUDE_CONFIG_DIR=$CH UV_TOOL_DIR=$UVT UV_TOOL_BIN_DIR=$UVB \
       UV_CACHE_DIR=$UVC UV_PYTHON_INSTALL_DIR=$UVP
     while [[ ${1:-} == [A-Za-z_][A-Za-z0-9_]#=* ]]; do export "$1"; shift; done
@@ -183,12 +205,33 @@ create_prompt() {  # runtime-model-json-fragment
 4) {"action":"execute","feature":"status","arguments":{}}
 Then report exactly four lines: AGENT: the agent id; ANSWER: the child'"'"'s answer; STATUS: the state and last_result.notification from call 3; LISTED: every agent id that call 4 lists. If any call returns an error, also print it verbatim on a line prefixed ERROR:.'
 }
-# One real Main Session of kind dsh|pi|claude in dir; sets SRC and SOUT (the text the judge reads) and PROCF
-# (graftling command lines of the Session's descendants).
+# The credential-like names a Main of this kind may hold (DeepSeek only). claude: the token derived from
+# DEEPSEEK_API_KEY and DeepSeek's endpoint ANTHROPIC_BASE_URL (its host is printed and checked).
+allowed() { [[ $1 == claude ]] && print -r -- DEEPSEEK_API_KEY,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_BASE_URL || print -r -- DEEPSEEK_API_KEY; }
+# Observable 1: the credential-like NAMES in the exact environment a Main of this kind gets (the same clean(), run
+# with `env`; values never leave the pipe). Also keeps your shell's own names in ROOT/<kind>-user-creds.txt.
+launch_env() {  # kind dir
+  local kind=$1 dir=$2
+  env | python3 -I $PROCS names > $ROOT/$kind-user-creds.txt
+  local -a got
+  if [[ $kind == claude ]]; then
+    got=(${(f)"$(cd $dir && export ANTHROPIC_AUTH_TOKEN=$DEEPSEEK_API_KEY && claude_run env | python3 -I $PROCS names)"})
+  else
+    got=(${(f)"$(cd $dir && clean env | python3 -I $PROCS names)"})
+  fi
+  local want=(${(s:,:)"$(allowed $kind)"})
+  print -r -- "your shell's credential-like names (not passed on unless allowed): $(tr '\n' ' ' < $ROOT/$kind-user-creds.txt)"
+  [[ $kind == claude ]] && print -r -- "ANTHROPIC_BASE_URL host for Claude Code: ${${DSURL#*://}%%/*}"
+  [[ ${(j:,:)${(o)got}} == ${(j:,:)${(o)want}} ]] \
+    && pass "the $kind Main's environment holds exactly these credential-like names: ${(j:, :)${(o)got}}" \
+    || fail "the $kind Main's environment holds credential-like names ${(j:, :)${(o)got}:-none}; allowed only ${(j:, :)${(o)want}}"
+}
+# One real Main Session of kind dsh|pi|claude in dir; sets SRC and SOUT (the text the judge reads), PROCF
+# (graftling command lines of the Session's descendants; PROCF.env: their credential-like names) and CJSONL.
 session() {
   local kind=$1 dir=$2 prompt=$3 stamp=$(date +%H%M%S)
-  SOUT=$ROOT/$kind-$stamp.txt PROCF=$ROOT/$kind-$stamp-procs.txt
-  : > $PROCF
+  SOUT=$ROOT/$kind-$stamp.txt PROCF=$ROOT/$kind-$stamp-procs.txt CJSONL=$ROOT/claude-$stamp.jsonl
+  : > $PROCF; : > $PROCF.env
   say "$kind Main in $dir (no GRAFTLING_PYTHON; the agents tool comes from the uv install's attachment)"
   if [[ $kind == dsh ]]; then
     (cd $dir && clean perl -e 'alarm shift; exec @ARGV' 600 dsh --profile headless "$prompt" < /dev/null) > $SOUT 2>&1 &
@@ -210,7 +253,7 @@ session() {
     print -r -- "claude stderr tail: $(tail -3 $ROOT/claude-$stamp.err)"
   fi
   tail -25 $SOUT; print -r -- "exit=$SRC (full output: $SOUT)"
-  mkdir -p $OUT 2>/dev/null && cp $SOUT $PROCF ${ROOT}/claude-$stamp.jsonl(N) $OUT/ 2>/dev/null
+  mkdir -p $OUT 2>/dev/null && cp $SOUT $PROCF $PROCF.env ${ROOT}/claude-$stamp.jsonl(N) $OUT/ 2>/dev/null
 }
 # One host step: its Main creates one dsh child in the project's own .agents-control; computed verdicts.
 host_step() {  # kind dir
@@ -218,9 +261,12 @@ host_step() {  # kind dir
   local snap=$ROOT/$kind-before.ids model=''
   python3 -I $JUDGE snap $root > $snap
   [[ $kind == pi ]] && model=',"model":"'$(dmodel)'"'
+  OK=1
+  say "observable 1: credential-like names in the $kind Main's environment (names only)"
+  launch_env $kind $dir
+  (( OK )) || { print -r -- "STOP: the $kind Main would start with another credential; nothing was started. Report it."; return 1; }
   session $kind $dir "$(create_prompt "$model")"
   say "verdict (computed from the records, the output and the process table)"
-  OK=1
   (( SRC == 0 )) && pass "the $kind Main exited 0" || fail "the $kind Main exited $SRC"
   grep -q 'Extension error' $SOUT && fail "Pi printed an extension error: $(grep -m1 'Extension error' $SOUT)"
   python3 -I $JUDGE pair $SOUT $root $snap $kind-native ready; local bits=$?
@@ -234,6 +280,27 @@ host_step() {  # kind dir
   [[ $st == *delivered* ]] && pass "completion notice reached the Main: $st" || fail "the Main's STATUS line does not say delivered: '${st:-none}'"
   python3 -I $PROCS judge $PROCF $UVT/graftling/ "$kind host" || OK=0
   [[ ! -e $DH/graftling-python ]] && pass "$DH/graftling-python does not exist" || fail "$DH/graftling-python exists"
+  say "observable 2: credential-like names of every process under the Session (names only; from ps -E)"
+  python3 -I $PROCS creds $PROCF.env $ROOT/$kind-user-creds.txt $(allowed $kind) "$kind Session" || OK=0
+  say "observable 3: provider, model and endpoint of the Main and of the child (DeepSeek only)"
+  case $kind in
+    dsh) python3 -I $PROVIDERS scan "dsh Main (files under DSH_HOME $DH)" $DH || OK=0 ;;
+    pi)  print -r -- "pi Main configured: $PIFLAGS"
+         [[ $PIFLAGS[2] == deepseek ]] && pass "pi Main configured provider deepseek, model $PIFLAGS[4]" || fail "pi Main provider is $PIFLAGS[2]"
+         python3 -I $PROVIDERS scan "pi Main (its Session files in $ROOT/pi-sessions)" $ROOT/pi-sessions || OK=0 ;;
+    claude)
+         local cm=$(python3 -I -c 'import json, sys
+for line in open(sys.argv[1], errors="replace"):
+    try: d = json.loads(line)
+    except ValueError: continue
+    if isinstance(d, dict) and d.get("type") == "system" and d.get("subtype") == "init": print(d.get("model")); break' $CJSONL 2>/dev/null)
+         local host=${${DSURL#*://}%%/*}
+         print -r -- "claude Main: endpoint ANTHROPIC_BASE_URL host $host, configured model $(<$CMODELF), init model ${cm:-none}"
+         [[ $host == api.deepseek.com && $cm == *deepseek* ]] && pass "claude Main: provider deepseek (endpoint $host), model $cm" \
+           || fail "claude Main: endpoint $host / model ${cm:-none} is not DeepSeek" ;;
+  esac
+  if [[ -n $agent ]]; then python3 -I $PROVIDERS child $root $agent || OK=0
+  else fail "child: no new record to read its provider from"; fi
   if (( OK )); then
     print -r -- "SUCCESS. follow-ups (paste as needed):"
     print -r -- "  python3 -m json.tool $root/control/agents/$agent.json"
@@ -356,6 +423,9 @@ pre)
     || { print -r -- "STOP: python3 on PATH imports a graftling ($g); a host could use it instead of the uv install"; return 1; }
   user_state > $ROOT/user-before.txt; cp $ROOT/user-before.txt $OUT/ 2>/dev/null
   print -r -- "your locations before (read only; names, hashes, mtimes):"; cat $ROOT/user-before.txt
+  say "observable 1 for pre's one-liners and install's model discovery (the same clean()): credential-like names"
+  launch_env dsh $PD; launch_env pi $PP
+  (( OK )) || { print -r -- "STOP: a Main would start with another credential (above); nothing was started. Report it."; return 1; }
   say "one-line DSH prompt, DSH_HOME=$DH (login: DEEPSEEK_API_KEY)"
   (cd $PD && clean perl -e 'alarm shift; exec @ARGV' 180 dsh --profile headless \
      "Reply in one line with the name of the model you are and nothing else." < /dev/null) 2>&1 | tail -5
@@ -373,6 +443,8 @@ pre)
   rc=$?; print -r -- "exit=$rc"
   (( rc == 0 )) || { print -r -- "STOP: Pi could not answer with $PIFLAGS; then: rm -rf $ROOT && zsh $THIS pre"; return 1; }
   print -r -- ${VERIFY581_CLAUDE_MODEL:-$(<$PIMODELF)} > $CMODELF
+  launch_env claude $PC
+  (( OK )) || { print -r -- "STOP: Claude Code would start with another credential (above); nothing was started. Report it."; return 1; }
   say "one-line Claude Code prompt: CLAUDE_CONFIG_DIR=$CH, ANTHROPIC_BASE_URL=$DSURL, model $(<$CMODELF), token from DEEPSEEK_API_KEY"
   $RTPY -I $ISO settings $H $PC || return 1
   $RTPY -I $ISO prompt R581 > $ROOT/claude-pre-prompt.txt

@@ -22,4 +22,8 @@ if args[:1] == ['install']:
 settings = Path('.pi/settings.json')
 packages = json.loads(settings.read_text()).get('packages') if settings.exists() else []
 python = stubrecord.prefix_python(packages[0]) if packages else None
-print(stubrecord.answer(args[-1], 'pi', python))
+if '--session-dir' in args:
+    import os
+    os.environ['STUB581_PI_SESSION_DIR'] = args[args.index('--session-dir') + 1]
+model = args[args.index('--model') + 1] if '--model' in args else 'deepseek-v4-flash'
+print(stubrecord.answer(args[-1], 'pi', python, model))

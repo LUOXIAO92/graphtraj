@@ -78,7 +78,7 @@ URL=${VERIFY581_URL:-https://github.com/LUOXIAO92/graftling.git}
 BASE=a4f008f3712614cbdcae714ae46cad07c1f8de6e       # graftling dev before 581 (577 + 578)
 GREPO=$H/graftling                                  # the local graftling repository (read only): holds BASE
 BRANCH=agent/581-graftling-single-source-uv-install
-PINNED=PENDING-581                                  # the graftling candidate the Leader named (base: dev a4f008f)
+PINNED=e919de2e790433fea7ed25c07e61474f94ca1b3b    # the graftling candidate the Leader named (base: dev a4f008f)
 BUNDLE=${VERIFY581_BUNDLE:-$WT/.scratch/581/graftling-581.bundle}
 GCOMMIT=${VERIFY581_GCOMMIT:-$PINNED}
 NOREPLY='89069722+LUOXIAO92@users.noreply.github.com'
@@ -423,6 +423,9 @@ install)
   print -r -- "AGENTS_PYTHON=$AGENTS_PYTHON -> Python, prefix, graftling version, file: $info"
   [[ $info == *$UVT/graftling/* ]] && pass "the install's Python imports graftling from $UVT/graftling" || { fail "the install's Python does not import its own graftling"; return 1; }
   print -r -- "$UVB: $(for f in $UVB/*(N); do print -n -- "${f:t} -> $(readlink $f) "; done)"
+  say "README: \"\$(uv tool dir --bin)/agents\" --help"
+  (cd / && clean "$(clean uv tool dir --bin)/agents" --help < /dev/null) > $ROOT/install-agents-help.txt 2>&1 \
+    && pass "agents --help from uv's tool bin: $(head -1 $ROOT/install-agents-help.txt)" || fail "agents --help failed: $(tail -2 $ROOT/install-agents-help.txt)"
   local DSH_PACKAGE=$(pkgdir graftling.dsh) PI_PACKAGE=$(pkgdir graftling.pi)
   print -r -- "DSH_PACKAGE=$DSH_PACKAGE"; print -r -- "PI_PACKAGE=$PI_PACKAGE"
   if [[ -n ${VERIFY581_DMODEL:-} ]]; then print -r -- $VERIFY581_DMODEL > $MODELF; else

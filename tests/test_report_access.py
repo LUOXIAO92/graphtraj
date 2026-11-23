@@ -559,3 +559,44 @@ def test_reports_only_send_is_denied_to_a_non_parent(tmp_path: Path) -> None:
         with pytest.raises(RunnerError) as denied:
             runner_control.continue_member('research@x1', 'Report.', tmp_path, reports_only=True)
         assert denied.value.code == 'authority-denied'
+
+
+def test_report_name_forms_resolve_only_to_the_issuers_assignment(tmp_path: Path) -> None:
+    """A filename or the assigned path writes the assigned file; other paths are refused."""
+    runner, team, _ = result_project(tmp_path)
+    mapping_file = runner / 'sessions/research@x1/mapping.yml'
+    mapping = yaml.safe_load(mapping_file.read_text())
+    mapping['report_files'].append('.state/teams/1/rounds/1/validation.md')
+    mapping_file.write_text(yaml.safe_dump(mapping))
+    rounds = team.parent / 'rounds'
+    report, validation = rounds / '1/researcher-x1.md', rounds / '1/validation.md'
+    task = team.parents[1]
+    other_task = task.with_name('999-other') / 'teams/1/rounds/1/researcher-x1.md'
+    outside = tmp_path / 'outside/researcher-x1.md'
+    with runtime_caller(runner, 'research@x1'):
+        for name, text, written in [
+            ('researcher-x1.md', 'bare', report),
+            ('.state/teams/1/rounds/1/validation.md', 'state path', validation),
+            ('teams/1/rounds/1/researcher-x1.md', 'teams path', report),
+            ('rounds/1/validation.md', 'round suffix', validation),
+            (str(report), 'absolute', report),
+        ]:
+            result = runner_control.submit_session_report(name, text, tmp_path)
+            assert result['report'] == str(written)
+            assert written.read_text() == text
+        for name in [
+            'researcher-x1', 'engineer-budget', 'leader.md', '', '.state/teams/1/rounds/1/../1/validation.md',
+            '../validation.md', '.state/teams/2/rounds/1/researcher-x1.md', 'rounds/2/validation.md',
+            'state/teams/1/rounds/1/validation.md', 'other/validation.md', str(other_task), str(outside),
+            '.state/teams/1/rounds/1/researcher-x2.md', str(rounds / '1/researcher-x2.md'),
+        ]:
+            with pytest.raises(RunnerError) as denied:
+                runner_control.submit_session_report(name, 'redirected', tmp_path)
+            assert denied.value.code == 'authority-denied'
+            assert denied.value.message == (
+                'The report is not assigned to this Session. Assigned reports: researcher-x1.md, '
+                'validation.md (give the filename, or its assigned path such as '
+                '.state/teams/1/rounds/1/researcher-x1.md).')
+    assert report.read_text() == 'absolute' and validation.read_text() == 'round suffix'
+    for path in [other_task, outside, rounds / '1/researcher-x2.md', rounds / '2', task / 'validation.md']:
+        assert not path.exists()

@@ -1,0 +1,66 @@
+##### correction 1 rehearsal (Engineer sandbox, no model, no login). VERIFY588_T=$TMPDIR/t588, VERIFY588_ROOT=$TMPDIR/graphtraj-588-rehearsal3, VERIFY588_HOME=$TMPDIR/t588/home (stand-in HOME; never ~/.claude), VERIFY588_NO_PS=1
+##### 1. zsh steps.zsh install; VERIFY588_DRY=1 zsh steps.zsh realhost
+== [install] Main. venv /tmp/claude-501/t588/venv-root-2e343d1d: wheels of GraphTraj 2e343d1db173b415569d58075058d6d44329589b and graftling 542a81df0c941f5b1a425d9807681b2a38daa87c, offline. Dialog: none. No login. ~1 min.
+temp root: /private/tmp/claude-501/verify-588-install-20261123T230740 (TMPDIR=/tmp/claude-501, outside the Harness)
+graphtraj /tmp/claude-501/t588/venv-root-2e343d1d/lib/python3.13/site-packages/graphtraj/__init__.py | wheel: True | graftling 0.8.0 /tmp/claude-501/t588/venv-root-2e343d1d/lib/python3.13/site-packages/graftling/__init__.py
+PASS: venv imports graphtraj 2e343d1db173b415569d58075058d6d44329589b (wheel) and graftling 0.8.0
+PASS: installed runner_control.py holds the 588 refusal text
+PASS: /tmp/claude-501/t588/venv-root-2e343d1d/bin/graphtraj
+PASS: /tmp/claude-501/t588/venv-root-2e343d1d/bin/agent-runner
+writes: /tmp/claude-501/t588/venv-root-2e343d1d, /tmp/claude-501/t588/venv-root-2e343d1d-src and /private/tmp/claude-501/verify-588-install-20261123T230740 only. dialog: none.
+next: ask the user to agree to the Claude login, then (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/588-submit-report-name-forms-and-error/scripts/verify-588/steps.zsh realhost
+STEP-END install rc=0
+== [realhost] Main. ONE real opus_coding_team Engineer in /tmp/claude-501/graphtraj-588-rehearsal3. Dialog: expected none. LOGIN: the user's Claude login. ~3-6 min.
+Proposed dev base: 56874f7dc88de2d8a338dae1c2ca9109915fe198
+Create dev from 56874f7dc88de2d8a338dae1c2ca9109915fe198? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+runner directory: /private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/runner | inside the project: True
+/tmp/claude-501/graphtraj-588-rehearsal3 is outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: no Harness AGENTS.md/CLAUDE.md lies above it
+roles file: /private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/roles.yml
+roles OK (opus_coding_team.engineer: connection claude/anthropic/opus-5_5, reports engineer.md validation.md)
+task 1 submit-report-name-probe: status ready (ready before the dispatch)
+batch: /tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/probe-588/batch.yml
+tasks:
+- task_id: '1'
+  task_name: submit-report-name-probe
+  role: opus_coding_team.engineer
+  instruction: 'This is a scripted probe of the GraphTraj tasks tool feature submit_report. Change no file and run no shell command. Make exactly these three calls with the tasks tool (action execute, feature submit_report), in this order, each with notify_parent false: 1) name "engineer.md", text "probe bare"; 2) name ".state/teams/1/rounds/1/validation.md", text "probe path"; 3) name "engineer-budget", text "probe refused" (a refusal is expected). Do not retry a call or change a name. Do not call submit_result. Then reply with the three raw results verbatim, one per line, as RESULT1: ..., RESULT2: ..., RESULT3: ..., and end your turn.'
+DRY (rehearsal): stopped before agent-runner --swarm-input
+STEP-END realhost rc=0
+
+##### 2. rehearse_session.py (stand-in Engineer: Team started via apply_delivery_state_request, mapping written as tests do; the three calls through runner_control.submit_session_report as that Session)
+RESULT1: {"alias": "1-submit_report_name_probe-handover9-engineer@engineer", "report": "/private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/engineer.md"}
+RESULT2: {"alias": "1-submit_report_name_probe-handover9-engineer@engineer", "report": "/private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/validation.md"}
+RESULT3: {"error": {"code": "authority-denied", "message": "The report is not assigned to this Session. Assigned reports: engineer.md, validation.md (give the filename, or its assigned path such as .state/teams/1/rounds/1/engineer.md)."}}
+stand-in transcript: /private/tmp/claude-501/t588/home/.claude/projects/rehearsal-588/rehearsal-de32bef9-1f84-4cab-bb7c-76e34d278a5e.jsonl
+alias: 1-submit_report_name_probe-handover9-engineer@engineer
+
+##### 3. before check: venv-root-2e343d1d (HEAD's) moved aside, so check must reuse an older-commit venv as on Main's host
+##### zsh steps.zsh check 1-submit_report_name_probe-handover9-engineer@engineer
+== [check] Main. Read only: waits for 1-submit_report_name_probe-handover9-engineer@engineer to end (<= 600 s), then its reports through session_reports, its reply and its own transcript. Dialog: none. No login (the Engineer already runs).
+venv: /tmp/claude-501/t588/venv-root-89a32f6f | holds GraphTraj 89a32f6f5a9316af1d4adda3fb891c9dd36ddb49 (wheel) | product files (src, pyproject.toml) equal to HEAD 2e343d1d: yes
+1-submit_report_name_probe-handover9-engineer@engineer: execution aea03c518d03409a9493e0371f93eb69 ended (completed)
+alias 1-submit_report_name_probe-handover9-engineer@engineer | role opus_coding_team.engineer | report_files ['.state/teams/1/rounds/1/engineer.md', '.state/teams/1/rounds/1/validation.md'] | outcome completed
+session_reports (agent-runner reports, read back):
+  /private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/engineer.md: 'probe bare'
+  /private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/validation.md: 'probe path'
+Engineer last message (verbatim):
+  RESULT1: {"alias": "1-submit_report_name_probe-handover9-engineer@engineer", "report": "/private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/engineer.md"}
+  RESULT2: {"alias": "1-submit_report_name_probe-handover9-engineer@engineer", "report": "/private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/validation.md"}
+  RESULT3: {"error": {"code": "authority-denied", "message": "The report is not assigned to this Session. Assigned reports: engineer.md, validation.md (give the filename, or its assigned path such as .state/teams/1/rounds/1/engineer.md)."}}
+submit_report calls in the Engineer's Claude transcript (read only): 3
+  call {"action": "execute", "feature": "submit_report", "arguments": {"name": "engineer.md", "text": "probe bare", "notify_parent": false}}
+    -> {"alias": "1-submit_report_name_probe-handover9-engineer@engineer", "report": "/private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/engineer.md"}
+  call {"action": "execute", "feature": "submit_report", "arguments": {"name": ".state/teams/1/rounds/1/validation.md", "text": "probe path", "notify_parent": false}}
+    -> {"alias": "1-submit_report_name_probe-handover9-engineer@engineer", "report": "/private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/validation.md"}
+  call {"action": "execute", "feature": "submit_report", "arguments": {"name": "engineer-budget", "text": "probe refused", "notify_parent": false}}
+    -> {"error": {"code": "authority-denied", "message": "The report is not assigned to this Session. Assigned reports: engineer.md, validation.md (give the filename, or its assigned path such as .state/teams/1/rounds/1/engineer.md)."}}
+  PASS engineer.md (bare name) holds 'probe bare' at /private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/engineer.md
+  PASS validation.md (path form .state/teams/1/rounds/1/validation.md) holds 'probe path' at /private/tmp/claude-501/graphtraj-588-rehearsal3/.graphtraj/state/tasks/1-submit-report-name-probe/teams/1/rounds/1/validation.md
+  PASS the 'engineer-budget' call was refused with authority-denied and lists "Assigned reports: engineer.md, validation.md"
+  PASS Round 1 holds only engineer.md and validation.md
+  PASS nothing written elsewhere (no engineer-budget* file, no file holding a probe text outside Round 1, Worktree clean)
+realhost: PASS (copy: /tmp/claude-501/t588/out/realhost-check.txt)
+writes: /tmp/claude-501/t588/out/realhost-check.txt only (ROOT is left as it is for inspection). dialog: none.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/588-submit-report-name-forms-and-error/scripts/verify-588/steps.zsh suite
+STEP-END check rc=0

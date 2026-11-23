@@ -938,10 +938,15 @@ def submit_report(arguments: Mapping[str, Any], *, cwd: Path | None = None) -> T
                                            notify_parent=_boolean_argument(arguments, 'notify_parent')))
 
 
-register_tool('submit_report', 'Write your own assigned report by filename (for example report.md). '
+register_tool('submit_report', 'Write your own assigned report by filename (for example report.md) '
+              'or by its assigned path (for example .state/teams/1/rounds/1/report.md). '
               'Set notify_parent to also notify your direct parent, continuing its turn.',
               {'type': 'object', 'properties': {
-                  'name': {'type': 'string'}, 'text': {'type': 'string'},
+                  'name': {'type': 'string',
+                           'description': 'One of your assigned reports: its filename, a trailing part '
+                                          'of its assigned .state/... path, or its absolute location. '
+                                          'Other paths are refused; the write goes to the assigned file.'},
+                  'text': {'type': 'string'},
                   'notify_parent': {'type': 'boolean', 'default': False,
                                     'description': 'Notify your direct parent of the written report, '
                                                    'which it reads through session_reports; the result '

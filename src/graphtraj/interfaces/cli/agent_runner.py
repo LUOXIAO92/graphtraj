@@ -418,7 +418,7 @@ def retain_evidence(submission_id: str, evidence_refs: tuple[str, ...]) -> None:
 
 
 @main.command("submit-report", cls=OperationCommand, feature="submit_report")
-@click.option("--name")
+@click.option("--name", help="Assigned report filename (engineer.md) or its assigned .state/... path.")
 @click.option("--text")
 @click.option("--notify-parent", is_flag=True, help="Also notify the direct parent of the report.")
 def submit_report(name: str, text: str, notify_parent: bool) -> None:

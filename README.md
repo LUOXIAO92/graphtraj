@@ -221,7 +221,8 @@ Claude child execution uses restricted mode, the native sandbox with
 responses through Runner `requests` / `reply`. A reply uses Claude's
 `behavior: allow` or `behavior: deny` shape. The native permission and filesystem
 checks still apply. `claude.read_paths` may list explicit external read-only
-resources. Assigned reports use the hosted `submit_report` tool, without granting
+resources. Assigned reports use the hosted `submit_report` tool, named by
+filename or assigned `.state/...` path, without granting
 write access to private state. User settings and other MCP servers are excluded
 from these restricted child launches; managed settings remain effective. The
 captured Context records these sources, model, effort, CLI version and paths.

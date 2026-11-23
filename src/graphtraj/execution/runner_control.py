@@ -873,8 +873,8 @@ def _continue_after_abnormal_answer(
         claim.rename(session_directory / "abnormal-response-{0}.yml".format(mapping["execution_id"]))
 
 
-def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
-    """Resolve the target's retained assignments without inferring role ownership."""
+def _session_report_assignments(alias: str, cwd: Path) -> list[tuple[str, Path]]:
+    """Pair each retained ``.state/...`` assignment with its resolved report path."""
     from graphtraj.execution.runner_results import task_report_paths
 
     runner = discover_runner_directory(cwd)
@@ -883,7 +883,47 @@ def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
         request, _, _ = _read_session_resume_request(directory, mapping)
         environment = _team_runtime_environment(mapping, cwd)
         mapping = _recover_report_mapping(request, mapping, environment)
-    return task_report_paths(mapping, cwd)
+    return list(zip(map(str, mapping['report_files']), task_report_paths(mapping, cwd)))
+
+
+def _session_report_paths(alias: str, cwd: Path) -> tuple[Path, ...]:
+    """Resolve the target's retained assignments without inferring role ownership."""
+    return tuple(path for _, path in _session_report_assignments(alias, cwd))
+
+
+def _assigned_report(name: str, alias: str, cwd: Path) -> int:
+    """Return the index of the one assigned report of this Session that ``name`` names.
+
+    Accepted: the filename; a relative path that is a trailing part of the
+    assigned ``.state/...`` path, as dispatched or with the current Round; or
+    the assigned file's absolute location. Any other directory, ``..`` or
+    an unassigned name is refused. The write target is always the assigned path.
+    """
+    assignments = _session_report_assignments(alias, cwd)
+    given = Path(name)
+    matches = set()
+    if name.strip() and '..' not in given.parts:
+        for index, (value, path) in enumerate(assignments):
+            dispatched = Path(value).parts
+            # The current Round form, which a later Round's prompt names.
+            current = ('.state', *path.parts[len(path.parts) - len(dispatched) + 1:])
+            if given.is_absolute():
+                found = given.parent.resolve() / given.name == path
+            else:
+                found = any(form[-len(given.parts):] == given.parts for form in (dispatched, current))
+            if found:
+                matches.add(index)
+    if len(matches) != 1:
+        if not assignments:
+            raise RunnerError('authority-denied', 'The report is not assigned to this Session. '
+                                                  'This Session has no assigned reports.')
+        raise RunnerError(
+            'authority-denied',
+            'The report is not assigned to this Session. Assigned reports: {0} (give the filename, '
+            'or its assigned path such as {1}).'.format(
+                ', '.join(path.name for _, path in assignments), assignments[0][0]),
+        )
+    return matches.pop()
 
 
 def read_session_reports(alias: str, cwd: Path) -> dict:
@@ -996,9 +1036,7 @@ def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: boo
     require_task_authority(
         load_project_configuration(cwd).state, runner, mapping['task_id'], alias, 'submit',
     )
-    paths = [path for path in _session_report_paths(alias, cwd) if path.name == name]
-    if len(paths) != 1:
-        raise RunnerError('authority-denied', 'The report is not assigned to this Session.')
+    index = _assigned_report(name, alias, cwd)
     from graphtraj.execution.runner_results import RESULT_STATUSES, start_result_correction
     from graphtraj.graph.task_graph import _load_task_state
 
@@ -1007,11 +1045,11 @@ def submit_session_report(name: str, text: str, cwd: Path, *, notify_parent: boo
         # A Task not accepting results, e.g. finished or blocked, opens no Round;
         # its member, e.g. after a follow-up or a stopped report collection,
         # adds its own report beside the retained one in the closed Round.
-        path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
-        written = _add_closed_round_report(path, text)
+        written = _add_closed_round_report(_session_report_paths(alias, cwd)[index], text)
         return _reported(runner / 'sessions' / alias, alias, written, notify_parent)
     start_result_correction(mapping, cwd)
-    path = next(path for path in _session_report_paths(alias, cwd) if path.name == name)
+    # The same assignment, resolved again: a correction may have opened a new Round.
+    path = _session_report_paths(alias, cwd)[index]
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:

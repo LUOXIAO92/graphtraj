@@ -12,6 +12,8 @@
 #   -> [Main tells the USER; 612's Leader and Engineer have ended their turns] USER /exit Main -> I (USER, Terminal)
 #   -> USER `cd <Harness> && claude --continue` -> M -> Mr -> N -> Nr -> P -> Pr -> done.
 #   Rollback: R (Main asks the USER first; the USER /exits Main), run from the backup's own copy.
+#   Correction 1 (a failed I that R rolled back): I0 -> Mpre -> USER /exit + I -> claude --continue -> M -> Mr -> N -> Nr
+#   -> P -> Pr -> done. I0 moves the old backup and that run's I/R records aside (never deletes); README.md, Correction 1.
 # I installs BOTH wheels (graftling 0.10.0 from the tag, graphtraj from git archive TARGET) with
 # pip --force-reinstall --no-deps --no-index; graphtraj's version stays 0.1.0, hence --force-reinstall.
 # P/Pr: graftling's own `models` feature is refused by GraphTraj (src/graphtraj/interfaces/agents.py, 611), whose
@@ -214,8 +216,22 @@ codex_hook_check() {  # $1 = venv: the Codex hooks entry names this venv's pytho
   [[ $out == '{}' ]]; ck $? "Codex hooks entry of $1 runs (neutral event answers {})" "${out[1,200]}"
 }
 manuals_check() {  # $1 = label, $2 = directory holding the installed manuals tree (share/graphtraj/manuals): == the archive's
-  local d; d=$(diff -r $TSRC/manuals $2 2>&1); print -r -- "diff -r archive manuals vs $2: ${${d//$'\n'/ | }[1,300]:-none}"
-  [[ -z $d ]]; ck $? "$1 share/graphtraj/manuals equals git archive ${TARGET[1,8]}'s manuals ($(find $2 -type f 2>/dev/null | wc -l | tr -d ' ') files)"
+  # Correction 1: tolerated is EXACTLY Claude Code's sandbox write marker, a top-level `.claude` directory whose only
+  # content is the empty directory `.cc-writes` (no RECORD names it, so pip leaves it; it can come back whenever a
+  # sandboxed session has this directory writable). Anything else extra, missing or differing is a FAIL.
+  local d m=$2/.claude line
+  local -a inside
+  d=$(diff -r $TSRC/manuals $2 2>&1)
+  if [[ -d $m && ! -L $m && -d $m/.cc-writes && ! -L $m/.cc-writes ]]; then
+    inside=(${(f)"$(cd $m && find . -mindepth 1 2>&1)"})
+    if [[ ${(j: :)inside} == ./.cc-writes ]]; then
+      line="Only in $2: .claude"
+      d=$(print -r -- "$d" | grep -vxF -- "$line")
+      print -r -- "INFO 612 $1 tolerated in $2: .claude/.cc-writes (empty), the Claude Code sandbox write marker (inferred; not a product file, in no RECORD); .claude $(stat -f '%Sm' -t '%F %T' $m) | .cc-writes $(stat -f '%Sm' -t '%F %T' $m/.cc-writes)"
+    fi
+  fi
+  print -r -- "diff -r archive manuals vs $2 (the marker excepted): ${${d//$'\n'/ | }[1,300]:-none}"
+  [[ -z $d ]]; ck $? "$1 share/graphtraj/manuals equals git archive ${TARGET[1,8]}'s manuals ($(find $2 -type f ! -path "$2/.claude/*" 2>/dev/null | wc -l | tr -d ' ') product files)"
 }
 p_args() { local c; c=$(sed -n 's/^CHOICE //p' $R/P-pre.txt 2>/dev/null | tail -1); c=(${=c}); print -r -- "{\"action\":\"discover\",\"runtime\":\"${c[1]:-}\",\"provider\":\"${c[2]:-}\"}"; }
 record_counts() {  # Agent records, Session archives and member Sessions now (P's "nothing created" observable)
@@ -679,6 +695,41 @@ V) print "[V] Main. Before the install, outside production: a scratch venv ($VV)
   print "Success: every 'CHECK 612 V ...: PASS' (incl. the hook copy byte-identical, graphtraj-mcp tools/list subagents, tasks, and runtime_connections' schema for P)."
   next "zsh $THIS Mpre" ;;
 
+I0) need_main; print "[I0] Main, before Mpre and a rerun of I (Correction 1). Read only, apart from two MOVES (nothing is deleted): when the backup $BK belongs to an I whose install began and R rolled it back, and production equals that backup, it moves $BK to $SCR/backup-run<N>-<time> (with its after-install snapshot inside) and that run's I/R records into $R/run<N>/. Otherwise STOP, changing nothing. $BK604 is not touched. No login. Dialog: none."
+  { if [[ ! -e $BK ]]; then print -r -- "no backup $BK: nothing to set aside; I may run (it still STOPs when a backup exists)"; exit 0; fi
+    nrun=1; while [[ -e $R/run$nrun || -n $(print -l $SCR/backup-run$nrun-*(N)) ]]; do nrun=$(( nrun + 1 )); done
+    print -r -- "the failed run being set aside: run$nrun | backup $BK (I start $(sed -n 's/^I start //p' $R/I.txt 2>/dev/null | tail -1))"
+    [[ -e $BK/COMPLETE && -e $BK/INSTALL-STARTED ]]; ck $? "I0 $BK has COMPLETE and INSTALL-STARTED (an I whose install began)"
+    nr=$(grep -c '^CHECK 612 R ' $R/R.txt 2>/dev/null) nf=$(grep -c '^CHECK 612 R .*: FAIL' $R/R.txt 2>/dev/null)
+    [[ -s $R/R.txt && ${nr:-0} -ge 5 && ${nf:-0} == 0 ]]; ck $? "I0 R's record $R/R.txt exists and every CHECK in it passed" "${nr:-0} CHECK lines, ${nf:-0} FAIL"
+    say "production equals that backup, in R's terms"
+    tree compare $BK/venv.manifest $RT > $SCR/I0-venv-compare.txt 2>&1; vrc=$?; tail -2 $SCR/I0-venv-compare.txt
+    ck $vrc "I0 production venv equals the backup (adopt_tree.py compare, as R)"
+    tree compare $BK/plugin.manifest $PDIR > /dev/null 2>&1; ck $? "I0 hook copy equals the backup"
+    shasum -a 256 -c $BK/entries.sha256 > /dev/null 2>&1; ck $? "I0 .mcp.json, settings.local.json and config.json equal the backup"
+    sp=$(site); dgt=$(cat $sp/graphtraj-$GTVERSION.dist-info/direct_url.json 2>/dev/null) dgl=$(cat $sp/graftling-$GOLDVERSION.dist-info/direct_url.json 2>/dev/null)
+    [[ $dgt == *"wheels-${OLD[1,8]}/graphtraj-$GTVERSION-"* && $dgl == *"wheels-$GOLDVERSION/graftling-$GOLDVERSION-"* ]]; ck $? "I0 graphtraj from wheels-${OLD[1,8]} and graftling $GOLDVERSION from 600's wheel"
+    pc=$(clean $RT/bin/python -B -m pip check --disable-pip-version-check 2>&1); ck $? "I0 production pip check" "${pc[1,120]}"
+  } 2>&1 | tee $R/I0.txt; rc=${pipestatus[1]}
+  (( rc == 0 )) || exit $rc
+  [[ -e $BK ]] || { next "zsh $THIS Mpre"; exit 0; }
+  grep -q '^CHECK 612 I0 .*: FAIL' $R/I0.txt && { print "\nI0 STOP (see above). Nothing was moved. Hand $R/I0.txt to the Team."; exit 1; }
+  { nrun=1; while [[ -e $R/run$nrun || -n $(print -l $SCR/backup-run$nrun-*(N)) ]]; do nrun=$(( nrun + 1 )); done
+    NB=$SCR/backup-run$nrun-$(date +%Y%m%dT%H%M%S)
+    mv $BK $NB || { print "STOP: moving $BK failed"; exit 1; }
+    print -r -- "MOVED $BK -> $NB (after-install snapshots inside: $(print -l $NB/after-install-*(N/:t) | tr '\n' ' '))"
+    mkdir -p $R/run$nrun || exit 1
+    files=($R/I.txt(N) $R/I.ok(N) $R/I-*(N) $R/R.txt(N) $R/R-*(N) $R/main-console-612-I(N) $R/main-console-612-I.*(N) $R/main-console-612-R(N) $R/main-console-612-R.*(N))
+    (( $#files )) && mv $files $R/run$nrun/ || exit 1
+    print -r -- "MOVED to $R/run$nrun/: ${files:t}"
+    print -r -- "SUPERSEDED run$nrun: I failed after the install began; R restored production; I0 set its backup and records aside (Correction 1)" > $R/run$nrun/SUPERSEDED
+    [[ ! -e $BK && -e $NB/COMPLETE && ! -e $R/I.txt && ! -e $R/R.txt ]]; ck $? "I0 backup and run$nrun records set aside; $BK and the current I/R records are absent"
+    print -r -- "$BK604 (untouched): $([[ -e $BK604/COMPLETE ]] && print COMPLETE || print 'not complete or absent')"
+  } 2>&1 | tee -a $R/I0.txt; rc=${pipestatus[1]}
+  (( rc == 0 )) && ! grep -q '^CHECK 612 I0 .*: FAIL' $R/I0.txt || { print "\nI0 STOP (see above). Hand $R/I0.txt to the Team."; exit 1; }
+  print "Success: every 'CHECK 612 I0 ...: PASS'. I may run again (Mpre right before it)."
+  next "zsh $THIS Mpre" ;;
+
 Mpre) need_main; print "[Mpre] Main, right before the USER exits Main (GR and V passed). Adoption only with no member running: 612's Leader and Engineer have ended their turns and no other member runs; else STOP (never signals). No login. Dialog: none."
   { grep -q '^CHECK 612 GR G record .*: PASS' $R/GR.txt 2>/dev/null; ck $? "Mpre GR passed"
     [[ -e $R/V.ok ]]; ck $? "Mpre V passed"
@@ -691,7 +742,7 @@ Mpre) need_main; print "[Mpre] Main, right before the USER exits Main (GR and V 
 
 I) need_main
   print "[I] USER (Main tells the USER first; the USER /exits Main, then runs this in a normal Terminal). Waits for members, backs up to $BK, installs BOTH wheels into $RT (graftling $GOLDVERSION -> $GVERSION, graphtraj ${OLD[1,8]} -> ${TARGET[1,8]}) with pip --force-reinstall --no-deps --no-index, checks the real entries. No login. Dialog: none (one Enter to confirm). ~3 min plus waiting."
-  [[ -e $BK ]] && { print "STOP: $BK exists; I never overwrites a backup. Tell Main."; exit 1; }
+  [[ -e $BK ]] && { print "STOP: $BK exists; I never overwrites a backup. Tell Main. (After a failed I that R rolled back, Main runs: zsh $THIS I0)"; exit 1; }
   [[ -e $R/V.ok ]] && grep -q '^CHECK 612 GR G record .*: PASS' $R/GR.txt 2>/dev/null || { print "STOP: V or GR has not passed. Nothing changed."; exit 1; }
   product_guard || { print "STOP: product guard. Nothing changed."; exit 1; }
   print "Confirm that you typed /exit in the Claude Code Main. Enter to continue, Ctrl-C to stop."; read -r answer
@@ -850,6 +901,11 @@ R) need_main; print "[R] USER (Main asks the USER first; after agreeing the USER
 done) print "[done] Main. Read only: every CHECK line of every step's raw file, and production now. No login. Dialog: none."
   { miss=""
     steps=(00 rel B G rp gh C5 GR V Mpre I Mr Nr P-pre Pr)
+    runs=($R/run<->(N/))
+    (( $#runs )) && steps+=(I0)   # a failed I was set aside: I0 must have passed
+    for d in $runs; do   # set-aside runs are listed, never counted (only the current I and R records count)
+      print -r -- "SUPERSEDED ${d:t}: $(cat $d/SUPERSEDED 2>/dev/null || print 'set aside by I0') | files: $(print -l $d/*(N:t) | tr '\n' ' ')| its CHECK FAIL lines (not counted): $(cat $d/*.txt(N) | grep -c '^CHECK .*: FAIL')"
+    done
     for s in $steps; do [[ -s $R/$s.txt ]] || miss="$miss $s"; done
     grep -h '^CHECK ' $R/${^steps}.txt(N)
     grep -h '^REPORT 612 ' $R/{C5,V}.txt(N)
@@ -867,5 +923,5 @@ done) print "[done] Main. Read only: every CHECK line of every step's raw file, 
   print "Success: both 'CHECK 612 done ...: PASS' (production graphtraj ${TARGET[1,8]} + graftling $GVERSION; every step's CHECK passed)."
   next "Main: hand $R to the Team; Task 612 steps complete. Rollback stays available (Main asks the USER first): zsh $BK/tools/steps.zsh R" ;;
 
-*) print "usage: zsh $THIS 00|rel|B|G|rp|gh|C5|GR|SR|suite-base|V|Mpre|I|M|Mr|N|Nr|P|Pr|done|R"; exit 2 ;;
+*) print "usage: zsh $THIS 00|rel|B|G|rp|gh|C5|GR|SR|suite-base|V|I0|Mpre|I|M|Mr|N|Nr|P|Pr|done|R"; exit 2 ;;
 esac

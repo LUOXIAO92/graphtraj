@@ -15,6 +15,36 @@ passed, and G is running. Do not rerun rel, rp or gh. Real-host facts used below
 
 All steps are now written for the new names and rehearsed (`rehearsal-output.txt`).
 
+## Correction 2 (user option A, Worldline user-decision 20261124T091451.431013+0900)
+
+Main's G on 3eb21101 + v0.9.0 found 4 NEW failures:
+`tests/test_mcp_adoption.py::test_installed_proxy_uses_websocket_for_public_refresh`, all four params.
+
+Cause:
+- 592's c9d68f31 changed the assertion at :111 to `['subagents', 'tasks']`.
+- It left the test's own fake Codex server reply at :68 as `'tools': {'agents': {}, 'tasks': {}}`.
+- The test skips without codex on PATH (:39-40), which hid the mismatch.
+
+Fix: `6fe8c8d9`, one line, test only. The fake reply now lists `subagents` and `tasks`.
+
+The candidate (TARGET) is now `6fe8c8d9`, so the raw directory, wheels, G records and V copies are named `6fe8c8d9`:
+- product_guard requires TARGET's src, plugins and pyproject.toml to equal `PRODUCT0` = 3eb21101. It prints that only
+  `tests/test_mcp_adoption.py` differs.
+- B checks that the graphtraj wheel equals both `git archive 6fe8c8d9` and `git archive 3eb21101 src`.
+
+suite-base on these 4 ids:
+- On 2f66c0ad it gave "fails on both", because both sides ran 3eb21101's test file.
+- With the fix, base (3eb21101 + graftling 49f97004) should fail them and the candidate should pass them:
+  `base-only (passes on the candidate)`.
+- Before/after in the Engineer's sandbox: all 4 SKIP on both commits, `Host denies Unix socket binding ([Errno 1]
+  Operation not permitted)`, so Main's suite-base is the proof. Command:
+  `zsh <Worktree>/scripts/adopt-593/steps.zsh suite-base 'tests/test_mcp_adoption.py::test_installed_proxy_uses_websocket_for_public_refresh[False-False]' '…[False-True]' '…[True-False]' '…[True-True]'`,
+  with each id written out in full.
+
+**Rerun order:** B → G → GR (→ SR / suite-base only if NEW) → V → Vu (USER, folder trust for
+`/private/tmp/vproject-593`; not run yet) → Vc → [scanhome is done] → Mpre → … as below.
+Do not rerun 00, scan (before I), scanhome, rel, rp or gh.
+
 ## The two commits
 
 **graftling 0.9.0** is `7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9` `graftling 0.9.0 (593)`.

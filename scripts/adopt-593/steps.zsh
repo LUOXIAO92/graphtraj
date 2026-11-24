@@ -77,9 +77,13 @@ BUNDLE=$SD/graftling-0.9.0.bundle
 GURL=${ADOPT593_GURL:-https://github.com/LUOXIAO92/graftling.git}   # gh: GitHub's graftling (read with ls-remote only)
 GTBASE=${VERIFY593_GTBASE:-3eb21101b920d94da057566c9cfdc3c81b6acbfb}   # GraphTraj dev at dispatch (suite-base side)
 SUITEIDS=$SD/../verify-581/suiteids.py   # whole pytest node ids from shard logs (581; used by verify-586's SR)
-# GraphTraj candidate: GraphTraj dev 3eb21101 itself (588, 592, 595; already graftling>=0.9.0,<0.10). 593 makes no
-# product change: product_guard requires this Worktree's src/tests/plugins/pyproject.toml to equal it.
-TARGET=${VERIFY593_TARGET:-3eb21101b920d94da057566c9cfdc3c81b6acbfb}
+# GraphTraj candidate (correction 2): 6fe8c8d9 = GraphTraj dev 3eb21101 (588, 592, 595; already graftling>=0.9.0,<0.10)
+# + the one-line test fix of tests/test_mcp_adoption.py (its fake Codex server lists subagents, as 592's c9d68f31
+# assertion expects). product_guard requires this Worktree's src/tests/plugins/pyproject.toml to equal TARGET, and
+# TARGET's src, plugins and pyproject.toml to equal PRODUCT0 (only tests differ), so the graphtraj wheel's contents are
+# 3eb21101's (B checks the wheel against both archives). Raw directory, wheels, G records and V copies follow TARGET.
+TARGET=${VERIFY593_TARGET:-6fe8c8d97b5eedaf3fae898cd3f3f86a66a7acf7}
+PRODUCT0=${VERIFY593_PRODUCT0:-3eb21101b920d94da057566c9cfdc3c81b6acbfb}   # GraphTraj dev: the product 593 installs
 C8=${TARGET[1,8]}   # per-commit names
 OLD=eb00972580b0f8bb28dfc7f0da57a52ccafeb18f   # production's graphtraj now (579)
 OLDBASE=${ADOPT593_OLDBASE:-$H/tmp/579}   # 579's backup: listed only, never touched
@@ -250,6 +254,9 @@ product_guard() {
   print "product guard: HEAD $head | git diff $C8 HEAD -- ${GUARDED[*]}: ${${names//$'\n'/ }:-empty} | uncommitted there: ${${dirty//$'\n'/ }:-none}"
   [[ -z $names ]] || { print "STOP: the Worktree's ${GUARDED[*]} differ from $C8 (only scripts/ may differ): ${names//$'\n'/ }"; return 1; }
   [[ -z $dirty ]] || { print "STOP: uncommitted changes in the Worktree's ${GUARDED[*]}"; return 1; }
+  local p0=$(git -C $WT diff --name-only $PRODUCT0 $TARGET -- src plugins pyproject.toml 2>&1) t0=$(git -C $WT diff --name-only $PRODUCT0 $TARGET -- $GUARDED 2>&1)
+  print -r -- "product guard: $C8 vs ${PRODUCT0[1,8]}: src plugins pyproject.toml ${${p0//$'\n'/ }:-identical} | every difference in ${GUARDED[*]}: ${${t0//$'\n'/ }:-none} (correction 2: only tests/test_mcp_adoption.py)"
+  [[ -z $p0 ]] || { print "STOP: $C8's src, plugins or pyproject.toml differ from ${PRODUCT0[1,8]}"; return 1; }
   local pin=$(git -C $WT show $TARGET:pyproject.toml 2>/dev/null | grep -m1 -oE '"graftling[^"]*"')
   print -r -- "product guard: $C8 pyproject pins ${pin:-NOTHING} (593 expects \"graftling>=0.9.0,<0.10\")"
   [[ $pin == '"graftling>=0.9.0,<0.10"' ]] || { print "STOP: $C8 does not pin graftling>=0.9.0,<0.10"; return 1; }
@@ -593,7 +600,7 @@ step_B() {
   say "the Worktree carries no product change beyond $C8 (only scripts/ differ)"
   product_guard || return 1
   rm -rf $SRC $GSRC $N; mkdir -p $SRC $GSRC $N   # this commit's own directories only
-  # Information only. 593's candidate is GraphTraj dev 3eb21101 itself; the candidate's identity is guarded by
+  # Information only. 593's candidate is GraphTraj dev 3eb21101 + correction 2's test fix; its identity is guarded by
   # product_guard and `git archive $TARGET`, so production installs exactly $C8.
   say "GraphTraj dev (information only)"
   local dv=$(git -C $WT rev-parse -q --verify refs/heads/dev 2>/dev/null)
@@ -654,6 +661,8 @@ for other in sys.argv[3:]:   # production 0.8.0 and the next incompatible 0.10.0
 sys.exit(0 if new and not old else 1)' "$req" $GVERSION $GOLDVERSION 0.10.0 || { print "STOP: the graphtraj requirement does not pair with graftling $GVERSION"; return 1; }
   say "both wheels = their git archives, file by file (gate)"
   $CONDA -I $SD/pkgdiff532.py graphtraj $(wheel_of graphtraj) archive:$SRC/src "593 graphtraj wheel equals git archive $C8" - || { print "STOP: the graphtraj wheel differs from git archive $C8"; return 1; }
+  rm -rf $SRC-product0; mkdir -p $SRC-product0; git -C $WT archive $PRODUCT0 src | tar -x -C $SRC-product0 || return 1
+  $CONDA -I $SD/pkgdiff532.py graphtraj $(wheel_of graphtraj) archive:$SRC-product0/src "593 graphtraj wheel content equals git archive ${PRODUCT0[1,8]} (GraphTraj dev; correction 2 changed tests only)" - || { print "STOP: the graphtraj wheel differs from git archive ${PRODUCT0[1,8]}"; return 1; }
   $CONDA -I $SD/pkgdiff532.py graftling $(wheel_of graftling) archive:$GSRC/src "593 graftling wheel equals git archive $GTAG" - || { print "STOP: the graftling wheel differs from git archive $GTAG"; return 1; }
   say "593 markers in the wheels (expect present)"
   rm -rf $W/wheelview-$C8; mkdir -p $W/wheelview-$C8; (cd $W/wheelview-$C8 && unzip -qo $(wheel_of graphtraj) 'graphtraj/*' && unzip -qo $(wheel_of graftling) 'graftling/*' && unzip -qo $(wheel_of graftling) '*.dist-info/entry_points.txt') || return 1
@@ -1452,7 +1461,7 @@ G) cv; print "[G] Main. 全套测试：本 Worktree HEAD + B 的 $GTAG wheel，6
 B) cv; print "[B] Main. 两个 wheel：graphtraj（git archive $C8）与 graftling（git -C $G archive $GTAG，从 archive 根目录构建）；I 两个一起装。不联网、不改 graftling 仓库和生产。对话框: 无。< 2 分钟。"
   if logged $R/B.txt step_B; then
     summary B "$(grep -E '\.whl$|leaked|peels|annotated|tagger|author|^main:|\^\{commit\}|product guard|GraphTraj dev|CHANGELOG heading|wheel version|Requires-Dist|CHECK|markers expected|carries' $R/B.txt)"
-    print "成功: 'product guard: PASS'；'GraphTraj dev: … dev contains $C8: …' 只是信息；'$GTAG peels to $GCOMMIT: yes' 与 'annotated … yes'；'CHECK 593 $GTAG version strings all $GVERSION: PASS'；$N 有 graphtraj-0.1.0 与 graftling-$GVERSION 两个 wheel；'CHECK 593 Requires-Dist … satisfied by $GVERSION: PASS' 与 '… NOT satisfied by $GOLDVERSION: PASS'、'… NOT satisfied by 0.10.0: PASS'；'CHECK 593 $GTAG console scripts subagents, subagents-mcp and no agents, agents-mcp: PASS'；两行 'CHECK 593 … wheel equals git archive …: PASS'；'markers expected present: PASS (8/8)'；carries graftling/: 0；leaked: 0。"
+    print "成功: 'product guard: $C8 vs ${PRODUCT0[1,8]}: src plugins pyproject.toml identical | every difference in src tests plugins pyproject.toml: tests/test_mcp_adoption.py …' 与 'product guard: PASS'；'GraphTraj dev: … dev contains $C8: …' 只是信息；'CHECK 593 graphtraj wheel content equals git archive ${PRODUCT0[1,8]} …: PASS'；'$GTAG peels to $GCOMMIT: yes' 与 'annotated … yes'；'CHECK 593 $GTAG version strings all $GVERSION: PASS'；$N 有 graphtraj-0.1.0 与 graftling-$GVERSION 两个 wheel；'CHECK 593 Requires-Dist … satisfied by $GVERSION: PASS' 与 '… NOT satisfied by $GOLDVERSION: PASS'、'… NOT satisfied by 0.10.0: PASS'；'CHECK 593 $GTAG console scripts subagents, subagents-mcp and no agents, agents-mcp: PASS'；两行 'CHECK 593 … wheel equals git archive …: PASS'；'markers expected present: PASS (8/8)'；carries graftling/: 0；leaked: 0。"
     next "zsh $THIS G    （Main 的全套测试队列串行：另一套在跑时 G 会排队等待并说明）"
   else print "\nB 失败。把 $R/B.txt 交给 Main（product guard STOP: Worktree 的 src/tests/plugins/pyproject 不等于 $C8；'peels' 或 'annotated' 失败: 先运行 rel，或交 Leader）。"; exit 1; fi ;;
 

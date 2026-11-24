@@ -35,7 +35,7 @@ REALSTATE=$REALH/.graphtraj/core/state
 GC=7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9      # graftling 0.9.0 (593), in the bundle only
 GBASE=49f97004a86cc245ad32515b9dd056d7092b08f7
 GOLD=542a81df0c941f5b1a425d9807681b2a38daa87c    # v0.8.0
-NEW=3eb21101b920d94da057566c9cfdc3c81b6acbfb     # the candidate's product = GraphTraj dev 3eb21101
+NEW=6fe8c8d97b5eedaf3fae898cd3f3f86a66a7acf7     # the candidate (correction 2): GraphTraj dev 3eb21101 + the test fix
 OLD=eb00972580b0f8bb28dfc7f0da57a52ccafeb18f
 DEV=3eb21101                                     # GraphTraj dev at dispatch
 NR=89069722+LUOXIAO92@users.noreply.github.com
@@ -261,8 +261,11 @@ check "gh: ~/.dsh profiles unchanged; nothing installed" sh -c "cmp -s $F/dsh-be
 head1 "B: wheels from git archive v0.9.0 (archive root) and of the candidate; version strings; requirement pairs"
 steps B > $F/B.out 2>&1; BRC=$?; check "B exit 0" [ $BRC -eq 0 ]
 check "B: guard says ${NEW[1,8]} pins graftling>=0.9.0,<0.10" grep -q "product guard: ${NEW[1,8]} pyproject pins \"graftling>=0.9.0,<0.10\"" $F/B.out
+check "B (correction 2): guard prints that only tests/test_mcp_adoption.py differs from 3eb21101; the wheel content equals git archive 3eb21101" sh -c "grep -q 'product guard: ${NEW[1,8]} vs 3eb21101: src plugins pyproject.toml identical | every difference in src tests plugins pyproject.toml: tests/test_mcp_adoption.py (correction 2' $F/B.out && grep -q 'CHECK 593 graphtraj wheel content equals git archive 3eb21101 (GraphTraj dev; correction 2 changed tests only): PASS' $F/B.out"
+VERIFY593_PRODUCT0=$OLD steps B > $F/B-p0.out 2>&1; BP0=$?
+check "guard negative (correction 2): a candidate whose src differs from the product base STOPs" sh -c "[ $BP0 -ne 0 ] && grep -q \"STOP: ${NEW[1,8]}'s src, plugins or pyproject.toml differ from ${OLD[1,8]}\" $F/B-p0.out"
 grep -E 'whl|leaked|peels|annotated|CHECK|markers expected|GraphTraj dev|CHANGELOG heading|main:|project.scripts' $F/B.out
-check "B: GraphTraj dev reported as information only; v0.9.0 annotated, peels to $GC" sh -c "grep -q 'dev contains ${NEW[1,8]}: yes' $F/B.out && grep -q 'v0.9.0 peels to $GC: yes' $F/B.out && grep -q 'v0.9.0 is an annotated tag (cat-file -t: tag): yes' $F/B.out"
+check "B: GraphTraj dev reported as information only; v0.9.0 annotated, peels to $GC" sh -c "grep -q 'dev contains ${NEW[1,8]}: no' $F/B.out && grep -q 'v0.9.0 peels to $GC: yes' $F/B.out && grep -q 'v0.9.0 is an annotated tag (cat-file -t: tag): yes' $F/B.out"
 check "B: every version string 0.9.0; CHANGELOG heading 0.9.0" sh -c "grep -q 'CHECK 593 v0.9.0 version strings all 0.9.0: PASS' $F/B.out && grep -q '^CHANGELOG heading: ## 0.9.0 (incompatible)' $F/B.out"
 check "B: no 0.7.0 install route in v0.9.0 (581); console scripts subagents, subagents-mcp only (591)" sh -c "grep -q 'CHECK 593 v0.9.0 has no 0.7.0 install route .*: PASS' $F/B.out && grep -q 'CHECK 593 v0.9.0 console scripts subagents, subagents-mcp and no agents, agents-mcp: PASS' $F/B.out"
 check "B: Requires-Dist satisfied by 0.9.0 and NOT by 0.8.0 or 0.10.0" sh -c "grep -q 'CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 satisfied by 0.9.0: PASS' $F/B.out && grep -q 'CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 NOT satisfied by 0.8.0: PASS' $F/B.out && grep -q 'CHECK 593 Requires-Dist graftling<0.10,>=0.9.0 NOT satisfied by 0.10.0: PASS' $F/B.out"
@@ -290,7 +293,7 @@ check "GR before any G: STOP 'run G first', FAIL" sh -c "[ $GNO -ne 0 ] && grep 
 print -r -- "$HOSTLINE" > $F/ps.txt; print -r -- "4242 1 /usr/bin/python3 scripts/run_test_shards.py --shards 6 (another Task's suite, simulated)" >> $F/ps.txt
 ( sleep 7; print -r -- "$HOSTLINE" > $F/ps.txt ) &!
 export FAKE_PROVIDER_API_KEY=sk-rehearsal-g-123456   # must not reach the suite (clean launch environment)
-ADOPT593_PYTEST_ARGS="-k 'test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract or test_child_tool_descriptions_match_the_members_entry or test_native_claude_lifecycle_without_a_task or test_extension_still_hands_an_explicit_agents_session_to_graftling or test_the_mcp_server_lists_subagents_and_tasks_only or test_the_claude_hook_copy_names_subagents_and_tasks'" steps G > $F/G.out 2>&1; GRC=$?
+ADOPT593_PYTEST_ARGS="-k 'test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_every_public_name_is_listed_in_the_contract or test_child_tool_descriptions_match_the_members_entry or test_native_claude_lifecycle_without_a_task or test_extension_still_hands_an_explicit_agents_session_to_graftling or test_the_mcp_server_lists_subagents_and_tasks_only or test_the_claude_hook_copy_names_subagents_and_tasks or test_installed_proxy_uses_websocket_for_public_refresh'" steps G > $F/G.out 2>&1; GRC=$?
 unset FAKE_PROVIDER_API_KEY
 GO=$(print -l $W/G-${NEW[1,8]}-*(N/om[1])); print "G record: $GO"; cat $GO/run.txt 2>/dev/null; grep -E 'WAITING|running:|queued|started' $F/G.out
 check "G queued: says WAITING with the running suite, never stops (exit 0)" sh -c "[ $GRC -eq 0 ] && grep -q '^WAITING: Main.s suite queue is serial' $F/G.out && grep -q 'running: 4242' $F/G.out && grep -q '^queued in the background' $F/G.out"
@@ -347,6 +350,14 @@ grep -E '^(base|candidate):|classification|tests/' $F/SB.out | head -12
 # 593: the base pairs GraphTraj 3eb21101 (graftling>=0.9.0,<0.10) with graftling 49f97004, which still says 0.8.0, so
 # this version-pair test fails on the base side only; the release commit is what makes it pass.
 check "suite-base: both sides ran the id in a clean environment, temp root outside the Harness; classified base-only (base graftling 49f97004 says 0.8.0), candidate passes" sh -c "grep -q '^base: pytest exit=1' $F/SB.out && grep -q '^candidate: pytest exit=0' $F/SB.out && grep -q 'launch environment: HOME USER PATH TERM TMPDIR LANG only' $F/SB.out && grep -q 'outside the Harness' $F/SB.out && grep -q '^base-only (passes on the candidate): tests/test_runtime_distribution.py::test_wheels_have_separate_owners' $F/SB.out && grep -q '^candidate-only: 0' $F/SB.out"
+MA=tests/test_mcp_adoption.py::test_installed_proxy_uses_websocket_for_public_refresh
+steps suite-base "${MA}[False-False]" "${MA}[False-True]" "${MA}[True-False]" "${MA}[True-True]" > $F/SB4.out 2>&1; SB4=$?
+grep -E '^(base|candidate):|classification|not on|tests/' $F/SB4.out | head -12; SB4D=$(print -l $W/suite-base-*(N/om[1]))
+grep -hE 'SKIPPED|skip' $SB4D/base.txt $SB4D/candidate.txt 2>/dev/null | sort -u | head -3
+# In this sandbox the proxy test SKIPs (Unix socket binding denied), so the rehearsal shows the ids reach both sides; on the
+# real host base (3eb21101's test) fails and the candidate (the fix) passes: base-only (passes on the candidate).
+check "suite-base (correction 2): the four test_mcp_adoption ids, each its own argument, are collected and run on base 3eb21101 and on the candidate; none missing; classified" sh -c "[ \$(wc -l < $SB4D/ids.txt) -eq 4 ] && [ \$(wc -l < $SB4D/base-ids.txt) -eq 4 ] && [ \$(wc -l < $SB4D/candidate-ids.txt) -eq 4 ] && ! grep -q '^not on' $F/SB4.out && grep -q '^candidate-only: 0' $F/SB4.out"
+check "suite-base (correction 2): base runs 3eb21101's test (fake server lists agents) and the candidate the fix (subagents)" sh -c "grep -q \"'tools': {'agents': {}, 'tasks': {}}\" $FH/tmp/593/graphtraj-base/tests/test_mcp_adoption.py && grep -q \"'tools': {'subagents': {}, 'tasks': {}}\" $FWT/tests/test_mcp_adoption.py"
 ADOPT593_GREC=$GX steps GR > /dev/null 2>&1   # the fixture's PASS stands in for the record in the I/R rehearsal below
 check "GR: earlier GR.txt kept as GR-<time>.txt" sh -c "ls $RW/GR-*.txt > /dev/null 2>&1"
 git -C $REALG for-each-ref --format='%(objectname) %(refname)' refs/heads refs/tags > $F/realg-refs-mid.txt

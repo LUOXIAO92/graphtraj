@@ -28,19 +28,27 @@ if base:
         if ':' in line:
             name, value = line.split(':', 1)
             headers[name.strip().lower()] = value.strip()
+    # As Claude Code does: its own Session id on every Messages request.
+    for flag in ('--session-id', '--resume'):
+        if flag in sys.argv:
+            headers['x-claude-code-session-id'] = sys.argv[sys.argv.index(flag) + 1]
+    # Negative rehearsal cases only (VERIFY613_STUB_BAD): a second credential, or another Session id.
+    bad = os.environ.get('VERIFY613_STUB_BAD', '')
+    if bad == 'authorization':
+        headers['authorization'] = 'Bearer stub-not-the-dummy'
+    elif bad == 'session':
+        headers['x-claude-code-session-id'] = 'stub-wrong-session-id'
     body = json.dumps({'model': 'claude-haiku-5-5', 'max_tokens': 8, 'stream': False,
                        'messages': [{'role': 'user', 'content': 'ready?'}]}).encode()
     records = os.environ.get('VERIFY613_STUB_RECORDS')
     if records:  # no-bind rehearsal: the record recorder.py would write, by its own rule
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from recorder import AUTH_LIKE
+        from recorder import describe
         dummy = os.environ.get(os.environ.get('VERIFY613_STUB_DUMMY', ''), '')
-        auth = {name: bool(dummy) and value in (dummy, 'Bearer ' + dummy)
-                for name, value in headers.items() if AUTH_LIKE.search(name)}
         with open(records, 'a') as stream:
             count = sum(1 for _ in open(records))
-            stream.write(json.dumps({'n': count + 1, 'method': 'POST', 'path': '/v1/messages', 'auth': auth},
-                                    sort_keys=True) + '\n')
+            stream.write(json.dumps({'n': count + 1, 'method': 'POST', 'path': '/v1/messages',
+                                     **describe(headers, dummy)}, sort_keys=True) + '\n')
         sys.exit(1)
     try:
         build_opener(ProxyHandler({})).open(Request(base.rstrip('/') + '/v1/messages', data=body, headers=headers),

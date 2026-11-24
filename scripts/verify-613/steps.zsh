@@ -218,6 +218,7 @@ A)
 B)
   say "[B] base_url with api_key_env: only the dummy reaches the recorder. Login: the user's Claude login (owner); the child holds only $DKEY (dummy). Dialog: none expected. Network: Anthropic (owner), 127.0.0.1 (child)."
   need_venv; typeset -ga STEPVARS=($DKEY=$DVAL); carried "$DKEY (fixed non-secret dummy)"
+  [[ -n $REHEARSAL && -n ${VERIFY613_STUB_BAD:-} ]] && STEPVARS+=(VERIFY613_STUB_BAD=$VERIFY613_STUB_BAD)  # rehearsal negative case only
   recorder_start B
   local P=$ROOT/proj-b
   project $P "    base_url: http://127.0.0.1:$RPORT
@@ -228,7 +229,7 @@ B)
 3) only if create returned an agent id: {"action":"execute","feature":"retire","arguments":{"agent":"<that agent id>"}}')"
   sleep 1; recorder_stop
   $CONDA -I $HERE/judge613.py check $CALLS B $P/.agents-control
-  $CONDA -I $HERE/recorder.py check $RECORDS dummy
+  $CONDA -I $HERE/recorder.py check $RECORDS dummy $P/.agents-control
   print -r -- "follow-ups: cat $CALLS; cat $RECORDS; rm -rf $ROOT  (when done)"
   ;;
 *)

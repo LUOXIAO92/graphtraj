@@ -7,21 +7,43 @@ serve RECORDS PORTFILE DUMMYVAR [SECONDS]
     the environment variable DUMMYVAR; for authorization also 'Bearer <dummy>'). Nothing
     else of the request is kept: no other header, no body, no value. A Messages request is
     answered with a minimal one-word reply ('ready'), streamed when asked; anything else 404.
-    Stops after SECONDS (default 900).
-check RECORDS EXPECT
-    EXPECT 'none': PASS when no request arrived. EXPECT 'dummy': PASS when at least one
-    request arrived and every request carried exactly one auth-like header, x-api-key,
-    equal to the dummy. Prints CHECK lines and the per-request summary; exit 1 on FAIL.
+    Stops after SECONDS (default 900). For x-claude-code-session-id the record also keeps
+    the hex sha256 of its value (under 'sha256'), so the check can compare it with the
+    child's native Session; the value itself is never stored.
+check RECORDS EXPECT [DATAROOT]
+    EXPECT 'none': PASS when no request arrived. EXPECT 'dummy' (step B), each a CHECK line:
+    (a) at least one request; (b) no auth-like header but x-api-key and
+    x-claude-code-session-id on any request; (c) at least one x-api-key, every one equal to
+    the dummy; (d) every x-claude-code-session-id hashes to the native Session ('session'
+    field) of the Agent record in DATAROOT/control/agents (the newest, step B creates one; if
+    that field is still empty, the session_id graftling launched it with, in its diagnostics).
+    A request without any auth-like header (Claude Code's HEAD probe) is allowed. Prints
+    names, flags and 'hash matches/does not match' only, never a value or a hash; exit 1 on FAIL.
 """
+import hashlib
 import json
 import os
 import re
 import sys
 import threading
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 AUTH_LIKE = re.compile(r'auth|api[-_]?key|token|secret|credential|cookie|session|bearer|password', re.I)
+SESSION_HEADER = 'x-claude-code-session-id'
+ALLOWED = {'x-api-key', SESSION_HEADER}
+
+
+def describe(headers, dummy: str) -> dict:
+    """The record fields of one request's headers: auth-like names, equal-to-dummy flags, session hash."""
+    auth, hashes = {}, {}
+    for name, value in ((key.lower(), value) for key, value in headers.items()):
+        if AUTH_LIKE.search(name):
+            auth[name] = bool(dummy) and value in (dummy, 'Bearer ' + dummy)
+            if name == SESSION_HEADER:
+                hashes[name] = hashlib.sha256(value.encode()).hexdigest()
+    return {'auth': auth, **({'sha256': hashes} if hashes else {})}
 
 
 def serve(records: str, portfile: str, variable: str, seconds: float) -> None:
@@ -35,14 +57,10 @@ def serve(records: str, portfile: str, variable: str, seconds: float) -> None:
             pass
 
         def record(self) -> None:
-            auth = {}
-            for name in {key.lower() for key in self.headers.keys()}:
-                if AUTH_LIKE.search(name):
-                    value = self.headers.get(name, '')
-                    auth[name] = bool(dummy) and value in (dummy, 'Bearer ' + dummy)
+            fields = describe(self.headers, dummy)
             with lock:
                 count[0] += 1
-                entry = {'n': count[0], 'method': self.command, 'path': urlsplit(self.path).path, 'auth': auth}
+                entry = {'n': count[0], 'method': self.command, 'path': urlsplit(self.path).path, **fields}
                 with open(records, 'a', encoding='utf-8') as stream:
                     stream.write(json.dumps(entry, sort_keys=True) + '\n')
 
@@ -98,26 +116,72 @@ def serve(records: str, portfile: str, variable: str, seconds: float) -> None:
     server.serve_forever()
 
 
-def check(records: str, expect: str) -> int:
+def native_session(root: str) -> tuple[str | None, str]:
+    """The newest Agent record's native Session id under ROOT, and a description without its value."""
+    records = sorted(Path(root, 'control', 'agents').glob('agent-*.json'), key=lambda p: p.stat().st_mtime)
+    if not records:
+        return None, f'no Agent record under {root}/control/agents'
+    session = json.loads(records[-1].read_text()).get('session')
+    if isinstance(session, str) and session:
+        return session, f"Agent record {records[-1].name}, field 'session'"
+    # Published only once Claude Code's start hook ran; before that graftling has the id it
+    # launched with (claude --session-id) in the execution's diagnostics, field session_id.
+    for diagnostics in sorted(Path(root, 'native', records[-1].stem).glob('claude-diagnostics-*.yml')):
+        found = re.search(r"^session_id: '?([0-9a-fA-F-]+)'?$", diagnostics.read_text(), re.M)
+        if found:
+            return found.group(1), (f"Agent record {records[-1].name} field 'session' empty; "
+                                    f"{diagnostics.name} field 'session_id'")
+    return None, f"Agent record {records[-1].name}: field 'session' empty and no diagnostics session_id"
+
+
+def check(records: str, expect: str, root: str | None = None) -> int:
     entries = [json.loads(line) for line in open(records, encoding='utf-8')] if os.path.exists(records) else []
     print(f'recorder: {len(entries)} request(s) in {records}')
+    session, where = native_session(root) if root else (None, 'no data root given')
+    expected = hashlib.sha256(session.encode()).hexdigest() if session else None
+    if expect != 'none':
+        print(f'native Session: {where}')
+
+    def hashed(entry: dict) -> str:
+        if SESSION_HEADER not in entry['auth']:
+            return ''
+        stored = (entry.get('sha256') or {}).get(SESSION_HEADER)
+        if stored is None:
+            return ' [session hash: not stored by this recorder version]'
+        if expected is None:
+            return ' [session hash: no native Session to compare]'
+        return ' [session hash matches the native Session]' if stored == expected else \
+            ' [session hash does NOT match the native Session]'
+
     for entry in entries:
         print(f"  #{entry['n']} {entry['method']} {entry['path']} auth headers: "
               + (', '.join(f"{name}={'equals dummy' if same else 'NOT the dummy'}"
-                           for name, same in sorted(entry['auth'].items())) or 'none'))
-    failed = 0
+                           for name, same in sorted(entry['auth'].items())) or 'none') + hashed(entry))
     if expect == 'none':
         failed = len(entries) != 0
         print(f"CHECK 613 recorder received no request: {'FAIL' if failed else 'PASS'}")
         return int(failed)
-    results = [('at least one request reached the recorder', len(entries) >= 1),
-               ('every request carried only x-api-key (no authorization, no other auth-like header)',
-                all(set(entry['auth']) == {'x-api-key'} for entry in entries)),
-               ('every x-api-key equals the dummy (no host key or login)',
-                all(entry['auth'].get('x-api-key') is True for entry in entries))]
+    keys = [entry['auth']['x-api-key'] for entry in entries if 'x-api-key' in entry['auth']]
+    sessions = [entry for entry in entries if SESSION_HEADER in entry['auth']]
+    stored = [(entry.get('sha256') or {}).get(SESSION_HEADER) for entry in sessions]
+    results = [('(a) at least one request reached the recorder', len(entries) >= 1),
+               ('(b) no auth-like header but x-api-key and x-claude-code-session-id (no authorization, cookie, token...)',
+                all(set(entry['auth']) <= ALLOWED for entry in entries)),
+               ('(c) at least one x-api-key, and every x-api-key equals the dummy (no host key or login)',
+                bool(keys) and all(keys))]
+    failed = 0
     for label, ok in results:
-        print(f"CHECK 613 {label}: {'PASS' if ok and entries else 'FAIL'}")
-        failed |= not (ok and entries)
+        print(f"CHECK 613 {label}: {'PASS' if ok else 'FAIL'}")
+        failed |= not ok
+    label = '(d) every x-claude-code-session-id is the child\'s native Session (sha256 match)'
+    if any(item is None for item in stored):
+        print(f'CHECK 613 {label}: NOT JUDGED (the records hold no session hash: an earlier recorder version)')
+        failed = 1
+    else:
+        ok = expected is not None and all(item == expected for item in stored)
+        print(f"CHECK 613 {label}: {'PASS' if ok else 'FAIL'}"
+              + ('' if sessions else ' (no request carried the header)'))
+        failed |= not ok
     return int(failed)
 
 
@@ -125,4 +189,4 @@ if __name__ == '__main__':
     if sys.argv[1] == 'serve':
         serve(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]) if len(sys.argv) > 5 else 900)
     else:
-        sys.exit(check(sys.argv[2], sys.argv[3]))
+        sys.exit(check(*sys.argv[2:5]))

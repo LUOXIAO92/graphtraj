@@ -1,0 +1,7 @@
+production graftling: 0.10.0 (I installed 0.10.0)
+catalog: /private/tmp/claude-501/r612/home/.graphtraj/connections.yml | revision 9f7528739ebb
+  entry claude-main | runtime claude | provider anthropic | base_url no | api_key_env none | models 1
+  entry pi-opencode | runtime pi | provider opencode | base_url no | api_key_env OPENCODE_API_KEY | models 1
+CHOICE claude-main anthropic claude login only (pre-approved)
+CHECK 612 P a catalog entry whose discovery uses only the Claude login or OPENCODE_API_KEY / DEEPSEEK_API_KEY: PASS
+COUNTS agents 1 sessions 2 members 1

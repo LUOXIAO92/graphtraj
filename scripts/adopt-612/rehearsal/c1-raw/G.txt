@@ -1,0 +1,10 @@
+TMPDIR=/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/ (outside the Harness)
+product guard: HEAD aa8a4948b73b691b19a724a333c042c342430b7b | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+pytest temp root: /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/adopt-612-G-20261125T005358 (TMPDIR=/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/, outside the Harness)
+launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+candidate: aa8a4948b73b691b19a724a333c042c342430b7b | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0, graftling-0.10.0-py3-none-any.whl)
+python: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/612/gvenv-612/bin/python
+test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.0
+record: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T005358
+00:54:01 started (6 shards; this step waits for them)
+01:11:27 ended (all shards ended: exit=1)

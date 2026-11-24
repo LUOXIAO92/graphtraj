@@ -1,0 +1,17 @@
+G record: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T005358
+product guard: HEAD aa8a4948b73b691b19a724a333c042c342430b7b | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+  run.txt: pytest temp root: /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/adopt-612-G-20261125T005358 (TMPDIR=/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/, outside the Harness)
+  run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+  run.txt: candidate: aa8a4948b73b691b19a724a333c042c342430b7b | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0, graftling-0.10.0-py3-none-any.whl)
+  run.txt: python: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/612/gvenv-612/bin/python
+  run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.0
+CHECK 612 GR the record's candidate aa8a4948 has the product of TARGET 78f929ee: PASS
+CHECK 612 GR the record's graftling wheel is v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
+CHECK 612 GR pytest temp outside the Harness and clean launch environment recorded: PASS
+CHECK 612 GR test interpreter graftling = 0.10.0: PASS
+totals: 2 failed, 3720 passed, 48 skipped | exit: 1
+516 current definition (task.yml current_definition): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+  known (611, fails on base too): tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]
+  known (516): tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+  shard timeouts ('timed out after' lines): 0
+CHECK 612 GR G record (v0.10.0 wheel) has no new failure: PASS

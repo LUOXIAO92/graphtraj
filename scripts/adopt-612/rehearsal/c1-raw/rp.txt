@@ -1,0 +1,10 @@
+origin: https://github.com/LUOXIAO92/graftling.git
+remote before: ddc506b0a7f87372baf8edc2347c26eebc2a251c	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main
+will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (9829f61ce4e1d64d88da973f020905f230d10bc0) (fast-forward only, --atomic, no force)
+To https://github.com/LUOXIAO92/graftling.git
+   ddc506b..6f4aeb8  dev -> dev
+   e8c2e80..6f4aeb8  main -> main
+ * [new tag]         v0.10.0 -> v0.10.0
+remote now: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/dev | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/tags/v0.10.0^{}
+CHECK 612 rp remote main == v0.10.0^{} == 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 612 rp remote dev == local dev (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS

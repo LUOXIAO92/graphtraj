@@ -1,0 +1,17 @@
+before: dev ddc506b0a7f87372baf8edc2347c26eebc2a251c (in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/graftling-dev) | main e8c2e80241dff1151f2122e8957fca5598ec987b (in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling) | v0.10.0 absent
+
+### bundle (sha256 fec2ae72c19b6c1b...): verify, fetch agent/612-graftling-0.10.0, check it is 6f4aeb8fe9f47b71d81b9771486167b123308066 on ddc506b0a7f87372baf8edc2347c26eebc2a251c
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/graftling-0.10.0.bundle is okay
+agent/612-graftling-0.10.0 = 6f4aeb8fe9f47b71d81b9771486167b123308066 (parent ddc506b0a7f87372baf8edc2347c26eebc2a251c) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+
+### dev: fast-forward ddc506b0a7f87372baf8edc2347c26eebc2a251c -> 6f4aeb8fe9f47b71d81b9771486167b123308066 in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/graftling-dev
+
+### main: fast-forward e8c2e80241dff1151f2122e8957fca5598ec987b -> 6f4aeb8fe9f47b71d81b9771486167b123308066 in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
+
+### annotated tag v0.10.0 at 6f4aeb8fe9f47b71d81b9771486167b123308066, tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+v0.10.0 -> 6f4aeb8fe9f47b71d81b9771486167b123308066 | dev 6f4aeb8fe9f47b71d81b9771486167b123308066 | main 6f4aeb8fe9f47b71d81b9771486167b123308066 | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 612 rel v0.10.0 peels to 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 612 rel graftling main == dev == v0.10.0^{} == 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 612 rel v0.10.0 is an annotated tag with the noreply tagger: PASS
+CHECK 612 rel v0.10.0 message names 613, 609, 608 and incompatible: PASS
+CHECK 612 rel version at v0.10.0 is 0.10.0: PASS (__version__ = "0.10.0")

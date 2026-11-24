@@ -1,0 +1,50 @@
+product guard: HEAD aa8a4948b73b691b19a724a333c042c342430b7b | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+CHECK 612 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+
+### graftling: git archive v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066) -> /Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/612/gsrc
+  src/graftling/__init__.py: __version__ = "0.10.0"
+  src/graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.0",
+  src/graftling/dsh/package.json:   "version": "0.10.0",
+  src/graftling/pi/package.json:   "version": "0.10.0",
+CHECK 612 B archive version strings (__init__.py and the 3 json) all 0.10.0: PASS
+CHANGELOG first heading: ## 0.10.0 (incompatible)
+CHECK 612 B CHANGELOG heading '## 0.10.0 (incompatible)' and no '## Unreleased': PASS
+graftling wheel: graftling-0.10.0-py3-none-any.whl
+  METADATA Version: 0.10.0
+  graftling/__init__.py: __version__ = "0.10.0"
+  graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.0",
+  graftling/dsh/package.json:   "version": "0.10.0",
+  graftling/pi/package.json:   "version": "0.10.0",
+CHECK 612 B graftling wheel reports 0.10.0 (METADATA, __init__.py, the 3 json): PASS
+  [console_scripts]: subagents subagents-mcp 
+CHECK 612 B graftling console scripts are exactly subagents, subagents-mcp: PASS
+graftling graftling-0.10.0-py3-none-any.whl vs /Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/612/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 612 B graftling wheel equals git archive v0.10.0: PASS
+CHECK 612 B the graftling wheel's files equal git archive v0.10.0: PASS
+  markers: 613 GATEWAY_KEY_REQUIRED x2 | 609 invalid-provider x6, _grouped x1 | 608 pi_ai_route x1
+CHECK 612 B 613's, 609's and 608's markers are in the graftling wheel: PASS
+graftling wheel build/ or __pycache__/ entries: 0
+CHECK 612 B no build/ or __pycache__ in the graftling wheel: PASS
+
+### graphtraj: git archive 78f929eed956714ba2d6e83fb2ace953f8a56bcb -> /Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/612/tsrc
+graphtraj wheel: graphtraj-0.1.0-py3-none-any.whl
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /Users/luoxiao/workspace/you-are-a-product-architect-delivery/tmp/612/tsrc/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 612 B graphtraj wheel equals git archive 78f929ee: PASS
+CHECK 612 B the graphtraj wheel's graphtraj/ files equal git archive 78f929ee: PASS
+data files in the pyproject: 7 | in the wheel: 7 | differing or missing: 0
+data files changed since the 604 wheel (information): ['share/graphtraj/manuals/setup-project/guide.md']
+Requires-Dist: ['PyYAML<7,>=6', 'click<9,>=8.1', 'graftling<0.11,>=0.10.0', 'websockets<17,>=15'] | 604 wheel: ['PyYAML<7,>=6', 'click<9,>=8.1', 'graftling<0.10,>=0.9.0', 'websockets<17,>=15']
+CHECK 612 B graphtraj data files equal the archive manuals (7 files): PASS
+CHECK 612 B graphtraj entry_points.txt identical to the 604 wheel: PASS
+CHECK 612 B graphtraj Requires-Dist equals the 604 wheel apart from graftling: PASS
+CHECK 612 B graphtraj requires graftling graftling<0.11,>=0.10.0: includes 0.10.0, excludes 0.9.1 and 0.11.0: PASS
+  611 markers: model_discovery.py groups x3 | agents.py 'runtime_connections discover' x1
+CHECK 612 B 611's markers are in the graphtraj wheel: PASS
+graphtraj wheel build/ or __pycache__/ entries: 0
+CHECK 612 B no build/ or __pycache__ in the graphtraj wheel: PASS
+
+### the wheels G, V and I install: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0 and /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee
+graftling-0.10.0-py3-none-any.whl: OK
+graphtraj-0.1.0-py3-none-any.whl: OK
+CHECK 612 B both wheel directories hold their wheel with SHA256SUMS and COMMIT: PASS
+wheel sha256: 6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51  graftling-0.10.0-py3-none-any.whl | 7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525  graphtraj-0.1.0-py3-none-any.whl

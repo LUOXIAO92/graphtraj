@@ -1,0 +1,44 @@
+
+### before: USER directories and conda (read only)
+snap local /Users/luoxiao/.local: 2136 entries
+snap uvtools /Users/luoxiao/.local/share/uv/tools: 2 entries
+snap pi /Users/luoxiao/.pi: 31 entries
+snap dsh /Users/luoxiao/.dsh: 6625 entries
+snap codex /Users/luoxiao/.codex: 9877 entries (codex: logs_*.sqlite* and models_cache.json left out)
+snap conda /Users/luoxiao/miniconda3: 1670 entries
+uv: /Users/luoxiao/.local/bin/uv -> /Users/luoxiao/.local/bin/uv | uv 0.9.18 (0cee76417 2025-12-16) | environment: UV_TOOL_DIR=/private/tmp/uvtool-612/tools UV_TOOL_BIN_DIR=/private/tmp/uvtool-612/bin UV_CACHE_DIR=/private/tmp/uvtool-612/cache UV_PYTHON_INSTALL_DIR=/private/tmp/uvtool-612/python
+command: uv tool install --managed-python git+https://github.com/LUOXIAO92/graftling.git   (uv = /Users/luoxiao/.local/bin/uv; no tag: the default branch main)
+ + graftling==0.10.0 (from git+https://github.com/LUOXIAO92/graftling.git@6f4aeb8fe9f47b71d81b9771486167b123308066)
+ + pyyaml==6.0.4
+ + websockets==16.1.1
+Installed 2 executables: subagents, subagents-mcp
+warning: `/private/tmp/uvtool-612/bin` is not on your PATH. To use installed tools, add the directory to your PATH.
+uv tool install rc=0 (full output: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/realhost/main-raw/C5-uv.txt)
+CHECK 612 C5 uv tool install rc 0: PASS
+uv tool dir: /private/tmp/uvtool-612/tools
+CHECK 612 C5 uv tool dir is /private/tmp/uvtool-612/tools: PASS
+tool python: /private/tmp/uvtool-612/tools/graftling/bin/python -> /private/tmp/uvtool-612/python/cpython-3.14.2-macos-aarch64-none/bin/python3.14 | sys.prefix: /private/tmp/uvtool-612/tools/graftling | base: /private/tmp/uvtool-612/python/cpython-3.14.2-macos-aarch64-none/bin/python3.14 -> /private/tmp/uvtool-612/python/cpython-3.14.2-macos-aarch64-none/bin/python3.14 | graftling.__version__ 0.10.0 | metadata 0.10.0 | direct_url commit_id 6f4aeb8fe9f47b71d81b9771486167b123308066 | requested_revision -
+CHECK 612 C5 graftling.__version__ and importlib.metadata version are 0.10.0: PASS
+CHECK 612 C5 sys.prefix is /private/tmp/uvtool-612/tools/graftling: PASS
+REPORT 612 C5 base interpreter: /private/tmp/uvtool-612/python/cpython-3.14.2-macos-aarch64-none/bin/python3.14 (uv-managed) | uv-managed Pythons: cpython-3.14.2-macos-aarch64-none 
+CHECK 612 C5 tool environment base interpreter is uv-managed (under /private/tmp/uvtool-612/python): PASS (uv-managed)
+CHECK 612 C5 installed commit (direct_url commit_id) is the release commit 6f4aeb8fe9f47b71d81b9771486167b123308066 (GitHub main): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
+uv tool dir --bin: /private/tmp/uvtool-612/bin
+subagents --help (rc 0): usage: subagents [-h] request
+CHECK 612 C5 /private/tmp/uvtool-612/bin/subagents --help rc 0: PASS
+CHECK 612 C5 /private/tmp/uvtool-612/bin/subagents-mcp exists: PASS (#!/private/tmp/uvtool-612/tools/graftling/bin/python)
+
+### after: USER directories and conda
+codex: added 0 [] | removed 0 [] | changed 0 []
+REPORT 593 codex unchanged: yes
+conda: added 0 [] | removed 0 [] | changed 0 []
+REPORT 593 conda unchanged: yes
+dsh: added 0 [] | removed 0 [] | changed 0 []
+REPORT 593 dsh unchanged: yes
+local: added 0 [] | removed 0 [] | changed 0 []
+REPORT 593 local unchanged: yes
+pi: added 0 [] | removed 0 [] | changed 0 []
+REPORT 593 pi unchanged: yes
+uvtools: added 0 [] | removed 0 [] | changed 0 []
+REPORT 593 uvtools unchanged: yes
+CHECK 612 C5 USER directories (~/.local, uv tools, ~/.pi, ~/.dsh, ~/.codex) and conda unchanged: PASS

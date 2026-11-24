@@ -1,0 +1,74 @@
+members_idle [I]: Task 612's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r612c1/project/.venv-runtime)
+members_idle [I]: no member execution is active: PASS
+I start 2026-11-25 01:31:19
+
+### backup: venv (manifest + cp -Rp), hook copy, entry files (mode 600), the tools R needs; COMPLETE marker
+manifest /private/tmp/claude-501/r612c1/scr/backup/venv.manifest: 1004 entries
+
+SAME entries=1004 differences=0 (/private/tmp/claude-501/r612c1/scr/backup/venv)
+manifest /private/tmp/claude-501/r612c1/scr/backup/plugin.manifest: 5 entries
+backup COMPLETE: /private/tmp/claude-501/r612c1/scr/backup
+CHECK 612 I entry files unchanged since V: PASS
+members_idle [I-before-pip]: Task 612's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r612c1/project/.venv-runtime)
+members_idle [I-before-pip]: no member execution is active: PASS
+graftling-0.10.0-py3-none-any.whl: OK
+graphtraj-0.1.0-py3-none-any.whl: OK
+
+### pip install --force-reinstall --no-deps --no-index graftling-0.10.0-py3-none-any.whl graphtraj-0.1.0-py3-none-any.whl
+Processing /private/tmp/claude-501/r612c1/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl
+Processing /private/tmp/claude-501/r612c1/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl
+Installing collected packages: graphtraj, graftling
+  Attempting uninstall: graphtraj
+    Found existing installation: graphtraj 0.1.0
+    Uninstalling graphtraj-0.1.0:
+      Successfully uninstalled graphtraj-0.1.0
+  Attempting uninstall: graftling
+    Found existing installation: graftling 0.9.1
+    Uninstalling graftling-0.9.1:
+      Successfully uninstalled graftling-0.9.1
+
+Successfully installed graftling-0.10.0 graphtraj-0.1.0
+CHECK 612 I pip install of both wheels: PASS
+graftling direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r612c1/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+graphtraj direct_url: {"archive_info": {"hash": "sha256=7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525", "hashes": {"sha256": "7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525"}}, "url": "file:///private/tmp/claude-501/r612c1/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+CHECK 612 I graftling direct_url is wheels-0.10.0: PASS
+CHECK 612 I graphtraj direct_url is wheels-78f929ee: PASS
+CHECK 612 I graftling 0.9.1 dist-info gone: PASS
+CHECK 612 I installed graftling equals the v0.10.0 wheel: PASS
+CHECK 612 I installed graftling files equal the wheel: PASS
+CHECK 612 I installed graphtraj equals the 78f929ee wheel: PASS
+CHECK 612 I installed graphtraj files equal the wheel: PASS
+diff -r archive manuals vs /private/tmp/claude-501/r612c1/project/.venv-runtime/share/graphtraj/manuals: Only in /private/tmp/claude-501/r612c1/project/.venv-runtime/share/graphtraj/manuals: .claude
+CHECK 612 I share/graphtraj/manuals equals git archive 78f929ee's manuals (7 files): FAIL
+CHECK 612 I production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 612 I production bin subagents, subagents-mcp, graphtraj-mcp (this venv's python): PASS
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/r612c1/project/.venv-runtime vs /private/tmp/claude-501/r612c1/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.10.0', '/private/tmp/claude-501/r612c1/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.10.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.10.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/r612c1/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/r612c1/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.10.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+503 layout: PASS (0 failed)
+CHECK 612 I one graftling 0.10.0 in production (onegraft.py): PASS
+
+### real entries of production (run in the isolated /private/tmp/claude-501/r612c1/vproject) and the files that must not change
+I-production server: /private/tmp/claude-501/r612c1/project/.venv-runtime/bin/graphtraj-mcp | serverInfo: {'name': 'graphtraj', 'version': '0.1.0'} | tools: ['subagents', 'tasks']
+I-production tools/call agents: {"jsonrpc": "2.0", "id": 3, "error": {"code": -32602, "message": "Unknown tool: agents"}}
+CHECK 593 I-production MCP tools/list is exactly subagents, tasks: PASS
+CHECK 593 I-production MCP tool agents is unknown (error answer, no alias): PASS
+CHECK 612 I-production graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (mcp593.py above): PASS
+Codex hooks entry configuration: ['/private/tmp/claude-501/r612c1/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook'] ['SessionEnd', 'SessionStart', 'Stop']
+CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612c1/project/.venv-runtime names its python for SessionStart/Stop/SessionEnd: PASS
+CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612c1/project/.venv-runtime runs (neutral event answers {}): PASS ({})
+CHECK 612 I hook copy byte-identical to the backup (no configuration --write: V proved no change): PASS
+CHECK 612 I .mcp.json byte-identical to the backup: PASS
+CHECK 612 I .claude/settings.local.json byte-identical to the backup: PASS
+CHECK 612 I .graphtraj/claude-host/config.json byte-identical to the backup: PASS
+CHECK 612 I no process started on /private/tmp/claude-501/r612c1/project/.venv-runtime during the install: PASS

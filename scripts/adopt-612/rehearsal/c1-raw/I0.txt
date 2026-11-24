@@ -1,0 +1,16 @@
+the failed run being set aside: run2 | backup /private/tmp/claude-501/r612c1/scr/backup (I start 2026-11-25 01:31:24)
+CHECK 612 I0 /private/tmp/claude-501/r612c1/scr/backup has COMPLETE and INSTALL-STARTED (an I whose install began): PASS
+CHECK 612 I0 R's record /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/c1-raw/R.txt exists and every CHECK in it passed: PASS (5 CHECK lines, 0 FAIL)
+
+### production equals that backup, in R's terms
+
+SAME entries=1004 differences=0 (/private/tmp/claude-501/r612c1/project/.venv-runtime)
+CHECK 612 I0 production venv equals the backup (adopt_tree.py compare, as R): PASS
+CHECK 612 I0 hook copy equals the backup: PASS
+CHECK 612 I0 .mcp.json, settings.local.json and config.json equal the backup: PASS
+CHECK 612 I0 graphtraj from wheels-1fdbbca5 and graftling 0.9.1 from 600's wheel: PASS
+CHECK 612 I0 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+MOVED /private/tmp/claude-501/r612c1/scr/backup -> /private/tmp/claude-501/r612c1/scr/backup-run2-20261125T013128 (after-install snapshots inside: after-install-20261125T013127 )
+MOVED to /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/c1-raw/run2/: R.txt
+CHECK 612 I0 backup and run2 records set aside; /private/tmp/claude-501/r612c1/scr/backup and the current I/R records are absent: PASS
+/private/tmp/claude-501/r612c1/project/tmp/604/backup (untouched): not complete or absent

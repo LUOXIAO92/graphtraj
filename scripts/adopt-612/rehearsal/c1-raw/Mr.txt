@@ -1,0 +1,10 @@
+Main transcripts read: /private/tmp/claude-501/r612/projects/-fake/11111111-2222-3333-4444-555555555612.jsonl /private/tmp/claude-501/r612/projects/-fake/11111111-2222-3333-4444-555555555612.jsonl
+[Main 11111111-2222-3333-4444-555555555612] scanned 1 file(s); split: after 2026-11-24T15:49:04Z (1795535344)
+[Main 11111111-2222-3333-4444-555555555612] calls at or before the split (not judged): none
+[Main 11111111-2222-3333-4444-555555555612] undated calls (no record time in any file): none
+[Main 11111111-2222-3333-4444-555555555612] calls of mcp__graphtraj__subagents after the split: 1; ok 1; others: []
+[Main 11111111-2222-3333-4444-555555555612] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 593 [Main 11111111-2222-3333-4444-555555555612] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 593 [Main 11111111-2222-3333-4444-555555555612] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+INFO 593 [Main 11111111-2222-3333-4444-555555555612] old-name calls after the split: none
+CHECK 612 Mr Main called mcp__graphtraj__subagents and mcp__graphtraj__tasks after I without error (rec593.py above): PASS

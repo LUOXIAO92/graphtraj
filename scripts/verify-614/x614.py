@@ -11,6 +11,9 @@ usage (the step venv's python, -I):
                                             the same three subagents calls the real host makes; judged as `judge`
   x614.py judge <stream.jsonl> <stderr.txt> <fake value file>
                                             the real host's stream: its three mcp__graphtraj__subagents calls
+  x614.py selftest <project> <fake value file> <out.jsonl>
+                                            rehearsal of `judge` on a SYNTHETIC stream made through the native host's
+                                            backend binding (not a real host, not evidence)
   x614.py prompt                            the one-line prompt of the real host
   x614.py selfenv                           credential-class names this python sees (names only)
 Prints only facts; never prints the fake value.
@@ -143,6 +146,7 @@ def mcp(project: str, fake_file: str, command: list[str]) -> int:
                 if message['id'] == last:
                     done.set()
 
+    last += 1  # and execute status {}: the same caller check as models
     threading.Thread(target=reader, daemon=True).start()
     messages = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
                  'params': {'protocolVersion': '2025-06-18', 'capabilities': {},
@@ -150,7 +154,8 @@ def mcp(project: str, fake_file: str, command: list[str]) -> int:
                 {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list', 'params': {}}]
     messages += [{'jsonrpc': '2.0', 'id': 3 + n, 'method': 'tools/call',
-                  'params': {'name': 'subagents', 'arguments': call}} for n, call in enumerate(CALLS)]
+                  'params': {'name': 'subagents', 'arguments': call}}
+                 for n, call in enumerate(CALLS + ({'action': 'execute', 'feature': 'status', 'arguments': {}},))]
     for message in messages:
         process.stdin.write(json.dumps(message) + '\n')
         process.stdin.flush()
@@ -169,7 +174,52 @@ def mcp(project: str, fake_file: str, command: list[str]) -> int:
         text = ' '.join(item.get('text', '') for item in answer.get('content', []) if isinstance(item, dict))
         results.append((bool(answer.get('isError')) or not answer, answer.get('structuredContent') or payload(text)))
     everything = json.dumps(replies) + stderr
-    return check(results, Path(fake_file).read_text().strip(), everything)
+    status_answer = results.pop()
+    (_, discover), _, (m_err, models) = results
+
+    def code(document: object) -> object:
+        return (document.get('error') or {}).get('code') if isinstance(document, dict) else document
+
+    features = [item.get('feature') for item in discover.get('features', [])] if isinstance(discover, dict) else []
+    print(f'discover features: {features}')
+    print(f'execute models -> {"error " + str(code(models)) if m_err else "result"} | execute status -> '
+          f'{"error " + str(code(status_answer[1])) if status_answer[0] else "result"}')
+    if not m_err:
+        return check(results, Path(fake_file).read_text().strip(), everything)
+    # Without a verified caller this entry refuses every subagents action alike; models must not be singled out.
+    ok = ('models' in features and code(models) != 'not-implemented' and status_answer[0]
+          and code(models) == code(status_answer[1]) and Path(fake_file).read_text().strip() not in everything)
+    print(f'CHECK 614 plain MCP lists models and refuses it only as it refuses status (caller check, code '
+          f'{code(models)}), never not-implemented: {"PASS" if ok else "FAIL"}')
+    print(f'RESULT 614 judge: {"PASS (plain path: unverified caller)" if ok else "FAIL"}')
+    return 0 if ok else 1
+
+
+def selftest(project: str, fake_file: str, out: str) -> int:
+    """Rehearsal of `judge`: the three calls through graftling's handle_request bound to GraphTraj's backend exactly
+    as the native host binds a Main (host.main_calls: Caller('claude-native', None, <session>, 'claude')), written as
+    a SYNTHETIC Claude stream (init + tool_use + tool_result), then judged. Not a real host; not evidence."""
+    from graftling import Caller, bind
+    from graftling.discovery import handle_request
+    from graphtraj.interfaces.agents import GraphTrajAgents
+
+    root = Path(project).resolve()
+    os.chdir(root)
+    call = bind(GraphTrajAgents(root, root), Caller('claude-native', None, 'selftest-614', 'claude'))
+    lines = [{'type': 'system', 'subtype': 'init', 'model': 'SYNTHETIC', 'apiKeySource': 'none',
+              'plugins': [{'name': 'graphtraj-claude-host'}], 'mcp_servers': [{'name': 'graphtraj', 'status': 'connected'}],
+              'tools': [TOOL, 'mcp__graphtraj__tasks']}]
+    for number, request in enumerate(CALLS, 1):
+        answer = handle_request(request, call)
+        lines.append({'type': 'assistant', 'message': {'content': [
+            {'type': 'tool_use', 'id': f'use-{number}', 'name': TOOL, 'input': request}]}})
+        lines.append({'type': 'user', 'message': {'content': [
+            {'type': 'tool_result', 'tool_use_id': f'use-{number}', 'is_error': answer.failed,
+             'content': [{'type': 'text', 'text': json.dumps(answer.document)}]}]}})
+    lines.append({'type': 'result', 'result': 'DONE-614 (synthetic)', 'is_error': False, 'modelUsage': {}})
+    Path(out).write_text(''.join(json.dumps(line) + '\n' for line in lines))
+    print(f'SYNTHETIC stream (rehearsal of the judge, not a real host): {out}')
+    return judge(out, '/dev/null', fake_file)
 
 
 def judge(stream: str, stderr: str, fake_file: str) -> int:
@@ -241,6 +291,8 @@ if __name__ == '__main__':
         sys.exit(mcp(rest[0], rest[1], rest[2:]))
     if operation == 'judge':
         sys.exit(judge(*rest))
+    if operation == 'selftest':
+        sys.exit(selftest(*rest))
     if operation == 'prompt':
         print(PROMPT)
         sys.exit(0)

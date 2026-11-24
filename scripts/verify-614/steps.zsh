@@ -30,8 +30,10 @@
 #           execute models {runtime: claude}. The judge reads the stream: the serving path (init plugins), discover
 #           lists models, execute models is not an error, groups anthropic / gw614 / provider-null, key NAMES only,
 #           the fake key value nowhere. LOGIN: the user's Claude login. Dialog: none. Network: Claude. ~1-2 min.
-#   plain   Main (optional, also rehearsed): the same three calls through the plain MCP entry graphtraj-mcp (no Claude,
-#           no native association). Dialog: none. No login. <30 s.
+#   plain   Main (optional, also rehearsed): the plain MCP entry graphtraj-mcp (no Claude, no native association).
+#           It refuses every subagents action of an unverified caller (authority-unavailable); PASS = discover lists
+#           models and models is refused only as status is, never not-implemented. Dialog: none. No login. <30 s.
+#   selftest  rehearsal aid: the judge on a SYNTHETIC stream made through the native host's backend binding.
 #   post    Main. Your locations vs pre (names, sizes, mtimes). <5 s.
 #   G       Main. Full suite of HEAD + the v0.10.0 wheel (6 shards, scripts/run_test_shards.py); waits for other test
 #           runs first, then for its shards; its LAST lines are the verdict, counts and next command. pytest temp
@@ -312,8 +314,17 @@ real)
   print -r -- "next (paste): zsh $THIS plain"
   return $jrc
   ;;
+selftest)
+  say "[selftest] Rehearsal aid (Main may skip it): the judge on a SYNTHETIC stream made in-process through graftling's handle_request bound to GraphTraj's backend as the native host binds a Main. Not a real host, not evidence. Dialog: none. No login."
+  venv_ready && need $FAKE setup || return 1
+  inproj FAKE614_KEY=$(<$FAKE) $VENV/bin/python -I $X614 selftest $P $FAKE $ROOT/selftest-stream.jsonl | tee $ROOT/selftest-judge.txt; local jrc=${pipestatus[1]}
+  cp $ROOT/selftest-stream.jsonl $ROOT/selftest-judge.txt $OUT/ 2>/dev/null
+  (( jrc == 0 )) && print -r -- "RESULT 614 selftest: PASS (synthetic; not evidence)" || print -r -- "RESULT 614 selftest: FAIL (above)"
+  print -r -- "next (paste): zsh $THIS real"
+  return $jrc
+  ;;
 plain)
-  say "[plain] Main (optional supplement). The same three calls through the plain MCP entry $VENV/bin/graphtraj-mcp in $P (no Claude, no native association). Dialog: none. No login."
+  say "[plain] Main (optional supplement). The plain MCP entry $VENV/bin/graphtraj-mcp in $P (no Claude, no native association): discover, describe models, execute models, execute status. Without a verified caller this entry refuses every subagents action alike; PASS = models is listed and refused only as status is (never not-implemented). Dialog: none. No login."
   venv_ready && need $FAKE setup || return 1
   inproj FAKE614_KEY=$(<$FAKE) $VENV/bin/python -I $X614 mcp $P $FAKE $VENV/bin/graphtraj-mcp | tee $ROOT/plain-judge.txt; local jrc=${pipestatus[1]}
   cp $ROOT/plain-judge.txt $OUT/ 2>/dev/null
@@ -414,7 +425,7 @@ suite-base)
   print -r -- "next: report the classification; a candidate-only id is a regression of this Task"
   return $fails
   ;;
-*) print -r -- "usage: zsh $THIS pre|install|setup|trust|real|plain|post|G|GR|SR|suite-base --from <file>|<ids>..."; return 2 ;;
+*) print -r -- "usage: zsh $THIS pre|install|setup|trust|selftest|real|plain|post|G|GR|SR|suite-base --from <file>|<ids>..."; return 2 ;;
 esac
 }
 

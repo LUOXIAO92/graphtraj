@@ -1,0 +1,22 @@
+## setup: graftling scratch clone + bare origin (GitHub stand-in)
+scratch graftling: main e8c2e80241dff1151f2122e8957fca5598ec987b | dev ddc506b0a7f87372baf8edc2347c26eebc2a251c | origin main e8c2e80241dff1151f2122e8957fca5598ec987b dev e8c2e80241dff1151f2122e8957fca5598ec987b HEAD -> refs/heads/main
+## setup: STUB claude and ps (fixtures)
+## setup: FAKE PRODUCTION /private/tmp/claude-501/r612/project (fixture built by the real product from 604's graphtraj wheel and 600's graftling 0.9.1 wheel)
+fake production: graphtraj 0.1.0 graftling 0.9.1 | .mcp.json servers: ['graphtraj'] | hook copy: hooks.json host_context.mjs 
+## setup: FIXTURE user catalogs (P)
+catalog (choice expected: claude-main anthropic):
+  version: 1
+  runtimes:
+    claude-main:
+      runtime: claude
+      providers:
+        anthropic:
+          models:
+            opus: {id: claude-opus-5-5, source: manual}
+    pi-opencode:
+      runtime: pi
+      providers:
+        opencode:
+          api_key_env: OPENCODE_API_KEY
+          models:
+            glm: {id: glm-5, source: manual}

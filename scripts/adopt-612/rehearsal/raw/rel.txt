@@ -1,0 +1,8 @@
+before: dev 6f4aeb8fe9f47b71d81b9771486167b123308066 (in /private/tmp/claude-501/r612/gdev) | main 6f4aeb8fe9f47b71d81b9771486167b123308066 (in /private/tmp/claude-501/r612/g) | v0.10.0 6f4aeb8fe9f47b71d81b9771486167b123308066
+already released: v0.10.0 = main = dev = 6f4aeb8fe9f47b71d81b9771486167b123308066 (nothing to do)
+v0.10.0 -> 6f4aeb8fe9f47b71d81b9771486167b123308066 | dev 6f4aeb8fe9f47b71d81b9771486167b123308066 | main 6f4aeb8fe9f47b71d81b9771486167b123308066 | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 612 rel v0.10.0 peels to 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 612 rel graftling main == dev == v0.10.0^{} == 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 612 rel v0.10.0 is an annotated tag with the noreply tagger: PASS
+CHECK 612 rel v0.10.0 message names 613, 609, 608 and incompatible: PASS
+CHECK 612 rel version at v0.10.0 is 0.10.0: PASS (__version__ = "0.10.0")

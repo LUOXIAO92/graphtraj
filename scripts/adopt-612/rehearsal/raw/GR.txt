@@ -1,0 +1,19 @@
+G record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835
+product guard: HEAD b8fe3610f0d004dcacd1e9178a8075c5427e0733 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+  run.txt: pytest temp root: /private/tmp/claude-501/adopt-612-G-20261125T003835 (TMPDIR=/tmp/claude-501, outside the Harness)
+  run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+  run.txt: candidate: b8fe3610f0d004dcacd1e9178a8075c5427e0733 | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0, graftling-0.10.0-py3-none-any.whl)
+  run.txt: python: /private/tmp/claude-501/r612/scr/gvenv-612/bin/python
+  run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.0
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_claude_uses_only_the_initialize_catalog or test_native_claude_lifecycle_without_a_task
+CHECK 612 GR the record's candidate b8fe3610 has the product of TARGET 78f929ee: PASS
+CHECK 612 GR the record's graftling wheel is v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
+CHECK 612 GR pytest temp outside the Harness and clean launch environment recorded: PASS
+CHECK 612 GR test interpreter graftling = 0.10.0: PASS
+totals: 9 passed, 3761 deselected | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+  (no FAILED/ERROR lines)
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/shards/shard-1.log: exit 5
+  shard timeouts ('timed out after' lines): 0
+CHECK 612 GR G record (v0.10.0 wheel) has no new failure: PASS

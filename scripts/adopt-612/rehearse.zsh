@@ -143,7 +143,7 @@ RAW=$OUTD/raw; STOPS=$OUTD/raw-stop
   print -r -- '{"header":{"id":"claude:c-1","native":{"agentId":"ag-1"}}}' > $SS/s-child/session.jsonl
   print -r -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"echo n612-tool && sleep 20"}}]}}' >> $SS/s-child/session.jsonl
   print -r -- 'member reply (fixture): last_message "DONE-612"; status: {"configuration": "opus_coding_team.advisor", "model": "claude-opus-5-5"}' > $RAW/N-reply.txt
-  print -l -- '[Graftling notice from 612-x@advisor · completed · execution 0a1b2c3d]' 'done (fixture)' > $RAW/N-main-notice.txt
+  print -r -- '[Graftling notice from 612-x@advisor · completed · execution 0a1b2c3d] done (fixture)' > $RAW/N-main-notice.txt
   print -r -- '{"tasks":[{"agent":"ag-member-1","alias":"612-x@advisor"}]} (fixture)' > $RAW/N.txt
   run $RAW Nr zsh $S Nr
   run $RAW P zsh $S P

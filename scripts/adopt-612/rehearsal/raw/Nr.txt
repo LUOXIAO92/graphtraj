@@ -1,0 +1,31 @@
+record directories: ['/private/tmp/claude-501/r612/project/.graphtraj/swarm/control/agents']
+child n612: agent=ag-1 parent=612-x@advisor executions=1 retired=True record=/private/tmp/claude-501/r612/project/.graphtraj/swarm/control/agents/ag-1.json
+  stored selection: configuration='opus_coding_team.advisor' preset=None model='claude-opus-5-5' reasoning_effort=None
+CHECK 455 stored record: configuration and model not null: PASS (configuration='opus_coding_team.advisor' model='claude-opus-5-5')
+CHECK 455 create/status result quoted by the member: configuration and model not null: PASS (configuration values ['"opus_coding_team.advisor"'] model values ['"claude-opus-5-5"'])
+CHECK 576 child created without tools (stored selection.tools is null): PASS (tools=None)
+CHECK 576 child without tools ran Bash and replied DONE-612 (member quotes the last_message): PASS (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/raw/N-reply.txt)
+CHECK 576 a Bash tool_use running echo n612-tool is in a Session archive: PASS (/private/tmp/claude-501/r612/project/.graphtraj/swarm/sessions/s-child/session.jsonl)
+  execution ex-1: state=ended outcome=completed error=None notification=delivered
+CHECK one child execution (create; 499 sends nothing else): PASS (1)
+CHECK 452 child execution ex-1 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution ex-1 notification delivered: PASS (delivered)
+member 612-x@advisor: record=/private/tmp/claude-501/r612/project/.graphtraj/core/runner/sessions/612-x@advisor/mapping.yml session=claude:m-1 task=612 role=opus_coding_team.advisor execution=me-1
+  member end: execution.yml execution_id=me-1 outcome=completed terminal_confirmed=True
+CHECK 452 member execution ended and recorded (execution.yml terminal, same execution as the mapping): PASS (outcome=completed)
+CHECK 452 member reported its end to Main (raw/N-main-notice.txt names completed): PASS (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/raw/N-main-notice.txt)
+  archive s-member: execution ex-1: events naming it by type {}; user/message inputs naming it with graphtraj: 0
+CHECK 477 no parent input pushed for waited execution ex-1: PASS
+MEMBER 612-x@advisor
+SESSION claude:m-1
+CHILD ag-1
+CHECK 612 Nr 593's record checks ran (their CHECK lines above): PASS
+CHECK 612 Nr Main got exactly one completed notice of the member: FAIL (0)
+member 612-x@advisor (Session claude:m-1) record files: 1
+[member 612-x@advisor] scanned 1 file(s); split: none (every call)
+[member 612-x@advisor] calls of mcp__graphtraj__subagents: 1; ok 1; others: []
+CHECK 593 [member 612-x@advisor] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 593 [member 612-x@advisor] no old-name call (mcp__graphtraj__agents, mcp__agents__*): PASS (0 in the window, 0 undated)
+CHECK 612 Nr member called mcp__graphtraj__subagents without error (rec593.py above): PASS
+CHECK 612 Nr swarm result has agent: PASS (ag-member-1)
+SWARM_AGENT ag-member-1

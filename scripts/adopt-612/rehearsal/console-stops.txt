@@ -1,0 +1,33 @@
+## script hygiene
+assigned names: 235 | special names among them: path HOME PATH TERM LANG | other than the intended (clean()'s env -i pass-throughs; path = the PATH array, as 593/600/604): none
+$NAME: followed by a letter (zsh modifier trap): 0 occurrences
+git diff 6c0756c3 78f929ee --name-only: pyproject.toml | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: (empty = TARGET's product)
+## STOP: rel with dev moved
+
+######## rehearsal: rel, dev moved
+[rel] Main. graftling repository /private/tmp/claude-501/r612/g: fetch agent/612-graftling-0.10.0 from the bundle, fast-forward dev (/private/tmp/claude-501/r612/gdev) and main (/private/tmp/claude-501/r612/g) to 6f4aeb8fe9f47b71d81b9771486167b123308066, annotated tag v0.10.0 (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>). No network, no login. Dialog: none.
+before: dev 1ece2f428f8fc3c917769b4b9d664417fc56541b (in /private/tmp/claude-501/r612/gdev) | main e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r612/g) | v0.10.0 absent
+STOP: graftling dev is 1ece2f428f8fc3c917769b4b9d664417fc56541b, no longer ddc506b0a7f87372baf8edc2347c26eebc2a251c (moved since dispatch: 1ece2f4 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.
+
+rel STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/raw-stop/rel.txt to the Team; do not run B or rp.
+######## exit=1 (rel, dev moved)
+after the STOP: dev 1ece2f428f8fc3c917769b4b9d664417fc56541b main e8c2e80241dff1151f2122e8957fca5598ec987b tag v0.10.0 absent branch agent/612 absent
+
+######## rehearsal: rp before rel
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.10.0 to origin (/private/tmp/claude-501/r612/origin.git), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision 20261124T212818.736102+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+STOP: rel is not complete (dev ddc506b0a7f87372baf8edc2347c26eebc2a251c, main e8c2e80241dff1151f2122e8957fca5598ec987b, v0.10.0 absent; need all 6f4aeb8fe9f47b71d81b9771486167b123308066).
+
+rp STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/raw-stop/rp.txt to the Team.
+######## exit=1 (rp before rel)
+
+######## rehearsal: P with a catalog that has no usable entry (STOP)
+[P] Main. Read only: picks one catalog entry and provider from the user catalog (~/.graphtraj/connections.yml, read by production's own graphtraj; names only), records the Agent/Session counts, and prints ONE prompt for Main's MCP call: mcp__graphtraj__tasks execute runtime_connections {action: discover} (the GraphTraj route for models by provider; graftling's subagents 'models' is refused by GraphTraj). The step itself starts no query. No login here. Dialog: none.
+production graftling: 0.9.1 (I installed 0.10.0)
+catalog: /private/tmp/claude-501/r612/home2/.graphtraj/connections.yml | revision 8b05eb012b1c
+  entry codex-main | runtime codex | provider openai | base_url no | api_key_env none | models 1
+CHOICE none
+CHECK 612 P a catalog entry whose discovery uses only the Claude login or OPENCODE_API_KEY / DEEPSEEK_API_KEY: FAIL
+COUNTS agents 0 sessions 0 members 0
+
+P STOP (see above): no entry this Task may discover with. Nothing was called. Main asks the user which entry and login or key to use, and tells the Team.
+######## exit=1 (P with a catalog that has no usable entry (STOP))

@@ -11,7 +11,7 @@ newline-delimited JSON-RPC: initialize, tools/list, then four tools/call request
 
 CHECKs: tools/list is exactly subagents, tasks; runtime_connections is listed by tasks discover; its describe schema
 has `provider` and the action `discover`, and P's arguments fit the schema (only known properties, the action in
-its enum, every value a string); subagents' `models` answers an error naming runtime_connections (so P uses tasks).
+its enum, every value a string); subagents' `models` answers an error (REPORT: whether it names runtime_connections).
 The server is closed by closing its stdin, and killed only if it ignores that for 20 s (it is this probe's child).
 """
 import json
@@ -111,10 +111,13 @@ fits = (set(p_arguments) <= set(properties) and p_arguments.get('action') in act
         and all(isinstance(value, str) and value for value in p_arguments.values()))
 check(f"P's arguments {json.dumps(p_arguments)} fit the runtime_connections schema", fits)
 
-# 5: GraphTraj refuses graftling's `models` and names its own route.
+# 5: GraphTraj refuses graftling's `models`. In this isolated project the call has no verified caller, so it is
+# refused before the action is read (authority-unavailable); a verified Main reaches agents.py's `unavailable`, whose
+# message names runtime_connections. Either way P cannot use `models`.
 failed, found, text = document(5)
 answer = json.dumps(found)[:300] if found else text[:300]
 print(f'{label} subagents execute models: error {failed} | {answer}')
-check("subagents 'models' is refused and names runtime_connections (P uses tasks)",
-      failed and 'runtime_connections' in (answer + text))
+print(f"REPORT 612 {label} subagents 'models' refusal names runtime_connections: "
+      f"{'yes' if 'runtime_connections' in answer + text else 'no (refused before the action: ' + answer[:120] + ')'}")
+check("subagents 'models' answers an error (P uses tasks runtime_connections)", failed)
 sys.exit(0 if all(checks) else 1)

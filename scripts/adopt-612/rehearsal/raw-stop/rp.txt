@@ -1,0 +1,4 @@
+origin: /private/tmp/claude-501/r612/origin.git
+remote before: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main
+will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0) (fast-forward only, --atomic, no force)
+STOP: the push is outward-facing. It is the user's decision 20261124T212818.736102+0900; run: ADOPT612_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh rp

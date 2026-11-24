@@ -1,0 +1,6 @@
+production graftling: 0.9.1 (I installed 0.10.0)
+catalog: /private/tmp/claude-501/r612/home2/.graphtraj/connections.yml | revision 8b05eb012b1c
+  entry codex-main | runtime codex | provider openai | base_url no | api_key_env none | models 1
+CHOICE none
+CHECK 612 P a catalog entry whose discovery uses only the Claude login or OPENCODE_API_KEY / DEEPSEEK_API_KEY: FAIL
+COUNTS agents 0 sessions 0 members 0

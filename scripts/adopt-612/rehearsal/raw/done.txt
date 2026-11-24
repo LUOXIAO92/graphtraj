@@ -52,7 +52,7 @@ CHECK 612 rp remote main == v0.10.0^{} == 6f4aeb8fe9f47b71d81b9771486167b1233080
 CHECK 612 rp remote dev == local dev (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS
 CHECK 612 gh GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
 CHECK 612 gh GitHub v0.10.0^{} = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
-CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote afdaee2921807b3da1584fcd64a79d195898f1c4, local afdaee2921807b3da1584fcd64a79d195898f1c4)
+CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote a71eb58d442bd65a85573ad57a46ac361b20d2c9, local a71eb58d442bd65a85573ad57a46ac361b20d2c9)
 CHECK 612 C5 uv tool install rc 0: PASS
 CHECK 612 C5 uv tool dir is /private/tmp/claude-501/r612/uvtool-612-rerun/tools: PASS
 CHECK 612 C5 graftling.__version__ and importlib.metadata version are 0.10.0: PASS
@@ -61,7 +61,7 @@ CHECK 612 C5 tool environment base interpreter is uv-managed (under /private/tmp
 CHECK 612 C5 installed commit (direct_url commit_id) is the release commit 6f4aeb8fe9f47b71d81b9771486167b123308066 (GitHub main): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
 CHECK 612 C5 /private/tmp/claude-501/r612/uvtool-612-rerun/bin/subagents --help rc 0: PASS
 CHECK 612 C5 /private/tmp/claude-501/r612/uvtool-612-rerun/bin/subagents-mcp exists: PASS (#!/private/tmp/claude-501/r612/uvtool-612-rerun/tools/graftling/bin/python)
-CHECK 612 GR the record's candidate 8ffd1f4b has the product of TARGET 78f929ee: PASS
+CHECK 612 GR the record's candidate 5e0349c2 has the product of TARGET 78f929ee: PASS
 CHECK 612 GR the record's graftling wheel is v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
 CHECK 612 GR pytest temp outside the Harness and clean launch environment recorded: PASS
 CHECK 612 GR test interpreter graftling = 0.10.0: PASS

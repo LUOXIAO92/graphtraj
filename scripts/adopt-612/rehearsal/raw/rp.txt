@@ -1,6 +1,6 @@
 origin: /private/tmp/claude-501/r612/origin.git
 remote before: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main
-will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (afdaee2921807b3da1584fcd64a79d195898f1c4) (fast-forward only, --atomic, no force)
+will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (a71eb58d442bd65a85573ad57a46ac361b20d2c9) (fast-forward only, --atomic, no force)
 To /private/tmp/claude-501/r612/origin.git
    e8c2e80..6f4aeb8  dev -> dev
    e8c2e80..6f4aeb8  main -> main

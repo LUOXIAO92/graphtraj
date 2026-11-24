@@ -3,7 +3,7 @@ guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
 guard: zombies (information): 0
 guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r612/project/.venv-runtime)
 members_idle [I]: no member execution is active: PASS
-I start 2026-11-25 00:42:28
+I start 2026-11-25 00:49:03
 
 ### backup: venv (manifest + cp -Rp), hook copy, entry files (mode 600), the tools R needs; COMPLETE marker
 manifest /private/tmp/claude-501/r612/scr/backup/venv.manifest: 1002 entries
@@ -35,8 +35,8 @@ Installing collected packages: graphtraj, graftling
 
 Successfully installed graftling-0.10.0 graphtraj-0.1.0
 CHECK 612 I pip install of both wheels: PASS
-graftling direct_url: {"archive_info": {"hash": "sha256=44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42", "hashes": {"sha256": "44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
-graphtraj direct_url: {"archive_info": {"hash": "sha256=17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578", "hashes": {"sha256": "17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295", "hashes": {"sha256": "caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+graphtraj direct_url: {"archive_info": {"hash": "sha256=eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1", "hashes": {"sha256": "eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
 CHECK 612 I graftling direct_url is wheels-0.10.0: PASS
 CHECK 612 I graphtraj direct_url is wheels-78f929ee: PASS
 CHECK 612 I graftling 0.9.1 dist-info gone: PASS

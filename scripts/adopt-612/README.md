@@ -125,11 +125,19 @@ The rehearsal runs against scratch copies under `$TMPDIR/r612`. It only reads re
 **Stand-in for Main's MCP call:** P/Pr's discover call is made by the installed candidate's public CLI, `graphtraj connections --action discover --runtime … --provider …`, with the stub claude. It goes through the same `invoke_tool("runtime_connections")` as Main's tasks call. The console labels it.
 
 **Results:**
-- **First full run:** `console-setup.txt`, `console-stops.txt`, `console-release.txt` and `console-adopt.txt`. Every step passed except C5: the background run could not use the sandbox network for uv's Python download ("tunnel error").
+- **Full run, after G was changed to wait:** `console-setup.txt`, `console-stops.txt`, `console-release.txt` and `console-adopt.txt`.
+  - Every step passed except C5: the rehearsal ran as a background job, which could not use the sandbox network for uv's Python download ("tunnel error").
+  - done counted 146 CHECK PASS and 1 not passed (that C5 line). Its production line passed, before R.
+- **G in `console-release.txt` waits in its own process:**
+  - A ps fixture line showed another suite, so G waited (00:47:19).
+  - It then started the 6 shards (00:47:21) and waited for them to end (00:47:26, `exit=1`: rehearsal `-k` shards with nothing collected).
+  - It then ran GR. Its last lines are `RESULT 612 G/GR: PASS | 9 passed, 3761 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0` and the next command.
+  - The rehearsal prints the time G's process exited, after the `ended` line.
+  - suite-base ends with `RESULT 612 suite-base: PASS`.
 - **C5 rerun:** `console-c5-rerun.txt` reruns C5 in the foreground with a fresh uv directory, followed by done.
   - C5 passed, with version 0.10.0 at commit 6f4aeb8f and a uv-managed CPython 3.14.7.
-  - done counted 154 CHECK PASS and 0 not passed across every step's raw file.
-  - Its production line fails only because the full run's R had already restored production to 1fdbbca5 + 0.9.1. In the full run, done's production line passed before R.
+  - done then counted 154 CHECK PASS and 0 not passed across every step's raw file.
+  - Its production line fails only because the full run's R had already restored production to 1fdbbca5 + 0.9.1.
 - **P's second choice:** `raw-stop/P-choice-key-entry.txt`. With no login-only Claude provider, P picks the OPENCODE_API_KEY entry and never the Claude gateway keyed by another variable.
 
 **Rehearsed STOPs:**

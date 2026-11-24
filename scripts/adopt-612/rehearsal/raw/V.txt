@@ -1,6 +1,6 @@
 graftling-0.10.0-py3-none-any.whl: OK
 graphtraj-0.1.0-py3-none-any.whl: OK
-product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 5e0349c2bc81c808aeda6c42c7e8351ba539be72 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 V product guard: PASS
 changes since production 1fdbbca5 under src/graphtraj/runtimes/claude (information): 
 graftling changes since 0.9.1 in the files the hook copy is written from (information): 

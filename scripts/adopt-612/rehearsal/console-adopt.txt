@@ -1,12 +1,15 @@
-G record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159
+G record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827
+G record ended before G's process exited (no waiting here): 1 exit= line
 G suite.txt tail:
-ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-1.log: exit 5
+ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards/shard-1.log: exit 5
 9 passed, 3761 deselected
-logs: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards
+logs: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards
 exit=1
 wait.txt:
-00:42:02 started
-00:42:06 ended
+00:48:29 waiting for another suite: 88 
+00:48:31 waiting for another suite: 88 
+00:48:33 started (6 shards; this step waits for them)
+00:48:38 ended (all shards ended: exit=1)
 PASSED ids through G's entry:
 PASSED tests/test_agents_model_discovery.py::test_claude_uses_only_the_initialize_catalog
 PASSED tests/test_agents_model_discovery.py::test_graphtraj_discovery_keeps_its_document[claude]
@@ -18,77 +21,80 @@ PASSED tests/test_graphtraj_public_agents_api.py::test_graphtraj_uses_only_publi
 PASSED tests/test_runtime_distribution.py::test_wheels_have_separate_owners
 PASSED tests/test_tool_name_592.py::test_the_mcp_server_lists_subagents_and_tasks_only
 
-######## rehearsal: GR
-[GR] Main, after G has ended. Read only: G's record, totals, and every FAILED/ERROR id and ABNORMAL shard, classed against 516's CURRENT definition and 611's known id (a shard 'timed out after' is NEW). No login. Dialog: none.
-G record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159
-product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
-  run.txt: pytest temp root: /private/tmp/claude-501/adopt-612-G-20261125T004159 (TMPDIR=/tmp/claude-501, outside the Harness)
+######## rehearsal: GR alone (re-judging the ended record; G already ran it at its end)
+[GR] G runs this at its end; Main may rerun it alone to re-judge an ended G record. Read only: G's record, totals, and every FAILED/ERROR id and ABNORMAL shard, classed against 516's CURRENT definition and 611's known id (a shard 'timed out after' is NEW). No login. Dialog: none.
+G record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827
+product guard: HEAD 5e0349c2bc81c808aeda6c42c7e8351ba539be72 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+  run.txt: pytest temp root: /private/tmp/claude-501/adopt-612-G-20261125T004827 (TMPDIR=/tmp/claude-501, outside the Harness)
   run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
-  run.txt: candidate: 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0, graftling-0.10.0-py3-none-any.whl)
+  run.txt: candidate: 5e0349c2bc81c808aeda6c42c7e8351ba539be72 | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0, graftling-0.10.0-py3-none-any.whl)
   run.txt: python: /private/tmp/claude-501/r612/scr/gvenv-612/bin/python
   run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.0
   run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_claude_uses_only_the_initialize_catalog or test_native_claude_lifecycle_without_a_task
-CHECK 612 GR the record's candidate 8ffd1f4b has the product of TARGET 78f929ee: PASS
+CHECK 612 GR the record's candidate 5e0349c2 has the product of TARGET 78f929ee: PASS
 CHECK 612 GR the record's graftling wheel is v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
 CHECK 612 GR pytest temp outside the Harness and clean launch environment recorded: PASS
 CHECK 612 GR test interpreter graftling = 0.10.0: PASS
 totals: 9 passed, 3761 deselected | exit: 1
 516 current definition (task.yml current_definition): /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
   (no FAILED/ERROR lines)
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-0.log: exit 5
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards/shard-1.log: exit 5
   shard timeouts ('timed out after' lines): 0
 CHECK 612 GR G record (v0.10.0 wheel) has no new failure: PASS
 
 ----- summary for Main (GR) -----
-G record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159
-CHECK 612 GR the record's candidate 8ffd1f4b has the product of TARGET 78f929ee: PASS
+G record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827
+CHECK 612 GR the record's candidate 5e0349c2 has the product of TARGET 78f929ee: PASS
 CHECK 612 GR the record's graftling wheel is v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
 CHECK 612 GR pytest temp outside the Harness and clean launch environment recorded: PASS
 CHECK 612 GR test interpreter graftling = 0.10.0: PASS
 totals: 9 passed, 3761 deselected | exit: 1
 CHECK 612 GR G record (v0.10.0 wheel) has no new failure: PASS
 -----
-Success: every 'CHECK 612 GR ...: PASS'.
 
-==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh V
-######## exit=0 (GR)
+RESULT 612 G/GR: PASS | 9 passed, 3761 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh V    (once rp, gh and C5 have passed)
+######## exit=0 (GR alone (re-judging the ended record; G already ran it at its end))
 
 ######## rehearsal: SR
 [SR] Main, read only. The newest G record's FAILED/ERROR ids and ABNORMAL shards, classed against 516 and 611's known id; prints the suite-base command for NEW ids. Dialog: none.
-leftover processes of run 7986e5240c49434b: before=0 after-shards=0 stopped=0 remaining=0
-ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-0.log: exit 5
-ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-1.log: exit 5
+leftover processes of run e80be0367e964c11: before=0 after-shards=0 stopped=0 remaining=0
+ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards/shard-0.log: exit 5
+ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards/shard-1.log: exit 5
 9 passed, 3761 deselected
-logs: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards
+logs: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards
 exit=1
 516 current definition (task.yml current_definition): /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
   (no FAILED/ERROR lines)
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-0.log: exit 5
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/shards/shard-1.log: exit 5
   shard timeouts ('timed out after' lines): 0
 SR verdict: PASS (no NEW failure)
 
-==> next (paste as is): none for suite-base (no NEW id). A NEW ABNORMAL shard: hand /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/suite.txt and its shard log to the Team. Otherwise: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh V
+==> next (paste as is): none for suite-base (no NEW id). A NEW ABNORMAL shard: hand /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004827/suite.txt and its shard log to the Team. Otherwise: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh V
 ######## exit=0 (SR)
 
 ######## rehearsal: suite-base (one real id)
 [suite-base] Main, only for SR's NEW ids. Reruns them on production now (GraphTraj 1fdbbca5 + graftling 0.9.1, the 604/600 wheels: base) and on the candidate (G's venv: TARGET + v0.10.0); clean environment, pytest temp under TMPDIR. Dialog: none.
 TMPDIR=/tmp/claude-501 (outside the Harness)
-base: pytest in /private/tmp/claude-501/r612/scr/graphtraj-base with /private/tmp/claude-501/r612/scr/sbvenv-1fdbbca5 (graftling 0.9.1 (600's wheel) + graphtraj 1fdbbca5 (editable)) | temp /private/tmp/claude-501/adopt-612-sb-base-20261125T004217 | launch environment: HOME USER PATH TERM TMPDIR LANG only
-base: pytest exit=0, 1 passed in 1.64s (/private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/suite-base-20261125T004217/base.txt)
-candidate: pytest in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption with /private/tmp/claude-501/r612/scr/gvenv-612 (graftling v0.10.0 wheel) | temp /private/tmp/claude-501/adopt-612-sb-candidate-20261125T004220 | launch environment: HOME USER PATH TERM TMPDIR LANG only
-candidate: pytest exit=0, 1 passed in 1.71s (/private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/suite-base-20261125T004217/candidate.txt)
+base: pytest in /private/tmp/claude-501/r612/scr/graphtraj-base with /private/tmp/claude-501/r612/scr/sbvenv-1fdbbca5 (graftling 0.9.1 (600's wheel) + graphtraj 1fdbbca5 (editable)) | temp /private/tmp/claude-501/adopt-612-sb-base-20261125T004853 | launch environment: HOME USER PATH TERM TMPDIR LANG only
+base: pytest exit=0, 1 passed in 1.49s (/private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/suite-base-20261125T004853/base.txt)
+candidate: pytest in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption with /private/tmp/claude-501/r612/scr/gvenv-612 (graftling v0.10.0 wheel) | temp /private/tmp/claude-501/adopt-612-sb-candidate-20261125T004856 | launch environment: HOME USER PATH TERM TMPDIR LANG only
+candidate: pytest exit=0, 1 passed in 1.55s (/private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/suite-base-20261125T004853/candidate.txt)
 passes on both now (not reproduced): tests/test_runtime_distribution.py::test_wheels_have_separate_owners   [base passed | candidate passed]
 candidate-only: 0
-next: hand /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/suite-base-20261125T004217/classification.txt to the Team; a candidate-only id is a regression of this release (no adoption)
+
+RESULT 612 suite-base: PASS (no candidate-only failure) | ids: 1 | record: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/suite-base-20261125T004853
+next: hand /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/suite-base-20261125T004853/classification.txt to the Team; a candidate-only id is a regression of this release (no adoption)
 ######## exit=0 (suite-base (one real id))
 
 ######## rehearsal: V
 [V] Main. Before the install, outside production: a scratch venv (/private/tmp/claude-501/r612/scr/vvenv) with BOTH new wheels + production's click, yaml and websockets; the real MCP entries in an isolated project (/private/tmp/claude-501/r612/vproject); the hook copy regenerated by the product into a scratch copy must be byte-identical to production's. No login. Dialog: none. ~1 min.
 graftling-0.10.0-py3-none-any.whl: OK
 graphtraj-0.1.0-py3-none-any.whl: OK
-product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 5e0349c2bc81c808aeda6c42c7e8351ba539be72 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 V product guard: PASS
 changes since production 1fdbbca5 under src/graphtraj/runtimes/claude (information): 
 graftling changes since 0.9.1 in the files the hook copy is written from (information): 
@@ -139,7 +145,7 @@ bb97a5ae7526c239a5feeef1b2d0ec6a2c210b95d8454433e4136e00378f24f2  /private/tmp/c
 510e0a5334c90b36ed4505b5f7bba38d5277c7979104b9d6df1cf3bfc26b103f  /private/tmp/claude-501/r612/project/.graphtraj/claude-host/config.json
 
 ----- summary for Main (V) -----
-product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 5e0349c2bc81c808aeda6c42c7e8351ba539be72 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 V product guard: PASS
 CHECK 612 V scratch venv pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
 CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/r612/scr/vvenv vs /private/tmp/claude-501/r612/scr/vvenv)
@@ -200,14 +206,14 @@ Main tells the USER, then the USER /exits Main and runs I in a Terminal:
 
 ######## rehearsal: I
 [I] USER (Main tells the USER first; the USER /exits Main, then runs this in a normal Terminal). Waits for members, backs up to /private/tmp/claude-501/r612/scr/backup, installs BOTH wheels into /private/tmp/claude-501/r612/project/.venv-runtime (graftling 0.9.1 -> 0.10.0, graphtraj 1fdbbca5 -> 78f929ee) with pip --force-reinstall --no-deps --no-index, checks the real entries. No login. Dialog: none (one Enter to confirm). ~3 min plus waiting.
-product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 5e0349c2bc81c808aeda6c42c7e8351ba539be72 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 Confirm that you typed /exit in the Claude Code Main. Enter to continue, Ctrl-C to stop.
 members_idle [I]: Task 612's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
 guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
 guard: zombies (information): 0
 guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r612/project/.venv-runtime)
 members_idle [I]: no member execution is active: PASS
-I start 2026-11-25 00:42:28
+I start 2026-11-25 00:49:03
 
 ### backup: venv (manifest + cp -Rp), hook copy, entry files (mode 600), the tools R needs; COMPLETE marker
 manifest /private/tmp/claude-501/r612/scr/backup/venv.manifest: 1002 entries
@@ -239,8 +245,8 @@ Installing collected packages: graphtraj, graftling
 
 Successfully installed graftling-0.10.0 graphtraj-0.1.0
 CHECK 612 I pip install of both wheels: PASS
-graftling direct_url: {"archive_info": {"hash": "sha256=44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42", "hashes": {"sha256": "44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
-graphtraj direct_url: {"archive_info": {"hash": "sha256=17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578", "hashes": {"sha256": "17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295", "hashes": {"sha256": "caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+graphtraj direct_url: {"archive_info": {"hash": "sha256=eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1", "hashes": {"sha256": "eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
 CHECK 612 I graftling direct_url is wheels-0.10.0: PASS
 CHECK 612 I graphtraj direct_url is wheels-78f929ee: PASS
 CHECK 612 I graftling 0.9.1 dist-info gone: PASS
@@ -278,12 +284,12 @@ CHECK 612 I .graphtraj/claude-host/config.json byte-identical to the backup: PAS
 CHECK 612 I no process started on /private/tmp/claude-501/r612/project/.venv-runtime during the install: PASS
 
 ----- summary for Main (I) -----
-I start 2026-11-25 00:42:28
+I start 2026-11-25 00:49:03
 backup COMPLETE: /private/tmp/claude-501/r612/scr/backup
 CHECK 612 I entry files unchanged since V: PASS
 CHECK 612 I pip install of both wheels: PASS
-graftling direct_url: {"archive_info": {"hash": "sha256=44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42", "hashes": {"sha256": "44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
-graphtraj direct_url: {"archive_info": {"hash": "sha256=17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578", "hashes": {"sha256": "17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295", "hashes": {"sha256": "caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+graphtraj direct_url: {"archive_info": {"hash": "sha256=eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1", "hashes": {"sha256": "eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
 CHECK 612 I graftling direct_url is wheels-0.10.0: PASS
 CHECK 612 I graphtraj direct_url is wheels-78f929ee: PASS
 CHECK 612 I graftling 0.9.1 dist-info gone: PASS
@@ -345,7 +351,7 @@ Every tool call below passes its arguments INLINE in the "arguments" field; neve
 ######## rehearsal: Mr
 [Mr] Main, after M[b]. Read only: Main's own transcript after I's install end must hold mcp__graphtraj__subagents and mcp__graphtraj__tasks calls answered without error (593's rec593.py). No login. Dialog: none.
 Main transcripts read: /private/tmp/claude-501/r612/projects/-fake/11111111-2222-3333-4444-555555555612.jsonl /private/tmp/claude-501/r612/projects/-fake/11111111-2222-3333-4444-555555555612.jsonl
-[Main 11111111-2222-3333-4444-555555555612] scanned 1 file(s); split: after 2026-11-24T15:42:30Z (1795534950)
+[Main 11111111-2222-3333-4444-555555555612] scanned 1 file(s); split: after 2026-11-24T15:49:04Z (1795535344)
 [Main 11111111-2222-3333-4444-555555555612] calls at or before the split (not judged): none
 [Main 11111111-2222-3333-4444-555555555612] undated calls (no record time in any file): none
 [Main 11111111-2222-3333-4444-555555555612] calls of mcp__graphtraj__subagents after the split: 1; ok 1; others: []
@@ -636,9 +642,9 @@ CHECK 612 rp remote main == v0.10.0^{} == 6f4aeb8fe9f47b71d81b9771486167b1233080
 CHECK 612 rp remote dev == local dev (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS
 CHECK 612 gh GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
 CHECK 612 gh GitHub v0.10.0^{} = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
-CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote afdaee2921807b3da1584fcd64a79d195898f1c4, local afdaee2921807b3da1584fcd64a79d195898f1c4)
+CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote a71eb58d442bd65a85573ad57a46ac361b20d2c9, local a71eb58d442bd65a85573ad57a46ac361b20d2c9)
 CHECK 612 C5 uv tool install rc 0: FAIL
-CHECK 612 GR the record's candidate 8ffd1f4b has the product of TARGET 78f929ee: PASS
+CHECK 612 GR the record's candidate 5e0349c2 has the product of TARGET 78f929ee: PASS
 CHECK 612 GR the record's graftling wheel is v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
 CHECK 612 GR pytest temp outside the Harness and clean launch environment recorded: PASS
 CHECK 612 GR test interpreter graftling = 0.10.0: PASS
@@ -734,8 +740,8 @@ REPORT 612 V-scratch subagents 'models' refusal names runtime_connections: no (r
 
 ### production now
 graphtraj graftling: 0.1.0 0.10.0
-graphtraj direct_url: {"archive_info": {"hash": "sha256=17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578", "hashes": {"sha256": "17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
-graftling direct_url: {"archive_info": {"hash": "sha256=44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42", "hashes": {"sha256": "44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+graphtraj direct_url: {"archive_info": {"hash": "sha256=eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1", "hashes": {"sha256": "eb85638cee43ba18c5e8e1f9a5301fb7520ac8cdb2785b6ea6b74d659db400c1"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295", "hashes": {"sha256": "caab2be93e7f6560cb4bb19c964312cf34a27f34ab2cb326a265d8e1971c7295"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
 CHECK 612 done production graphtraj from wheels-78f929ee, graftling 0.10.0 from wheels-0.10.0: PASS
 steps without a raw file: none | CHECK PASS 146 | CHECK not passed 1
 CHECK 612 done every step ran and every CHECK passed: FAIL

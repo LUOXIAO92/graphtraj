@@ -1,2 +1,2 @@
-before: dev cc64d5ab582aaac3ccb70d8f5da06f1cdbbb13b5 (in /private/tmp/claude-501/r612/gdev) | main e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r612/g) | v0.10.0 absent
-STOP: graftling dev is cc64d5ab582aaac3ccb70d8f5da06f1cdbbb13b5, no longer ddc506b0a7f87372baf8edc2347c26eebc2a251c (moved since dispatch: cc64d5a dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.
+before: dev fc23f06cc2161f93d69216d4ecb392781606a9f0 (in /private/tmp/claude-501/r612/gdev) | main e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r612/g) | v0.10.0 absent
+STOP: graftling dev is fc23f06cc2161f93d69216d4ecb392781606a9f0, no longer ddc506b0a7f87372baf8edc2347c26eebc2a251c (moved since dispatch: fc23f06 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.

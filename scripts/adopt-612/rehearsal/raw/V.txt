@@ -1,6 +1,6 @@
 graftling-0.10.0-py3-none-any.whl: OK
 graphtraj-0.1.0-py3-none-any.whl: OK
-product guard: HEAD b8fe3610f0d004dcacd1e9178a8075c5427e0733 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 V product guard: PASS
 changes since production 1fdbbca5 under src/graphtraj/runtimes/claude (information): 
 graftling changes since 0.9.1 in the files the hook copy is written from (information): 
@@ -40,8 +40,9 @@ V-scratch tasks describe runtime_connections: error False | properties ['action'
 CHECK 612 V-scratch runtime_connections schema has 'provider' and the action 'discover': PASS
 CHECK 612 V-scratch P's arguments {"action": "discover", "runtime": "claude", "provider": "anthropic"} fit the runtime_connections schema: PASS
 V-scratch subagents execute models: error True | {"action": "models", "error": {"code": "authority-unavailable", "message": "subagents needs a verified caller: a managed Session or a verified native Main Session. This call has neither."}}
-CHECK 612 V-scratch subagents 'models' is refused and names runtime_connections (P uses tasks): FAIL
-CHECK 612 V mcp612.py checks above (P's shape; entry and provider names are filled in at P): FAIL
+REPORT 612 V-scratch subagents 'models' refusal names runtime_connections: no (refused before the action: {"action": "models", "error": {"code": "authority-unavailable", "message": "subagents needs a verified caller: a managed)
+CHECK 612 V-scratch subagents 'models' answers an error (P uses tasks runtime_connections): PASS
+CHECK 612 V mcp612.py checks above (P's shape; entry and provider names are filled in at P): PASS
 Codex hooks entry configuration: ['/private/tmp/claude-501/r612/scr/vvenv/bin/python -m graphtraj.runtimes.codex.stop_hook'] ['SessionEnd', 'SessionStart', 'Stop']
 CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612/scr/vvenv names its python for SessionStart/Stop/SessionEnd: PASS
 CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612/scr/vvenv runs (neutral event answers {}): PASS ({})

@@ -20,7 +20,7 @@ MEMBER 612-x@advisor
 SESSION claude:m-1
 CHILD ag-1
 CHECK 612 Nr 593's record checks ran (their CHECK lines above): PASS
-CHECK 612 Nr Main got exactly one completed notice of the member: FAIL (0)
+CHECK 612 Nr Main got exactly one completed notice of the member: PASS (1)
 member 612-x@advisor (Session claude:m-1) record files: 1
 [member 612-x@advisor] scanned 1 file(s); split: none (every call)
 [member 612-x@advisor] calls of mcp__graphtraj__subagents: 1; ok 1; others: []

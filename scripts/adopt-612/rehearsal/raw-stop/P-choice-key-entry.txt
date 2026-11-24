@@ -1,0 +1,6 @@
+## P's choice (2): no Claude provider without base_url and key (claude-gw needs OTHER_GATEWAY_KEY, never chosen); an OPENCODE_API_KEY entry. p612.py choose, run by the fake production's python after R (graphtraj 1fdbbca5 again; 78f929ee's catalog validation differs only for DSH providers, none here) with HOME = a third fixture catalog.
+catalog: /private/tmp/claude-501/r612/home3/.graphtraj/connections.yml | revision 7040cc981f6b
+  entry claude-gw | runtime claude | provider gateway | base_url yes | api_key_env OTHER_GATEWAY_KEY | models 1
+  entry pi-opencode | runtime pi | provider opencode | base_url no | api_key_env OPENCODE_API_KEY | models 1
+CHOICE pi-opencode opencode api_key_env OPENCODE_API_KEY (approved for Task 612)
+exit=0

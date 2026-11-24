@@ -1,12 +1,12 @@
-leftover processes of run 09d702c8007a4fe1: before=0 after-shards=0 stopped=0 remaining=0
-ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/shards/shard-0.log: exit 5
-ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/shards/shard-1.log: exit 5
+leftover processes of run 7986e5240c49434b: before=0 after-shards=0 stopped=0 remaining=0
+ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-0.log: exit 5
+ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-1.log: exit 5
 9 passed, 3761 deselected
-logs: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/shards
+logs: /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards
 exit=1
 516 current definition (task.yml current_definition): /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
   (no FAILED/ERROR lines)
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/shards/shard-0.log: exit 5
-  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/shards/shard-1.log: exit 5
   shard timeouts ('timed out after' lines): 0
 SR verdict: PASS (no NEW failure)

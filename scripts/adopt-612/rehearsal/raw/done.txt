@@ -52,9 +52,16 @@ CHECK 612 rp remote main == v0.10.0^{} == 6f4aeb8fe9f47b71d81b9771486167b1233080
 CHECK 612 rp remote dev == local dev (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS
 CHECK 612 gh GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
 CHECK 612 gh GitHub v0.10.0^{} = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
-CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0, local 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0)
-CHECK 612 C5 uv tool install rc 0: FAIL
-CHECK 612 GR the record's candidate b8fe3610 has the product of TARGET 78f929ee: PASS
+CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote afdaee2921807b3da1584fcd64a79d195898f1c4, local afdaee2921807b3da1584fcd64a79d195898f1c4)
+CHECK 612 C5 uv tool install rc 0: PASS
+CHECK 612 C5 uv tool dir is /private/tmp/claude-501/r612/uvtool-612-rerun/tools: PASS
+CHECK 612 C5 graftling.__version__ and importlib.metadata version are 0.10.0: PASS
+CHECK 612 C5 sys.prefix is /private/tmp/claude-501/r612/uvtool-612-rerun/tools/graftling: PASS
+CHECK 612 C5 tool environment base interpreter is uv-managed (under /private/tmp/claude-501/r612/uvtool-612-rerun/python): PASS (uv-managed)
+CHECK 612 C5 installed commit (direct_url commit_id) is the release commit 6f4aeb8fe9f47b71d81b9771486167b123308066 (GitHub main): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
+CHECK 612 C5 /private/tmp/claude-501/r612/uvtool-612-rerun/bin/subagents --help rc 0: PASS
+CHECK 612 C5 /private/tmp/claude-501/r612/uvtool-612-rerun/bin/subagents-mcp exists: PASS (#!/private/tmp/claude-501/r612/uvtool-612-rerun/tools/graftling/bin/python)
+CHECK 612 GR the record's candidate 8ffd1f4b has the product of TARGET 78f929ee: PASS
 CHECK 612 GR the record's graftling wheel is v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066): PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
 CHECK 612 GR pytest temp outside the Harness and clean launch environment recorded: PASS
 CHECK 612 GR test interpreter graftling = 0.10.0: PASS
@@ -79,13 +86,46 @@ CHECK 612 V-scratch MCP tools/list is exactly subagents, tasks: PASS
 CHECK 612 V-scratch tasks discover lists runtime_connections: PASS (36 features)
 CHECK 612 V-scratch runtime_connections schema has 'provider' and the action 'discover': PASS
 CHECK 612 V-scratch P's arguments {"action": "discover", "runtime": "claude", "provider": "anthropic"} fit the runtime_connections schema: PASS
-CHECK 612 V-scratch subagents 'models' is refused and names runtime_connections (P uses tasks): FAIL
-CHECK 612 V mcp612.py checks above (P's shape; entry and provider names are filled in at P): FAIL
+CHECK 612 V-scratch subagents 'models' answers an error (P uses tasks runtime_connections): PASS
+CHECK 612 V mcp612.py checks above (P's shape; entry and provider names are filled in at P): PASS
 CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612/scr/vvenv names its python for SessionStart/Stop/SessionEnd: PASS
 CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612/scr/vvenv runs (neutral event answers {}): PASS ({})
 CHECK 612 Mpre GR passed: PASS
-CHECK 612 Mpre V passed: FAIL
+CHECK 612 Mpre V passed: PASS
 CHECK 612 Mpre no member Worker or swarm batch runs: PASS
+CHECK 612 I entry files unchanged since V: PASS
+CHECK 612 I pip install of both wheels: PASS
+CHECK 612 I graftling direct_url is wheels-0.10.0: PASS
+CHECK 612 I graphtraj direct_url is wheels-78f929ee: PASS
+CHECK 612 I graftling 0.9.1 dist-info gone: PASS
+CHECK 612 I installed graftling equals the v0.10.0 wheel: PASS
+CHECK 612 I installed graftling files equal the wheel: PASS
+CHECK 612 I installed graphtraj equals the 78f929ee wheel: PASS
+CHECK 612 I installed graphtraj files equal the wheel: PASS
+CHECK 612 I share/graphtraj/manuals equals git archive 78f929ee's manuals (7 files): PASS
+CHECK 612 I production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 612 I production bin subagents, subagents-mcp, graphtraj-mcp (this venv's python): PASS
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/r612/project/.venv-runtime vs /private/tmp/claude-501/r612/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.10.0', '/private/tmp/claude-501/r612/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.10.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.10.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/r612/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.10.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 612 I one graftling 0.10.0 in production (onegraft.py): PASS
+CHECK 593 I-production MCP tools/list is exactly subagents, tasks: PASS
+CHECK 593 I-production MCP tool agents is unknown (error answer, no alias): PASS
+CHECK 612 I-production graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (mcp593.py above): PASS
+CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612/project/.venv-runtime names its python for SessionStart/Stop/SessionEnd: PASS
+CHECK 612 Codex hooks entry of /private/tmp/claude-501/r612/project/.venv-runtime runs (neutral event answers {}): PASS ({})
+CHECK 612 I hook copy byte-identical to the backup (no configuration --write: V proved no change): PASS
+CHECK 612 I .mcp.json byte-identical to the backup: PASS
+CHECK 612 I .claude/settings.local.json byte-identical to the backup: PASS
+CHECK 612 I .graphtraj/claude-host/config.json byte-identical to the backup: PASS
+CHECK 612 I no process started on /private/tmp/claude-501/r612/project/.venv-runtime during the install: PASS
+CHECK 593 [Main 11111111-2222-3333-4444-555555555612] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 593 [Main 11111111-2222-3333-4444-555555555612] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 612 Mr Main called mcp__graphtraj__subagents and mcp__graphtraj__tasks after I without error (rec593.py above): PASS
 CHECK 455 stored record: configuration and model not null: PASS (configuration='opus_coding_team.advisor' model='claude-opus-5-5')
 CHECK 455 create/status result quoted by the member: configuration and model not null: PASS (configuration values ['"opus_coding_team.advisor"'] model values ['"claude-opus-5-5"'])
 CHECK 576 child created without tools (stored selection.tools is null): PASS (tools=None)
@@ -98,18 +138,28 @@ CHECK 452 member execution ended and recorded (execution.yml terminal, same exec
 CHECK 452 member reported its end to Main (raw/N-main-notice.txt names completed): PASS (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/raw/N-main-notice.txt)
 CHECK 477 no parent input pushed for waited execution ex-1: PASS
 CHECK 612 Nr 593's record checks ran (their CHECK lines above): PASS
-CHECK 612 Nr Main got exactly one completed notice of the member: FAIL (0)
+CHECK 612 Nr Main got exactly one completed notice of the member: PASS (1)
 CHECK 593 [member 612-x@advisor] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
 CHECK 593 [member 612-x@advisor] no old-name call (mcp__graphtraj__agents, mcp__agents__*): PASS (0 in the window, 0 undated)
 CHECK 612 Nr member called mcp__graphtraj__subagents without error (rec593.py above): PASS
 CHECK 612 Nr swarm result has agent: PASS (ag-member-1)
 CHECK 612 P a catalog entry whose discovery uses only the Claude login or OPENCODE_API_KEY / DEEPSEEK_API_KEY: PASS
+CHECK 612 Pr the raw result is a runtime_connections document with discovery: PASS
+CHECK 612 Pr discovery is for entry claude-main, provider anthropic: PASS (claude-main / anthropic)
+CHECK 612 Pr models are grouped by provider (groups: [{provider, models}], at least one model): PASS
+CHECK 612 Pr the groups are the requested provider anthropic: PASS
+CHECK 612 Pr every api_key_env is a variable NAME: PASS
+CHECK 612 Pr no field holds a credential-like value (only key names): PASS
+CHECK 612 Pr no Agent, child Session or member Session was created (record counts unchanged): PASS
+CHECK 612 Pr checks above (grouped by provider, key names only, nothing created): PASS
+REPORT 612 C5 base interpreter: /private/tmp/claude-501/r612/uvtool-612-rerun/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 (uv-managed) | uv-managed Pythons: cpython-3.14.7-macos-aarch64-none 
 REPORT 612 V-scratch subagents discover lists graftling's 'models': yes
+REPORT 612 V-scratch subagents 'models' refusal names runtime_connections: no (refused before the action: {"action": "models", "error": {"code": "authority-unavailable", "message": "subagents needs a verified caller: a managed)
 
 ### production now
 graphtraj graftling: 0.1.0 0.9.1
 graphtraj direct_url: {"archive_info": {"hash": "sha256=a15555979fb751391e63183d0d4117d3b9a1061d74b83fcc7ac907204cb1571e", "hashes": {"sha256": "a15555979fb751391e63183d0d4117d3b9a1061d74b83fcc7ac907204cb1571e"}}, "url": "file:///private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/604-graphtraj-603-production-adoption/adoption/wheels-1fdbbca5/graphtraj-0.1.0-py3-none-any.whl"}
 graftling direct_url: none
 CHECK 612 done production graphtraj from wheels-78f929ee, graftling 0.10.0 from wheels-0.10.0: FAIL
-steps without a raw file: I | CHECK PASS 101 | CHECK not passed 5
-CHECK 612 done every step ran and every CHECK passed: FAIL
+steps without a raw file: none | CHECK PASS 154 | CHECK not passed 0
+CHECK 612 done every step ran and every CHECK passed: PASS

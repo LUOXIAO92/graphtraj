@@ -1,5 +1,5 @@
 CHECK 612 Mpre GR passed: PASS
-CHECK 612 Mpre V passed: FAIL
+CHECK 612 Mpre V passed: PASS
 members_idle [Mpre]: Task 612's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 1
   77 0:10 /private/tmp/claude-501/r612/project/.venv-runtime/bin/python -m graphtraj.execution.runner_worker /private/tmp/claude-501/r612/project/.graphtraj/core/runner/sessions/999-x@engineer/launch.yml
 CHECK 612 Mpre no member Worker or swarm batch runs: FAIL

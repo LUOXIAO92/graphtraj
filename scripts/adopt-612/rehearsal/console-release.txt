@@ -55,7 +55,7 @@ CHECK 612 00 production bin has subagents, subagents-mcp (and no agents): PASS
 CHECK 612 00 backup /private/tmp/claude-501/r612/scr/backup absent: PASS
 
 ### this Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption (the GraphTraj product I installs)
-product guard: HEAD b8fe3610f0d004dcacd1e9178a8075c5427e0733 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 00 HEAD contains TARGET 78f929ee (= 6c0756c3 + pyproject.toml's graftling range) and differs from it only under scripts/adopt-612; clean: PASS
 GraphTraj dev now (information; Main integrates TARGET after acceptance): 6c0756c34df87989621cb6d086c2453afa61cecb
 graftling range at TARGET:     "graftling>=0.10.0,<0.11",
@@ -192,7 +192,7 @@ Success: every 'CHECK 612 rel ...: PASS' (or 'already released').
 
 ######## rehearsal: B
 [B] Main, before the push. Builds BOTH wheels with /Users/luoxiao/miniconda3/bin/python3.13 (--no-index --no-deps --no-build-isolation): graftling from git archive v0.10.0 -> /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0, graphtraj from git archive 78f929ee -> /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee. No network, no login. Dialog: none.
-product guard: HEAD b8fe3610f0d004dcacd1e9178a8075c5427e0733 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
 
 ### graftling: git archive v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066) -> /private/tmp/claude-501/r612/scr/gsrc
@@ -241,7 +241,7 @@ CHECK 612 B no build/ or __pycache__ in the graphtraj wheel: PASS
 graftling-0.10.0-py3-none-any.whl: OK
 graphtraj-0.1.0-py3-none-any.whl: OK
 CHECK 612 B both wheel directories hold their wheel with SHA256SUMS and COMMIT: PASS
-wheel sha256: 19a76074b760c04ba44704a068f4d3a80569341ce781c7c04ee10d187e2c1408  graftling-0.10.0-py3-none-any.whl | ccb9b5b6f6884ce0975b818fbe32a6b0eaa9101300944bba4a037d2b6cf9465e  graphtraj-0.1.0-py3-none-any.whl
+wheel sha256: 44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42  graftling-0.10.0-py3-none-any.whl | 17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578  graphtraj-0.1.0-py3-none-any.whl
 
 ----- summary for Main (B) -----
 CHECK 612 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
@@ -265,7 +265,7 @@ CHECK 612 B graphtraj requires graftling graftling<0.11,>=0.10.0: includes 0.10.
 CHECK 612 B 611's markers are in the graphtraj wheel: PASS
 CHECK 612 B no build/ or __pycache__ in the graphtraj wheel: PASS
 CHECK 612 B both wheel directories hold their wheel with SHA256SUMS and COMMIT: PASS
-wheel sha256: 19a76074b760c04ba44704a068f4d3a80569341ce781c7c04ee10d187e2c1408  graftling-0.10.0-py3-none-any.whl | ccb9b5b6f6884ce0975b818fbe32a6b0eaa9101300944bba4a037d2b6cf9465e  graphtraj-0.1.0-py3-none-any.whl
+wheel sha256: 44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42  graftling-0.10.0-py3-none-any.whl | 17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578  graphtraj-0.1.0-py3-none-any.whl
 -----
 Success: every 'CHECK 612 B ...: PASS'.
 
@@ -280,16 +280,16 @@ STOP: V or GR has not passed. Nothing changed.
 ######## rehearsal: G (-k: real tests incl. repository fixtures and 611's discovery)
 [G] Main. Full GraphTraj suite: this Worktree's HEAD (editable; product = TARGET 78f929ee) + the v0.10.0 wheel from B, 6 shards in the background (~25-30 min once started) through scripts/run_test_shards.py; pytest temp under TMPDIR=/tmp/claude-501 (outside the Harness; checked below). Main's suite queue is serial: while another suite runs G waits (wait.txt) and starts by itself. No login, no network. Dialog: none. Returns at once.
 TMPDIR=/tmp/claude-501 (outside the Harness)
-product guard: HEAD b8fe3610f0d004dcacd1e9178a8075c5427e0733 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
-pytest temp root: /private/tmp/claude-501/adopt-612-G-20261125T003835 (TMPDIR=/tmp/claude-501, outside the Harness)
+product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+pytest temp root: /private/tmp/claude-501/adopt-612-G-20261125T004159 (TMPDIR=/tmp/claude-501, outside the Harness)
 launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
-candidate: b8fe3610f0d004dcacd1e9178a8075c5427e0733 | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0, graftling-0.10.0-py3-none-any.whl)
+candidate: 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0, graftling-0.10.0-py3-none-any.whl)
 python: /private/tmp/claude-501/r612/scr/gvenv-612/bin/python
 test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.0
 REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_claude_uses_only_the_initialize_catalog or test_native_claude_lifecycle_without_a_task
-G started in the background at 00:38:38: record /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835 (suite.txt ends with exit=N)
-expected end: about 01:08 if it started now (~25-30 min; when queued, 25-30 min after the 'started' line in /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/wait.txt)
-check (paste): tail -2 /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/suite.txt; tail -1 /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T003835/wait.txt     (finished when the last line of suite.txt is exit=N; then: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh GR)
+G started in the background at 00:42:02: record /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159 (suite.txt ends with exit=N)
+expected end: about 01:12 if it started now (~25-30 min; when queued, 25-30 min after the 'started' line in /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/wait.txt)
+check (paste): tail -2 /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/suite.txt; tail -1 /private/tmp/claude-501/r612/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/G-20261125T004159/wait.txt     (finished when the last line of suite.txt is exit=N; then: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh GR)
 Success: 'G started' (or 'queued'); run.txt names the candidate, the v0.10.0 wheel and a pytest temp root outside the Harness.
 
 ==> next (paste as is): ADOPT612_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh rp    (G keeps running; GR after it ends)
@@ -299,7 +299,7 @@ Success: 'G started' (or 'queued'); run.txt names the candidate, the v0.10.0 whe
 [rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.10.0 to origin (/private/tmp/claude-501/r612/origin.git), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision 20261124T212818.736102+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
 origin: /private/tmp/claude-501/r612/origin.git
 remote before: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main
-will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0) (fast-forward only, --atomic, no force)
+will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (afdaee2921807b3da1584fcd64a79d195898f1c4) (fast-forward only, --atomic, no force)
 STOP: the push is outward-facing. It is the user's decision 20261124T212818.736102+0900; run: ADOPT612_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/steps.zsh rp
 
 rp STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/raw-stop/rp.txt to the Team.
@@ -309,7 +309,7 @@ rp STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-d
 [rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.10.0 to origin (/private/tmp/claude-501/r612/origin.git), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision 20261124T212818.736102+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
 origin: /private/tmp/claude-501/r612/origin.git
 remote before: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main
-will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0) (fast-forward only, --atomic, no force)
+will push: dev 6f4aeb8fe9f47b71d81b9771486167b123308066, main 6f4aeb8fe9f47b71d81b9771486167b123308066, refs/tags/v0.10.0 (afdaee2921807b3da1584fcd64a79d195898f1c4) (fast-forward only, --atomic, no force)
 To /private/tmp/claude-501/r612/origin.git
    e8c2e80..6f4aeb8  dev -> dev
    e8c2e80..6f4aeb8  main -> main
@@ -331,16 +331,16 @@ Success: both 'CHECK 612 rp ...: PASS'.
 
 ######## rehearsal: gh
 [gh] Main. Read only: git ls-remote /private/tmp/claude-501/r612/origin.git. Network: github.com. No login. Dialog: none.
-GitHub: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main | 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0	refs/tags/v0.10.0 | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/tags/v0.10.0^{}
+GitHub: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main | afdaee2921807b3da1584fcd64a79d195898f1c4	refs/tags/v0.10.0 | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/tags/v0.10.0^{}
 CHECK 612 gh GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
 CHECK 612 gh GitHub v0.10.0^{} = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
-CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0, local 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0)
+CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote afdaee2921807b3da1584fcd64a79d195898f1c4, local afdaee2921807b3da1584fcd64a79d195898f1c4)
 
 ----- summary for Main (gh) -----
-GitHub: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main | 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0	refs/tags/v0.10.0 | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/tags/v0.10.0^{}
+GitHub: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main | afdaee2921807b3da1584fcd64a79d195898f1c4	refs/tags/v0.10.0 | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/tags/v0.10.0^{}
 CHECK 612 gh GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
 CHECK 612 gh GitHub v0.10.0^{} = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
-CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0, local 8b9fb6af8e958dfe9eb39c93d4e9e4a4ea8ee4c0)
+CHECK 612 gh GitHub v0.10.0 is the local annotated tag object: PASS (remote afdaee2921807b3da1584fcd64a79d195898f1c4, local afdaee2921807b3da1584fcd64a79d195898f1c4)
 -----
 Success: three 'CHECK 612 gh ...: PASS'.
 
@@ -354,7 +354,7 @@ Success: three 'CHECK 612 gh ...: PASS'.
 snap: skipped (ADOPT612_NOSNAP, rehearsal only)
 uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin) | environment: UV_TOOL_DIR=/private/tmp/claude-501/r612/uvtool-612/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/r612/uvtool-612/bin UV_CACHE_DIR=/private/tmp/claude-501/r612/uvtool-612/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/r612/uvtool-612/python
 command: uv tool install --managed-python git+file:///private/tmp/claude-501/r612/origin.git   (uv = /Users/luoxiao/miniconda3/bin/uv; no tag: the default branch main)
-error: Request failed after 3 retries in 5.1s
+error: Request failed after 3 retries in 7.9s
   Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.14.7%2B20260807-aarch64-apple-darwin-install_only_stripped.tar.gz
   Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.14.7%2B20260807-aarch64-apple-darwin-install_only_stripped.tar.gz)
   Caused by: client error (Connect)

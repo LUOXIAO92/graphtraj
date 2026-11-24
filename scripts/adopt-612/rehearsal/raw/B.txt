@@ -1,4 +1,4 @@
-product guard: HEAD b8fe3610f0d004dcacd1e9178a8075c5427e0733 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
 
 ### graftling: git archive v0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066) -> /private/tmp/claude-501/r612/scr/gsrc
@@ -47,4 +47,4 @@ CHECK 612 B no build/ or __pycache__ in the graphtraj wheel: PASS
 graftling-0.10.0-py3-none-any.whl: OK
 graphtraj-0.1.0-py3-none-any.whl: OK
 CHECK 612 B both wheel directories hold their wheel with SHA256SUMS and COMMIT: PASS
-wheel sha256: 19a76074b760c04ba44704a068f4d3a80569341ce781c7c04ee10d187e2c1408  graftling-0.10.0-py3-none-any.whl | ccb9b5b6f6884ce0975b818fbe32a6b0eaa9101300944bba4a037d2b6cf9465e  graphtraj-0.1.0-py3-none-any.whl
+wheel sha256: 44c31f465a4ab82f2cfed4721724b977300ddf68ef894d2af7ce64b6a629fd42  graftling-0.10.0-py3-none-any.whl | 17f82e861fb667d1e0c25c2514b63b7d112af496d94841e0b4d24ad95123f578  graphtraj-0.1.0-py3-none-any.whl

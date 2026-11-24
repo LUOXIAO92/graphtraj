@@ -1,0 +1,110 @@
+scope: user
+path: /private/tmp/claude-501/r612/home/.graphtraj/connections.yml
+revision: 9f7528739ebb29ff604c7eaf05bde59f6232979d14c75ee9dcaf7399be4d15e7
+catalog:
+  version: 1
+  runtimes:
+    claude-main:
+      runtime: claude
+      providers:
+        anthropic:
+          models:
+            opus:
+              id: claude-opus-5-5
+              source: manual
+    pi-opencode:
+      runtime: pi
+      providers:
+        opencode:
+          api_key_env: OPENCODE_API_KEY
+          models:
+            glm:
+              id: glm-5
+              source: manual
+account_access: unknown
+capabilities:
+  read: true
+  preview: true
+  save: true
+  reasoning_efforts:
+    claude:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    codex:
+    - none
+    - minimal
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    - ultra
+    pi:
+    - 'off'
+    - minimal
+    - low
+    - medium
+    - high
+    - xhigh
+    dsh:
+    - 'off'
+    - low
+    - high
+    - max
+  model_discovery:
+    codex: native
+    pi: native
+    dsh: native-host
+    claude: native
+  custom_api:
+    codex:
+    - responses
+    pi:
+    - openai-completions
+    - openai-responses
+    - anthropic-messages
+    dsh:
+    - anthropic-messages
+    claude:
+    - anthropic-messages
+discovery:
+  runtime_entry: claude-main
+  provider: anthropic
+  runtime: claude
+  source: native
+  account_access: unknown
+  models:
+  - id: default
+    alias: Default (stub)
+    provider: anthropic
+    supported_efforts: null
+    source: native
+  - id: opus
+    alias: Opus (stub)
+    provider: anthropic
+    supported_efforts: &id001
+    - low
+    - high
+    resolved_model: claude-opus-5-5
+    source: native
+  groups:
+  - provider: anthropic
+    models:
+    - id: default
+      alias: Default (stub)
+      provider: anthropic
+      supported_efforts: null
+      source: native
+    - id: opus
+      alias: Opus (stub)
+      provider: anthropic
+      supported_efforts: *id001
+      resolved_model: claude-opus-5-5
+      source: native
+  supported_efforts: unknown
+  catalog_scope: runtime
+  status: available
+  message: Native catalog metadata does not establish account calling permission.

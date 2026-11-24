@@ -1,0 +1,17 @@
+members_idle [R]: Task 612's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r612/project/.venv-runtime)
+members_idle [R]: no member execution is active: PASS
+
+SAME entries=1002 differences=0 (/private/tmp/claude-501/r612/project/.venv-runtime)
+CHECK 612 R venv equals the pre-install bytes: PASS
+
+SAME entries=5 differences=0 (/private/tmp/claude-501/r612/project/.claude/skills/graphtraj-claude-host)
+CHECK 612 R hook copy restored: PASS
+/private/tmp/claude-501/r612/project/.mcp.json: OK
+/private/tmp/claude-501/r612/project/.claude/settings.local.json: OK
+/private/tmp/claude-501/r612/project/.graphtraj/claude-host/config.json: OK
+CHECK 612 R entry files restored: PASS
+CHECK 612 R graphtraj from wheels-1fdbbca5 and graftling 0.9.1 from 600's wheel again: PASS
+CHECK 612 R pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)

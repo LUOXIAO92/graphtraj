@@ -1,1 +1,12 @@
-STOP: no /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption/scripts/adopt-612/rehearsal/raw/P.txt: Main has not saved the raw discover result yet (P's prompt)
+P chose: entry claude-main provider anthropic (claude login only (pre-approved))
+CHECK 612 Pr the raw result is a runtime_connections document with discovery: PASS
+CHECK 612 Pr discovery is for entry claude-main, provider anthropic: PASS (claude-main / anthropic)
+discovery status available | groups ['anthropic: 2'] | models 2
+CHECK 612 Pr models are grouped by provider (groups: [{provider, models}], at least one model): PASS
+CHECK 612 Pr the groups are the requested provider anthropic: PASS
+api_key_env values in the result (names): ['OPENCODE_API_KEY']
+CHECK 612 Pr every api_key_env is a variable NAME: PASS
+CHECK 612 Pr no field holds a credential-like value (only key names): PASS
+records before P: agents 1 sessions 2 members 1 | after Pr: agents 1 sessions 2 members 1
+CHECK 612 Pr no Agent, child Session or member Session was created (record counts unchanged): PASS
+CHECK 612 Pr checks above (grouped by provider, key names only, nothing created): PASS

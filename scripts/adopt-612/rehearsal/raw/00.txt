@@ -52,7 +52,7 @@ CHECK 612 00 production bin has subagents, subagents-mcp (and no agents): PASS
 CHECK 612 00 backup /private/tmp/claude-501/r612/scr/backup absent: PASS
 
 ### this Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/612-graftling-provider-release-and-production-adoption (the GraphTraj product I installs)
-product guard: HEAD b8fe3610f0d004dcacd1e9178a8075c5427e0733 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
+product guard: HEAD 8ffd1f4b01387c8f9632c3762fe5239b4fb93cf2 | git diff 78f929ee HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 78f929ee outside scripts/adopt-612: none | git diff 6c0756c3 78f929ee -- product: pyproject.toml  | uncommitted (rehearsal outputs excepted): none
 CHECK 612 00 HEAD contains TARGET 78f929ee (= 6c0756c3 + pyproject.toml's graftling range) and differs from it only under scripts/adopt-612; clean: PASS
 GraphTraj dev now (information; Main integrates TARGET after acceptance): 6c0756c34df87989621cb6d086c2453afa61cecb
 graftling range at TARGET:     "graftling>=0.10.0,<0.11",

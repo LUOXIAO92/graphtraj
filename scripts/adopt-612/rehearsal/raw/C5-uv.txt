@@ -1,5 +1,12 @@
-error: Request failed after 3 retries in 5.1s
-  Caused by: Failed to download https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.14.7%2B20260807-aarch64-apple-darwin-install_only_stripped.tar.gz
-  Caused by: error sending request for url (https://github.com/astral-sh/python-build-standalone/releases/download/20260807/cpython-3.14.7%2B20260807-aarch64-apple-darwin-install_only_stripped.tar.gz)
-  Caused by: client error (Connect)
-  Caused by: tunnel error: unsuccessful
+Downloading cpython-3.14.7-macos-aarch64-none (download) (25.3MiB)
+ Downloaded cpython-3.14.7-macos-aarch64-none (download)
+Resolved 3 packages in 63ms
+   Building graftling @ git+file:///private/tmp/claude-501/r612/origin.git@6f4aeb8fe9f47b71d81b9771486167b123308066
+      Built graftling @ git+file:///private/tmp/claude-501/r612/origin.git@6f4aeb8fe9f47b71d81b9771486167b123308066
+Prepared 3 packages in 307ms
+Installed 3 packages in 4ms
+ + graftling==0.10.0 (from git+file:///private/tmp/claude-501/r612/origin.git@6f4aeb8fe9f47b71d81b9771486167b123308066)
+ + pyyaml==6.0.4
+ + websockets==16.1.1
+Installed 2 executables: subagents, subagents-mcp
+warning: `/private/tmp/claude-501/r612/uvtool-612-rerun/bin` is not on your PATH. To use installed tools, add the directory to your PATH.

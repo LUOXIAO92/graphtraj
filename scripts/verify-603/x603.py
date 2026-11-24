@@ -56,10 +56,10 @@ The member replies with one line and ends its turn.
 REASON = '603 probe: cancelled by the verification step.'
 
 
-def run(*argv: str, cwd: Path) -> subprocess.CompletedProcess:
-    """Run one command in the project; echo a failure."""
+def run(*argv: str, cwd: Path, quiet: bool = False) -> subprocess.CompletedProcess:
+    """Run one command in the project; echo a failure unless a nonzero exit is an expected answer."""
     done = subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
-    if done.returncode:
+    if done.returncode and not quiet:
         print('command failed:', ' '.join(argv), '\n', (done.stdout + done.stderr)[-800:])
     return done
 
@@ -239,7 +239,7 @@ def cancel(project: Path) -> int:
     tip = run('git', 'rev-parse', 'refs/heads/' + branch, cwd=project).stdout.strip()
     team = read(task_directory(project, CANCELLED) / f'teams/{state["active_team_ordinal"]}/team.yml')
     print(f'Task 1 Worktree {worktree} | branch {branch} tip {tip} (not in dev: '
-          f'{run("git", "merge-base", "--is-ancestor", tip, "dev", cwd=project).returncode == 1})')
+          f'{run("git", "merge-base", "--is-ancestor", tip, "dev", cwd=project, quiet=True).returncode == 1})')
     revision = probe / 'cancel.yml'
     revision.write_text(yaml.safe_dump({
         'product_preserving': True, 'caused_by_event_ids': [],
@@ -340,7 +340,7 @@ def clean(project: Path) -> int:
     document = yaml.safe_load(done.stdout) or {}
     verdict(document.get('cleanup_status') == 'cleaned', 'Task 1 cleanup_status cleaned')
     verdict(not Path(record['worktree']).exists(), f'Worktree {record["worktree"]} is gone')
-    ref = run('git', 'show-ref', '--verify', '--quiet', 'refs/heads/' + record['branch'], cwd=project)
+    ref = run('git', 'show-ref', '--verify', '--quiet', 'refs/heads/' + record['branch'], cwd=project, quiet=True)
     verdict(ref.returncode == 1, f'branch {record["branch"]} is gone')
     recorded = (document.get('evidence') or {}).get('task_commit')
     verdict(recorded == record['tip'], f'recorded task_commit {recorded} equals the branch tip {record["tip"]}')

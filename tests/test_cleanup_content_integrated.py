@@ -88,7 +88,8 @@ def test_cleanup_removes_a_content_integrated_worktree_but_still_refuses_a_dirty
     runner.mkdir()
     monkeypatch.setattr(runner_cleanup, '_task_mappings', lambda *args: ([], [], []))
     task = SimpleNamespace(
-        status='integrated', task_id='336', branch='task', worktree=worktree, candidate=case.candidate,
+        status='integrated', cancelled=False, task_id='336', branch='task', worktree=worktree,
+        candidate=case.candidate,
         project=SimpleNamespace(repository=case.repository, dev_commit=case.dev,
                                 integration_branch='dev', runner_directory=runner))
 

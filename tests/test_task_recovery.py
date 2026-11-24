@@ -441,13 +441,16 @@ def test_sampled_stop_continues_original_researcher_with_unchanged_accounting(
         command(installed_commands, root, env, 'interrupt', alias)
 
 
-def test_cancelled_task_is_neither_recoverable_nor_cleanable(
+def test_cancelled_task_is_not_recoverable(
     installed_commands: InstalledCommands,
     temporary_git_repository: Path,
     fake_codex: FakeCodex,
     tmp_path: Path,
 ) -> None:
-    """Cancelling an actual task keeps its stopped evidence and never means complete."""
+    """Cancelling an actual task keeps its stopped evidence and never means complete.
+
+    Cleanup of a cancelled Task removes its Worktree (603); test_agent_runner_cleanup covers it.
+    """
     root, env, task = prepare(installed_commands, temporary_git_repository, fake_codex, tmp_path, 'researcher')
     alias = task['alias']
     try:
@@ -475,7 +478,6 @@ def test_cancelled_task_is_neither_recoverable_nor_cleanable(
             ('continue', '--task-id', '154', '--caused-by-event-id', cause),
             ('replace', alias, '--caused-by-event-id', cause),
             ('send', alias, '--instruction', 'Resume', '--caused-by-event-id', cause),
-            ('cleanup', '--task-id', '154'),
         ):
             refused = command(installed_commands, root, env, *args)
             assert refused.returncode == 1, refused.stdout + refused.stderr
@@ -618,6 +620,11 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
     definition = _task('160', 'first-session', dependencies=[] if cancelled else ['159'])
     definition['body'] = BODY + definition['body']
     _register(installed_commands, root, definition)
+    task = root / '.graphtraj/state/tasks/160-first-session'
+    monitor = budgets.execution_budget_monitor(task, '160', 'first-session')
+    assert not monitor.is_stopped()
+    # The stop is sampled while the Task is active: a cancelled Task samples none (603).
+    sample_stop(monitor, monkeypatch)
     if cancelled:
         _change_status(installed_commands, root, '160', 'ready')
         definition.update(disposition='cancelled', replaced_by=[],
@@ -632,10 +639,6 @@ def test_task_continuation_requires_active_ready_task_before_first_session(
         result = run_process([str(installed_commands.product), 'task', 'revise',
                               '--revision-file', str(revision)], cwd=root, env=env)
         assert result.returncode == 0, result.stdout + result.stderr
-    task = root / '.graphtraj/state/tasks/160-first-session'
-    monitor = budgets.execution_budget_monitor(task, '160', 'first-session')
-    assert not monitor.is_stopped()
-    sample_stop(monitor, monkeypatch)
     retained = (task / 'execution-budget.yml').read_bytes()
     history = events(root)
     result = command(installed_commands, root, env, 'continue', '--task-id', '160',

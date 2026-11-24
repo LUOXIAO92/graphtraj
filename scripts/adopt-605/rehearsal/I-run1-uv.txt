@@ -1,0 +1,10 @@
+Resolved 3 packages in 66ms
+   Building graftling @ git+file:///Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling@e8c2e80241dff1151f2122e8957fca5598ec987b
+      Built graftling @ git+file:///Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling@e8c2e80241dff1151f2122e8957fca5598ec987b
+Prepared 3 packages in 347ms
+Installed 3 packages in 3ms
+ + graftling==0.9.1 (from git+file:///Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling@e8c2e80241dff1151f2122e8957fca5598ec987b)
+ + pyyaml==6.0.4
+ + websockets==16.1.1
+Installed 2 executables: subagents, subagents-mcp
+warning: `/private/tmp/claude-501/uvt605r/bin` is not on your PATH. To use installed tools, add the directory to your PATH.

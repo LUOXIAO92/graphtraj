@@ -1,0 +1,64 @@
+# Task 605 upgrade evidence: 'zsh scripts/adopt-605/steps.zsh U' (Engineer rehearsal, sandbox, 2026-11-24)
+# env: ADOPT605_UPD=/private/tmp/claude-501/uvup-605 ADOPT605_NOSNAP=1 ADOPT605_CLEAN_EXTRA=<the sandbox's proxy variables>; uv 0.12.3; source = local clone of <Harness>/graftling, main = e8c2e802 (v0.9.1); managed CPython 3.14.7 downloaded into the scratch dir
+
+
+### source: a local clone of /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling; its default branch main = /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling's main; tag v0.9.1
+source git+file:///private/tmp/claude-501/uvup-605/repo: HEAD -> refs/heads/main = e8c2e80241dff1151f2122e8957fca5598ec987b; v0.9.1 = e8c2e80241dff1151f2122e8957fca5598ec987b
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+
+### 1. install without a ref (the README's default form) and pinned @v0.9.1
+$ UV_TOOL_DIR=/private/tmp/claude-501/uvup-605/default/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/uvup-605/default/bin UV_CACHE_DIR=/private/tmp/claude-501/uvup-605/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/uvup-605/python uv tool install --managed-python git+file:///private/tmp/claude-501/uvup-605/repo
+  | Downloading cpython-3.14.7-macos-aarch64-none (download) (25.3MiB)
+  |  Downloaded cpython-3.14.7-macos-aarch64-none (download)
+  | Resolved 3 packages in 88ms
+  |    Building graftling @ git+file:///private/tmp/claude-501/uvup-605/repo@e8c2e80241dff1151f2122e8957fca5598ec987b
+  |       Built graftling @ git+file:///private/tmp/claude-501/uvup-605/repo@e8c2e80241dff1151f2122e8957fca5598ec987b
+  | Prepared 3 packages in 311ms
+  | Installed 3 packages in 4ms
+  |  + graftling==0.9.1 (from git+file:///private/tmp/claude-501/uvup-605/repo@e8c2e80241dff1151f2122e8957fca5598ec987b)
+  |  + pyyaml==6.0.4
+  |  + websockets==16.1.1
+  | Installed 2 executables: subagents, subagents-mcp
+  | warning: `/private/tmp/claude-501/uvup-605/default/bin` is not on your PATH. To use installed tools, add the directory to your PATH.
+  rc=0
+$ UV_TOOL_DIR=/private/tmp/claude-501/uvup-605/pinned/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/uvup-605/pinned/bin UV_CACHE_DIR=/private/tmp/claude-501/uvup-605/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/uvup-605/python uv tool install --managed-python git+file:///private/tmp/claude-501/uvup-605/repo@v0.9.1
+  | Resolved 3 packages in 1ms
+  | Installed 3 packages in 3ms
+  |  + graftling==0.9.1 (from git+file:///private/tmp/claude-501/uvup-605/repo@e8c2e80241dff1151f2122e8957fca5598ec987b)
+  |  + pyyaml==6.0.4
+  |  + websockets==16.1.1
+  | Installed 2 executables: subagents, subagents-mcp
+  | warning: `/private/tmp/claude-501/uvup-605/pinned/bin` is not on your PATH. To use installed tools, add the directory to your PATH.
+  rc=0
+REPORT 605 U default after install: commit e8c2e80241dff1151f2122e8957fca5598ec987b | graftling 0.9.1 | requested_revision - | receipt: requirements = [{ name = "graftling", git = "file:///private/tmp/claude-501/uvup-605/repo" }] 
+REPORT 605 U pinned after install: commit e8c2e80241dff1151f2122e8957fca5598ec987b | graftling 0.9.1 | requested_revision v0.9.1 | receipt: requirements = [{ name = "graftling", git = "file:///private/tmp/claude-501/uvup-605/repo?rev=v0.9.1" }] 
+CHECK 605 U tagless install is main's commit: PASS
+CHECK 605 U pinned install is v0.9.1's commit: PASS
+
+### 2. a new commit on the source's default branch main
+main is now c7ef7f5ee22b6dfd5cf73c9db547b574b2bc7bd2 (graftling 0.9.1 -> 0.9.1.post605)
+
+### 3. uv tool upgrade graftling (tagless install)
+$ UV_TOOL_DIR=/private/tmp/claude-501/uvup-605/default/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/uvup-605/default/bin UV_CACHE_DIR=/private/tmp/claude-501/uvup-605/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/uvup-605/python uv tool upgrade graftling
+  |    Updating file:///private/tmp/claude-501/uvup-605/repo (HEAD)
+  |     Updated file:///private/tmp/claude-501/uvup-605/repo (c7ef7f5ee22b6dfd5cf73c9db547b574b2bc7bd2)
+  |    Building graftling @ git+file:///private/tmp/claude-501/uvup-605/repo@c7ef7f5ee22b6dfd5cf73c9db547b574b2bc7bd2
+  |       Built graftling @ git+file:///private/tmp/claude-501/uvup-605/repo@c7ef7f5ee22b6dfd5cf73c9db547b574b2bc7bd2
+  | Updated graftling v0.9.1 -> v0.9.1.post605
+  |  - graftling==0.9.1 (from git+file:///private/tmp/claude-501/uvup-605/repo@e8c2e80241dff1151f2122e8957fca5598ec987b)
+  |  + graftling==0.9.1.post605 (from git+file:///private/tmp/claude-501/uvup-605/repo@c7ef7f5ee22b6dfd5cf73c9db547b574b2bc7bd2)
+  | Installed 2 executables: subagents, subagents-mcp
+  | warning: `/private/tmp/claude-501/uvup-605/default/bin` is not on your PATH. To use installed tools, add the directory to your PATH.
+  rc=0
+REPORT 605 U default after 'uv tool upgrade graftling': commit c7ef7f5ee22b6dfd5cf73c9db547b574b2bc7bd2 | graftling 0.9.1.post605 | requested_revision - | receipt: requirements = [{ name = "graftling", git = "file:///private/tmp/claude-501/uvup-605/repo" }] 
+REPORT 605 U tagless: e8c2e80241dff1151f2122e8957fca5598ec987b -> c7ef7f5ee22b6dfd5cf73c9db547b574b2bc7bd2 (graftling 0.9.1.post605); moved by: uv tool upgrade graftling
+
+### 6. uv tool upgrade graftling (pinned @v0.9.1)
+$ UV_TOOL_DIR=/private/tmp/claude-501/uvup-605/pinned/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/uvup-605/pinned/bin UV_CACHE_DIR=/private/tmp/claude-501/uvup-605/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/uvup-605/python uv tool upgrade graftling
+  |    Updating file:///private/tmp/claude-501/uvup-605/repo (v0.9.1)
+  |     Updated file:///private/tmp/claude-501/uvup-605/repo (e8c2e80241dff1151f2122e8957fca5598ec987b)
+  | Nothing to upgrade
+  rc=0
+REPORT 605 U pinned after 'uv tool upgrade graftling': commit e8c2e80241dff1151f2122e8957fca5598ec987b | graftling 0.9.1 | requested_revision v0.9.1 | receipt: requirements = [{ name = "graftling", git = "file:///private/tmp/claude-501/uvup-605/repo?rev=v0.9.1" }] 
+REPORT 605 U pinned @v0.9.1: e8c2e80241dff1151f2122e8957fca5598ec987b -> e8c2e80241dff1151f2122e8957fca5598ec987b (graftling 0.9.1); stays
+RESULT 605 U: after a tagless install, the first command that moved it to the new commit of main: uv tool upgrade graftling; a pinned @v0.9.1 install stays on 'uv tool upgrade graftling'.

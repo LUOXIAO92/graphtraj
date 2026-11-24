@@ -1,0 +1,55 @@
+dsh: /opt/homebrew/bin/dsh -> /opt/homebrew/lib/node_modules/@deepseek-ai/dsh/lib/bin.js | 0.2.2-rc.5
+~/.dsh names+mtimes digest before: skipped (ADOPT605_NOSNAP)
+graftling 0.9.1 at /private/tmp/claude-501/uvt605r/tools/graftling/lib/python3.13/site-packages/graftling; dsh /opt/homebrew/bin/dsh
+user DSH home (fake) files: ['.credentials.yaml']
+provider 'deepseek-official': accepted
+provider 'openrouter': invalid-config
+provider 'command-code': invalid-config
+base_url with user:password: ROLE_CONFIG_INVALID
+base_url with a query: ROLE_CONFIG_INVALID
+base_url ftp: ROLE_CONFIG_INVALID
+api_key_env naming an unset variable: RUNTIME_CREDENTIAL_MISSING
+[no-connection-settings] settings {}
+[no-connection-settings] provider selected: deepseek-official | DSH_HOME: /private/tmp/claude-501/dsh-605r/work/no-connection-settings/dsh-home (generated)
+[no-connection-settings] generated home files: ['profiles/web/cordis.patch.yml', 'profiles/web/package.json']
+[no-connection-settings] llm-deepseek row config: {}
+[no-connection-settings] web-search rows: {}
+[no-connection-settings] credential-like names in the child environment: ['DEEPSEEK_API_KEY']
+[no-connection-settings] DEEPSEEK_BASE_URL in the child environment: False
+[no-connection-settings] generated home holds .credentials.yaml or .env: False
+[api_key_env] settings {"api_key_env": "PROBE605_KEY"}
+[api_key_env] provider selected: deepseek-official | DSH_HOME: /private/tmp/claude-501/dsh-605r/work/api_key_env/dsh-home (generated)
+[api_key_env] generated home files: ['profiles/web/cordis.patch.yml', 'profiles/web/package.json']
+[api_key_env] llm-deepseek row config: {"apiKeyEnv": "PROBE605_KEY"}
+[api_key_env] web-search rows: {}
+[api_key_env] credential-like names in the child environment: ['PROBE605_KEY']
+[api_key_env] DEEPSEEK_BASE_URL in the child environment: False
+[api_key_env] generated home holds .credentials.yaml or .env: False
+[home] settings {"runtime_home": "/private/tmp/claude-501/dsh-605r/home/.dsh"}
+[home] provider selected: deepseek-official | DSH_HOME: /private/tmp/claude-501/dsh-605r/home/.dsh (the user DSH home)
+[home] generated home files: ['profiles/web/cordis.patch.yml', 'profiles/web/package.json']
+[home] llm-deepseek row config: {}
+[home] web-search rows: {}
+[home] credential-like names in the child environment: ['DEEPSEEK_API_KEY']
+[home] DEEPSEEK_BASE_URL in the child environment: False
+[home] generated home holds .credentials.yaml or .env: False
+[base_url] settings {"base_url": "https://example.invalid/anthropic"}
+[base_url] provider selected: deepseek-official | DSH_HOME: /private/tmp/claude-501/dsh-605r/work/base_url/dsh-home (generated)
+[base_url] generated home files: ['profiles/web/cordis.patch.yml', 'profiles/web/package.json']
+[base_url] llm-deepseek row config: {"baseURL": "https://example.invalid/anthropic", "models": [{"id": "deepseek-flash"}]}
+[base_url] web-search rows: {"web-search-deepseek": {"id": "web-search-deepseek", "config": {"apiKeyEnv": "DEEPSEEK_API_KEY", "baseURL": "https://example.invalid/anthropic/v1"}}, "web-deepseek-api": {"id": "web-deepseek-api", "disabled": true}}
+[base_url] credential-like names in the child environment: ['DEEPSEEK_API_KEY']
+[base_url] DEEPSEEK_BASE_URL in the child environment: False
+[base_url] generated home holds .credentials.yaml or .env: False
+probe rc=0
+~/.dsh names+mtimes digest after:  skipped (ADOPT605_NOSNAP)
+CHECK 605 D the USER's ~/.dsh unchanged (names and mtimes): PASS
+CHECK 605 D a provider other than deepseek-official is refused with invalid-config: PASS
+CHECK 605 D without home the child's DSH_HOME is the generated directory, not the user's: FAIL
+CHECK 605 D the generated home holds only the profile manifest and patch (no credentials): PASS
+CHECK 605 D without api_key_env the child keeps DEEPSEEK_API_KEY only: PASS
+CHECK 605 D with api_key_env the child gets that variable only: PASS
+CHECK 605 D api_key_env becomes llm-deepseek's apiKeyEnv: PASS
+CHECK 605 D a connection's home becomes DSH_HOME: FAIL
+CHECK 605 D base_url becomes llm-deepseek's baseURL: PASS
+CHECK 605 D (expected FAIL) an inherited DEEPSEEK_BASE_URL reaches the child: FAIL

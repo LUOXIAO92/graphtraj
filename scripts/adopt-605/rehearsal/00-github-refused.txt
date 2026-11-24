@@ -1,0 +1,11 @@
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 605 00 this uv's 'uv tool install --help' lists --managed-python: PASS
+uv user config: /Users/luoxiao/.config/uv/uv.toml absent; /etc/uv/uv.toml absent; 
+CHECK 605 00 /private/tmp/claude-501/uvt605r absent: PASS
+CHECK 605 00 /private/tmp/claude-501/uvup-605-absent absent: PASS
+graftling agent/605-graftling-readme-install-without-tag HEAD: 89830064c00ab73edda713257b21270445dfefe2 (Install without a tag (main = latest release), upgrade with uv tool upgrade; AGENTS_PYTHON and DSH child docs (605))
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+I runs:              uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+CHECK 605 00 README's first install line equals I's command exactly: PASS
+REPORT 605 00 GitHub main: fatal: unable to access 'https://github.com/LUOXIAO92/graftling.git/': Proxy CONNECT aborted (https://github.com/LUOXIAO92/graftling.git refs/heads/main)
+CHECK 605 00 ls-remote returned main's commit: FAIL

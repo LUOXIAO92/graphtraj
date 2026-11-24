@@ -340,6 +340,11 @@ class GraphTrajAgents:
                 return self._ask_parent(arguments, binding.caller)
             if action == "session_read":
                 return self.control.operate(action, self._member_session(arguments), binding)
+            if action == "models":
+                # The core lists its own config.yml connections, which GraphTraj does not use.
+                raise unavailable("models", "GraphTraj chooses a child by project role: create takes "
+                                            "configuration or provider, and runtime_connections discover "
+                                            "lists a catalog entry's models by provider.")
             member = self._member_alias(agent)
             core = member is None and (action == "create" or (agent or "").startswith(AGENT_PREFIX))
             if not core and action not in {"status", "wait"} and binding.caller.agent is None:
@@ -354,7 +359,7 @@ class GraphTrajAgents:
                 if arguments.get("reports_only"):
                     raise AgentsError("invalid-input", "request.reports_only: only for a Task member")
                 if action == "create":
-                    arguments = self._member_workspace(arguments, binding.caller)
+                    arguments = self._role_for_provider(self._member_workspace(arguments, binding.caller))
                 return self.control.operate(action, arguments, binding)
             if action == "status" and agent is None:
                 return self._hierarchy(binding)
@@ -420,6 +425,22 @@ class GraphTrajAgents:
             return arguments
         worktree = member_worktree(self.root, caller.agent)
         return arguments if worktree is None else {**arguments, "workspace": str(worktree)}
+
+    def _role_for_provider(self, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Turn ``create``'s ``provider`` into the role (``configuration``) that uses it.
+
+        GraphTraj's choices are project roles, not the core's ``config.yml``
+        connections, so the provider selects among roles whose catalog
+        connection declares it.
+        """
+        from graphtraj.execution.agent_driver import select_role
+
+        provider = arguments.get("provider")
+        if provider is None:
+            return arguments
+        name, _ = select_role(self.root, arguments["runtime"], arguments.get("configuration"), provider)
+        rest = {field: value for field, value in arguments.items() if field != "provider"}
+        return {**rest, "configuration": name}
 
     def _ask_parent(self, arguments: Mapping[str, Any], caller: Caller) -> Outcome:
         """Ask the caller's own direct parent for a decision or resources.

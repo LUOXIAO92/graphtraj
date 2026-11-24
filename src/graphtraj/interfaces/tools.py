@@ -882,6 +882,9 @@ register_tool(
         'expected_revision': {'type': 'string', 'description':
             'Exact revision returned by read; required to save and for changes.'},
         'runtime': {'type': 'string', 'description': 'Configured runtime entry name to query for discovery.'},
+        'provider': {'type': 'string', 'description':
+            'Discovery only: list this provider. A provider the entry declares is queried with its '
+            'base_url and api_key_env name; models are also returned grouped by provider.'},
     }, 'additionalProperties': False},
     runtime_connections, manual_ref='manuals/setup-project/guide.md',
     examples=({'action': 'read'},),

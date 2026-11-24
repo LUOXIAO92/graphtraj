@@ -1,0 +1,13 @@
+# Correction 1 rehearsal (Engineer sandbox, 2026-11-24 23:01:31 JST): sampler() extracted unchanged from steps.zsh (sed), run with VENV=<rehearsal venv>, P=<scratch project>, VERIFY611_NO_PS=1.
+== zsh -n scripts/verify-611/steps.zsh
+OK
+== case 1: empty sessions dir (entries: 0), no member yet, limit 4 s (must NOT stop early)
+elapsed: 4 s
+sampler stopped: time limit; runtime pids seen: none
+== case 2: sessions dir now holds a copy of realhost/1-opencode_probe-handover0-opencode@opencode (ended), limit 60 s (must stop at once)
+elapsed: 0 s
+pid 73836 already gone
+sampler stopped: execution ended; runtime pids seen: 73836
+== the old stop test's input on an empty sessions dir: x611.py ended <empty> 1 0
+Task 1: no member execution ended within 0 s ([])
+exit=2 -- the text contains 'execution ended', which the old grep matched

@@ -1,0 +1,255 @@
+# Task 611 rehearsal (Engineer, Claude Code sandbox, 2026-11-24 22:26:04 JST); candidate scripts at ce8ee59e
+# Environment: VERIFY611_ROOT=/tmp/claude-501/611/rh/root VERIFY611_T=/tmp/claude-501/611/rh/T VERIFY611_OUT=/tmp/claude-501/611/rh/out VERIFY611_USERHOME=/tmp/claude-501/611/rh/userhome (scratch);
+# VERIFY611_NO_PS=1 (ps not permitted here); dummy OPENCODE_API_KEY/DEEPSEEK_API_KEY values (never printed); a dummy
+# OPENROUTER_API_KEY in the pre run shows the scrub. pre ran with VERIFY611_NO_PROMPT=1 (no network in the sandbox).
+# pre's single FAIL was the then-uncommitted scripts/verify-611 directory (committed in ce8ee59e).
+\n===== pre =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD OPENROUTER_API_KEY; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [pre] Main. Preflight; creates /tmp/claude-501/611/rh/root; two one-line DSH prompts. Dialog: none. Keys: OPENCODE_API_KEY, DEEPSEEK_API_KEY. ~1-2 min.
+zsh 5.9 runs /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/scripts/verify-611/steps.zsh
+candidate HEAD 1e9fab579b52625cf8008d9b5b0921827effcba0 (611: graphtraj connections --provider for discovery; test uses the CLI entry)
+PASS: base GraphTraj 06353b380677843f656796798a7023f91457ad70 resolvable
+PASS: graftling 026267b5804d660caf1ea4f76610e9a73257c169 resolvable in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (models: a connection discovery refuses (608 DSH route) is invalid-conf)
+FAIL: uncommitted changes in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation: ?? scripts/verify-611/
+PASS: TMPDIR=/tmp/claude-501 is outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery
+PASS: click present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: yaml present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: websockets present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: /Users/luoxiao/miniconda3/bin/python3.13: Python 3.13.11
+node: /opt/homebrew/bin/node v26.5.0
+dsh: /opt/homebrew/bin/dsh 0.2.2-rc.5
+OPENCODE_API_KEY: set (18 characters; not printed). DEEPSEEK_API_KEY: set (18 characters; not printed).
+allowlisted environment of a child step's runner (names only): DEEPSEEK_API_KEY EXAMPLE_STEP_VAR HOME LANG OPENCODE_API_KEY PATH TMPDIR
+your locations before (names, sizes, mtimes): 3 lines in /tmp/claude-501/611/rh/root/user-before.txt
+REHEARSAL: DSH prompts skipped (VERIFY611_NO_PROMPT=1)
+writes: /tmp/claude-501/611/rh/root and copies in /tmp/claude-501/611/rh/out only. dialog: none.
+STOP: FAIL lines above; report them (then: rm -rf '/tmp/claude-501/611/rh/root' && zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/scripts/verify-611/steps.zsh pre)
+STEP-END pre rc=1
+\n===== install =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [install] Main. /tmp/claude-501/611/rh/root/venv: GraphTraj 1e9fab579b52625cf8008d9b5b0921827effcba0 (wheel) + graftling 026267b5804d660caf1ea4f76610e9a73257c169 (wheel), offline. Dialog: none. No key.
+graphtraj /tmp/claude-501/611/rh/root/venv/lib/python3.13/site-packages/graphtraj/__init__.py | wheel: True | graftling 0.9.1 /tmp/claude-501/611/rh/root/venv/lib/python3.13/site-packages/graftling/__init__.py
+PASS: venv imports graphtraj 1e9fab579b52625cf8008d9b5b0921827effcba0 (wheel) and graftling 0.9.1 (026267b5804d660caf1ea4f76610e9a73257c169 wheel)
+PASS: installed DSH adapter passes the catalog provider (611)
+PASS: installed graftling has the 608 DSH provider route
+PASS: /tmp/claude-501/611/rh/root/venv/bin/graphtraj
+PASS: /tmp/claude-501/611/rh/root/venv/bin/agent-runner
+PASS: /tmp/claude-501/611/rh/root/venv/bin/graphtraj-session
+writes: /tmp/claude-501/611/rh/root/venv and /tmp/claude-501/611/rh/root/venv-src only. dialog: none.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/scripts/verify-611/steps.zsh setup
+STEP-END install rc=0
+\n===== setup =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [setup] Main. Project /tmp/claude-501/611/rh/root/proj, isolated catalog /tmp/claude-501/611/rh/root/home/.graphtraj/connections.yml, roles, probe Tasks. Dialog: none. No key.
+Proposed dev base: ad1e98eccab2ee70b2f7adddb2c9c1a686a5b9b4
+Create dev from ad1e98eccab2ee70b2f7adddb2c9c1a686a5b9b4? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+runner directory: /private/tmp/claude-501/611/rh/root/proj/.graphtraj/runner | inside the project: True
+PASS: graphtraj setup created the project's own .graphtraj
+catalog draft /tmp/claude-501/611/rh/root/catalog-draft.yml: runtime entry dsh-611 (dsh, home /tmp/claude-501/611/rh/root/dsh-home); providers opencode-go (api_key_env OPENCODE_API_KEY, model glm-5.3) and deepseek-official (api_key_env DEEPSEEK_API_KEY, model deepseek-flash)
+PASS: public preview accepts the catalog (a DSH provider without base_url; /tmp/claude-501/611/rh/root/catalog-preview.yml)
+PASS: public read uses the isolated catalog /tmp/claude-501/611/rh/root/home/.graphtraj/connections.yml (revision: cb1aabb950e6918731ebdfb7d21684f7f58db421dfebda2abc1a71c8a02d56df)
+roles file /tmp/claude-501/611/rh/root/proj/.graphtraj/roles.yml:
+roles:
+  probe_team:
+    opencode:
+      connection: dsh-611/opencode-go/glm
+    deepseek:
+      connection: dsh-611/deepseek-official/flash
+role_tree:
+  probe_team.opencode: {}
+  probe_team.deepseek: {}
+PASS: graphtraj doctor: roles: OK
+PASS: Task 1 (opencode-probe) registered and ready: ready
+PASS: Task 2 (deepseek-probe) registered and ready: ready
+PASS: task register and update exited 0
+PASS: public role preview lists: probe_team.deepseek probe_team.opencode
+writes: /tmp/claude-501/611/rh/root only (project, isolated HOME and DSH home). dialog: none.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/scripts/verify-611/steps.zsh list
+STEP-END setup rc=0
+\n===== list =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [list] Main. Public discover by provider: opencode-go (OPENCODE_API_KEY only), deepseek-official (DEEPSEEK_API_KEY only), an undeclared one. Dialog: none.
+== graphtraj connections --action discover --runtime dsh-611 --provider opencode-go (credential OPENCODE_API_KEY only)
+discovery: runtime_entry dsh-611, provider opencode-go, status unknown, provider_status None, message 'Native metadata query failed. Check installation/login in the original Runtime client and refresh.'
+FAIL: opencode-go: status available
+FAIL: opencode-go: the models are grouped under opencode-go only
+FAIL: opencode-go lists glm-5.3
+PASS: opencode-go: every listed model carries provider opencode-go
+PASS: the discovery output does not contain the OPENCODE_API_KEY value
+listing: 3 FAIL
+== graphtraj connections --action discover --runtime dsh-611 --provider deepseek-official (credential DEEPSEEK_API_KEY only)
+discovery: runtime_entry dsh-611, provider deepseek-official, status unknown, provider_status None, message 'Native metadata query failed. Check installation/login in the original Runtime client and refresh.'
+FAIL: deepseek-official: status available
+FAIL: deepseek-official: the models are grouped under deepseek-official only
+FAIL: deepseek-official lists deepseek-flash
+PASS: deepseek-official: every listed model carries provider deepseek-official
+PASS: the discovery output does not contain the DEEPSEEK_API_KEY value
+listing: 3 FAIL
+PASS: an undeclared DSH provider is refused: Error: DSH provider 'no-such-611' needs api_key_env on its connection: graftling does not let DSH look for that provider's key itself.
+writes: /tmp/claude-501/611/rh/root/list-* and copies in /tmp/claude-501/611/rh/out only. dialog: none.
+STOP: FAIL lines above; report them
+STEP-END list rc=1
+\n===== child-opencode-dry =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [child-opencode] Main. ONE swarm call: Task 1's probe_team.opencode DSH member on opencode-go/glm-5.3. Dialog: none expected (deny any). Keys: both in the runner.
+batch: /tmp/claude-501/611/rh/root/proj/.graphtraj/probe-611/batch-1.yml
+tasks:
+- task_id: '1'
+  task_name: opencode-probe
+  role: probe_team.opencode
+  instruction: This is a scripted GraphTraj probe. Change no file, run no command, call no tool and dispatch nobody. Reply with exactly one line, READY-611-OPENCODE, and end your turn.
+runner environment (names; values not printed): DEEPSEEK_API_KEY HOME LANG OPENCODE_API_KEY PATH TMPDIR
+DRY (rehearsal): stopped before agent-runner --swarm-input
+STEP-END child-opencode rc=0
+\n===== child-opencode =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [child-opencode] Main. ONE swarm call: Task 1's probe_team.opencode DSH member on opencode-go/glm-5.3. Dialog: none expected (deny any). Keys: both in the runner.
+batch: /tmp/claude-501/611/rh/root/proj/.graphtraj/probe-611/batch-1.yml
+tasks:
+- task_id: '1'
+  task_name: opencode-probe
+  role: probe_team.opencode
+  instruction: This is a scripted GraphTraj probe. Change no file, run no command, call no tool and dispatch nobody. Reply with exactly one line, READY-611-OPENCODE, and end your turn.
+runner environment (names; values not printed): DEEPSEEK_API_KEY HOME LANG OPENCODE_API_KEY PATH TMPDIR
+dispatch at 22:17:21
+agent-runner --swarm-input exit=1 (output: /tmp/claude-501/611/rh/root/launch-task-1.yml)
+  alias: 1-opencode_probe-handover0-opencode@opencode
+  launch_status: failed
+    code: launch-failed
+    message: 'DSH exited before authentication (pid=16974, exit=1).
+STOP: the swarm call failed (output above)
+NOT ACCEPTED (FAIL/STOP lines above); report them. The next step still runs.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/scripts/verify-611/steps.zsh child-deepseek
+STEP-END child-opencode rc=1
+\n===== child-deepseek =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [child-deepseek] Main. ONE swarm call: Task 2's probe_team.deepseek DSH member on deepseek-official/deepseek-flash. Dialog: none expected (deny any). Keys: both in the runner.
+batch: /tmp/claude-501/611/rh/root/proj/.graphtraj/probe-611/batch-2.yml
+tasks:
+- task_id: '2'
+  task_name: deepseek-probe
+  role: probe_team.deepseek
+  instruction: This is a scripted GraphTraj probe. Change no file, run no command, call no tool and dispatch nobody. Reply with exactly one line, READY-611-DEEPSEEK, and end your turn.
+runner environment (names; values not printed): DEEPSEEK_API_KEY HOME LANG OPENCODE_API_KEY PATH TMPDIR
+member_case:11: nice(5) failed: operation not permitted
+dispatch at 22:18:03
+agent-runner --swarm-input exit=1 (output: /tmp/claude-501/611/rh/root/launch-task-2.yml)
+  alias: 2-deepseek_probe-handover0-deepseek@deepseek
+  launch_status: failed
+    code: launch-failed
+    message: 'DSH exited before authentication (pid=20954, exit=1).
+STOP: the swarm call failed (output above)
+NOT ACCEPTED (FAIL/STOP lines above); report them.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/scripts/verify-611/steps.zsh post
+STEP-END child-deepseek rc=1
+\n===== suite =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+keys: DEEPSEEK_API_KEY and OPENCODE_API_KEY dropped for this step; python3 now sees: none
+== [suite] Main. GraphTraj full suite of HEAD ce8ee59efa88efb392423f944c865205731d6c11 (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. No login.
+load average: unavailable
+NOTE: ps cannot list processes here; check skipped (rehearsal)
+temp root: /private/tmp/claude-501/verify-611-suite-20261124T221859 (TMPDIR=/tmp/claude-501, outside the Harness)
+/tmp/claude-501/611/rh/T/venv-suite-026267b5: graftling 026267b5804d660caf1ea4f76610e9a73257c169 (wheel) + graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation (editable)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/src/graphtraj/__init__.py | graftling 0.9.1 /tmp/claude-501/611/rh/T/venv-suite-026267b5/lib/python3.13/site-packages/graftling/__init__.py | editable: False
+pytest temp root: /private/tmp/claude-501/verify-611-suite-20261124T221859 (TMPDIR, outside the Harness) | candidate GraphTraj ce8ee59efa88efb392423f944c865205731d6c11 | graftling 026267b5804d660caf1ea4f76610e9a73257c169 (wheel)
+REHEARSAL: extra pytest args after -- -rA: 'tests/test_provider_selection.py' 'tests/test_runtime_connections.py' '-k' 'dsh or provider or catalog'
+started in the background at 22:19:06; output: /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/suite.txt (ends with 'exit=N')
+writes: /tmp/claude-501/611/rh/T (venv, sources, /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906) and /private/tmp/claude-501/verify-611-suite-20261124T221859 only. dialog: none.
+progress (paste): tail -3 /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/suite.txt; ls -la /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/shards
+next (paste, after /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/suite.txt ends with exit=): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/scripts/verify-611/steps.zsh SR
+STEP-END suite rc=0
+\n===== SR =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: none
+== [SR] read only: newest suite; FAILED/ERROR node ids classed against 516's current definition. Dialog: none.
+516 current definition (task.yml current_definition): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+pytest temp root: /private/tmp/claude-501/verify-611-suite-20261124T221859 (TMPDIR, outside the Harness) | candidate GraphTraj ce8ee59efa88efb392423f944c865205731d6c11 | graftling 026267b5804d660caf1ea4f76610e9a73257c169 (wheel)
+REHEARSAL: extra pytest args after -- -rA: 'tests/test_provider_selection.py' 'tests/test_runtime_connections.py' '-k' 'dsh or provider or catalog'
+shard 4: 41 files -> /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/shards/shard-4.log
+shard 5: 41 files -> /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/shards/shard-5.log
+leftover processes of run 72e35d20c1ba4696: before=0 after-shards=0 stopped=0 remaining=0
+397 passed, 14 skipped, 3554 deselected
+logs: /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/shards
+exit=0
+(no FAILED/ERROR lines)
+shard-0.log:63 passed, 2 skipped, 616 deselected in 44.85s
+shard-1.log:45 passed, 2 skipped, 641 deselected in 23.07s
+shard-2.log:29 passed, 2 skipped, 453 deselected in 12.68s
+shard-3.log:44 passed, 3 skipped, 658 deselected in 32.99s
+shard-4.log:140 passed, 3 skipped, 550 deselected in 67.67s (0:01:07)
+shard-5.log:76 passed, 2 skipped, 636 deselected in 8.94s
+SR verdict: PASS (no NEW failure)
+NEW node ids (0, one per line): /tmp/claude-501/611/rh/T/suite-ce8ee59e-20261124T221906/new-ids.txt
+next: none (no NEW id); report the SR verdict
+STEP-END SR rc=0
+\n===== suite-base =====
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD; kept if set: OPENCODE_API_KEY DEEPSEEK_API_KEY
+credential-class names a python3 started here sees: none
+keys: DEEPSEEK_API_KEY and OPENCODE_API_KEY dropped for this step; python3 now sees: none
+== [suite-base] Main. 2 node ids: base (GraphTraj 06353b380677843f656796798a7023f91457ad70), then candidate (HEAD ce8ee59efa88efb392423f944c865205731d6c11), both with graftling 026267b5804d660caf1ea4f76610e9a73257c169 (wheel). Dialog: none. No login.
+  id: tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]
+  id: tests/test_agents_model_discovery.py::test_graphtraj_discovery_keeps_its_document[dsh]
+NOTE: ps cannot list processes here; check skipped (rehearsal)
+/tmp/claude-501/611/rh/T/venv-base-06353b38: graftling 026267b5804d660caf1ea4f76610e9a73257c169 (wheel) + graphtraj /tmp/claude-501/611/rh/T/graphtraj-base (editable)
+reusing /tmp/claude-501/611/rh/T/venv-suite-026267b5 (graftling 026267b5804d660caf1ea4f76610e9a73257c169 (wheel) + graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation (editable))
+temp root: /private/tmp/claude-501/verify-611-base-20261124T222139 (TMPDIR=/tmp/claude-501, outside the Harness)
+== base: pytest in /tmp/claude-501/611/rh/T/graphtraj-base; graphtraj /private/tmp/claude-501/611/rh/T/graphtraj-base/src/graphtraj/__init__.py | graftling 0.9.1 /tmp/claude-501/611/rh/T/venv-base-06353b38/lib/python3.13/site-packages/graftling/__init__.py | editable: False
+base: pytest exit=1, 1 failed, 1 passed in 0.26s (output: /tmp/claude-501/611/rh/T/suite-base-20261124T222139/base.txt)
+temp root: /private/tmp/claude-501/verify-611-candidate-20261124T222141 (TMPDIR=/tmp/claude-501, outside the Harness)
+== candidate: pytest in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation; graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/611-graphtraj-provider-selection-adaptation/src/graphtraj/__init__.py | graftling 0.9.1 /tmp/claude-501/611/rh/T/venv-suite-026267b5/lib/python3.13/site-packages/graftling/__init__.py | editable: False
+candidate: pytest exit=1, 1 failed, 1 passed in 0.29s (output: /tmp/claude-501/611/rh/T/suite-base-20261124T222139/candidate.txt)
+== classification (each id: base, then candidate)
+fails on both (pre-existing): tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]   [base failed | candidate failed]
+passes on both now (not reproduced): tests/test_agents_model_discovery.py::test_graphtraj_discovery_keeps_its_document[dsh]   [base passed | candidate passed]
+candidate-only: 0
+writes: /tmp/claude-501/611/rh/T (venvs, /tmp/claude-501/611/rh/T/graphtraj-base, /tmp/claude-501/611/rh/T/suite-base-20261124T222139), a copy in /tmp/claude-501/611/rh/out/suite-base-20261124T222139 and pytest temp roots under /tmp/claude-501 only. dialog: none.
+next: report the classification (/tmp/claude-501/611/rh/T/suite-base-20261124T222139/classification.txt); a candidate-only id is a regression of this Task
+STEP-END suite-base rc=0
+\n===== x611.py listing on a synthetic available discovery document (verdict logic) =====
+discovery: runtime_entry dsh-611, provider opencode-go, status available, provider_status {'opencode-go': 'available'}, message 'synthetic'
+  group opencode-go: 1 models: glm-5.3
+PASS: opencode-go: status available
+PASS: opencode-go: the models are grouped under opencode-go only
+PASS: opencode-go lists glm-5.3
+PASS: opencode-go: every listed model carries provider opencode-go
+PASS: the discovery output does not contain the OPENCODE_API_KEY value
+listing: ALL PASS
+\n===== sandbox origin of the DSH failures: dsh web started directly (DSH's own output) =====
+    Error: EPERM: operation not permitted, mkdtemp '/tmp/dsh-spill-XXXXXX'
+    Error: listen EPERM: operation not permitted 127.0.0.1
+\n===== member launch records from the sandbox dispatch (adapter_request; generated child DSH profile rows) =====
+  model: glm-5.3
+  provider: opencode-go
+  runtime_home: /private/tmp/claude-501/611/rh/root/dsh-home
+  connection: dsh-611/opencode-go/glm
+  api_key_env: OPENCODE_API_KEY
+connection: {}
+- id: llm-pi-ai
+  config:
+    providers:
+      opencode-go:
+        apiKeyEnv: OPENCODE_API_KEY
+- id: system-prompt
+Error: listen EPERM: operation not permitted 127.0.0.1
+  model: deepseek-flash
+  provider: deepseek-official
+  runtime_home: /private/tmp/claude-501/611/rh/root/dsh-home
+  connection: dsh-611/deepseek-official/flash
+  api_key_env: DEEPSEEK_API_KEY
+connection: {}
+- id: llm-deepseek
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+- id: system-prompt
+  config:
+    personaSuffix: '
+Error: listen EPERM: operation not permitted 127.0.0.1

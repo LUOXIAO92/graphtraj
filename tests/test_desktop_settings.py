@@ -478,7 +478,7 @@ def test_manual_efforts_survive_native_refresh_and_role_save(
     }}}}
     assert not call(project, {'scope': 'user', 'action': 'save', 'catalog': catalog,
                              'expected_revision': initial['revision']})[-1]['failed']
-    monkeypatch.setattr(model_discovery, 'discover_models', lambda runtime: {
+    monkeypatch.setattr(model_discovery, 'discover_models', lambda runtime, provider=None: {
         'status': 'available', 'account_access': 'unknown',
         'models': [{'provider': 'openai', 'id': 'my-model', 'supported_efforts': ['medium']}],
     })

@@ -1,0 +1,13 @@
+# Task 608 rehearsal outputs (Engineer sandbox; ADOPT608_* overrides => rehearsal, not acceptance)
+## full suite on candidate ccff30e (development run)
+885 passed, 21 skipped in 242.74s (0:04:02)
+exit=0
+## suite step (filtered)
+candidate ccff30e1d8160b50cab2432f0b9bcac9a56fda05 | TMPDIR /private/tmp/claude-501/adopt-608-suite-20261124T211359 | extra: tests/test_dsh_providers_608.py tests/test_agents_connections_presets.py::test_dsh_driver_applies_connection_model_and_effort
+.........                                                                [100%]
+9 passed in 1.01s
+exit=0
+## probe output (dummy key, sandbox network)
+
+dsh: TRANSPORT: Connection error.: getaddrinfo ENOTFOUND opencode.ai
+## list refusal checks: see validation.md

@@ -104,17 +104,22 @@ RAW=$OUTD/raw; STOPS=$OUTD/raw-stop
 } 2>&1 | tee $OUTD/console-stops.txt
 { for st in 00 rel rel B; do run $RAW $st zsh $S $st; done
   run $STOPS "I before V/GR (STOP, nothing changed)" zsh -fc "print | zsh $S I"
+  print -r -- "## G: the step's own process starts at $(date +%T); it must exit only after its shards end, with the verdict as its last output"
+  print -r -- "## G queue: a ps FIXTURE line shows another suite ('-m pytest') for ~5 s; G must wait for it in its own process"
+  print -r -- "88 python -m pytest -q (ps FIXTURE: another suite)" > $SB/ps.txt; ( sleep 5; print -r -- $PSIDLE > $SB/ps.txt ) &
   run $RAW "G (-k: real tests incl. repository fixtures and 611's discovery)" env ADOPT612_PYTEST_ARGS="-k 'test_wheels_have_separate_owners or test_graphtraj_uses_only_published_agents_names or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_claude_uses_only_the_initialize_catalog or test_native_claude_lifecycle_without_a_task'" zsh $S G
+  GREC=$(print -l $FST/$T612/adoption/G-*(N/om[1]))
+  print -r -- "## G: the step's process exited at $(date +%T) | wait.txt: $(tr '\n' ';' < $GREC/wait.txt) | suite.txt last line: $(tail -1 $GREC/suite.txt) | G's last two output lines are the RESULT line and the next command (above)"
   run $STOPS "rp unconfirmed" zsh $S rp
   run $RAW "rp confirmed" env ADOPT612_PUSH_CONFIRMED=yes zsh $S rp
   run $RAW gh zsh $S gh
   run $RAW "C5 (source git+file:// scratch origin, no tag)" env ADOPT612_SOURCE="git+file://$SB/origin.git" zsh $S C5
 } 2>&1 | tee $OUTD/console-release.txt
 { GREC=$(print -l $FST/$T612/adoption/G-*(N/om[1])); print "G record: $GREC"
-  [[ -n $GREC ]] && for i in {1..400}; do grep -q '^exit=' $GREC/suite.txt 2>/dev/null && break; sleep 3; done
+  print -r -- "G record ended before G's process exited (no waiting here): $(grep -c '^exit=' $GREC/suite.txt) exit= line"
   print "G suite.txt tail:"; tail -4 $GREC/suite.txt; print "wait.txt:"; cat $GREC/wait.txt
   print "PASSED ids through G's entry:"; grep -hoE '^PASSED tests/[^ ]+' $GREC/shards/*.log(N) | sort -u
-  run $RAW GR zsh $S GR
+  run $RAW "GR alone (re-judging the ended record; G already ran it at its end)" zsh $S GR
   run $RAW SR zsh $S SR
   run $RAW "suite-base (one real id)" zsh $S suite-base tests/test_runtime_distribution.py::test_wheels_have_separate_owners
   run $RAW V zsh $S V

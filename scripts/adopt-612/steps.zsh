@@ -7,7 +7,8 @@
 # graftling-0.10.0.bundle next to this file. User decisions (Worldline): release, push and adoption
 # 20261124T212818.736102+0900; 613 included 20261124T215350.017660+0900; version 0.10.0 20261124T224332.078396+0900.
 # Run one step at a time:  zsh <this file> <STEP>     ONE ordered list:
-#   00 -> rel -> B -> G (background) -> rp -> gh -> C5 -> GR (after G; -> SR -> suite-base only if NEW) -> V -> Mpre
+#   00 -> rel -> B -> G (Main starts it as a background command; G itself waits for its shards and ends with GR's
+#   verdict; -> SR -> suite-base only if NEW) and meanwhile rp -> gh -> C5 -> [G ended PASS] -> V -> Mpre
 #   -> [Main tells the USER; 612's Leader and Engineer have ended their turns] USER /exit Main -> I (USER, Terminal)
 #   -> USER `cd <Harness> && claude --continue` -> M -> Mr -> N -> Nr -> P -> Pr -> done.
 #   Rollback: R (Main asks the USER first; the USER /exits Main), run from the backup's own copy.
@@ -462,9 +463,9 @@ print(f"CHECK 612 B graphtraj requires graftling {g[0] if g else None}: includes
   (( rc == 0 )) && ! grep -q ': FAIL' $R/B.txt || { print "\nB STOP (see above). Do not push. Hand $R/B.txt to the Team."; exit 1; }
   summary B "$(grep -E '^(CHECK|wheel|data files|Requires-Dist)' $R/B.txt)"
   print "Success: every 'CHECK 612 B ...: PASS'."
-  next "zsh $THIS G    (it starts the full suite in the background and returns; then: ADOPT612_PUSH_CONFIRMED=yes zsh $THIS rp)" ;;
+  next "zsh $THIS G    (Main starts it as a BACKGROUND command; it runs ~25-30 min and ends with its verdict. Without waiting for it: ADOPT612_PUSH_CONFIRMED=yes zsh $THIS rp)" ;;
 
-G) print "[G] Main. Full GraphTraj suite: this Worktree's HEAD (editable; product = TARGET ${TARGET[1,8]}) + the $GTAG wheel from B, 6 shards in the background (~25-30 min once started) through scripts/run_test_shards.py; pytest temp under TMPDIR=${TMPDIR:-/tmp} (outside the Harness; checked below). Main's suite queue is serial: while another suite runs G waits (wait.txt) and starts by itself. No login, no network. Dialog: none. Returns at once."
+G) print "[G] Main STARTS THIS STEP IN THE BACKGROUND ITSELF (Runtime background command); the Runtime tells Main when it exits. Full GraphTraj suite: this Worktree's HEAD (editable; product = TARGET ${TARGET[1,8]}) + the $GTAG wheel from B, 6 parallel shards through scripts/run_test_shards.py; pytest temp under TMPDIR=${TMPDIR:-/tmp} (outside the Harness; checked below). Main's suite queue is serial: while another suite runs, G waits for it first. This process waits for the shards, then judges the record (GR) and exits; its LAST lines are the verdict, the counts and the next command. Duration: ~25-30 min once the shards start, plus any wait behind another suite. No login, no network. Dialog: none."
   { check_tmp || exit 1
     product_guard || { print "STOP: product guard (above)"; exit 1; }
     whl=($NG/graftling-$GVERSION-*.whl(N)); (( $#whl == 1 )) || { print "STOP: no $GTAG wheel in $NG: run B first"; exit 1; }
@@ -483,25 +484,22 @@ G) print "[G] Main. Full GraphTraj suite: this Worktree's HEAD (editable; produc
     extra=(${(Q)${(z)${ADOPT612_PYTEST_ARGS:-}}})
     (( $#extra )) && print -r -- "REHEARSAL: extra pytest args after -- -rA: $extra" >> $O/run.txt
     : > $O/suite.txt
-    busy=$(other_suites)
-    ( while true; do
-        busy=$(other_suites) || { print "$(date +%T) STOP: ps failed; G did not start" >> $O/wait.txt; print "exit=ps-failed (G did not start)" >> $O/suite.txt; exit 1; }
-        [[ -z $busy ]] && break
-        print -r -- "$(date +%T) waiting for another suite: $(print -r -- $busy | awk '{print $1}' | tr '\n' ' ')" >> $O/wait.txt; sleep ${ADOPT612_GWAIT:-60}
-      done
-      print -r -- "$(date +%T) started" >> $O/wait.txt
-      cd $WT && clean env TMPDIR=$RUNTMP $GV/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $O/shards -- -rA $extra > $O/suite.txt 2>&1
-      print "exit=$?" >> $O/suite.txt; print -r -- "$(date +%T) ended" >> $O/wait.txt
-      clean $CONDA -I $S593/fails593.py $O/failures.txt $O/suite.txt $O/shards/*(N.) > /dev/null
-    ) < /dev/null > /dev/null 2>&1 &!
-    cat $O/run.txt
-    print -r -- "G $([[ -n $busy ]] && print 'queued behind another suite' || print started) in the background at $(date +%T): record $O (suite.txt ends with exit=N)"
-    print -r -- "expected end: about $(date -v+30M +%H:%M) if it started now (~25-30 min; when queued, 25-30 min after the 'started' line in $O/wait.txt)"
-    print -r -- "check (paste): tail -2 $O/suite.txt; tail -1 $O/wait.txt     (finished when the last line of suite.txt is exit=N; then: zsh $THIS GR)"
+    cat $O/run.txt; print -r -- "record: $O"
+    # The serial queue: wait (in this process) while another suite runs.
+    while true; do
+      busy=$(other_suites) || { print -r -- "$(date +%T) STOP: ps failed; G did not start" | tee -a $O/wait.txt; print "exit=ps-failed (G did not start)" >> $O/suite.txt; exit 1; }
+      [[ -z $busy ]] && break
+      print -r -- "$(date +%T) waiting for another suite: $(print -r -- $busy | awk '{print $1}' | tr '\n' ' ')" | tee -a $O/wait.txt; sleep ${ADOPT612_GWAIT:-60}
+    done
+    # The 6 shards run in parallel inside run_test_shards.py; this process waits for it to end.
+    print -r -- "$(date +%T) started (6 shards; this step waits for them)" | tee -a $O/wait.txt
+    (cd $WT && clean env TMPDIR=$RUNTMP $GV/bin/python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir $O/shards -- -rA $extra > $O/suite.txt 2>&1 < /dev/null)
+    print "exit=$?" >> $O/suite.txt; print -r -- "$(date +%T) ended (all shards ended: $(tail -1 $O/suite.txt))" | tee -a $O/wait.txt
+    clean $CONDA -I $S593/fails593.py $O/failures.txt $O/suite.txt $O/shards/*(N.) > /dev/null
   } 2>&1 | tee $R/G.txt; rc=${pipestatus[1]}
   (( rc == 0 )) || { print "\nG STOP (see above). Hand $R/G.txt to the Team."; exit 1; }
-  print "Success: 'G started' (or 'queued'); run.txt names the candidate, the $GTAG wheel and a pytest temp root outside the Harness."
-  next "ADOPT612_PUSH_CONFIRMED=yes zsh $THIS rp    (G keeps running; GR after it ends)" ;;
+  print "\n### G: the suite has ended; GR judges its record (the same checks as the GR step)"
+  zsh $THIS GR; exit $? ;;
 
 rp) print "[rp] Main. Outward-facing: push graftling dev, main and refs/tags/$GTAG to origin ($GURL), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision $DECISION). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none."
   { gt=$(gg -C $G rev-parse -q --verify "refs/tags/$GTAG^{commit}") gd=$(gg -C $G rev-parse dev) gm=$(gg -C $G rev-parse main)
@@ -579,9 +577,9 @@ print(v.get("commit_id", "none")); print(v.get("requested_revision", "-"))' 2>&1
   (( rc == 0 )) && ! grep -q ': FAIL' $R/C5.txt || { print "\nC5 STOP (see above). Hand $R/C5.txt to the Team."; exit 1; }
   summary C5 "$(grep -E '^(uv|command|uv tool install|tool python|subagents --help|CHECK|REPORT)' $R/C5.txt)"
   print "Success: every 'CHECK 612 C5 ...: PASS' (rc 0; version $GVERSION; commit $GCOMMIT; subagents --help rc 0; subagents-mcp; USER directories and conda unchanged)."
-  next "zsh $THIS GR    (after G has ended: the last line of $(grec)/suite.txt is exit=N)" ;;
+  next "zsh $THIS V    (once the background G has exited with 'RESULT 612 G/GR: PASS'; if it ended FAIL: zsh $THIS SR)" ;;
 
-GR) print "[GR] Main, after G has ended. Read only: G's record, totals, and every FAILED/ERROR id and ABNORMAL shard, classed against 516's CURRENT definition and 611's known id (a shard 'timed out after' is NEW). No login. Dialog: none."
+GR) print "[GR] G runs this at its end; Main may rerun it alone to re-judge an ended G record. Read only: G's record, totals, and every FAILED/ERROR id and ABNORMAL shard, classed against 516's CURRENT definition and 611's known id (a shard 'timed out after' is NEW). No login. Dialog: none."
   { rec=$(grec); print -r -- "G record: $rec"
     product_guard
     [[ -f $rec/run.txt && -f $rec/suite.txt ]] || { print "STOP: no G record: run G first"; exit 1; }
@@ -599,10 +597,12 @@ GR) print "[GR] Main, after G has ended. Read only: G's record, totals, and ever
     rf=0; grep -q '^REHEARSAL' $rec/run.txt && rf=1   # a rehearsal -k filter leaves shards with nothing collected (exit 5)
     (( SR_NEW == 0 )) && [[ $ex == 0 || ( $ex == 1 && ( $SR_ANY == 1 || $rf == 1 ) ) ]]; ck $? "GR G record ($GTAG wheel) has no new failure" "$( (( $#SR_IDS )) && print "$#SR_IDS NEW ids: run SR")"
   } 2>&1 | tee $R/GR.txt; rc=${pipestatus[1]}
-  (( rc == 0 )) && ! grep -q ': FAIL' $R/GR.txt || { print "\nGR STOP or FAIL (see above). If it names NEW ids or an ABNORMAL shard: zsh $THIS SR"; exit 1; }
-  summary GR "$(grep -E '^(G record|totals|CHECK|  NEW|  known|  ABNORMAL)' $R/GR.txt)"
-  print "Success: every 'CHECK 612 GR ...: PASS'."
-  next "zsh $THIS V" ;;
+  verdict=PASS; (( rc == 0 )) && ! grep -q ': FAIL' $R/GR.txt || verdict=FAIL
+  summary GR "$(grep -E '^(G record|totals|CHECK|  NEW|  known|  ABNORMAL|STOP)' $R/GR.txt)"
+  kn=$(grep -c '^  known ' $R/GR.txt) nw=$(grep -c '^  NEW: ' $R/GR.txt) ab=$(grep -c '^  ABNORMAL shard' $R/GR.txt)
+  print ""; print -r -- "RESULT 612 G/GR: $verdict | ${$(sed -n 's/^totals: //p' $R/GR.txt | tail -1):-no totals (the record has not ended or is missing)} | known non-blocking ids: $kn | NEW ids: $nw | ABNORMAL shards: $ab"
+  if [[ $verdict == PASS ]]; then next "zsh $THIS V    (once rp, gh and C5 have passed)"
+  else next "zsh $THIS SR    (NEW ids or an ABNORMAL shard: SR prints the suite-base command; a STOP line above: hand $R/GR.txt to the Team)"; exit 1; fi ;;
 
 SR) print "[SR] Main, read only. The newest G record's FAILED/ERROR ids and ABNORMAL shards, classed against 516 and 611's known id; prints the suite-base command for NEW ids. Dialog: none."
   rec=$(grec); [[ -f $rec/suite.txt ]] && grep -q '^exit=' $rec/suite.txt || { print -r -- "no finished G record ($rec)"; exit 1; }
@@ -639,6 +639,7 @@ suite-base) print "[suite-base] Main, only for SR's NEW ids. Reruns them on prod
     print -r -- "$side: pytest exit=$src, $(grep -E '^[0-9]+ (passed|failed)|^=+ .*(passed|failed|error)' $O/$side.txt | tail -1) ($O/$side.txt)"
   done
   clean $CONDA -I $SUITEIDS classify $O/ids.txt $O/base.txt $O/candidate.txt | tee $O/classification.txt; fails=${pipestatus[1]}
+  print ""; print -r -- "RESULT 612 suite-base: $( (( fails == 0 )) && print 'PASS (no candidate-only failure)' || print 'FAIL (classification above)') | ids: $#ids | record: $O"
   print -r -- "next: hand $O/classification.txt to the Team; a candidate-only id is a regression of this release (no adoption)"; exit $fails ;;
 
 V) print "[V] Main. Before the install, outside production: a scratch venv ($VV) with BOTH new wheels + production's click, yaml and websockets; the real MCP entries in an isolated project ($VPROJ); the hook copy regenerated by the product into a scratch copy must be byte-identical to production's. No login. Dialog: none. ~1 min."

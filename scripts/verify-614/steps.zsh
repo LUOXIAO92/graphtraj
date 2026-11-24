@@ -416,7 +416,9 @@ suite-base)
   for side dir V in base $B $VB candidate $WT $VC; do
     RUNTMP=${PYTEST_TMP:A}/verify-614-sb-$side-$(date +%Y%m%dT%H%M%S); mkdir -p $RUNTMP
     print -r -- "$side: pytest in $dir | temp $RUNTMP"
-    (cd $dir && clean TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q --collect-only ${(u)${ids%%::*}} > $R/$side-collected.txt 2>&1)
+    local -a files=() ; local f; for f in ${(u)${ids%%::*}}; do [[ -e $dir/$f ]] && files+=$f; done   # a file absent on a side is not collected there
+    if (( $#files )); then (cd $dir && clean TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q --collect-only $files > $R/$side-collected.txt 2>&1)
+    else : > $R/$side-collected.txt; fi
     clean $CONDA -I $SUITEIDS present $R/$side-collected.txt $R/ids.txt > $R/$side-ids.txt 2> $R/$side-missing.txt
     local -a run=(${(f)"$(<$R/$side-ids.txt)"})
     if (( $#run )); then (cd $dir && clean TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rA "${run[@]}" > $R/$side.txt 2>&1); src=$?

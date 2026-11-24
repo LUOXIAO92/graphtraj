@@ -23,7 +23,7 @@ REALH=${WT:h:h:h:h}
 REALS=$REALH/.venv-runtime/lib/python3.13/site-packages
 REALSTATE=$REALH/.graphtraj/core/state
 CONDA=/Users/luoxiao/miniconda3/bin/python3.13
-OUTD=$SD/${ADOPT604_ROUT:-rehearsal}
+OUTD=${ADOPT604_ROUT:-$SD/rehearsal}             # a debug run may name another (absolute) directory
 SB=${${TMPDIR:-/tmp}:A}/${ADOPT604_RNAME:-r604}
 FH=$SB/project; FRT=$FH/.venv-runtime; FST=$FH/.graphtraj/core/state/tasks
 T593=593-graftling-0-9-0-release-and-production-adoption; T600=600-graftling-0-9-1-release
@@ -33,6 +33,9 @@ MAINID=11111111-2222-3333-4444-555555555604         # Main's Session (FIXTURE tr
 PSIDLE="1 Ss 0:01 /sbin/launchd (ps FIXTURE: an idle host)"
 rm -rf $SB $OUTD/raw $OUTD/raw-stop; mkdir -p $SB/stub $SB/projects/-fake $OUTD
 S=$SD/steps.zsh
+# Every product command of the setup and the cleanup stand-in runs in an allowlist environment: this Engineer's own
+# session variables (for example GRAPHTRAJ_CLI_CONNECTION) must not reach the scratch project's product.
+cl() { env -i HOME=$HOME USER=${USER:-x} PATH=/usr/bin:/bin TMPDIR=$TMPDIR LANG=en_US.UTF-8 "$@"; }
 { print "## setup: STUB claude and ps (fixtures)"
   print -l '#!/bin/zsh' 'case ${1:-} in' '  --version) print "2.1.330 (stub Claude Code, rehearsal fixture)" ;;' \
     '  -p) cat > /dev/null; print "READY-604 claude-opus-5-5 LOGGED-IN (stub, rehearsal fixture)" ;;' '  *) print "stub claude: $*" ;;' 'esac' > $SB/stub/claude
@@ -45,10 +48,10 @@ S=$SD/steps.zsh
   print "# fake" > $FH/README.md; git -C $FH add README.md; git -C $FH -c user.name=x -c user.email=x@invalid commit -qm init
   $CONDA -m venv $FRT && $FRT/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $W593/graphtraj-0.1.0-*.whl $W600/graftling-0.9.1-*.whl || exit 1
   D=$FRT/lib/python3.13/site-packages; for d in click 'click-*.dist-info' yaml _yaml '[Pp]y[Yy][Aa][Mm][Ll]-*.dist-info' websockets 'websockets-*.dist-info'; do cp -Rp $REALS/$~d $D/; done
-  (cd $FH && print y | $FRT/bin/graphtraj setup) > /dev/null || exit 1
+  (cd $FH && print y | cl $FRT/bin/graphtraj setup) > /dev/null || exit 1
   for c in $FH/.graphtraj/config.yml(N) $FH/.graphtraj/core/config.yml(N); do
     $CONDA -I -c 'import sys; p = sys.argv[1]; t = open(p).read(); open(p, "w").write(t.replace("state: .graphtraj/state", "state: .graphtraj/core/state"))' $c; done
-  (cd $FH && $FRT/bin/python -m graphtraj.runtimes.claude.host configuration --project $FH --claude $SB/stub/claude --write) > /dev/null || exit 1
+  (cd $FH && cl $FRT/bin/python -m graphtraj.runtimes.claude.host configuration --project $FH --claude $SB/stub/claude --write) > /dev/null || exit 1
   for t in $T593 $T600 $T603 $T604 $T516 $T601; do mkdir -p $FST/$t && cp -p $REALSTATE/tasks/$t/task.yml $FST/$t/ && cp -Rp $REALSTATE/tasks/$t/definitions $FST/$t/ || exit 1; done
   cp -Rp $REALSTATE/tasks/$T603/realhost $FST/$T603/ && cp -p $REALSTATE/tasks/$T601/execution-budget.yml $FST/$T601/ && cp -Rp $REALSTATE/tasks/$T601/teams $FST/$T601/ || exit 1
   print "## setup: SCRATCH cancelled Task 601 (real state copy; fixture branch and Worktree in the scratch project's git)"
@@ -112,7 +115,7 @@ RAW=$OUTD/raw; STOPS=$OUTD/raw-stop
   run $RAW "STOP: C601r before C601.txt exists" zsh $S C601r
   print "## REHEARSAL STAND-IN for Main's MCP call: the installed candidate's public cleanup CLI from the fake production venv"
   print -r -- "command: (cd $FH && $FRT/bin/agent-runner cleanup --task-id 601) > $RAW/C601.txt"
-  (cd $FH && env -i HOME=$HOME PATH=/usr/bin:/bin TMPDIR=$TMPDIR LANG=en_US.UTF-8 $FRT/bin/agent-runner cleanup --task-id 601) > $RAW/C601.txt 2>$SB/C601.err
+  (cd $FH && cl $FRT/bin/agent-runner cleanup --task-id 601) > $RAW/C601.txt 2>$SB/C601.err
   print -r -- "agent-runner cleanup exit=$? | stdout:"; cat $RAW/C601.txt; print -r -- "stderr: $(cat $SB/C601.err)"
   run $RAW C601r zsh $S C601r
   run $RAW done zsh $S done

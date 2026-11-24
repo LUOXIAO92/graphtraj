@@ -13,11 +13,14 @@ check CALLS.json STEP DATAROOT
 """
 import json
 import os
+import re
 from pathlib import Path
 import sys
 
 TOOL = 'mcp__graftling__subagents'
 REFUSAL = 'base_url needs api_key_env'
+# A plugin hook's denial is plain text: '... association failed: <code>: <message>'.
+DENIAL = re.compile(r'failed: ([a-z][a-z0-9-]*): ')
 
 
 def main_calls(out: str, target: str) -> None:
@@ -33,7 +36,10 @@ def main_calls(out: str, target: str) -> None:
                   '| mcp servers:', [(s.get('name'), s.get('status')) for s in event.get('mcp_servers') or []])
         if event.get('type') == 'result':
             print('Main result:', str(event.get('result'))[:300].replace('\n', ' | '))
-        for item in (event.get('message') or {}).get('content') or []:
+        message = event.get('message')
+        # Some events (system permission_denied, ...) carry a plain-text message: no content to read.
+        content_items = message.get('content') if isinstance(message, dict) else None
+        for item in content_items if isinstance(content_items, list) else []:
             if not isinstance(item, dict):
                 continue
             if item.get('type') == 'tool_use' and item.get('name') == TOOL:
@@ -45,7 +51,11 @@ def main_calls(out: str, target: str) -> None:
                 try:
                     document = json.loads(text)
                 except ValueError:
-                    document = {'error': {'code': 'unparsed-tool-result', 'message': text[:300]}}
+                    document = None
+                if not isinstance(document, dict):
+                    denial = DENIAL.search(text)
+                    document = {'error': {'code': denial.group(1), 'message': text} if denial else
+                                {'code': 'unparsed-tool-result', 'message': text[:300]}}
                 request = uses[item['tool_use_id']]
                 calls.append({'feature': request.get('feature'), 'arguments': request.get('arguments'),
                               'document': document, 'failed': bool(item.get('is_error')) or 'error' in document})

@@ -1,0 +1,29 @@
+# Task 613: re-judge of Main's real step A stream with the fixed judge613.py (parser only; no product change).
+# Input: <Harness>/.graphtraj/core/state/tasks/613-graftling-claude-gateway-login-leak/realhost/main-raw/main-A.jsonl (real run on ddc506b).
+# Data root: $TMPDIR/rejudge-613/missing-data-root (does not exist: no Agent record anywhere).
+
+$ python3.13 -I scripts/verify-613/judge613.py main <main-A.jsonl> $TMPDIR/rejudge-613/calls-A.json
+Main init: model claude-opus-5-5 | apiKeySource none | subagents tool listed: True | mcp servers: [('graftling', 'connected')]
+Main result: AGENT: NONE |  | RESULT: Plugins blocked both calls (`models` and `create`) before they ran, so no agent was created and no model list came back. I didn't retry or change any arguments. Both calls returned this exact error: |  | ``` | Permission to use mcp__graftling__subagents denied by plugins agents-claude
+2 subagents call(s) -> $TMPDIR/rejudge-613/calls-A.json
+$ python3.13 -I scripts/verify-613/judge613.py check $TMPDIR/rejudge-613/calls-A.json A $TMPDIR/rejudge-613/missing-data-root
+  models: failed=True error=invalid-config: Permission to use mcp__graftling__subagents denied by plugins agents-claude-host, cc-plugin-privacy: Error: Native agents association failed: invalid-config: The subagents host did not start: Connecti
+  create: failed=True error=invalid-config: Permission to use mcp__graftling__subagents denied by plugins agents-claude-host, cc-plugin-privacy: Error: Native agents association failed: invalid-config: The subagents host did not start: Connecti
+CHECK 613 A: models refused with invalid-config naming "base_url needs api_key_env": PASS
+CHECK 613 A: create refused with invalid-config naming "base_url needs api_key_env": PASS
+CHECK 613 A: no Agent record was created: PASS
+exit=0
+$ python3.13 -I scripts/verify-613/recorder.py check <main-raw>/recorder-A.jsonl none
+recorder: 0 request(s) in <main-raw>/recorder-A.jsonl
+CHECK 613 recorder received no request: PASS
+exit=0
+
+# Parser check on a synthetic B-shaped stream (JSON result as a str and as a list of text parts; non-dict message fields).
+$ python3.13 -I scripts/verify-613/judge613.py main $TMPDIR/rejudge-613/main-B-synthetic.jsonl $TMPDIR/rejudge-613/calls-B.json
+Main init: model m | apiKeySource none | subagents tool listed: True | mcp servers: []
+Main result: AGENT: agent-x
+2 subagents call(s) -> $TMPDIR/rejudge-613/calls-B.json
+  create failed= False agent= agent-x state= active
+  retire failed= False agent= agent-x state= retired
+
+# Stub rehearsal after the fix (same flags as rehearsal-output.txt Part 1, steps A and B on ddc506b): every CHECK PASS

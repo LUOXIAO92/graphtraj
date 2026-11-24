@@ -1,0 +1,54 @@
+# Task 613: re-judge of Main's real step B recorder file with the revised B check (scripts/verify-613 only; graftling stays ddc506b).
+# Input: <main-raw>/recorder-B.jsonl (real run on ddc506b, written by the earlier recorder, which stored no session hash).
+# Data root: /private/tmp/graftling-613/proj-b/.agents-control (read only; the retained run's Agent record; no value is printed).
+
+$ python3.13 -I scripts/verify-613/recorder.py check <main-raw>/recorder-B.jsonl dummy /private/tmp/graftling-613/proj-b/.agents-control
+recorder: 2 request(s) in <main-raw>/recorder-B.jsonl
+native Session: Agent record agent-cf6f139d1e5e46a389b5cd931c3b327d.json, field 'session' (set)
+  #1 HEAD /api/hello auth headers: none
+  #2 POST /v1/messages auth headers: x-api-key=equals dummy, x-claude-code-session-id=NOT the dummy [session hash: not stored by this recorder version]
+CHECK 613 (a) at least one request reached the recorder: PASS
+CHECK 613 (b) no auth-like header but x-api-key and x-claude-code-session-id (no authorization, cookie, token...): PASS
+CHECK 613 (c) at least one x-api-key, and every x-api-key equals the dummy (no host key or login): PASS
+CHECK 613 (d) every x-claude-code-session-id is the child's native Session (sha256 match): NOT JUDGED (the records hold no session hash: an earlier recorder version)
+exit=1 (1: (d) is not judged, so the check does not pass as a whole)
+
+# (a)-(c) are judged. (d) cannot be: the retained records hold no sha256 of x-claude-code-session-id.
+# The retained Agent record's session fields (names and types only):
+  session: str set | sessions: list 1 entr(y/ies)
+# 'session' is the native Session: ClaudeExecution passes native_id as claude --session-id and publishes it through
+# run.events.session, which control.py stores as record['session'] (and appends to record['sessions']).
+
+# Stub rehearsal of step B with the revised check (graftling ddc506b in $TMPDIR/rehearsal-613/venv): the stub child sends
+# x-claude-code-session-id = its --session-id; two negative cases (VERIFY613_STUB_BAD) must FAIL (b) or (d). Under stubs the record's
+# 'session' stays empty (no start hook), so the check reads the session_id graftling launched with from the execution's diagnostics.
+### REHEARSAL B (stubs, no-bind): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home> VERIFY613_ROOT=$TMPDIR/rehearsal-613 VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh B
+CHECK 613 B: create returned an Agent (the child was started): PASS
+CHECK 613 B: retire succeeded: PASS
+recorder: 1 request(s) in $TMPDIR/rehearsal-613/recorder-B.jsonl
+native Session: Agent record agent-e9130e6537bc4ac8abc1d5fd1bb7b76a.json field 'session' empty; claude-diagnostics-384e65a5c3114eb299a0928ca572573e.yml field 'session_id'
+  #1 POST /v1/messages auth headers: x-api-key=equals dummy, x-claude-code-session-id=NOT the dummy [session hash matches the native Session]
+CHECK 613 (a) at least one request reached the recorder: PASS
+CHECK 613 (b) no auth-like header but x-api-key and x-claude-code-session-id (no authorization, cookie, token...): PASS
+CHECK 613 (c) at least one x-api-key, and every x-api-key equals the dummy (no host key or login): PASS
+CHECK 613 (d) every x-claude-code-session-id is the child's native Session (sha256 match): PASS
+### REHEARSAL B (stubs, no-bind), NEGATIVE CASE VERIFY613_STUB_BAD=authorization: VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home> VERIFY613_ROOT=$TMPDIR/rehearsal-613 VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> VERIFY613_STUB_BAD=authorization zsh scripts/verify-613/steps.zsh B
+CHECK 613 B: create returned an Agent (the child was started): PASS
+CHECK 613 B: retire succeeded: PASS
+recorder: 1 request(s) in $TMPDIR/rehearsal-613/recorder-B.jsonl
+native Session: Agent record agent-7127a6904a1f4003b11394668a293e2d.json field 'session' empty; claude-diagnostics-82c8950cd6554b43802e1eb139666298.yml field 'session_id'
+  #1 POST /v1/messages auth headers: authorization=NOT the dummy, x-api-key=equals dummy, x-claude-code-session-id=NOT the dummy [session hash matches the native Session]
+CHECK 613 (a) at least one request reached the recorder: PASS
+CHECK 613 (b) no auth-like header but x-api-key and x-claude-code-session-id (no authorization, cookie, token...): FAIL
+CHECK 613 (c) at least one x-api-key, and every x-api-key equals the dummy (no host key or login): PASS
+CHECK 613 (d) every x-claude-code-session-id is the child's native Session (sha256 match): PASS
+### REHEARSAL B (stubs, no-bind), NEGATIVE CASE VERIFY613_STUB_BAD=session: VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home> VERIFY613_ROOT=$TMPDIR/rehearsal-613 VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> VERIFY613_STUB_BAD=session zsh scripts/verify-613/steps.zsh B
+CHECK 613 B: create returned an Agent (the child was started): PASS
+CHECK 613 B: retire succeeded: PASS
+recorder: 1 request(s) in $TMPDIR/rehearsal-613/recorder-B.jsonl
+native Session: Agent record agent-74b2e7ceb83f438f920a5c28c4dee5dc.json field 'session' empty; claude-diagnostics-e352f8086f074a4b8b9dd6923301a4fb.yml field 'session_id'
+  #1 POST /v1/messages auth headers: x-api-key=equals dummy, x-claude-code-session-id=NOT the dummy [session hash does NOT match the native Session]
+CHECK 613 (a) at least one request reached the recorder: PASS
+CHECK 613 (b) no auth-like header but x-api-key and x-claude-code-session-id (no authorization, cookie, token...): PASS
+CHECK 613 (c) at least one x-api-key, and every x-api-key equals the dummy (no host key or login): PASS
+CHECK 613 (d) every x-claude-code-session-id is the child's native Session (sha256 match): FAIL

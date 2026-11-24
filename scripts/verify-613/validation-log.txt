@@ -1,0 +1,68 @@
+# Task 613 validation log (graftling candidate ddc506b0a7f87372baf8edc2347c26eebc2a251c after correction 1; sections 1-4 were first run on 60f61df, base 026267b5804d660caf1ea4f76610e9a73257c169)
+# Environment: macOS sandbox of the Engineer session; Python 3.13.11 (conda, --system-site-packages venvs with pytest 9.1.1,
+# PyYAML 6.0.3, websockets 16.1.1; graftling installed editable --no-deps --no-build-isolation). PyPI was not reachable.
+# Trees (inside this Worktree's gitignored build/): build/g613 = candidate branch (bare git dir build/g613.git),
+# build/g613-base = detached 026267b; venvs build/venv-cand -> build/g613/src, build/venv-base -> build/g613-base/src.
+# TMPDIR=${TMPDIR:-/tmp} (the session's sandbox temp, outside the Harness).
+
+## 1. New tests fail on the base (old code imported: see the 'imports' line)
+$ cd build/g613-base (graftling 026267b, the two candidate test files copied in) && TMPDIR=${TMPDIR:-/tmp} ../venv-base/bin/python -m pytest -q -p no:cacheprovider -rf tests/test_claude_gateway_login_613.py tests/test_provider_listing_609_613.py::test_a_claude_endpoint_without_its_key_is_not_queried
+imports /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/613-graftling-claude-gateway-login-leak/build/g613-base/src/graftling/__init__.py
+FAILED tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[]
+FAILED tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[    models: [claude-haiku-5-5]\n]
+FAILED tests/test_claude_gateway_login_613.py::test_a_host_claude_endpoint_without_its_key_is_refused_before_any_process
+FAILED tests/test_claude_gateway_login_613.py::test_a_child_reaches_its_endpoint_with_only_the_connection_key
+FAILED tests/test_provider_listing_609_613.py::test_a_claude_endpoint_without_its_key_is_not_queried
+5 failed, 2 passed in 2.85s
+
+## 2. New and related tests pass on the candidate
+$ cd build/g613 && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider tests/test_claude_gateway_login_613.py tests/test_provider_listing_609.py tests/test_agents_connections_presets.py
+83 passed in 6.50s
+
+## 3. Full suite, both run concurrently
+$ cd build/g613 && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider
+candidate 60f61df: 4 failed, 905 passed, 21 skipped in 259.49s (0:04:19)
+FAILED tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns
+FAILED tests/test_codex_tool_reclaim_462.py::test_normal_end_owner_stops_the_tool_the_service_left
+FAILED tests/test_codex_tool_reclaim_462.py::test_reclaim_runs_when_the_interpreter_refuses_new_threads
+FAILED tests/test_codex_tool_reclaim_462.py::test_a_slow_reclaim_does_not_delay_the_end
+$ cd build/g613-base && TMPDIR=${TMPDIR:-/tmp} ../venv-base/bin/python -m pytest -q -p no:cacheprovider
+base 026267b: 2 failed, 901 passed, 21 skipped in 259.09s (0:04:19)
+FAILED tests/test_codex_tool_reclaim_462.py::test_reclaim_runs_when_the_interpreter_refuses_new_threads
+FAILED tests/test_codex_tool_reclaim_462.py::test_a_slow_reclaim_does_not_delay_the_end
+Totals: candidate 930 = base 924 + 6 new tests (613 file: 6; 609 file: +1 new, -1 parametrized case that now expects the refusal).
+
+## 4. The failures are Codex process/timing tests that move between runs under concurrent load; alone they pass
+$ cd build/g613 && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider tests/test_codex_child_interpreter_shutdown_473.py tests/test_codex_tool_reclaim_462.py   (alone, after the concurrent full runs)
+......                                                                   [100%]
+6 passed in 17.02s
+(An earlier pair of full runs, before the refusal moved ahead of declared models, gave the same picture: candidate
+4 failed/901 passed, base 5 failed/895 passed, the same Codex tests, and 3 test_dsh_plugin_install_python errors from
+a venv without websockets' dist-info; with it they pass on both: 9 passed / 9 passed.)
+
+## 4a. Correction 1 (launch refusal for a recorded Agent), candidate ddc506b
+New test test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch fails with 60f61df's driver.py:
+$ cd build/g613 with src/graftling/claude/driver.py replaced by 60f61df's (git show 60f61df:src/graftling/claude/driver.py; the only file this correction changes in src) && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider tests/test_claude_gateway_login_613.py
+driver has the 613 launch refusal: 0
+E           AssertionError: {'action': 'send', 'agent': 'agent-eb564b5aeee8430286c85925b05db32c', 'session': '1069ee0f-9f01-4c83-bf0d-da9541147040', 'execution': '34a11f5a831a4a53b0467355b563fb5d', ...}
+E           assert (False)
+E            +  where False = AgentsResult(document={'action': 'send', 'agent': 'agent-eb564b5aeee8430286c85925b05db32c', 'session': '1069ee0f-9f01-...'error': None, 'terminal_confirmed': True, 'ended_at': 1795527213.064499, 'notification': 'delivere
+FAILED tests/test_claude_gateway_login_613.py::test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch
+1 failed, 6 passed in 2.33s
+
+$ cd build/g613 (ddc506b) && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider tests/test_claude_gateway_login_613.py tests/test_provider_listing_609.py tests/test_agents_connections_presets.py
+84 passed
+$ cd build/g613 (ddc506b) && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider   (alone)
+910 passed, 21 skipped in 253.57s (0:04:13)
+Totals: 931 = base 924 + 7 new tests. Base numbers reused from section 3.
+
+## 5. Bundle
+$ git -C <Harness>/graftling bundle verify scripts/verify-613/graftling-613.bundle
+scripts/verify-613/graftling-613.bundle is okay
+The bundle contains this ref:
+ddc506b0a7f87372baf8edc2347c26eebc2a251c refs/heads/agent/613-graftling-claude-gateway-login-leak
+The bundle requires this ref:
+026267b5804d660caf1ea4f76610e9a73257c169 
+The bundle uses this hash algorithm: sha1
+
+## 6. Rehearsal of the steps: see rehearsal-output.txt (candidate: every CHECK PASS; base: A's 4 CHECKs FAIL).

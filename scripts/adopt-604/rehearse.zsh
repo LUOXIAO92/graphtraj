@@ -50,7 +50,8 @@ cl() { env -i HOME=$HOME USER=${USER:-x} PATH=/usr/bin:/bin TMPDIR=$TMPDIR LANG=
   D=$FRT/lib/python3.13/site-packages; for d in click 'click-*.dist-info' yaml _yaml '[Pp]y[Yy][Aa][Mm][Ll]-*.dist-info' websockets 'websockets-*.dist-info'; do cp -Rp $REALS/$~d $D/; done
   (cd $FH && print y | cl $FRT/bin/graphtraj setup) > /dev/null || exit 1
   for c in $FH/.graphtraj/config.yml(N) $FH/.graphtraj/core/config.yml(N); do
-    $CONDA -I -c 'import sys; p = sys.argv[1]; t = open(p).read(); open(p, "w").write(t.replace("state: .graphtraj/state", "state: .graphtraj/core/state"))' $c; done
+    $CONDA -I -c 'import sys; p = sys.argv[1]; t = open(p).read(); open(p, "w").write(t.replace("state: .graphtraj/state", "state: .graphtraj/core/state").replace("agent_worktrees: .graphtraj/.agent-worktrees", "agent_worktrees: .graphtraj/core/worktrees"))' $c; done
+  print -r -- "fake project paths (production layout, as the real 601 state records its Worktree): $(grep -E 'agent_worktrees|state:' $FH/.graphtraj/config.yml | tr -s ' ' | tr '\n' ';')"
   (cd $FH && cl $FRT/bin/python -m graphtraj.runtimes.claude.host configuration --project $FH --claude $SB/stub/claude --write) > /dev/null || exit 1
   for t in $T593 $T600 $T603 $T604 $T516 $T601; do mkdir -p $FST/$t && cp -p $REALSTATE/tasks/$t/task.yml $FST/$t/ && cp -Rp $REALSTATE/tasks/$t/definitions $FST/$t/ || exit 1; done
   cp -Rp $REALSTATE/tasks/$T603/realhost $FST/$T603/ && cp -p $REALSTATE/tasks/$T601/execution-budget.yml $FST/$T601/ && cp -Rp $REALSTATE/tasks/$T601/teams $FST/$T601/ || exit 1
@@ -68,7 +69,7 @@ cl() { env -i HOME=$HOME USER=${USER:-x} PATH=/usr/bin:/bin TMPDIR=$TMPDIR LANG=
 extra=""; for v in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy ALL_PROXY all_proxy; do [[ -n ${(P)v:-} ]] && extra="$extra $v=${(P)v}"; done
 common=(ADOPT604_H=$FH ADOPT604_WT=$WT ADOPT604_STUB=$SB/stub ADOPT604_PROJECTS=$SB/projects/-fake ADOPT604_VPROJECT=$SB/vproject
         ADOPT604_SCRATCH=$SB/scr ADOPT604_REPO=$FH ADOPT604_DEV=$(git -C $FH rev-parse dev) "ADOPT604_CLEAN_EXTRA=${extra# }")
-run() { local out=$1 tag=$2; shift 2; print -r -- "\n######## rehearsal: $tag"; env $common ADOPT604_OUT=$out "$@"; print -r -- "######## exit=$? ($tag)"; }
+run() { local out=$1 tag=$2; shift 2; print; print -r -- "######## rehearsal: $tag"; env $common ADOPT604_OUT=$out "$@"; print -r -- "######## exit=$? ($tag)"; }
 RAW=$OUTD/raw; STOPS=$OUTD/raw-stop
 { print "## script hygiene"
   specials=(${(k)parameters[(R)*special*]})
@@ -83,7 +84,7 @@ RAW=$OUTD/raw; STOPS=$OUTD/raw-stop
   run $STOPS "STOP: S with a FIXTURE record carrying an id not named in 516" env ADOPT604_S603=$SB/s603-fixture zsh $S S
   for st in S B V; do run $RAW $st zsh $S $st; done
   print -r -- "77 0:10 $FH/.venv-runtime/bin/python -m graphtraj.execution.runner_worker $FH/.graphtraj/core/runner/sessions/999-x@engineer/launch.yml" > $SB/ps.txt
-  run $STOPS "STOP: Mpre with a member Worker running (ps FIXTURE line)" zsh $S Mpre
+  run $RAW "STOP: Mpre with a member Worker running (ps FIXTURE line)" zsh $S Mpre; cp -p $RAW/Mpre.txt $STOPS/Mpre.txt
   print -r -- $PSIDLE > $SB/ps.txt
   run $RAW Mpre zsh $S Mpre
   run $RAW I zsh -fc "print | zsh $S I"

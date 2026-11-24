@@ -1,0 +1,195 @@
+# Task 603 rehearsal (Engineer sandbox, 2026-11-24 +0900)
+# overrides: VERIFY603_T/OUT/ROOT under $TMPDIR=/tmp/claude-501/603/rh (the Harness tmp/ is outside this sandbox), VERIFY603_HOME=scratch HOME with a manual catalog (claude/anthropic/haiku-5_5, opus-5_5), VERIFY603_NO_PS=1, VERIFY603_NO_CLAUDE=1 (no ~/.claude in the sandbox), VERIFY603_DRY=1 for realhost.
+# pre/install/realhost ran on HEAD ec10b4b7; suite/SR on ba89a6c0 (only tests and x603's quiet git checks changed in between).
+
+## zsh steps.zsh pre (VERIFY603_NO_CLAUDE=1)
+== [pre] Main. Read-only preflight plus one claude -p call. Dialog: none. LOGIN: the user's Claude login (claude -p). ~30 s.
+PASS: /tmp/claude-501/603/rh/root does not exist
+zsh 5.9 runs /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup/scripts/verify-603/steps.zsh
+candidate HEAD ec10b4b75adbfc832bd4bfd3750d5f61ffbcd60b (603: a cancelled Task's budget stops notifying; cleanup removes a cancelled Task; manual c)
+PASS: base GraphTraj 36b9385014d16f67c28fc85d951acaf4681bd111 resolvable (adopt-600: production adoption steps in the one ordered list (G/GR/SR/)
+PASS: graftling e8c2e80241dff1151f2122e8957fca5598ec987b resolvable in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (v0.9.1)
+PASS: HEAD declares "graftling>=0.9.0,<0.10"
+PASS: no uncommitted change in src, tests, scripts
+PASS: TMPDIR=/tmp/claude-501 is outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery
+PASS: click present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: yaml present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: websockets present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: /Users/luoxiao/miniconda3/bin/python3.13: Python 3.13.11
+NOTE: ps cannot list processes here; check skipped (VERIFY603_NO_PS=1, rehearsal)
+PASS: no other pytest running
+user catalog Claude login connections: claude/anthropic/haiku-5_5 (claude-haiku-5-5), claude/anthropic/opus-5_5 (claude-opus-5-5)
+PASS: members will use Claude connection claude/anthropic/haiku-5_5
+REHEARSAL: claude checks skipped (VERIFY603_NO_CLAUDE=1)
+writes: one empty temp directory and its answer.txt under /tmp/claude-501 only. dialog: none.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup/scripts/verify-603/steps.zsh install
+STEP-END pre rc=0
+## zsh steps.zsh install
+== [install] Main. venv /tmp/claude-501/603/rh/t/venv-root-ec10b4b7: wheels of GraphTraj ec10b4b75adbfc832bd4bfd3750d5f61ffbcd60b and graftling e8c2e80241dff1151f2122e8957fca5598ec987b, offline. Dialog: none. No login. ~1 min.
+temp root: /private/tmp/claude-501/verify-603-install-20261124T183820 (TMPDIR=/tmp/claude-501, outside the Harness)
+graphtraj /tmp/claude-501/603/rh/t/venv-root-ec10b4b7/lib/python3.13/site-packages/graphtraj/__init__.py | wheel: True | graftling 0.9.1 /tmp/claude-501/603/rh/t/venv-root-ec10b4b7/lib/python3.13/site-packages/graftling/__init__.py
+PASS: venv imports graphtraj ec10b4b75adbfc832bd4bfd3750d5f61ffbcd60b (wheel) and graftling 0.9.1
+PASS: installed budget_idle_timer.py ends a timer once the Task is not active (603)
+PASS: installed runner_cleanup.py accepts a cancelled Task (603)
+PASS: /tmp/claude-501/603/rh/t/venv-root-ec10b4b7/bin/graphtraj
+PASS: /tmp/claude-501/603/rh/t/venv-root-ec10b4b7/bin/agent-runner
+writes: /tmp/claude-501/603/rh/t/venv-root-ec10b4b7, /tmp/claude-501/603/rh/t/venv-root-ec10b4b7-src and /private/tmp/claude-501/verify-603-install-20261124T183820 only. dialog: none.
+next: ask the user to agree to the Claude login, then (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup/scripts/verify-603/steps.zsh realhost
+STEP-END install rc=0
+## zsh steps.zsh realhost (VERIFY603_DRY=1)
+== [realhost] Main. ONE swarm call (one real Claude Engineer each for probe Tasks 1 and 2) in /tmp/claude-501/603/rh/root, then task revise cancels Task 1. Dialog: expected none. LOGIN: the user's Claude login. ~1-2 min.
+user catalog Claude login connections: claude/anthropic/haiku-5_5 (claude-haiku-5-5), claude/anthropic/opus-5_5 (claude-opus-5-5)
+member connection: claude/anthropic/haiku-5_5
+Proposed dev base: de371d054979def3956186356ce5dad829de2153
+Create dev from de371d054979def3956186356ce5dad829de2153? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+runner directory: /private/tmp/claude-501/603/rh/root/.graphtraj/runner | inside the project: True
+/tmp/claude-501/603/rh/root is outside the Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery: no Harness AGENTS.md/CLAUDE.md lies above it
+roles file: /private/tmp/claude-501/603/rh/root/.graphtraj/roles.yml (probe_team.engineer: connection claude/anthropic/haiku-5_5, effort low, permission_mode auto)
+roles OK
+task statuses before the dispatch: {'1': 'ready', '2': 'ready'} (both must be ready)
+batch: /tmp/claude-501/603/rh/root/.graphtraj/probe-603/batch.yml
+tasks:
+- task_id: '1'
+  task_name: cancel-probe
+  role: probe_team.engineer
+  instruction: This is a scripted GraphTraj probe (Task 1). Change no file, run no command, call no tool and dispatch nobody. Reply with exactly one line, PROBE-603 task 1, and end your turn.
+- task_id: '2'
+  task_name: active-control
+  role: probe_team.engineer
+  instruction: This is a scripted GraphTraj probe (Task 2). Change no file, run no command, call no tool and dispatch nobody. Reply with exactly one line, PROBE-603 task 2, and end your turn.
+DRY (rehearsal): stopped before agent-runner --swarm-input
+STEP-END realhost rc=0
+
+## not a step, beyond the required rehearsal: a second dry project (VERIFY603_ROOT=/tmp/claude-501/603/rh/root2, same DRY realhost), its batch dispatched by hand
+## with the repository's fake claude (tests/claude_cli_fixture.py: no model, no login; env -i), then x603 ended and cancel as realhost runs them,
+## then the script's own wait and clean steps. Real Workers and idle-timer processes ran; only the model is fake. (x603 at ec10b4b7: the
+## 'command failed' echo of the expected merge-base/show-ref exit 1 was silenced afterwards in ba89a6c0.)
+## not a step: the dry project's batch dispatched by hand with the repository's fake claude (tests/claude_cli_fixture.py, no model, no login, env -i), then x603 ended and cancel exactly as realhost runs them
+agent-runner --swarm-input exit=0
+  alias: 1-cancel_probe-handover0-engineer@engineer
+  launch_status: launched
+  alias: 2-active_control-handover0-engineer@engineer
+  launch_status: launched
+1-cancel_probe-handover0-engineer@engineer: execution ended, outcome completed, error None; idle budget timer: started (token 778ab068f7804052afd04051ffa3bccd)
+2-active_control-handover0-engineer@engineer: execution ended, outcome completed, error None; idle budget timer: started (token ce694d3fffe14cdc8987150faba9f79b)
+ended rc=0
+Task 1 member 1-cancel_probe-handover0-engineer@engineer: execution outcome completed; budget-timer.yml present (the idle timer started before the cancellation)
+command failed: git merge-base --is-ancestor 9879ac642e68c491b961a51ba77ef7dea2a415f4 dev
+
+Task 1 Worktree /private/tmp/claude-501/603/rh/root2/.graphtraj/.agent-worktrees/1-cancel-probe | branch agent/1-cancel-probe tip 9879ac642e68c491b961a51ba77ef7dea2a415f4 (not in dev: True)
+task revise: Task 1 disposition cancelled at 2026-11-24T18:41:14+09:00 (event 20261124T184114.691598+0900)
+Task 1 status implementing (before implementing), Team status active
+Task 1 budget: started 2026-11-24T18:41:13+09:00, planned end 2026-11-24T18:43:13+09:00, allowance 0.47 min -> 2026-11-24T18:43:41+09:00
+Task 2 (control) allowance ends 2026-11-24T18:43:49+09:00
+the wait ends after 2026-11-24T18:44:19+09:00 (latest allowance end + 30 s)
+cancel rc=0
+
+## zsh steps.zsh wait (fake-claude project)
+== [wait] Main. Read only: sleeps past Task 1's planned end + allowance (time printed by realhost), then the notice observables. Dialog: none. No login.
+venv: /tmp/claude-501/603/rh/t/venv-root-ec10b4b7 | holds GraphTraj ec10b4b75adbfc832bd4bfd3750d5f61ffbcd60b | product files equal to HEAD ec10b4b7: yes
+waiting until 2026-11-24T18:44:19+09:00 (178 s)
+Task 1 execution-budget.yml: notifications [], parent_notices [], stopped False, stopping_checks 0
+PASS: the cancelled Task recorded no budget notice
+1-cancel_probe-handover0-engineer@engineer parent-notices.jsonl execution-budget records: none
+PASS: no execution-budget notice reached the cancelled member's parent
+Task 2 (control, active) notifications ['elapsed_minutes:2', 'additional_allowance:0.5968997375660562']
+PASS: the active control Task's idle timer recorded its planned-end notice: timers ran here
+PASS: the cancellation (2026-11-24T18:41:14+09:00) came before Task 1's planned end (2026-11-24T18:43:13+09:00)
+verdict: PASS
+wait: PASS (copy: /tmp/claude-501/603/rh/out/realhost-wait.txt)
+writes: /tmp/claude-501/603/rh/out/realhost-wait.txt only. dialog: none.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup/scripts/verify-603/steps.zsh clean
+STEP-END wait rc=0
+## zsh steps.zsh clean (fake-claude project)
+== [clean] Main. Public cleanup of cancelled Task 1, then of active Task 2 (must be refused). Dialog: none. No login.
+venv: /tmp/claude-501/603/rh/t/venv-root-ec10b4b7 | holds GraphTraj ec10b4b75adbfc832bd4bfd3750d5f61ffbcd60b | product files equal to HEAD ec10b4b7: yes
+agent-runner cleanup --task-id 1: exit 0
+task_id: '1'
+cleanup_status: cleaned
+worktree_path: /private/tmp/claude-501/603/rh/root2/.graphtraj/.agent-worktrees/1-cancel-probe
+branch: agent/1-cancel-probe
+aliases_removed: []
+standby_aliases:
+- 1-cancel_probe-handover0-engineer@engineer
+evidence:
+  task_disposition: cancelled
+  task_commit: 9879ac642e68c491b961a51ba77ef7dea2a415f4
+PASS: Task 1 cleanup_status cleaned
+PASS: Worktree /private/tmp/claude-501/603/rh/root2/.graphtraj/.agent-worktrees/1-cancel-probe is gone
+command failed: git show-ref --verify --quiet refs/heads/agent/1-cancel-probe
+
+PASS: branch agent/1-cancel-probe is gone
+PASS: recorded task_commit 9879ac642e68c491b961a51ba77ef7dea2a415f4 equals the branch tip 9879ac642e68c491b961a51ba77ef7dea2a415f4
+PASS: Task 1 records kept: {'task.yml': True, 'definitions/': True, 'execution-budget.yml': True, 'teams/1/team.yml': True, 'Traces': True}
+PASS: Task 1 status implementing and Team status active unchanged
+PASS: Session record 1-cancel_probe-handover0-engineer@engineer kept
+agent-runner cleanup --task-id 2: exit 1
+task_id: '2'
+cleanup_status: refused
+worktree_path: /private/tmp/claude-501/603/rh/root2/.graphtraj/.agent-worktrees/2-active-control
+branch: agent/2-active-control
+error:
+  code: cleanup-not-integrated
+  message: The Task has not completed validated integration.
+evidence:
+  task_status: implementing
+PASS: Task 2 (active, unintegrated) refused with cleanup-not-integrated
+PASS: Task 2 Worktree kept
+verdict: PASS
+clean: PASS (copy: /tmp/claude-501/603/rh/out/realhost-clean.txt)
+writes: /tmp/claude-501/603/rh/root2 (Task 1 Worktree and branch removed by cleanup) and /tmp/claude-501/603/rh/out/realhost-clean.txt only. dialog: none.
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup/scripts/verify-603/steps.zsh suite
+STEP-END clean rc=0
+
+## zsh steps.zsh suite (VERIFY603_PYTEST_ARGS='-k test_installed_cleanup_removes_a_cancelled_task_worktree_and_unmerged_branch')
+== [suite] Main. GraphTraj full suite of HEAD ba89a6c08a23bf71deec4a44922c65d4e9ea8eac (6 shards, --timeout 1500, -rA, background ~25 min). Dialog: none. No login.
+load average: unavailable
+NOTE: ps cannot list processes here; check skipped (VERIFY603_NO_PS=1, rehearsal)
+temp root: /private/tmp/claude-501/verify-603-suite-20261124T184549 (TMPDIR=/tmp/claude-501, outside the Harness)
+/tmp/claude-501/603/rh/t/venv-suite-e8c2e802: graftling e8c2e80241dff1151f2122e8957fca5598ec987b (wheel) + graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup (editable)
+graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup/src/graphtraj/__init__.py | graftling 0.9.1 /tmp/claude-501/603/rh/t/venv-suite-e8c2e802/lib/python3.13/site-packages/graftling/__init__.py | editable: False
+pytest temp root: /private/tmp/claude-501/verify-603-suite-20261124T184549 (TMPDIR, outside the Harness) | candidate GraphTraj ba89a6c08a23bf71deec4a44922c65d4e9ea8eac | graftling e8c2e80241dff1151f2122e8957fca5598ec987b (wheel)
+REHEARSAL: extra pytest args after -- -rA: '-k' 'test_installed_cleanup_removes_a_cancelled_task_worktree_and_unmerged_branch'
+started in the background at 18:45:53; output: /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/suite.txt (ends with 'exit=N')
+writes: /tmp/claude-501/603/rh/t (venv, sources, /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553) and /private/tmp/claude-501/verify-603-suite-20261124T184549 only. dialog: none.
+progress (paste): tail -3 /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/suite.txt; ls -la /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards
+next (paste, after /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/suite.txt ends with exit=): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/603-cancelled-task-timer-and-cleanup/scripts/verify-603/steps.zsh SR
+STEP-END suite rc=0
+## the suite output when it ended:
+shard 3: 41 files -> /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-3.log
+shard 4: 41 files -> /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-4.log
+shard 5: 40 files -> /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-5.log
+leftover processes of run 817d512235f04cf8: before=0 after-shards=0 stopped=0 remaining=0
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-0.log: exit 5
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-1.log: exit 5
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-2.log: exit 5
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-3.log: exit 5
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-4.log: exit 5
+1 passed, 3766 deselected
+logs: /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards
+exit=1
+
+## zsh steps.zsh SR
+== [SR] read only: newest suite; FAILED/ERROR node ids classed against 516's current definition. Dialog: none.
+516 current definition (task.yml current_definition): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+pytest temp root: /private/tmp/claude-501/verify-603-suite-20261124T184549 (TMPDIR, outside the Harness) | candidate GraphTraj ba89a6c08a23bf71deec4a44922c65d4e9ea8eac | graftling e8c2e80241dff1151f2122e8957fca5598ec987b (wheel)
+REHEARSAL: extra pytest args after -- -rA: '-k' 'test_installed_cleanup_removes_a_cancelled_task_worktree_and_unmerged_branch'
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-2.log: exit 5
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-3.log: exit 5
+ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-4.log: exit 5
+1 passed, 3766 deselected
+logs: /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards
+exit=1
+(no FAILED/ERROR lines)
+rehearsal filter, nothing collected: ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-0.log: exit 5
+rehearsal filter, nothing collected: ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-1.log: exit 5
+rehearsal filter, nothing collected: ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-2.log: exit 5
+rehearsal filter, nothing collected: ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-3.log: exit 5
+rehearsal filter, nothing collected: ABNORMAL /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/shards/shard-4.log: exit 5
+shard-5.log:1 passed, 510 deselected in 11.33s
+SR verdict: PASS (no NEW failure)
+NEW node ids (0, one per line): /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/new-ids.txt
+writes: /tmp/claude-501/603/rh/t/suite-ba89a6c0-20261124T184553/new-ids.txt and copies in /tmp/claude-501/603/rh/out only. dialog: none.
+next: none (no NEW id); report the SR verdict
+STEP-END SR rc=0

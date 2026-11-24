@@ -1,0 +1,26 @@
+# Task 603 regression evidence (2026-11-24 18:47:41 +0900)
+## base 36b93850 (unfixed): git clone at /tmp/claude-501/603/base (HEAD 36b93850), venv /tmp/claude-501/603/venv-base (graftling 0.9.1 wheel + base editable); the two new/changed test files copied in; pyproject pythonpath=src -> /tmp/claude-501/603/base/src
+imports /private/tmp/claude-501/603/base/src/graphtraj/__init__.py
+cancelled_task = DeliveredTask(root=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-381/test_installed_cleanup_removes0'), ...e/tmp/claude-501/pytest-of-luoxiao/pytest-381/installed-environment0/venv/bin/agent-runner')), failed_start_aliases=())
+E       AssertionError: task_id: '85'
+cancelled_task = DeliveredTask(root=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-381/test_installed_cleanup_refuses1'), ...e/tmp/claude-501/pytest-of-luoxiao/pytest-381/installed-environment0/venv/bin/agent-runner')), failed_start_aliases=())
+E       AssertionError: assert 'cleanup-not-integrated' == 'cleanup-dirty'
+cancelled_task = DeliveredTask(root=PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-381/test_installed_cleanup_refuses2'), ...e/tmp/claude-501/pytest-of-luoxiao/pytest-381/installed-environment0/venv/bin/agent-runner')), failed_start_aliases=())
+E       AssertionError: assert 'cleanup-not-integrated' == 'worktree-busy'
+E       AssertionError: assert True is False
+E       AssertionError: assert True is False
+FAILED tests/test_agent_runner_cleanup.py::test_installed_cleanup_removes_a_cancelled_task_worktree_and_unmerged_branch
+FAILED tests/test_agent_runner_cleanup.py::test_installed_cleanup_refuses_a_dirty_cancelled_task
+FAILED tests/test_agent_runner_cleanup.py::test_installed_cleanup_refuses_a_cancelled_task_with_an_executing_agent
+FAILED tests/test_budget_notice_idle.py::test_a_timer_started_before_the_task_was_cancelled_sends_nothing[cancelled]
+FAILED tests/test_budget_notice_idle.py::test_a_timer_started_before_the_task_was_cancelled_sends_nothing[superseded]
+5 failed, 2 passed, 48 deselected in 27.15s
+## candidate (fix) ba89a6c0: venv /tmp/claude-501/603/venv (graftling 0.9.1 wheel + Worktree editable)
+PASSED tests/test_agent_runner_cleanup.py::test_installed_cleanup_refuses_a_task_without_validated_integration
+PASSED tests/test_agent_runner_cleanup.py::test_installed_cleanup_removes_a_cancelled_task_worktree_and_unmerged_branch
+PASSED tests/test_agent_runner_cleanup.py::test_installed_cleanup_refuses_a_dirty_cancelled_task
+PASSED tests/test_agent_runner_cleanup.py::test_installed_cleanup_refuses_a_cancelled_task_with_an_executing_agent
+PASSED tests/test_agent_runner_cleanup.py::test_installed_cleanup_still_refuses_a_superseded_unintegrated_task
+PASSED tests/test_budget_notice_idle.py::test_a_timer_started_before_the_task_was_cancelled_sends_nothing[cancelled]
+PASSED tests/test_budget_notice_idle.py::test_a_timer_started_before_the_task_was_cancelled_sends_nothing[superseded]
+7 passed, 48 deselected in 23.24s

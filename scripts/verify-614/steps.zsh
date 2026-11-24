@@ -412,15 +412,15 @@ suite-base)
   if [[ ! -d $B/.git ]]; then rm -rf -- $B && git clone -q --no-checkout $(git -C $WT rev-parse --path-format=absolute --git-common-dir) $B \
      && git -C $B -c advice.detachedHead=false checkout -q $GTBASE || return 1; fi
   g_venv $VB $B && g_venv $VC $WT || return 1
-  local R=$T/suite-base-$(date +%Y%m%dT%H%M%S) side dir V src RUNTMP; mkdir -p $R; print -l -- $ids > $R/ids.txt
+  local R=$T/suite-base-$(date +%Y%m%dT%H%M%S) side dir V src RUNTMP f; local -a files run; mkdir -p $R; print -l -- $ids > $R/ids.txt
   for side dir V in base $B $VB candidate $WT $VC; do
     RUNTMP=${PYTEST_TMP:A}/verify-614-sb-$side-$(date +%Y%m%dT%H%M%S); mkdir -p $RUNTMP
     print -r -- "$side: pytest in $dir | temp $RUNTMP"
-    local -a files=() ; local f; for f in ${(u)${ids%%::*}}; do [[ -e $dir/$f ]] && files+=$f; done   # a file absent on a side is not collected there
+    files=(); for f in ${(u)${ids%%::*}}; do [[ -e $dir/$f ]] && files+=$f; done   # a file absent on a side is not collected there
     if (( $#files )); then (cd $dir && clean TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q --collect-only $files > $R/$side-collected.txt 2>&1)
     else : > $R/$side-collected.txt; fi
     clean $CONDA -I $SUITEIDS present $R/$side-collected.txt $R/ids.txt > $R/$side-ids.txt 2> $R/$side-missing.txt
-    local -a run=(${(f)"$(<$R/$side-ids.txt)"})
+    run=(${(f)"$(<$R/$side-ids.txt)"}); run=(${run:#})
     if (( $#run )); then (cd $dir && clean TMPDIR=$RUNTMP $V/bin/python -m pytest -p no:cacheprovider -q -rA "${run[@]}" > $R/$side.txt 2>&1); src=$?
     else print -r -- "(no id present on $side)" > $R/$side.txt; src=5; fi
     print -r -- "$side: pytest exit=$src, $(grep -E '^[0-9]+ (passed|failed)|^=+ .*(passed|failed|error)' $R/$side.txt | tail -1) ($R/$side.txt)"

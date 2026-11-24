@@ -1,4 +1,4 @@
-# Task 613 validation log (graftling candidate 60f61df27bffad896d786962480edfbfb51c20bb, base 026267b5804d660caf1ea4f76610e9a73257c169)
+# Task 613 validation log (graftling candidate ddc506b0a7f87372baf8edc2347c26eebc2a251c after correction 1; sections 1-4 were first run on 60f61df, base 026267b5804d660caf1ea4f76610e9a73257c169)
 # Environment: macOS sandbox of the Engineer session; Python 3.13.11 (conda, --system-site-packages venvs with pytest 9.1.1,
 # PyYAML 6.0.3, websockets 16.1.1; graftling installed editable --no-deps --no-build-isolation). PyPI was not reachable.
 # Trees (inside this Worktree's gitignored build/): build/g613 = candidate branch (bare git dir build/g613.git),
@@ -40,11 +40,27 @@ $ cd build/g613 && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -
 4 failed/901 passed, base 5 failed/895 passed, the same Codex tests, and 3 test_dsh_plugin_install_python errors from
 a venv without websockets' dist-info; with it they pass on both: 9 passed / 9 passed.)
 
+## 4a. Correction 1 (launch refusal for a recorded Agent), candidate ddc506b
+New test test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch fails with 60f61df's driver.py:
+$ cd build/g613 with src/graftling/claude/driver.py replaced by 60f61df's (git show 60f61df:src/graftling/claude/driver.py; the only file this correction changes in src) && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider tests/test_claude_gateway_login_613.py
+driver has the 613 launch refusal: 0
+E           AssertionError: {'action': 'send', 'agent': 'agent-eb564b5aeee8430286c85925b05db32c', 'session': '1069ee0f-9f01-4c83-bf0d-da9541147040', 'execution': '34a11f5a831a4a53b0467355b563fb5d', ...}
+E           assert (False)
+E            +  where False = AgentsResult(document={'action': 'send', 'agent': 'agent-eb564b5aeee8430286c85925b05db32c', 'session': '1069ee0f-9f01-...'error': None, 'terminal_confirmed': True, 'ended_at': 1795527213.064499, 'notification': 'delivere
+FAILED tests/test_claude_gateway_login_613.py::test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch
+1 failed, 6 passed in 2.33s
+
+$ cd build/g613 (ddc506b) && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider tests/test_claude_gateway_login_613.py tests/test_provider_listing_609.py tests/test_agents_connections_presets.py
+84 passed
+$ cd build/g613 (ddc506b) && TMPDIR=${TMPDIR:-/tmp} ../venv-cand/bin/python -m pytest -q -p no:cacheprovider   (alone)
+910 passed, 21 skipped in 253.57s (0:04:13)
+Totals: 931 = base 924 + 7 new tests. Base numbers reused from section 3.
+
 ## 5. Bundle
 $ git -C <Harness>/graftling bundle verify scripts/verify-613/graftling-613.bundle
 scripts/verify-613/graftling-613.bundle is okay
 The bundle contains this ref:
-60f61df27bffad896d786962480edfbfb51c20bb refs/heads/agent/613-graftling-claude-gateway-login-leak
+ddc506b0a7f87372baf8edc2347c26eebc2a251c refs/heads/agent/613-graftling-claude-gateway-login-leak
 The bundle requires this ref:
 026267b5804d660caf1ea4f76610e9a73257c169 
 The bundle uses this hash algorithm: sha1

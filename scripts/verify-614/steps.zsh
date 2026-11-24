@@ -271,6 +271,7 @@ setup)
     && pass "public role preview: $(grep -oE '\b(claude|routed|inline|coder)\b' $ROOT/roles-preview.yml | sort -u | xargs)" \
     || fail "public role preview failed: $(tail -3 $ROOT/roles-preview.yml)"
   local C=$(claude_bin)
+  [[ -x $C ]] || { fail "no Claude CLI at ~/.local/bin/claude or on PATH (the host configuration names it)"; return 1; }
   inproj $VENV/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $C --write > $ROOT/host-configuration.txt 2>&1 \
     && pass "Claude host material written: $(tr -d '\n ' < $ROOT/host-configuration.txt | cut -c1-200)" || fail "host configuration --write failed ($ROOT/host-configuration.txt)"
   clean $CONDA -I -c 'import secrets; print("fake-614-" + secrets.token_hex(12))' > $FAKE && chmod 600 $FAKE

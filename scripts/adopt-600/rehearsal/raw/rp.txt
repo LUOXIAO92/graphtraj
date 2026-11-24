@@ -1,0 +1,7 @@
+origin: /private/tmp/claude-501/r600/origin.git
+remote before: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd	refs/tags/v0.9.1
+will push: dev e8c2e80241dff1151f2122e8957fca5598ec987b, main e8c2e80241dff1151f2122e8957fca5598ec987b, refs/tags/v0.9.1 (e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd) (fast-forward only, --atomic, no force)
+Everything up-to-date
+remote now: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+CHECK 600 rp remote main == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rp remote dev == local dev (e8c2e80241dff1151f2122e8957fca5598ec987b): PASS

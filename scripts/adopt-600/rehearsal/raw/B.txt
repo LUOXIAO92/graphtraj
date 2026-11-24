@@ -1,0 +1,43 @@
+git archive v0.9.1 (e8c2e80241dff1151f2122e8957fca5598ec987b) -> /private/tmp/claude-501/r600/tmp600/gsrc
+
+### version strings in the archive
+  src/graftling/__init__.py: __version__ = "0.9.1"
+  src/graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.9.1",
+  src/graftling/dsh/package.json:   "version": "0.9.1",
+  src/graftling/pi/package.json:   "version": "0.9.1",
+CHECK 600 B archive version strings (__init__.py and the 3 json) all 0.9.1: PASS
+CHANGELOG first heading: ## 0.9.1 (compatible)
+CHECK 600 B CHANGELOG heading '## 0.9.1 (compatible)' and no '## Unreleased': PASS
+
+### build (setuptools 80.9.0 | pip 25.3)
+wheel: graftling-0.9.1-py3-none-any.whl
+
+### version strings in the wheel
+  METADATA Version: 0.9.1
+  graftling/__init__.py: __version__ = "0.9.1"
+  graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.9.1",
+  graftling/dsh/package.json:   "version": "0.9.1",
+  graftling/pi/package.json:   "version": "0.9.1",
+CHECK 600 B wheel version strings (METADATA, __init__.py, the 3 json) all 0.9.1: PASS
+
+### console scripts
+  [console_scripts]: subagents subagents-mcp 
+CHECK 600 B wheel console scripts are exactly subagents, subagents-mcp: PASS
+
+### wheel == git archive v0.9.1, file by file (593's pkgdiff532.py)
+graftling graftling-0.9.1-py3-none-any.whl vs /private/tmp/claude-501/r600/tmp600/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 600 B graftling wheel equals git archive v0.9.1: PASS
+CHECK 600 B the wheel's graftling/ files equal git archive v0.9.1: PASS
+
+### content markers in the wheel
+  graftling/claude-plugin/bin/graftling-host: 'uv tool install --managed-python' x1
+  graftling/dsh/plugin.mjs: 'uv tool install --managed-python' x1
+  graftling/PUBLIC_API.md: '**Retired Agents.**' x1
+CHECK 600 B 597's and 599's markers are in the wheel: PASS
+leaked build/ or __pycache__/ entries: 0
+CHECK 600 B no build/ or __pycache__ in the wheel: PASS
+
+### GraphTraj's graftling requirement (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/pyproject.toml; information: no change needed)
+REPORT 600 B GraphTraj Requires-Dist graftling<0.10,>=0.9.0 includes 0.9.1: yes, no change needed
+CHECK 600 B GraphTraj's graftling range includes 0.9.1: PASS
+wheel sha256: 0e7e944870f1192082ef3328b8d41fdb5fc040a5bc0bbaec0eeebab5db3b152b  /private/tmp/claude-501/r600/tmp600/wheel/graftling-0.9.1-py3-none-any.whl

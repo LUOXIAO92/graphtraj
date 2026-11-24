@@ -1,0 +1,38 @@
+CHECK 600 00 runs under zsh: PASS (zsh 5.9)
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 600 00 this uv's 'uv tool install --help' lists --managed-python: PASS (--managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=])
+uv user config: /Users/luoxiao/.config/uv/uv.toml absent; /etc/uv/uv.toml absent; 
+TMPDIR: /tmp/claude-501
+CHECK 600 00 /private/tmp/claude-501/r600/uvtool-600 absent: PASS
+
+### graftling repository /private/tmp/claude-501/r600/g (read only)
+dev: 2b4a33aef93dc45b953bd412e4d5dd61347c38ea in /private/tmp/claude-501/r600/gdev | main: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 in /private/tmp/claude-501/r600/g
+CHECK 600 00 graftling dev = 2b4a33aef93dc45b953bd412e4d5dd61347c38ea: PASS
+CHECK 600 00 graftling main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (v0.9.0): PASS
+CHECK 600 00 dev is checked out in /private/tmp/claude-501/r600/gdev and main in /private/tmp/claude-501/r600/g: PASS
+CHECK 600 00 both worktrees clean (git status --porcelain empty): PASS
+CHECK 600 00 v0.9.1 absent locally: PASS
+
+### GitHub /private/tmp/claude-501/r600/origin.git (git ls-remote, read only)
+GitHub main: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | dev: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | v0.9.1: absent
+CHECK 600 00 GitHub main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
+CHECK 600 00 GitHub v0.9.1 absent: PASS
+CHECK 600 00 GitHub dev (7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9) is an ancestor of 2b4a33aef93dc45b953bd412e4d5dd61347c38ea, so rp fast-forwards it: PASS
+
+### bundle /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/graftling-0.9.1.bundle
+sha256: b5c6d530ef5f3f5324438a4f3ba6d47d0ef8bee271e4b7f53f34f2f2fe66ee12
+CHECK 600 00 bundle sha256 = b5c6d530ef5f3f5324438a4f3ba6d47d0ef8bee271e4b7f53f34f2f2fe66ee12: PASS
+CHECK 600 00 bundle verifies against /private/tmp/claude-501/r600/g (its prerequisite 2b4a33aef93dc45b953bd412e4d5dd61347c38ea is there): PASS
+list-heads: e8c2e80241dff1151f2122e8957fca5598ec987b refs/heads/agent/600-graftling-0.9.1
+CHECK 600 00 bundle head = e8c2e80241dff1151f2122e8957fca5598ec987b (agent/600-graftling-0.9.1): PASS
+
+### the release commit, read from a scratch clone /private/tmp/claude-501/r600/tmp600/g00.git (objects shared from /private/tmp/claude-501/r600/g, which is not written)
+e8c2e80241dff1151f2122e8957fca5598ec987b: graftling 0.9.1 (600) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | committer LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | parent 2b4a33aef93dc45b953bd412e4d5dd61347c38ea
+CHECK 600 00 e8c2e80241dff1151f2122e8957fca5598ec987b is one commit on 2b4a33aef93dc45b953bd412e4d5dd61347c38ea: PASS
+CHECK 600 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+changed files: CHANGELOG.md src/graftling/__init__.py src/graftling/claude-plugin/.claude-plugin/plugin.json src/graftling/dsh/package.json src/graftling/pi/package.json 
+CHECK 600 00 the release commit changes exactly the 5 version/CHANGELOG files: PASS
+version at e8c2e80241dff1151f2122e8957fca5598ec987b: __version__ = "0.9.1"
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@<tag-or-commit>"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@v0.9.1"
+CHECK 600 00 README install line at e8c2e80241dff1151f2122e8957fca5598ec987b with @v0.9.1 equals C5's command: PASS

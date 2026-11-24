@@ -1,0 +1,8 @@
+before: dev e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r600/gdev) | main e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r600/g) | v0.9.1 e8c2e80241dff1151f2122e8957fca5598ec987b
+already released: v0.9.1 = main = dev = e8c2e80241dff1151f2122e8957fca5598ec987b (nothing to do)
+v0.9.1 -> e8c2e80241dff1151f2122e8957fca5598ec987b | dev e8c2e80241dff1151f2122e8957fca5598ec987b | main e8c2e80241dff1151f2122e8957fca5598ec987b | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 600 rel v0.9.1 peels to e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel graftling main == dev == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel v0.9.1 is an annotated tag with the noreply tagger: PASS
+CHECK 600 rel v0.9.1 message names 597, 599 and compatible: PASS
+CHECK 600 rel version at v0.9.1 is 0.9.1: PASS (__version__ = "0.9.1")

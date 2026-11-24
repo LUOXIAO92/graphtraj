@@ -1,0 +1,34 @@
+
+### before: USER directories and conda (read only)
+snap: skipped (ADOPT600_NOSNAP, rehearsal only)
+
+### README line 1: the install, uv directories isolated under /private/tmp/claude-501/r600/uvtool-600
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin) | environment: UV_TOOL_DIR=/private/tmp/claude-501/r600/uvtool-600/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/r600/uvtool-600/bin UV_CACHE_DIR=/private/tmp/claude-501/r600/uvtool-600/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/r600/uvtool-600/python
+command: uv tool install --managed-python git+file:///private/tmp/claude-501/r600/origin.git@v0.9.1   (uv = /Users/luoxiao/miniconda3/bin/uv)
+ + graftling==0.9.1 (from git+file:///private/tmp/claude-501/r600/origin.git@e8c2e80241dff1151f2122e8957fca5598ec987b)
+ + pyyaml==6.0.4
+ + websockets==16.1.1
+Installed 2 executables: subagents, subagents-mcp
+warning: `/private/tmp/claude-501/r600/uvtool-600/bin` is not on your PATH. To use installed tools, add the directory to your PATH.
+uv tool install rc=0 (full output: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/rehearsal/raw/C5-uv.txt)
+CHECK 600 C5 uv tool install rc 0: PASS
+
+### README line 2: AGENTS_PYTHON="$(uv tool dir)/graftling/bin/python" (isolated environment)
+uv tool dir: /private/tmp/claude-501/r600/uvtool-600/tools
+CHECK 600 C5 uv tool dir is /private/tmp/claude-501/r600/uvtool-600/tools: PASS
+tool python: /private/tmp/claude-501/r600/uvtool-600/tools/graftling/bin/python -> /private/tmp/claude-501/r600/uvtool-600/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 | sys.prefix: /private/tmp/claude-501/r600/uvtool-600/tools/graftling | base: /private/tmp/claude-501/r600/uvtool-600/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 -> /private/tmp/claude-501/r600/uvtool-600/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 | graftling.__version__ 0.9.1 | metadata 0.9.1 | direct_url commit_id e8c2e80241dff1151f2122e8957fca5598ec987b
+CHECK 600 C5 graftling.__version__ and importlib.metadata version are 0.9.1: PASS
+CHECK 600 C5 sys.prefix is /private/tmp/claude-501/r600/uvtool-600/tools/graftling: PASS
+REPORT 600 C5 base interpreter: /private/tmp/claude-501/r600/uvtool-600/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 (uv-managed) | uv-managed Pythons: cpython-3.14.7-macos-aarch64-none 
+CHECK 600 C5 tool environment base interpreter is uv-managed (under /private/tmp/claude-501/r600/uvtool-600/python): PASS (uv-managed)
+CHECK 600 C5 installed dist-info direct_url.json vcs commit_id is e8c2e80241dff1151f2122e8957fca5598ec987b: PASS (e8c2e80241dff1151f2122e8957fca5598ec987b)
+
+### README line 3: "$(uv tool dir --bin)/subagents" --help (isolated environment)
+uv tool dir --bin: /private/tmp/claude-501/r600/uvtool-600/bin
+CHECK 600 C5 uv tool dir --bin is /private/tmp/claude-501/r600/uvtool-600/bin: PASS
+subagents --help (rc 0): usage: subagents [-h] request
+CHECK 600 C5 /private/tmp/claude-501/r600/uvtool-600/bin/subagents --help rc 0: PASS
+CHECK 600 C5 /private/tmp/claude-501/r600/uvtool-600/bin/subagents-mcp exists: PASS (#!/private/tmp/claude-501/r600/uvtool-600/tools/graftling/bin/python)
+
+### after: USER directories and conda
+snap compare: skipped (ADOPT600_NOSNAP, rehearsal only)

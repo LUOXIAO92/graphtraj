@@ -1,0 +1,20 @@
+scratch: /private/tmp/claude-501/r600 | G=/private/tmp/claude-501/r600/g (main) | GDEV=/private/tmp/claude-501/r600/gdev (dev) | GitHub stand-in: /private/tmp/claude-501/r600/origin.git (dev 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9)
+## zsh special parameter collisions among names assigned in steps.zsh
+assigned names: 113 | special names among them: HOME PATH TERM LANG | other than clean()'s intended pass-throughs (HOME PATH TERM LANG TMPDIR USER as env -i arguments): none
+## $NAME: followed by a letter (zsh modifier trap, e.g. $GBRANCH:refs -> :r): 0 occurrences
+## STOP: rel with dev moved
+\n######## rehearsal: rel, dev moved (exit code follows)
+[rel] Main. graftling repository /private/tmp/claude-501/r600/g: fetch agent/600-graftling-0.9.1 from the bundle, fast-forward dev (/private/tmp/claude-501/r600/gdev) and main (/private/tmp/claude-501/r600/g) to e8c2e80241dff1151f2122e8957fca5598ec987b, annotated tag v0.9.1 (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>). No network, no login. Dialog: none.
+before: dev 911d4098e4c4c136a7b02e1b2f9eaf2d1b0ba1cb (in /private/tmp/claude-501/r600/gdev) | main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (in /private/tmp/claude-501/r600/g) | v0.9.1 absent
+STOP: graftling dev is 911d4098e4c4c136a7b02e1b2f9eaf2d1b0ba1cb, no longer 2b4a33aef93dc45b953bd412e4d5dd61347c38ea (moved since dispatch: 911d409 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.
+
+rel STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/rehearsal/raw-stop/rel.txt to the Team; do not run B or rp.
+######## exit=1
+after the STOP: dev 911d4098e4c4c136a7b02e1b2f9eaf2d1b0ba1cb main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 tag v0.9.1 absent branch agent/600 absent
+## STOP: rp before rel
+\n######## rehearsal: rp before rel (exit code follows)
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.9.1 to origin (/private/tmp/claude-501/r600/origin.git), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision 20261124T114043.053104+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+STOP: rel is not complete (dev 2b4a33aef93dc45b953bd412e4d5dd61347c38ea, main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9, v0.9.1 absent; need all e8c2e80241dff1151f2122e8957fca5598ec987b).
+
+rp STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/rehearsal/raw-stop/rp.txt to the Team.
+######## exit=1

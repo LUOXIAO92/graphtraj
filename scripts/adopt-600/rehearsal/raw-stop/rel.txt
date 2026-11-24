@@ -1,0 +1,2 @@
+before: dev 911d4098e4c4c136a7b02e1b2f9eaf2d1b0ba1cb (in /private/tmp/claude-501/r600/gdev) | main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (in /private/tmp/claude-501/r600/g) | v0.9.1 absent
+STOP: graftling dev is 911d4098e4c4c136a7b02e1b2f9eaf2d1b0ba1cb, no longer 2b4a33aef93dc45b953bd412e4d5dd61347c38ea (moved since dispatch: 911d409 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.

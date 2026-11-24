@@ -1,0 +1,263 @@
+\n######## rehearsal: 00 (exit code follows)
+[00] Main. Read only, apart from creating /private/tmp/claude-501/r600/tmp600 (and a scratch clone /private/tmp/claude-501/r600/tmp600/g00.git there to read the bundle). No host and no login: Task 600 calls no Claude, Codex, Pi or DSH. Network: github.com (git ls-remote, read only). Dialog: none.
+CHECK 600 00 runs under zsh: PASS (zsh 5.9)
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 600 00 this uv's 'uv tool install --help' lists --managed-python: PASS (--managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=])
+uv user config: /Users/luoxiao/.config/uv/uv.toml absent; /etc/uv/uv.toml absent; 
+TMPDIR: /tmp/claude-501
+CHECK 600 00 /private/tmp/claude-501/r600/uvtool-600 absent: PASS
+
+### graftling repository /private/tmp/claude-501/r600/g (read only)
+dev: 2b4a33aef93dc45b953bd412e4d5dd61347c38ea in /private/tmp/claude-501/r600/gdev | main: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 in /private/tmp/claude-501/r600/g
+CHECK 600 00 graftling dev = 2b4a33aef93dc45b953bd412e4d5dd61347c38ea: PASS
+CHECK 600 00 graftling main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (v0.9.0): PASS
+CHECK 600 00 dev is checked out in /private/tmp/claude-501/r600/gdev and main in /private/tmp/claude-501/r600/g: PASS
+CHECK 600 00 both worktrees clean (git status --porcelain empty): PASS
+CHECK 600 00 v0.9.1 absent locally: PASS
+
+### GitHub /private/tmp/claude-501/r600/origin.git (git ls-remote, read only)
+GitHub main: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | dev: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | v0.9.1: absent
+CHECK 600 00 GitHub main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
+CHECK 600 00 GitHub v0.9.1 absent: PASS
+CHECK 600 00 GitHub dev (7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9) is an ancestor of 2b4a33aef93dc45b953bd412e4d5dd61347c38ea, so rp fast-forwards it: PASS
+
+### bundle /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/graftling-0.9.1.bundle
+sha256: b5c6d530ef5f3f5324438a4f3ba6d47d0ef8bee271e4b7f53f34f2f2fe66ee12
+CHECK 600 00 bundle sha256 = b5c6d530ef5f3f5324438a4f3ba6d47d0ef8bee271e4b7f53f34f2f2fe66ee12: PASS
+CHECK 600 00 bundle verifies against /private/tmp/claude-501/r600/g (its prerequisite 2b4a33aef93dc45b953bd412e4d5dd61347c38ea is there): PASS
+list-heads: e8c2e80241dff1151f2122e8957fca5598ec987b refs/heads/agent/600-graftling-0.9.1
+CHECK 600 00 bundle head = e8c2e80241dff1151f2122e8957fca5598ec987b (agent/600-graftling-0.9.1): PASS
+
+### the release commit, read from a scratch clone /private/tmp/claude-501/r600/tmp600/g00.git (objects shared from /private/tmp/claude-501/r600/g, which is not written)
+e8c2e80241dff1151f2122e8957fca5598ec987b: graftling 0.9.1 (600) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | committer LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | parent 2b4a33aef93dc45b953bd412e4d5dd61347c38ea
+CHECK 600 00 e8c2e80241dff1151f2122e8957fca5598ec987b is one commit on 2b4a33aef93dc45b953bd412e4d5dd61347c38ea: PASS
+CHECK 600 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+changed files: CHANGELOG.md src/graftling/__init__.py src/graftling/claude-plugin/.claude-plugin/plugin.json src/graftling/dsh/package.json src/graftling/pi/package.json 
+CHECK 600 00 the release commit changes exactly the 5 version/CHANGELOG files: PASS
+version at e8c2e80241dff1151f2122e8957fca5598ec987b: __version__ = "0.9.1"
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@<tag-or-commit>"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@v0.9.1"
+CHECK 600 00 README install line at e8c2e80241dff1151f2122e8957fca5598ec987b with @v0.9.1 equals C5's command: PASS
+
+----- summary for Main (00) -----
+CHECK 600 00 runs under zsh: PASS (zsh 5.9)
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 600 00 this uv's 'uv tool install --help' lists --managed-python: PASS (--managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=])
+uv user config: /Users/luoxiao/.config/uv/uv.toml absent; /etc/uv/uv.toml absent; 
+TMPDIR: /tmp/claude-501
+CHECK 600 00 /private/tmp/claude-501/r600/uvtool-600 absent: PASS
+dev: 2b4a33aef93dc45b953bd412e4d5dd61347c38ea in /private/tmp/claude-501/r600/gdev | main: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 in /private/tmp/claude-501/r600/g
+CHECK 600 00 graftling dev = 2b4a33aef93dc45b953bd412e4d5dd61347c38ea: PASS
+CHECK 600 00 graftling main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (v0.9.0): PASS
+CHECK 600 00 dev is checked out in /private/tmp/claude-501/r600/gdev and main in /private/tmp/claude-501/r600/g: PASS
+CHECK 600 00 both worktrees clean (git status --porcelain empty): PASS
+CHECK 600 00 v0.9.1 absent locally: PASS
+GitHub main: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | dev: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 | v0.9.1: absent
+CHECK 600 00 GitHub main = 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9: PASS
+CHECK 600 00 GitHub v0.9.1 absent: PASS
+CHECK 600 00 GitHub dev (7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9) is an ancestor of 2b4a33aef93dc45b953bd412e4d5dd61347c38ea, so rp fast-forwards it: PASS
+sha256: b5c6d530ef5f3f5324438a4f3ba6d47d0ef8bee271e4b7f53f34f2f2fe66ee12
+CHECK 600 00 bundle sha256 = b5c6d530ef5f3f5324438a4f3ba6d47d0ef8bee271e4b7f53f34f2f2fe66ee12: PASS
+CHECK 600 00 bundle verifies against /private/tmp/claude-501/r600/g (its prerequisite 2b4a33aef93dc45b953bd412e4d5dd61347c38ea is there): PASS
+list-heads: e8c2e80241dff1151f2122e8957fca5598ec987b refs/heads/agent/600-graftling-0.9.1
+CHECK 600 00 bundle head = e8c2e80241dff1151f2122e8957fca5598ec987b (agent/600-graftling-0.9.1): PASS
+CHECK 600 00 e8c2e80241dff1151f2122e8957fca5598ec987b is one commit on 2b4a33aef93dc45b953bd412e4d5dd61347c38ea: PASS
+CHECK 600 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+CHECK 600 00 the release commit changes exactly the 5 version/CHANGELOG files: PASS
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@<tag-or-commit>"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@v0.9.1"
+CHECK 600 00 README install line at e8c2e80241dff1151f2122e8957fca5598ec987b with @v0.9.1 equals C5's command: PASS
+-----
+Success: every 'CHECK 600 00 ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh rel
+######## exit=0
+\n######## rehearsal: rel (exit code follows)
+[rel] Main. graftling repository /private/tmp/claude-501/r600/g: fetch agent/600-graftling-0.9.1 from the bundle, fast-forward dev (/private/tmp/claude-501/r600/gdev) and main (/private/tmp/claude-501/r600/g) to e8c2e80241dff1151f2122e8957fca5598ec987b, annotated tag v0.9.1 (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>). No network, no login. Dialog: none.
+before: dev 2b4a33aef93dc45b953bd412e4d5dd61347c38ea (in /private/tmp/claude-501/r600/gdev) | main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (in /private/tmp/claude-501/r600/g) | v0.9.1 absent
+
+### bundle (sha256 b5c6d530ef5f3f53...): verify, fetch agent/600-graftling-0.9.1, check it is e8c2e80241dff1151f2122e8957fca5598ec987b on 2b4a33aef93dc45b953bd412e4d5dd61347c38ea
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/graftling-0.9.1.bundle is okay
+agent/600-graftling-0.9.1 = e8c2e80241dff1151f2122e8957fca5598ec987b (parent 2b4a33aef93dc45b953bd412e4d5dd61347c38ea) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+
+### dev: fast-forward 2b4a33aef93dc45b953bd412e4d5dd61347c38ea -> e8c2e80241dff1151f2122e8957fca5598ec987b in /private/tmp/claude-501/r600/gdev
+
+### main: fast-forward 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 -> e8c2e80241dff1151f2122e8957fca5598ec987b in /private/tmp/claude-501/r600/g
+
+### annotated tag v0.9.1 at e8c2e80241dff1151f2122e8957fca5598ec987b, tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+v0.9.1 -> e8c2e80241dff1151f2122e8957fca5598ec987b | dev e8c2e80241dff1151f2122e8957fca5598ec987b | main e8c2e80241dff1151f2122e8957fca5598ec987b | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 600 rel v0.9.1 peels to e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel graftling main == dev == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel v0.9.1 is an annotated tag with the noreply tagger: PASS
+CHECK 600 rel v0.9.1 message names 597, 599 and compatible: PASS
+CHECK 600 rel version at v0.9.1 is 0.9.1: PASS (__version__ = "0.9.1")
+
+----- summary for Main (rel) -----
+before: dev 2b4a33aef93dc45b953bd412e4d5dd61347c38ea (in /private/tmp/claude-501/r600/gdev) | main 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9 (in /private/tmp/claude-501/r600/g) | v0.9.1 absent
+CHECK 600 rel v0.9.1 peels to e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel graftling main == dev == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel v0.9.1 is an annotated tag with the noreply tagger: PASS
+CHECK 600 rel v0.9.1 message names 597, 599 and compatible: PASS
+CHECK 600 rel version at v0.9.1 is 0.9.1: PASS (__version__ = "0.9.1")
+-----
+Success: every 'CHECK 600 rel ...: PASS' (or 'already released').
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh B
+######## exit=0
+\n######## rehearsal: rel (exit code follows)
+[rel] Main. graftling repository /private/tmp/claude-501/r600/g: fetch agent/600-graftling-0.9.1 from the bundle, fast-forward dev (/private/tmp/claude-501/r600/gdev) and main (/private/tmp/claude-501/r600/g) to e8c2e80241dff1151f2122e8957fca5598ec987b, annotated tag v0.9.1 (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>). No network, no login. Dialog: none.
+before: dev e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r600/gdev) | main e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r600/g) | v0.9.1 e8c2e80241dff1151f2122e8957fca5598ec987b
+already released: v0.9.1 = main = dev = e8c2e80241dff1151f2122e8957fca5598ec987b (nothing to do)
+v0.9.1 -> e8c2e80241dff1151f2122e8957fca5598ec987b | dev e8c2e80241dff1151f2122e8957fca5598ec987b | main e8c2e80241dff1151f2122e8957fca5598ec987b | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 600 rel v0.9.1 peels to e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel graftling main == dev == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel v0.9.1 is an annotated tag with the noreply tagger: PASS
+CHECK 600 rel v0.9.1 message names 597, 599 and compatible: PASS
+CHECK 600 rel version at v0.9.1 is 0.9.1: PASS (__version__ = "0.9.1")
+
+----- summary for Main (rel) -----
+before: dev e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r600/gdev) | main e8c2e80241dff1151f2122e8957fca5598ec987b (in /private/tmp/claude-501/r600/g) | v0.9.1 e8c2e80241dff1151f2122e8957fca5598ec987b
+already released: v0.9.1 = main = dev = e8c2e80241dff1151f2122e8957fca5598ec987b (nothing to do)
+CHECK 600 rel v0.9.1 peels to e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel graftling main == dev == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rel v0.9.1 is an annotated tag with the noreply tagger: PASS
+CHECK 600 rel v0.9.1 message names 597, 599 and compatible: PASS
+CHECK 600 rel version at v0.9.1 is 0.9.1: PASS (__version__ = "0.9.1")
+-----
+Success: every 'CHECK 600 rel ...: PASS' (or 'already released').
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh B
+######## exit=0
+\n######## rehearsal: B (exit code follows)
+[B] Main, before the push. git archive v0.9.1 -> /private/tmp/claude-501/r600/tmp600/gsrc; wheel from the archive root with /Users/luoxiao/miniconda3/bin/python3.13 (--no-index --no-deps --no-build-isolation) -> /private/tmp/claude-501/r600/tmp600/wheel. No network, no login. Dialog: none.
+git archive v0.9.1 (e8c2e80241dff1151f2122e8957fca5598ec987b) -> /private/tmp/claude-501/r600/tmp600/gsrc
+
+### version strings in the archive
+  src/graftling/__init__.py: __version__ = "0.9.1"
+  src/graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.9.1",
+  src/graftling/dsh/package.json:   "version": "0.9.1",
+  src/graftling/pi/package.json:   "version": "0.9.1",
+CHECK 600 B archive version strings (__init__.py and the 3 json) all 0.9.1: PASS
+CHANGELOG first heading: ## 0.9.1 (compatible)
+CHECK 600 B CHANGELOG heading '## 0.9.1 (compatible)' and no '## Unreleased': PASS
+
+### build (setuptools 80.9.0 | pip 25.3)
+wheel: graftling-0.9.1-py3-none-any.whl
+
+### version strings in the wheel
+  METADATA Version: 0.9.1
+  graftling/__init__.py: __version__ = "0.9.1"
+  graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.9.1",
+  graftling/dsh/package.json:   "version": "0.9.1",
+  graftling/pi/package.json:   "version": "0.9.1",
+CHECK 600 B wheel version strings (METADATA, __init__.py, the 3 json) all 0.9.1: PASS
+
+### console scripts
+  [console_scripts]: subagents subagents-mcp 
+CHECK 600 B wheel console scripts are exactly subagents, subagents-mcp: PASS
+
+### wheel == git archive v0.9.1, file by file (593's pkgdiff532.py)
+graftling graftling-0.9.1-py3-none-any.whl vs /private/tmp/claude-501/r600/tmp600/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 600 B graftling wheel equals git archive v0.9.1: PASS
+CHECK 600 B the wheel's graftling/ files equal git archive v0.9.1: PASS
+
+### content markers in the wheel
+  graftling/claude-plugin/bin/graftling-host: 'uv tool install --managed-python' x1
+  graftling/dsh/plugin.mjs: 'uv tool install --managed-python' x1
+  graftling/PUBLIC_API.md: '**Retired Agents.**' x1
+CHECK 600 B 597's and 599's markers are in the wheel: PASS
+leaked build/ or __pycache__/ entries: 0
+CHECK 600 B no build/ or __pycache__ in the wheel: PASS
+
+### GraphTraj's graftling requirement (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/pyproject.toml; information: no change needed)
+REPORT 600 B GraphTraj Requires-Dist graftling<0.10,>=0.9.0 includes 0.9.1: yes, no change needed
+CHECK 600 B GraphTraj's graftling range includes 0.9.1: PASS
+wheel sha256: 0e7e944870f1192082ef3328b8d41fdb5fc040a5bc0bbaec0eeebab5db3b152b  /private/tmp/claude-501/r600/tmp600/wheel/graftling-0.9.1-py3-none-any.whl
+
+----- summary for Main (B) -----
+CHECK 600 B archive version strings (__init__.py and the 3 json) all 0.9.1: PASS
+CHECK 600 B CHANGELOG heading '## 0.9.1 (compatible)' and no '## Unreleased': PASS
+wheel: graftling-0.9.1-py3-none-any.whl
+CHECK 600 B wheel version strings (METADATA, __init__.py, the 3 json) all 0.9.1: PASS
+CHECK 600 B wheel console scripts are exactly subagents, subagents-mcp: PASS
+CHECK 600 B graftling wheel equals git archive v0.9.1: PASS
+CHECK 600 B the wheel's graftling/ files equal git archive v0.9.1: PASS
+CHECK 600 B 597's and 599's markers are in the wheel: PASS
+CHECK 600 B no build/ or __pycache__ in the wheel: PASS
+REPORT 600 B GraphTraj Requires-Dist graftling<0.10,>=0.9.0 includes 0.9.1: yes, no change needed
+CHECK 600 B GraphTraj's graftling range includes 0.9.1: PASS
+wheel sha256: 0e7e944870f1192082ef3328b8d41fdb5fc040a5bc0bbaec0eeebab5db3b152b  /private/tmp/claude-501/r600/tmp600/wheel/graftling-0.9.1-py3-none-any.whl
+-----
+Success: every 'CHECK 600 B ...: PASS'.
+
+==> next (paste as is): ADOPT600_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh rp
+######## exit=0
+\n######## rehearsal: rp (exit code follows)
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.9.1 to origin (/private/tmp/claude-501/r600/origin.git), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision 20261124T114043.053104+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+origin: /private/tmp/claude-501/r600/origin.git
+remote before: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/dev | 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/main
+will push: dev e8c2e80241dff1151f2122e8957fca5598ec987b, main e8c2e80241dff1151f2122e8957fca5598ec987b, refs/tags/v0.9.1 (e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd) (fast-forward only, --atomic, no force)
+STOP: the push is outward-facing. It is the user's decision 20261124T114043.053104+0900; run: ADOPT600_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh rp
+
+rp STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/rehearsal/raw/rp.txt to the Team.
+######## exit=1
+\n######## rehearsal: rp confirmed (exit code follows)
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.9.1 to origin (/private/tmp/claude-501/r600/origin.git), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision 20261124T114043.053104+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+origin: /private/tmp/claude-501/r600/origin.git
+remote before: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/dev | 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/main
+will push: dev e8c2e80241dff1151f2122e8957fca5598ec987b, main e8c2e80241dff1151f2122e8957fca5598ec987b, refs/tags/v0.9.1 (e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd) (fast-forward only, --atomic, no force)
+To /private/tmp/claude-501/r600/origin.git
+   7b5f4e6..e8c2e80  dev -> dev
+   7b5f4e6..e8c2e80  main -> main
+ * [new tag]         v0.9.1 -> v0.9.1
+remote now: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+CHECK 600 rp remote main == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rp remote dev == local dev (e8c2e80241dff1151f2122e8957fca5598ec987b): PASS
+
+----- summary for Main (rp) -----
+remote before: 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/dev | 7b5f4e6b48ec2c502947942f5ebbb3029ecc2fc9	refs/heads/main
+remote now: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+CHECK 600 rp remote main == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rp remote dev == local dev (e8c2e80241dff1151f2122e8957fca5598ec987b): PASS
+-----
+Success: both 'CHECK 600 rp ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh gh
+######## exit=0
+\n######## rehearsal: rp confirmed again (idempotent) (exit code follows)
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.9.1 to origin (/private/tmp/claude-501/r600/origin.git), fast-forward only, atomic, no force. The user's release decision is the push decision (Worldline user-decision 20261124T114043.053104+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+origin: /private/tmp/claude-501/r600/origin.git
+remote before: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd	refs/tags/v0.9.1
+will push: dev e8c2e80241dff1151f2122e8957fca5598ec987b, main e8c2e80241dff1151f2122e8957fca5598ec987b, refs/tags/v0.9.1 (e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd) (fast-forward only, --atomic, no force)
+Everything up-to-date
+remote now: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+CHECK 600 rp remote main == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rp remote dev == local dev (e8c2e80241dff1151f2122e8957fca5598ec987b): PASS
+
+----- summary for Main (rp) -----
+remote before: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd	refs/tags/v0.9.1
+remote now: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/dev | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+CHECK 600 rp remote main == v0.9.1^{} == e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 rp remote dev == local dev (e8c2e80241dff1151f2122e8957fca5598ec987b): PASS
+-----
+Success: both 'CHECK 600 rp ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh gh
+######## exit=0
+\n######## rehearsal: gh (exit code follows)
+[gh] Main. Read only: git ls-remote /private/tmp/claude-501/r600/origin.git. Network: github.com. No login. Dialog: none.
+GitHub: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd	refs/tags/v0.9.1 | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+CHECK 600 gh GitHub main = e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 gh GitHub v0.9.1^{} = e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 gh GitHub v0.9.1 is the local annotated tag object: PASS (remote e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd, local e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd)
+
+----- summary for Main (gh) -----
+GitHub: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd	refs/tags/v0.9.1 | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+CHECK 600 gh GitHub main = e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 gh GitHub v0.9.1^{} = e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
+CHECK 600 gh GitHub v0.9.1 is the local annotated tag object: PASS (remote e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd, local e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd)
+-----
+Success: three 'CHECK 600 gh ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/scripts/adopt-600/steps.zsh C5
+######## exit=0

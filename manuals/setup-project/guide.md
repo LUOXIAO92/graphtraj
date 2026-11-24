@@ -52,10 +52,18 @@ The desktop settings operation uses the same interface with `scope: user`.
 Consult command help or the selected tool schema for the complete fields.
 
 The catalog has `version: 1` and a `runtimes` mapping. Each named entry selects
-`runtime` (`codex`, `pi` or `dsh`), an optional absolute `home`, and `providers`.
-Providers share that Home and contain `models`, with optional `base_url` and
-`api_key_env`. A model entry has its native `id`, `source` (`native` or `manual`),
-and optional display `alias` and `supported_efforts`.
+`runtime` (`codex`, `pi`, `dsh` or `claude`), an optional absolute `home`, and
+`providers`. Providers share that Home and contain `models`, with optional
+`base_url` and `api_key_env`. A model entry has its native `id`, `source`
+(`native` or `manual`), and optional display `alias` and `supported_efforts`.
+When a gateway model is not in the Runtime's native list, for example behind a
+Claude or Codex gateway, declare it under that provider's `models` with
+`source: manual`.
+
+A Codex provider without `base_url` or `api_key_env` is used by its name. It
+must be a built-in provider or defined in that Home's `config.toml`. With
+either override, GraphTraj writes its own Codex provider entry. The launch
+record keeps the catalog provider name.
 
 Authenticate in the original Runtime. Discovery queries its public metadata
 without inference; a listed model is not proof of account access or available

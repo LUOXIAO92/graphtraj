@@ -76,6 +76,11 @@ snap() {  # $1 = output json
   $CONDA -I $S593/homesnap593.py snap $1 local=$HOME/.local uvtools=$(clean $U tool dir 2>/dev/null || print $HOME/.local/share/uv/tools) \
     pi=$HOME/.pi dsh=$HOME/.dsh codex=$HOME/.codex conda=$CROOT
 }
+# The child really ended with the token: a wait result whose "outcome":"completed" is followed by "last_message":"<token>",
+# plain or backslash-escaped JSON (tool_result text). The token alone also sits in the create input and the ui_log lines.
+child_ok() {  # $1 = token, $2 = stream-json file
+  grep -qE '\\?"outcome\\?": ?\\?"completed\\?", ?\\?"last_message\\?": ?\\?"'"$1"'\\?"' $2
+}
 # The tool environment and its base interpreter. $1 = tool bin/python, $2 = label. CHECK PASS only when uv-managed.
 interp() {
   local py=$1 label=$2 out prefix base version real class
@@ -180,8 +185,8 @@ C5r) print "[C5r] Main, after C5 and C5u. The USER's conda base only activated (
         print "claude -p rc=$? (142 = 600 s timeout)"'
     touch $R/C5r.done; sleep 3
     $CONDA -I $S593/adopt_tree.py stream $R/C5r-stream.jsonl mcp__graftling__subagents
-    grep -q 'C597-CHILD-OK' $R/C5r-stream.jsonl && print "CHECK 597 C5r the child created through mcp__graftling__subagents ended and replied C597-CHILD-OK: PASS" \
-      || print "CHECK 597 C5r the child created through mcp__graftling__subagents ended and replied C597-CHILD-OK: FAIL"
+    child_ok C597-CHILD-OK $R/C5r-stream.jsonl && print "CHECK 597 C5r the child created through mcp__graftling__subagents ended (wait result outcome completed) with last_message C597-CHILD-OK: PASS" \
+      || print "CHECK 597 C5r the child created through mcp__graftling__subagents ended (wait result outcome completed) with last_message C597-CHILD-OK: FAIL"
   } 2>&1 | tee $R/C5r.txt; rc=${pipestatus[1]}
   (( rc == 0 )) || { print "\nC5r STOP (see above). Nothing installed; conda unchanged. Hand $R/C5r.txt to Main."; exit 1; }
   { base=$(sed -n 's/^C5R-BASE //p' $R/C5r.txt)
@@ -204,6 +209,8 @@ C5r) print "[C5r] Main, after C5 and C5u. The USER's conda base only activated (
   summary C5r "$(grep -E '^(conda active|subagents CLI|claude -p rc|PASS|FAIL|CHECK|REPORT)' $R/C5r.txt)"
   print "Success: 'conda active: ...' (python under conda); 'subagents CLI: ...' usage line; every 'CHECK 597 C5r ...: PASS' (child replied; base interpreter under $UVT/python with conda active; graftling processes on $UVT's Python; conda and USER directories unchanged)."
   next "Main: hand $R/C5.txt and $R/C5r.txt to the Team; done"; exit $rc ;;
+
+_childok) child_ok ${2:?token} ${3:?stream} && print "child_ok $2 ${3:t}: MATCH" || { print "child_ok $2 ${3:t}: NO MATCH"; exit 1; } ;;   # rehearsal only
 
 *) print "usage: zsh $THIS 00|C5|C5u|C5r"; exit 2 ;;
 esac

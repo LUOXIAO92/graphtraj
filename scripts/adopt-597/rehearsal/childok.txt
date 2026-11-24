@@ -1,0 +1,14 @@
+# child_ok rehearsal against 593 raw-6fe8c8d9/C5r-stream.jsonl (token count: 12)
+# create-only = the create tool_use line; no-wait-result = every line without last_message (5 lines still hold the token); plain-only / escaped-only = wait-result lines with only one JSON form left
+child_ok C5-CHILD-OK C5r-stream.jsonl: MATCH
+rc=0
+child_ok C5-CHILD-OK plain-only.jsonl: MATCH
+rc=0
+child_ok C5-CHILD-OK escaped-only.jsonl: MATCH
+rc=0
+child_ok C5-CHILD-OK create-only.jsonl: NO MATCH
+rc=1
+child_ok C5-CHILD-OK no-wait-result.jsonl: NO MATCH
+rc=1
+child_ok C597-CHILD-OK C5r-stream.jsonl: NO MATCH
+rc=1 (token C597-CHILD-OK on the 593 stream)

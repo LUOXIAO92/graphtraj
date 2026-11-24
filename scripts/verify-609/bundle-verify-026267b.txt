@@ -1,0 +1,7 @@
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/609-graftling-provider-listing-and-create/scripts/verify-609/graftling-609.bundle is okay
+The bundle contains this ref:
+026267b5804d660caf1ea4f76610e9a73257c169 refs/heads/agent/609-graftling-provider-listing-and-create
+The bundle requires these 2 refs:
+ccff30e1d8160b50cab2432f0b9bcac9a56fda05 
+aa40b184b25acb21599d196a32cdafc1579dc6c2 
+The bundle uses this hash algorithm: sha1

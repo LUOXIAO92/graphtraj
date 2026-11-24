@@ -231,7 +231,10 @@ print("runner directory:", found, "| inside the project:", found.is_relative_to(
   inroot $VROOT/bin/agent-runner --swarm-input $batch > $OUT/realhost-launch.yml 2>&1; local rc=$?
   print -r -- "agent-runner --swarm-input exit=$rc (output: $OUT/realhost-launch.yml)"
   grep -E "alias:|launch_status:|code:|message:" $OUT/realhost-launch.yml
-  (( rc == 0 )) || { print -r -- "STOP: the swarm call failed (output above)"; return 1; }
+  if (( rc )); then  # the retained launch evidence still exists; show it, then stop
+    inroot $PY -I $X610 observe $PROJECT $ROOT/codex-home 2>&1 | tee $OUT/realhost-observe.txt
+    print -r -- "STOP: the swarm call failed (output above; error text in $OUT/realhost-launch.yml)"; return 1
+  fi
   inroot $PY -I $X610 ended $PROJECT 300 | tee $OUT/realhost-ended.txt
   inroot $PY -I $X610 observe $PROJECT $ROOT/codex-home 2>&1 | tee $OUT/realhost-observe.txt; rc=${pipestatus[1]}
   local s; for s in $PROJECT/.graphtraj/runner/sessions/[12]-*(N/); do

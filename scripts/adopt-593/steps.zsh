@@ -1708,13 +1708,13 @@ C5r) cv; print "[C5r] Main，C5 与 C5u 之后。在 USER 已有的 conda 环境
     rm -f $R/C5r.done
     print -r -- "Reply with exactly the agent id after these calls. Using only mcp__graftling__subagents: execute create with arguments {\"runtime\":\"claude\",\"name\":\"c593\",\"instruction\":\"Reply with exactly: C5-CHILD-OK\"}; then execute wait with {\"agent\": <the agent id>, \"timeout_seconds\": 300}, repeating until the execution has ended; print the final last_message; then retire the child. Print one line DONE and stop." > $R/C5r-prompt.txt
     env -i HOME=$HOME USER=${USER:-luoxiao} PATH=${(j.:.)path} TERM=${TERM:-xterm} TMPDIR=${TMPDIR:-/tmp} LANG=${LANG:-en_US.UTF-8} \
-      CONDABIN=$CONDABIN CENV=$CENV UVT=$UVT MODEL=$MODEL CLAUDE=$(claude_bin) PROMPT=$R/C5r-prompt.txt OUT=$R/C5r-stream.jsonl /bin/zsh -f -c '
+      CONDABIN=$CONDABIN CENV=$CENV UVT=$UVT MODEL=$MODEL CLAUDE=$(claude_bin) C5PFILE=$R/C5r-prompt.txt OUT=$R/C5r-stream.jsonl /bin/zsh -f -c '
         eval "$($CONDABIN shell.zsh hook 2>/dev/null)" && conda activate $CENV || { print "STOP: conda activate $CENV failed"; exit 1; }
         print -r -- "conda active: CONDA_PREFIX=$CONDA_PREFIX | python on PATH: $(command -v python) | python3: $(command -v python3)"
         print -r -- "subagents CLI: $($UVT/bin/subagents --help 2>&1 | head -1)"
         print -r -- "subagents CLI from a plain shell (expected authority-denied, it only forwards to a host): $($UVT/bin/subagents "{\"action\":\"discover\"}" 2>&1 | head -c 200)"
         cd $UVT/project && /usr/bin/perl -e "alarm shift; exec @ARGV" 600 $CLAUDE -p --model $MODEL --output-format stream-json --verbose \
-          --allowedTools mcp__graftling__subagents < $PROMPT > $OUT 2> $OUT.err
+          --allowedTools mcp__graftling__subagents < $C5PFILE > $OUT 2> $OUT.err
         print "claude -p rc=$? (142 = 600 s timeout)"'
     touch $R/C5r.done; sleep 3
     tree stream $R/C5r-stream.jsonl mcp__graftling__subagents

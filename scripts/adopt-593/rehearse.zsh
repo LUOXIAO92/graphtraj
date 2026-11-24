@@ -87,7 +87,7 @@ cat > $F/stub/claude <<'EOF'
 case "$1" in
   --version) print "2.1.325 (stub Claude Code)" ;;
   plugin) print "✔ Validation passed (stub)" ;;
-  -p) in=$(cat); tag=$(print -r -- "$in" | sed -n 's/.*Line 1: \([A-Z-]*\) followed.*/\1/p')
+  -p) in=$(cat); print -r -- "$in" > .stub-last-prompt; tag=$(print -r -- "$in" | sed -n 's/.*Line 1: \([A-Z-]*\) followed.*/\1/p')
       /Users/luoxiao/miniconda3/bin/python3.13 -I -c '
 import json, os
 try: servers = sorted((json.load(open(".mcp.json")).get("mcpServers") or {}))
@@ -543,6 +543,25 @@ check "X: data root from claude-host.json root = <uvt>/project/.agents-control; 
 check "X: merged config keeps the project's own fields, turns archiving on and points the reviewer at x593.py with X's log" sh -c "grep -q '^save_normalized_sessions: true' $XP/.agents-control/config.yml && grep -q 'review: x593-review' $XP/.agents-control/config.yml && grep -q '$SD/x593.py' $XP/.agents-control/config.yml && grep -q '$RW/X-reviewer.jsonl' $XP/.agents-control/config.yml"
 check "X: claude -p ran in <uvt>/project with --allowedTools mcp__graftling__subagents only; judge read that data root (stub claude: no child, so the judge does not PASS)" sh -c "grep -q 'Using only mcp__graftling__subagents' $RW/X-prompt.txt && grep -qF '\"preset\":\"x593\"' $RW/X-prompt.txt && grep -q 'claude -p rc=' $F/X.out && grep -q 'NO child named x593 under $XP/.agents-control/control/agents' $F/X.out && [ $XRC -ne 0 ]"
 check "X: production config, .venv-runtime and /private/tmp/vproject-593's stand-in untouched; next is done" sh -c "shasum -a 256 -c --quiet $F/X-untouched.sha256 && grep -q \"next.*: zsh $SD/steps.zsh done\" $F/X.out"
+head1 "C5r inner shell (correction 4): the step's own env -i ... /bin/zsh -f -c with a conda activation; the prompt file arrives unchanged"
+# The REAL conda hook cannot run in the Engineer sandbox: `conda shell.zsh hook` raises PermissionError: [Errno 1]
+# Operation not permitted: '/Users/luoxiao/miniconda3/.condarc' (conda/common/configuration.py:1429 _expand_search_path
+# -> os.stat; the sandbox reads only miniconda3/bin and lib). STAND-IN conda: its `shell.zsh hook` defines `conda` whose
+# `activate <env>` does what conda's activation does to the shell that matters here: PS1="(<env>) $PS1" (PS1 and PROMPT
+# are the same zsh parameter), CONDA_PREFIX, CONDA_DEFAULT_ENV, CONDA_PROMPT_MODIFIER and PATH.
+FC=$F/fakeconda; mkdir -p $FC/bin
+print -l '#!/bin/zsh' '[[ "$1 $2" == "shell.zsh hook" ]] || exit 2' \
+  "print -r -- 'conda() { [[ \$1 == activate ]] || return 1; export CONDA_PREFIX=$FC CONDA_DEFAULT_ENV=\$2 CONDA_PROMPT_MODIFIER=\"(\$2) \"; PS1=\"(\$2) \$PS1\"; path=($FC/bin \$path); }'" > $FC/bin/conda
+chmod +x $FC/bin/conda; mkdir -p $UC/bin; ln -sf $UC/tools/graftling/bin/subagents $UC/bin/subagents; rm -f $UC/project/.stub-last-prompt
+ADOPT593_UVT=$UC ADOPT593_CONDABIN=$FC/bin/conda steps C5r > $F/C5r-inner.out 2>&1; grep -E '^(conda active|claude -p rc)|no such file' $RW/C5r.txt
+check "C5r (correction 4): conda activated in the inner zsh, the prompt file opened by the redirection (no '(base) ' path), claude -p ran (rc=0)" sh -c "grep -q '^conda active: CONDA_PREFIX=$FC' $RW/C5r.txt && grep -q '^claude -p rc=0 ' $RW/C5r.txt && ! grep -q 'no such file or directory' $RW/C5r.txt"
+check "C5r (correction 4): the stub claude received exactly the step's prompt file (path arrived unchanged in C5PFILE)" cmp -s $RW/C5r-prompt.txt $UC/project/.stub-last-prompt
+# Negative: the old name. The same inner shell with PROMPT= reproduces the real failure.
+env -i HOME=$HOME PATH=/usr/bin:/bin TMPDIR=$TMPDIR CONDABIN=$FC/bin/conda PROMPT=$RW/C5r-prompt.txt /bin/zsh -f -c '
+  eval "$($CONDABIN shell.zsh hook 2>/dev/null)" && conda activate base || exit 9
+  cat < $PROMPT > /dev/null' > $F/C5r-oldname.out 2>&1; OLDRC=$?; cat $F/C5r-oldname.out
+check "C5r negative (correction 4): with the old name PROMPT, conda's activation turns it into '(base) <path>' and the redirection fails" sh -c "[ $OLDRC -ne 0 ] && grep -q 'no such file or directory: (base) $RW/C5r-prompt.txt' $F/C5r-oldname.out"
+print -r -- 'CHECK 593 C5 the child created through mcp__graftling__subagents ended and replied C5-CHILD-OK: PASS' > $RW/C5r.txt   # REHEARSAL FIXTURE again
 # done with X's new raw output: a passed X record (the graftling-shaped judge fixture above) in raw/X.txt.
 cp $F/xjudge.out $RW/X.txt
 

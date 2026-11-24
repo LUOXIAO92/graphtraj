@@ -15,6 +15,31 @@ passed, and G is running. Do not rerun rel, rp or gh. Real-host facts used below
 
 All steps are now written for the new names and rehearsed (`rehearsal-output.txt`).
 
+## Correction 4 (Worldline user-decision 20261124T102549.151550+0900): C5r's prompt file variable
+
+The real C5r failed with `zsh:6: no such file or directory: (base) /…/C5r-prompt.txt`, and claude -p never ran:
+- C5r passed the prompt file into its inner `env -i … /bin/zsh -f -c` as `PROMPT`.
+- PROMPT is zsh's prompt parameter (the same as PS1).
+- `conda activate base` prefixes it with `(base) `.
+
+The variable is now `C5PFILE`, at the assignment and at the `< $C5PFILE` redirection. Nothing else in C5r changed.
+
+Collision scan: every name assigned in steps.zsh and rehearse.zsh was compared with zsh's special parameters and with
+the names conda's activation sets (CONDA_*, PS1/PROMPT, PATH). PROMPT in C5r was the only collision.
+- HOME, USER, PATH, TERM, TMPDIR and LANG are the clean environment's intended pass-throughs.
+- `path` is the outer PATH setup.
+- CONDA_PREFIX is only read.
+- C5r is the only step whose shell runs after a conda activation.
+
+Rehearsal (`rehearsal-output.txt`): the step's own inner shell is run with a stand-in conda. The real
+`conda shell.zsh hook` cannot run in the Engineer's sandbox: `PermissionError: [Errno 1] Operation not permitted:
+'/Users/luoxiao/miniconda3/.condarc'`, from conda/common/configuration.py:1429, because the sandbox reads only
+miniconda3/bin and lib. The stand-in's `activate` sets PS1="(base) $PS1", CONDA_PREFIX and PATH.
+- The prompt file reaches the stub claude unchanged.
+- The old name PROMPT reproduces `no such file or directory: (base) <path>`.
+
+**Rerun:** C5r → X → done. Nothing else reruns.
+
 ## Correction 3 (Worldline user-decision 20261124T101325.067460+0900): X on graftling's own host
 
 The real X failed with `invalid-config` (raw-6fe8c8d9/X.txt):

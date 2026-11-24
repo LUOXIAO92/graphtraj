@@ -50,10 +50,15 @@
 #   suite-base Main, only if SR lists failures: reruns exactly those node ids on graftling dev BASE in SROOT; per id
 #              'also fails on base' (not new) or 'candidate-only' (NEW). Dialog: none. No login.
 # Order: pre, install, list, probe, child-opencode, child-deepseek, post. suite and SR (suite-base) need no ROOT and no key.
-# Credentials: every pi, dsh and python process these steps start runs in an ALLOWLISTED environment: PATH,
-# HOME=ROOT/home, TMPDIR, LANG, PI_CODING_AGENT_DIR, the step's own variables (shown by name) and only the credentials
-# that step names: DEEPSEEK_API_KEY (the Pi Main, the deepseek child, its listing and prompt) and OPENCODE_API_KEY
-# (list, probe, and the Pi Main of child-opencode, which must hold it to hand it to its child). Keys are never printed
+# Credentials (correction 1): at start, before any step, the script unsets every exported variable whose name is
+# credential-class (graftling's is_credential_name, restated in judge.py: a '_'-separated part ending in KEY, TOKEN,
+# SECRET(S), PASSWORD or CREDENTIAL(S); GIT_CONFIG_KEY_<n> excepted) other than DEEPSEEK_API_KEY and OPENCODE_API_KEY,
+# printing the removed NAMES. So every process a step starts (pi, dsh, python, judge, sampler, pip, git, ps, pgrep, ...)
+# holds at most those two. suite and suite-base also drop those two before they start anything (the tests need
+# neither) and say so. On top of that, pi, dsh and graftling's python run through allow(): only PATH,
+# HOME=ROOT/home, TMPDIR, LANG, PI_CODING_AGENT_DIR, the step's own variables (shown by name) and the credentials that
+# step names: DEEPSEEK_API_KEY (the Pi Main, the deepseek child, its listing and prompt) and OPENCODE_API_KEY (list,
+# probe, and the Pi Main of child-opencode, which must hold it to hand it to its child). Keys are never printed
 # and never arguments. These steps never read or write ~/.dsh, ~/.pi, ~/.codex, ~/.claude or
 # ~/.graphtraj/connections.yml (names, hashes of ~/.pi/agent files and mtimes only, as 591). Writes outside ROOT and
 # SROOT: none expected. ADOPT608_ROOT / _OUT / _BUNDLE / _GCOMMIT / _SUITE_ROOT / _PYTEST_ARGS / _USERHOME are for the
@@ -410,7 +415,8 @@ post)
   ;;
 suite)
   gcommit || return 1
-  say "[suite] Main. graftling full suite on $GCOMMIT (clean clone from the bundle in $SROOT/cand). TMPDIR=$PYTEST_TMP. Dialog: none. No login. ~5-15 min."
+  unset $DKEY $OKEY; print -r -- "keys: $DKEY and $OKEY dropped for this step (the tests need neither); python3 now sees: $(python3 -I $JUDGE selfenv)"
+  say "[suite] Main. graftling full suite on $GCOMMIT (clean clone from the bundle in $SROOT/cand). TMPDIR=$PYTEST_TMP (outside the Harness, checked below). Dialog: none. No login. ~5-15 min."
   git -C $GREPO bundle verify $BUNDLE >/dev/null 2>&1 || { print -r -- "STOP: $BUNDLE does not verify"; return 1; }
   run_root suite || return 1
   suite_tree $SROOT/cand $GCOMMIT || return 1
@@ -448,6 +454,7 @@ SR)
   ;;
 suite-base)
   local -a ids=("${(@)IDS}")
+  unset $DKEY $OKEY; print -r -- "keys: $DKEY and $OKEY dropped for this step (the tests need neither); python3 now sees: $(python3 -I $JUDGE selfenv)"
   (( $#ids )) || { print -r -- "usage: zsh $THIS suite-base <node id>...   (SR prints the command with its node ids)"; return 2; }
   say "[suite-base] the failing node ids on graftling dev $BASE (clean clone in $SROOT/base). Dialog: none. No login."
   run_root base || return 1
@@ -468,6 +475,20 @@ esac
 }
 
 [[ -d $H/.graphtraj || -n ${ADOPT608_OUT:-} ]] || { print "STOP: $H is not the Harness root"; exit 1; }
+# Correction 1: no provider credential other than the two approved ones reaches anything this script starts.
+scrub() {  # unset credential-class exported names except $DKEY and $OKEY; print the names removed
+  local k u p; local -a gone=()
+  for k in ${(k)parameters[(R)*export*]}; do
+    [[ $k == ($DKEY|$OKEY) ]] && continue
+    u=${(U)k}; [[ $u == GIT_CONFIG_KEY_<-> ]] && continue
+    for p in ${(s:_:)u}; do
+      [[ $p == *(KEY|TOKEN|SECRET|SECRETS|PASSWORD|CREDENTIAL|CREDENTIALS) ]] && { gone+=$k; unset $k; break; }
+    done
+  done
+  print -r -- "credential scrub: removed from this script's environment (names only): ${gone:-none}; kept if set: $DKEY $OKEY"
+}
+scrub
+print -r -- "credential-class names a judge-run python3 sees: $(python3 -I $JUDGE selfenv)"
 OK=1
 IDS=("${(@)argv[2,-1]}")                            # suite-base: the node ids after the step name
 mkdir -p $OUT 2>/dev/null

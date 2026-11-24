@@ -11,3 +11,43 @@ exit=0
 
 dsh: TRANSPORT: Connection error.: getaddrinfo ENOTFOUND opencode.ai
 ## list refusal checks: see validation.md
+
+## Correction 1 rehearsal (credential scrub; dummy DEEPSEEK_API_KEY, OPENCODE_API_KEY, OPENROUTER_API_KEY)
+### pre (to its network STOP; user-location lines omitted)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD OPENROUTER_API_KEY; kept if set: DEEPSEEK_API_KEY OPENCODE_API_KEY
+credential-class names a judge-run python3 sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+== [pre] Main. Preflight; creates /private/tmp/claude-501/r608c1. Dialog: none. ~1 min.
+zsh 5.9 (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/608-graftling-dsh-multi-provider/scripts/adopt-608/steps.zsh)
+node: /opt/homebrew/bin/node v26.5.0
+git: /usr/bin/git git version 2.50.1 (Apple Git-155)
+pi: /opt/homebrew/bin/pi 1.4.0
+dsh: /opt/homebrew/bin/dsh 0.2.2-rc.5
+PASS: bundle /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/608-graftling-dsh-multi-provider/scripts/adopt-608/graftling-608.bundle verifies
+PASS: bundle head is ccff30e1d8160b50cab2432f0b9bcac9a56fda05
+DEEPSEEK_API_KEY: set (9 characters; not printed). OPENCODE_API_KEY: set (12 characters; not printed).
+allowlisted environment, e.g. child-opencode's Main (names only): DEEPSEEK_API_KEY EXAMPLE_STEP_VAR HOME LANG OPENCODE_API_KEY PATH PI_CODING_AGENT_DIR TMPDIR
+your locations before (read only; names, hashes, mtimes):
+== the Pi Main's model: pi --list-models deepseek (PI_CODING_AGENT_DIR=/private/tmp/claude-501/r608c1/agent-probe; DEEPSEEK_API_KEY only)
+provider  model            context  max-out  thinking  images
+deepseek  deepseek-flash   1M       384K     yes       yes   
+deepseek  deepseek-v4-pro  1M       384K     yes       no    
+== one-line Pi prompt: pi -p --provider deepseek --model deepseek-flash --no-session --no-extensions --no-tools
+Connection error.
+exit=1 (login: DEEPSEEK_API_KEY from the allowlisted environment)
+STOP: Pi could not answer; check DEEPSEEK_API_KEY and the network, then: rm -rf /private/tmp/claude-501/r608c1 && zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/608-graftling-dsh-multi-provider/scripts/adopt-608/steps.zsh pre
+### suite (filtered)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD OPENROUTER_API_KEY; kept if set: DEEPSEEK_API_KEY OPENCODE_API_KEY
+credential-class names a judge-run python3 sees: DEEPSEEK_API_KEY OPENCODE_API_KEY
+keys: DEEPSEEK_API_KEY and OPENCODE_API_KEY dropped for this step (the tests need neither); python3 now sees: none
+== [suite] Main. graftling full suite on ccff30e1d8160b50cab2432f0b9bcac9a56fda05 (clean clone from the bundle in /private/tmp/claude-501/s608/cand). TMPDIR=/tmp/claude-501 (outside the Harness, checked below). Dialog: none. No login. ~5-15 min.
+pytest temp: TMPDIR=/tmp/claude-501 -> run root /private/tmp/claude-501/adopt-608-suite-20261124T212119 (outside the Harness)
+suite source: /private/tmp/claude-501/s608/cand/src at ccff30e1d8160b50cab2432f0b9bcac9a56fda05 (clean: yes)
+imports graftling 0.9.1 from /private/tmp/claude-501/s608/cand/src/src/graftling/__init__.py | pytest 9.1.1 | graphtraj importable: False
+REHEARSAL: extra pytest args: tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child (a filtered run is not the full suite)
+pytest: cd /private/tmp/claude-501/s608/cand/src && TMPDIR=/private/tmp/claude-501/adopt-608-suite-20261124T212119 /private/tmp/claude-501/s608/cand/venv/bin/python -m pytest -q -p no:cacheprovider -rfE tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child
+candidate ccff30e1d8160b50cab2432f0b9bcac9a56fda05 | TMPDIR /private/tmp/claude-501/adopt-608-suite-20261124T212119 | extra: tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child
+3 passed in 0.37s
+exit=0
+(full output: /private/tmp/claude-501/s608/suite-20261124T212119.txt)
+SUCCESS: graftling suite passed on ccff30e1d8160b50cab2432f0b9bcac9a56fda05 (FILTERED rehearsal run)
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/608-graftling-dsh-multi-provider/scripts/adopt-608/steps.zsh SR

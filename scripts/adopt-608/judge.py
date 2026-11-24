@@ -2,6 +2,7 @@
 
 usage:
   judge.py snap <data root>                       record ids now under <root>/control/agents
+  judge.py selfenv                                the credential-class variable NAMES this python3 sees
   judge.py pids <data root> <snap>                runtime_pid values of the records not in <snap>
   judge.py envnames <out file>                    stdin: `ps -E -ww -o command= -p <pid>`; writes the variable NAMES only
   judge.py pick <listing.json> <candidates file>  the opencode listing -> ordered "provider model" candidates
@@ -13,7 +14,7 @@ usage:
 
 Every verdict line starts PASS or FAIL; the exit status is 0 only when every line is PASS.
 """
-import json, re, sys
+import json, os, re, sys
 from pathlib import Path
 
 FAILED = []
@@ -196,6 +197,9 @@ def main(argv):
         return 0
     if argv[:1] == ['envnames'] and len(argv) == 2:
         envnames(argv[1])
+        return 0
+    if argv[:1] == ['selfenv'] and len(argv) == 1:
+        print(' '.join(sorted(n for n in os.environ if credential(n))) or 'none')
         return 0
     if argv[:1] == ['pids'] and len(argv) == 3:
         pids(*argv[1:])

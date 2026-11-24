@@ -198,12 +198,14 @@ def migrate_task_definitions_command(preview: bool) -> None:
               help="YAML runtimes changes to apply at --expected-revision instead of a complete catalog.")
 @click.option("--expected-revision")
 @click.option("--runtime")
+@click.option("--provider", help="Discovery only: list this provider of the --runtime entry.")
 def connections_command(
     action: str,
     catalog_file: Path | None,
     changes_file: Path | None,
     expected_revision: str | None,
     runtime: str | None,
+    provider: str | None,
 ) -> None:
     """Manage the user's Runtime connections independently of the desktop."""
     arguments = {"action": action}
@@ -211,6 +213,8 @@ def connections_command(
         arguments["expected_revision"] = expected_revision
     if runtime is not None:
         arguments["runtime"] = runtime
+    if provider is not None:
+        arguments["provider"] = provider
     try:
         if catalog_file is not None:
             arguments["catalog"] = yaml.safe_load(catalog_file.read_text(encoding="utf-8"))

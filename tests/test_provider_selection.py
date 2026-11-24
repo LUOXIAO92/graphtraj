@@ -10,12 +10,14 @@ import json
 from pathlib import Path
 import shutil
 
+from click.testing import CliRunner
 import pytest
 import yaml
 
 from graphtraj.configuration.project_roles import load_project_roles
 from graphtraj.configuration.role_definitions import resolve_child_role
 from graphtraj.interfaces.local_tool import bind
+from graphtraj.interfaces.cli.graphtraj import main
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, select_runtime_adapter
 from test_agents_native_claude import agents
 from test_claude_runtime import claude_environment  # noqa: F401 - pytest fixture
@@ -124,7 +126,11 @@ def test_dsh_discovery_by_provider_uses_its_route_and_groups(
     saved = save(project, dsh_catalog(tmp_path))
     assert saved['applied'] is True
 
-    listed = operation(project, {'action': 'discover', 'runtime': 'dsh-home', 'provider': 'opencode-go'})['discovery']
+    # The CLI entry Main and the manual use.
+    shown = CliRunner().invoke(main, ['connections', '--action', 'discover', '--runtime', 'dsh-home',
+                                      '--provider', 'opencode-go'])
+    assert shown.exit_code == 0, shown.output
+    listed = yaml.safe_load(shown.output)['discovery']
     assert listed['provider'] == 'opencode-go' and listed['status'] == 'available'
     assert [(group['provider'], [model['id'] for model in group['models']]) for group in listed['groups']] == [
         ('opencode-go', ['glm-5.3', 'kimi'])]

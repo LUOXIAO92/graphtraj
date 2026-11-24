@@ -1,0 +1,140 @@
+# Task 613 rehearsal output (REHEARSAL ONLY, not acceptance). Produced by the Engineer on 2026-11-24 22:27 JST.
+# The sandbox here forbids binding a local port and writing .mcp.json inside the Worktree, so: ROOT is under $TMPDIR,
+# VERIFY613_NO_BIND=1 (the stub child writes the record line recorder.py would write; recorder.py check judges it),
+# owner = rehearsal/stub_owner.py (00), calls through the installed graftling's bound subagents function (judge613.py
+# rehearse) instead of the real Main + plugin hooks, child = rehearsal/stub_child.py. Part 2 is a negative control on base 026267b.
+
+## Part 1: candidate 60f61df
+### REHEARSAL (candidate): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home with .claude/.credentials.json> VERIFY613_ROOT=$TMPDIR/rehearsal-613 VERIFY613_GCOMMIT=60f61df27bffad896d786962480edfbfb51c20bb VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh 00   (shell seeded with fake ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, UNRELATED_API_KEY)
+scrubbed at start (names only): ANTHROPIC_CUSTOM_HEADERS UNRELATED_API_KEY ANTHROPIC_AUTH_TOKEN DEEPSEEK_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL ANTHROPIC_API_KEY
+== [00] Preflight. Login: the user's Claude login (owner only). Dialog: at most the macOS keychain prompt for 'Claude Code-credentials' (choose Allow). Network: Anthropic.
+PASS: run by zsh 5.9
+claude: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/613-graftling-claude-gateway-login-leak/scripts/verify-613/rehearsal/stub_owner.py 2.1.300 (Claude Code) [rehearsal stub]
+git: git version 2.50.1 (Apple Git-155) | python: Python 3.13.11
+PASS: PyYAML and websockets present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: bundle verifies; its head is GCOMMIT 60f61df27bffad896d786962480edfbfb51c20bb
+credentials carried by started processes: none (plus the user's own Claude login, read by Claude Code itself, for the owner)
+owner one-line prompt exit=0
+owner model: rehearsal-stub | login (apiKeySource): none | answer: OK (rehearsal stub)
+CHECK 613 00: the owner answered with the user's own login and no key variable: PASS
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/613-graftling-claude-gateway-login-leak/scripts/verify-613/steps.zsh I
+### exit=0
+### REHEARSAL (candidate): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home with .claude/.credentials.json> VERIFY613_ROOT=$TMPDIR/rehearsal-613 VERIFY613_GCOMMIT=60f61df27bffad896d786962480edfbfb51c20bb VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh I   (shell seeded with fake ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, UNRELATED_API_KEY)
+scrubbed at start (names only): ANTHROPIC_CUSTOM_HEADERS UNRELATED_API_KEY ANTHROPIC_AUTH_TOKEN DEEPSEEK_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL ANTHROPIC_API_KEY
+== [I] Install GCOMMIT 60f61df27bffad896d786962480edfbfb51c20bb as a wheel into /tmp/claude-501/rehearsal-613/venv. Login: none. Dialog: none. Network: none.
+credentials carried by started processes: none (plus the user's own Claude login, read by Claude Code itself, for the owner)
+CHECK 613 I: graftling 0.9.1 /tmp/claude-501/rehearsal-613/venv/lib/python3.13/site-packages/graftling/__init__.py from GCOMMIT 60f61df27bffad896d786962480edfbfb51c20bb: PASS
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/613-graftling-claude-gateway-login-leak/scripts/verify-613/steps.zsh A
+### exit=0
+### REHEARSAL (candidate): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home with .claude/.credentials.json> VERIFY613_ROOT=$TMPDIR/rehearsal-613 VERIFY613_GCOMMIT=60f61df27bffad896d786962480edfbfb51c20bb VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh A   (shell seeded with fake ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, UNRELATED_API_KEY)
+scrubbed at start (names only): ANTHROPIC_CUSTOM_HEADERS UNRELATED_API_KEY ANTHROPIC_AUTH_TOKEN DEEPSEEK_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL ANTHROPIC_API_KEY
+== [A] base_url without api_key_env is refused. Login: the user's Claude login (owner only). Dialog: none expected. Network: Anthropic (owner).
+credentials carried by started processes: none (plus the user's own Claude login, read by Claude Code itself, for the owner)
+REHEARSAL no-bind: no recorder listens; the stub child writes the record the recorder would write to /tmp/claude-501/rehearsal-613/recorder-A.jsonl
+config.yml:
+  connections:
+    gw:
+      runtime: claude
+      base_url: http://127.0.0.1:9
+      models: [claude-haiku-5-5]
+host files: .mcp.json .agents-control/claude-host.json .claude/skills/agents-claude-host 
+REHEARSAL (not acceptance): 2 call(s) through graftling.bind -> /tmp/claude-501/rehearsal-613/calls-A.json
+  models: failed=True error=invalid-config: Connection 'gw': base_url needs api_key_env: without its own key, a Claude child or model listing would send the host's Claude login to that endpoint.
+  create: failed=True error=invalid-config: Connection 'gw': base_url needs api_key_env: without its own key, a Claude child or model listing would send the host's Claude login to that endpoint.
+CHECK 613 A: models refused with invalid-config naming "base_url needs api_key_env": PASS
+CHECK 613 A: create refused with invalid-config naming "base_url needs api_key_env": PASS
+CHECK 613 A: no Agent record was created: PASS
+recorder: 0 request(s) in /tmp/claude-501/rehearsal-613/recorder-A.jsonl
+CHECK 613 recorder received no request: PASS
+host.log refusal line: none
+follow-ups: cat /tmp/claude-501/rehearsal-613/calls-A.json; cat /tmp/claude-501/rehearsal-613/recorder-A.jsonl; next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/613-graftling-claude-gateway-login-leak/scripts/verify-613/steps.zsh B
+### exit=0
+### REHEARSAL (candidate): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home with .claude/.credentials.json> VERIFY613_ROOT=$TMPDIR/rehearsal-613 VERIFY613_GCOMMIT=60f61df27bffad896d786962480edfbfb51c20bb VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh B   (shell seeded with fake ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, UNRELATED_API_KEY)
+scrubbed at start (names only): ANTHROPIC_CUSTOM_HEADERS UNRELATED_API_KEY ANTHROPIC_AUTH_TOKEN DEEPSEEK_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL ANTHROPIC_API_KEY
+== [B] base_url with api_key_env: only the dummy reaches the recorder. Login: the user's Claude login (owner); the child holds only GATEWAY613_TEST_KEY (dummy). Dialog: none expected. Network: Anthropic (owner), 127.0.0.1 (child).
+credentials carried by started processes: GATEWAY613_TEST_KEY (fixed non-secret dummy) (plus the user's own Claude login, read by Claude Code itself, for the owner)
+REHEARSAL no-bind: no recorder listens; the stub child writes the record the recorder would write to /tmp/claude-501/rehearsal-613/recorder-B.jsonl
+config.yml:
+  connections:
+    gw:
+      runtime: claude
+      base_url: http://127.0.0.1:9
+      api_key_env: GATEWAY613_TEST_KEY
+      models: [claude-haiku-5-5]
+host files: .mcp.json .agents-control/claude-host.json .claude/skills/agents-claude-host 
+REHEARSAL (not acceptance): 3 call(s) through graftling.bind -> /tmp/claude-501/rehearsal-613/calls-B.json
+  create: failed=True agent=agent-37124ab8c9bc49b78d7ea364c207ae48 state=standby outcome=failed
+  wait: failed=False agent=agent-37124ab8c9bc49b78d7ea364c207ae48 state=standby outcome=failed
+  retire: failed=False agent=agent-37124ab8c9bc49b78d7ea364c207ae48 state=standby outcome=failed
+  agent: agent-37124ab8c9bc49b78d7ea364c207ae48; records: ['agent-37124ab8c9bc49b78d7ea364c207ae48']
+  follow-up: python3 -m json.tool /tmp/claude-501/rehearsal-613/proj-b/.agents-control/control/agents/agent-37124ab8c9bc49b78d7ea364c207ae48.json
+CHECK 613 B: create returned an Agent (the child was started): PASS
+CHECK 613 B: retire succeeded: PASS
+recorder: 1 request(s) in /tmp/claude-501/rehearsal-613/recorder-B.jsonl
+  #1 POST /v1/messages auth headers: x-api-key=equals dummy
+CHECK 613 at least one request reached the recorder: PASS
+CHECK 613 every request carried only x-api-key (no authorization, no other auth-like header): PASS
+CHECK 613 every x-api-key equals the dummy (no host key or login): PASS
+follow-ups: cat /tmp/claude-501/rehearsal-613/calls-B.json; cat /tmp/claude-501/rehearsal-613/recorder-B.jsonl; rm -rf /tmp/claude-501/rehearsal-613  (when done)
+### exit=0
+
+## Part 2: negative control, graftling base 026267b (A must FAIL; B cannot discriminate with a stub, see engineer.md)
+### NEGATIVE CONTROL (base 026267b): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home with .claude/.credentials.json> VERIFY613_ROOT=$TMPDIR/rehearsal-613-base VERIFY613_GCOMMIT=026267b5804d660caf1ea4f76610e9a73257c169 VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh I   (shell seeded with fake ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, UNRELATED_API_KEY)
+scrubbed at start (names only): ANTHROPIC_CUSTOM_HEADERS UNRELATED_API_KEY ANTHROPIC_AUTH_TOKEN DEEPSEEK_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL ANTHROPIC_API_KEY
+== [I] Install GCOMMIT 026267b5804d660caf1ea4f76610e9a73257c169 as a wheel into /tmp/claude-501/rehearsal-613-base/venv. Login: none. Dialog: none. Network: none.
+credentials carried by started processes: none (plus the user's own Claude login, read by Claude Code itself, for the owner)
+CHECK 613 I: graftling 0.9.1 /tmp/claude-501/rehearsal-613-base/venv/lib/python3.13/site-packages/graftling/__init__.py from GCOMMIT 026267b5804d660caf1ea4f76610e9a73257c169: PASS
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/613-graftling-claude-gateway-login-leak/scripts/verify-613/steps.zsh A
+### exit=0
+### NEGATIVE CONTROL (base 026267b): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home with .claude/.credentials.json> VERIFY613_ROOT=$TMPDIR/rehearsal-613-base VERIFY613_GCOMMIT=026267b5804d660caf1ea4f76610e9a73257c169 VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh A   (shell seeded with fake ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, UNRELATED_API_KEY)
+scrubbed at start (names only): ANTHROPIC_CUSTOM_HEADERS UNRELATED_API_KEY ANTHROPIC_AUTH_TOKEN DEEPSEEK_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL ANTHROPIC_API_KEY
+== [A] base_url without api_key_env is refused. Login: the user's Claude login (owner only). Dialog: none expected. Network: Anthropic (owner).
+credentials carried by started processes: none (plus the user's own Claude login, read by Claude Code itself, for the owner)
+REHEARSAL no-bind: no recorder listens; the stub child writes the record the recorder would write to /tmp/claude-501/rehearsal-613-base/recorder-A.jsonl
+config.yml:
+  connections:
+    gw:
+      runtime: claude
+      base_url: http://127.0.0.1:9
+      models: [claude-haiku-5-5]
+host files: .mcp.json .agents-control/claude-host.json .claude/skills/agents-claude-host 
+REHEARSAL (not acceptance): 2 call(s) through graftling.bind -> /tmp/claude-501/rehearsal-613-base/calls-A.json
+  models: failed=False agent=None state=None outcome=None
+  create: failed=True agent=agent-32e5d32baa4b496e80d187d0c65ae3cb state=standby outcome=failed
+CHECK 613 A: models refused with invalid-config naming "base_url needs api_key_env": FAIL
+CHECK 613 A: create refused with invalid-config naming "base_url needs api_key_env": FAIL
+CHECK 613 A: no Agent record was created: FAIL
+recorder: 1 request(s) in /tmp/claude-501/rehearsal-613-base/recorder-A.jsonl
+  #1 POST /v1/messages auth headers: none
+CHECK 613 recorder received no request: FAIL
+host.log refusal line: none
+follow-ups: cat /tmp/claude-501/rehearsal-613-base/calls-A.json; cat /tmp/claude-501/rehearsal-613-base/recorder-A.jsonl; next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/613-graftling-claude-gateway-login-leak/scripts/verify-613/steps.zsh B
+### exit=0
+### NEGATIVE CONTROL (base 026267b): VERIFY613_REHEARSAL=1 VERIFY613_NO_BIND=1 VERIFY613_HOME=<fake home with .claude/.credentials.json> VERIFY613_ROOT=$TMPDIR/rehearsal-613-base VERIFY613_GCOMMIT=026267b5804d660caf1ea4f76610e9a73257c169 VERIFY613_OWNER_STUB=<rehearsal/stub_owner.py> VERIFY613_CHILD=<rehearsal/stub_child.py> zsh scripts/verify-613/steps.zsh B   (shell seeded with fake ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_CUSTOM_HEADERS, UNRELATED_API_KEY)
+scrubbed at start (names only): ANTHROPIC_CUSTOM_HEADERS UNRELATED_API_KEY ANTHROPIC_AUTH_TOKEN DEEPSEEK_BASE_URL CLAUDE_CODE_OAUTH_TOKEN CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL ANTHROPIC_API_KEY
+== [B] base_url with api_key_env: only the dummy reaches the recorder. Login: the user's Claude login (owner); the child holds only GATEWAY613_TEST_KEY (dummy). Dialog: none expected. Network: Anthropic (owner), 127.0.0.1 (child).
+credentials carried by started processes: GATEWAY613_TEST_KEY (fixed non-secret dummy) (plus the user's own Claude login, read by Claude Code itself, for the owner)
+REHEARSAL no-bind: no recorder listens; the stub child writes the record the recorder would write to /tmp/claude-501/rehearsal-613-base/recorder-B.jsonl
+config.yml:
+  connections:
+    gw:
+      runtime: claude
+      base_url: http://127.0.0.1:9
+      api_key_env: GATEWAY613_TEST_KEY
+      models: [claude-haiku-5-5]
+host files: .mcp.json .agents-control/claude-host.json .claude/skills/agents-claude-host 
+REHEARSAL (not acceptance): 3 call(s) through graftling.bind -> /tmp/claude-501/rehearsal-613-base/calls-B.json
+  create: failed=True agent=agent-69f938067bd04c8498638bd89d9d4a7c state=standby outcome=failed
+  wait: failed=False agent=agent-69f938067bd04c8498638bd89d9d4a7c state=standby outcome=failed
+  retire: failed=False agent=agent-69f938067bd04c8498638bd89d9d4a7c state=standby outcome=failed
+  agent: agent-69f938067bd04c8498638bd89d9d4a7c; records: ['agent-69f938067bd04c8498638bd89d9d4a7c']
+  follow-up: python3 -m json.tool /tmp/claude-501/rehearsal-613-base/proj-b/.agents-control/control/agents/agent-69f938067bd04c8498638bd89d9d4a7c.json
+CHECK 613 B: create returned an Agent (the child was started): PASS
+CHECK 613 B: retire succeeded: PASS
+recorder: 1 request(s) in /tmp/claude-501/rehearsal-613-base/recorder-B.jsonl
+  #1 POST /v1/messages auth headers: x-api-key=equals dummy
+CHECK 613 at least one request reached the recorder: PASS
+CHECK 613 every request carried only x-api-key (no authorization, no other auth-like header): PASS
+CHECK 613 every x-api-key equals the dummy (no host key or login): PASS
+follow-ups: cat /tmp/claude-501/rehearsal-613-base/calls-B.json; cat /tmp/claude-501/rehearsal-613-base/recorder-B.jsonl; rm -rf /tmp/claude-501/rehearsal-613-base  (when done)
+### exit=0

@@ -506,9 +506,10 @@ C601r) print "[C601r] Main. Read only: Main's raw cleanup result and the reposit
     pre() { sed -n "s/^PRE $1 //p" $R/C601-pre.txt | head -1; }
     ptip=$(pre tip) pwt=$(pre worktree) pbr=$(pre branch) pst=$(pre status) pdisp=$(pre disposition)
     raw=$(<$R/C601.txt); print -r -- "raw result (first 600 chars): ${raw[1,600]}"
-    [[ $raw =~ '"cleanup_status" *: *"cleaned"' ]]; ck $? "C601r raw result cleanup_status cleaned"
-    [[ $raw =~ '"task_disposition" *: *"cancelled"' ]]; ck $? "C601r evidence task_disposition cancelled"
-    rtc=$(print -r -- $raw | grep -oE '"task_commit" *: *"[0-9a-f]{40}"' | head -1 | grep -oE '[0-9a-f]{40}')
+    # The raw result as JSON (MCP) or YAML (the CLI): "key": "value" or key: value
+    [[ $raw =~ '"?cleanup_status"? *: *"?cleaned' ]]; ck $? "C601r raw result cleanup_status cleaned"
+    [[ $raw =~ '"?task_disposition"? *: *"?cancelled' ]]; ck $? "C601r evidence task_disposition cancelled"
+    rtc=$(print -r -- $raw | grep -oE '"?task_commit"? *: *"?[0-9a-f]{40}' | head -1 | grep -oE '[0-9a-f]{40}')
     [[ -n $ptip && $rtc == $ptip ]]; ck $? "C601r task_commit == the pre-recorded tip" "result ${rtc:-none}, pre ${ptip:-none}"
     inlist=$(gg -C $REPO worktree list --porcelain | grep -cxF "worktree $pwt")
     [[ ! -e $pwt && $inlist == 0 ]]; ck $? "C601r 601's Worktree path is gone and not in git worktree list" "$([[ -e $pwt ]] && print 'path exists') listed $inlist"

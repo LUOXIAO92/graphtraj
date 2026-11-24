@@ -33,9 +33,9 @@ RAW=$OUTD/c1-raw
 MAN=$FRT/share/graphtraj/manuals
 SITE=$FRT/lib/python3.13/site-packages
 MAINID=11111111-2222-3333-4444-555555555612
-rm -rf $SB $RAW; mkdir -p $SB/stub $SB/projects/-fake $SB/scr $RAW
+rm -rf $SB $RAW; mkdir -p $SB/stub $SB/projects/-fake $SB/scr $SB/aa8a4948 $RAW
 S=$SD/steps.zsh
-OLD=$SB/steps-aa8a4948.zsh                           # the submitted steps.zsh, as Main ran it
+OLD=$SB/aa8a4948/steps.zsh                           # the submitted steps.zsh, as Main ran it (same file name: I copies it into the backup)
 git -C $WT show aa8a4948:scripts/adopt-612/steps.zsh > $OLD || exit 1
 cl() { env -i HOME=$HOME USER=${USER:-x} PATH=/usr/bin:/bin TMPDIR=$TMPDIR LANG=en_US.UTF-8 "$@"; }
 { print "## setup: STUB claude and ps (fixtures)"

@@ -284,11 +284,12 @@ replacement succeeded.
 Task cleanup is separate from Agent retirement. After validated integration,
 it removes the clean Task Worktree and merged branch, moves unstarted allocations
 into their retained Traces, and returns started members as `standby_aliases`.
-A cancelled Task is cleaned the same way without integration (see below).
 Their identities and native Sessions remain available for continuation.
 Retire a member separately only when its removal is authorized. A later
 reports-only continuation uses the original Session and recreates its recorded
 cwd when needed; this empty directory does not restore removed source files.
+A cancelled Task is cleaned the same way without integration; see
+[Cancel a Task with a Team](#cancel-a-task-with-a-team).
 
 If that root has no recorded connection, replacement uses the caller's existing
 host binding or the Runtime's actual host context when available. The replacement

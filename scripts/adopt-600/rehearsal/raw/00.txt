@@ -26,7 +26,7 @@ CHECK 600 00 bundle verifies against /private/tmp/claude-501/r600/g (its prerequ
 list-heads: e8c2e80241dff1151f2122e8957fca5598ec987b refs/heads/agent/600-graftling-0.9.1
 CHECK 600 00 bundle head = e8c2e80241dff1151f2122e8957fca5598ec987b (agent/600-graftling-0.9.1): PASS
 
-### the release commit, read from a scratch clone /private/tmp/claude-501/r600/tmp600/g00.git (objects shared from /private/tmp/claude-501/r600/g, which is not written)
+### the release commit, read from a scratch clone /private/tmp/claude-501/r600/project/tmp/600/g00.git (objects shared from /private/tmp/claude-501/r600/g, which is not written)
 e8c2e80241dff1151f2122e8957fca5598ec987b: graftling 0.9.1 (600) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | committer LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | parent 2b4a33aef93dc45b953bd412e4d5dd61347c38ea
 CHECK 600 00 e8c2e80241dff1151f2122e8957fca5598ec987b is one commit on 2b4a33aef93dc45b953bd412e4d5dd61347c38ea: PASS
 CHECK 600 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
@@ -36,3 +36,45 @@ version at e8c2e80241dff1151f2122e8957fca5598ec987b: __version__ = "0.9.1"
 README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@<tag-or-commit>"
 C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@v0.9.1"
 CHECK 600 00 README install line at e8c2e80241dff1151f2122e8957fca5598ec987b with @v0.9.1 equals C5's command: PASS
+
+### adoption preflight: production /private/tmp/claude-501/r600/project/.venv-runtime (read only)
+TMPDIR=/tmp/claude-501 (outside the Harness)
+CHECK 600 00 TMPDIR outside the Harness: PASS
+production graphtraj graftling: 0.1.0 0.9.0
+graphtraj direct_url: {"archive_info": {"hash": "sha256=8246c97f45646929a65403de7a7ae9a80b4048d25fd32dc1fb6a50c4e3b2cafa", "hashes": {"sha256": "8246c97f45646929a65403de7a7ae9a80b4048d25fd32dc1fb6a50c4e3b2cafa"}}, "url": "file:///private/tmp/claude-501/r600/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-6fe8c8d9/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=62bb119d9732bac5c1aeada9233d2830caaeec6bc13ae52f79d481e8f8137e6f", "hashes": {"sha256": "62bb119d9732bac5c1aeada9233d2830caaeec6bc13ae52f79d481e8f8137e6f"}}, "url": "file:///private/tmp/claude-501/r600/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-6fe8c8d9/graftling-0.9.0-py3-none-any.whl"}
+CHECK 600 00 production is graphtraj 0.1.0 + graftling 0.9.0, both from 593's wheels-6fe8c8d9: PASS
+CHECK 600 00 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+production bin: subagents subagents-mcp 
+CHECK 600 00 production bin has subagents, subagents-mcp (and no agents): PASS
+593 wheels: graftling-0.9.0-py3-none-any.whl
+CHECK 600 00 593's graphtraj and graftling 0.9.0 wheels are in /private/tmp/claude-501/r600/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-6fe8c8d9 (suite-base's base side, V's graphtraj): PASS
+CHECK 600 00 backup /private/tmp/claude-501/r600/project/tmp/600/backup absent: PASS
+product guard: HEAD 1a50ddfdddb9812752fba9772ff7f0ce4fd7876d | git diff 6fe8c8d9 HEAD -- src tests plugins pyproject.toml: empty | uncommitted there: none
+CHECK 600 00 this Worktree's src tests plugins pyproject.toml equal production graphtraj 6fe8c8d9 (I installs only the graftling wheel): PASS
+GraphTraj dev: 5daa7c5f2e0381202214fceef073b76726aac0df | git diff 6fe8c8d9 dev -- src plugins pyproject.toml tests: (information)
+CHECK 600 00 probe Task 600 ready (current_definition definitions/20261124T115154.574759+0900.md exists): PASS
+.mcp.json servers: ['graphtraj']
+plugin and entry files (hashes; I requires them unchanged):
+  d35a47ddcc32cd8b26e785d0da6071ec2b9f5e5e7585875e9cbc1ca03156dddb  /private/tmp/claude-501/r600/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
+  02299ad72cd0f6316f21f1fccc367b7a4a8e9985e45e9bc4b30b97810f55e9fe  /private/tmp/claude-501/r600/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json
+  ca13e022a2e263a9b635da3e31baea516867694661561dc9e7db923b10f5326b  /private/tmp/claude-501/r600/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json
+  d4696cb4624ca34bc3495a2e0d1114e609255dc9e68f414b248f687a2cb6bbd2  /private/tmp/claude-501/r600/project/.mcp.json
+  17e1791364ebeed751faae2f7f38f0dc7f707f3ef11f068179b98bb641274ecb  /private/tmp/claude-501/r600/project/.claude/settings.local.json
+  854cb6e67bd76eca6ecb286ad4932c1d5a29fbd501a70119a267a4436aa7fc03  /private/tmp/claude-501/r600/project/.graphtraj/claude-host/config.json
+
+### Claude: version and one claude -p probe (the USER pre-approved their Claude login for Task 600: Worldline user-decision 20261124T115605.289456+0900)
+claude: /private/tmp/claude-501/r600/stub/claude -> /private/tmp/claude-501/r600/stub/claude | version: 2.1.330 (stub Claude Code, rehearsal fixture) | recorded at 00: 2.1.330 (stub Claude Code, rehearsal fixture)
+claude answered: READY-600 claude-opus-5-5 LOGGED-IN (stub, rehearsal fixture)
+CHECK 600 00 claude -p answers READY-600 (model and login above): PASS
+
+### Main's Session (I, M, Mr need it)
+no host serving /private/tmp/claude-501/r600/project/.graphtraj/claude-host/config.json found by ps
+source: newest transcript 11111111-2222-3333-4444-555555555600.jsonl
+MAIN=11111111-2222-3333-4444-555555555600 (saved to /private/tmp/claude-501/r600/project/tmp/600/main.session)
+CHECK 600 00 Main's Session id found: PASS
+members_idle [00]: Task 600's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r600/project/.venv-runtime)
+members_idle [00]: no member execution is active: PASS

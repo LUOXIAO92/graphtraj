@@ -1,4 +1,4 @@
-GitHub: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd	refs/tags/v0.9.1 | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
+GitHub: e8c2e80241dff1151f2122e8957fca5598ec987b	refs/heads/main | 6120b31f745bd9e2fd5d10333f3f7bfd483167da	refs/tags/v0.9.1 | e8c2e80241dff1151f2122e8957fca5598ec987b	refs/tags/v0.9.1^{}
 CHECK 600 gh GitHub main = e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
 CHECK 600 gh GitHub v0.9.1^{} = e8c2e80241dff1151f2122e8957fca5598ec987b: PASS
-CHECK 600 gh GitHub v0.9.1 is the local annotated tag object: PASS (remote e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd, local e85a6a1d9f6fa381c024fdb6ac372316bf2b0fcd)
+CHECK 600 gh GitHub v0.9.1 is the local annotated tag object: PASS (remote 6120b31f745bd9e2fd5d10333f3f7bfd483167da, local 6120b31f745bd9e2fd5d10333f3f7bfd483167da)

@@ -1,9 +1,9 @@
 Downloading cpython-3.14.7-macos-aarch64-none (download) (25.3MiB)
  Downloaded cpython-3.14.7-macos-aarch64-none (download)
-Resolved 3 packages in 70ms
+Resolved 3 packages in 76ms
    Building graftling @ git+file:///private/tmp/claude-501/r600/origin.git@e8c2e80241dff1151f2122e8957fca5598ec987b
       Built graftling @ git+file:///private/tmp/claude-501/r600/origin.git@e8c2e80241dff1151f2122e8957fca5598ec987b
-Prepared 3 packages in 344ms
+Prepared 3 packages in 326ms
 Installed 3 packages in 3ms
  + graftling==0.9.1 (from git+file:///private/tmp/claude-501/r600/origin.git@e8c2e80241dff1151f2122e8957fca5598ec987b)
  + pyyaml==6.0.4

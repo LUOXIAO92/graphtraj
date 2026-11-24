@@ -1,4 +1,4 @@
-git archive v0.9.1 (e8c2e80241dff1151f2122e8957fca5598ec987b) -> /private/tmp/claude-501/r600/tmp600/gsrc
+git archive v0.9.1 (e8c2e80241dff1151f2122e8957fca5598ec987b) -> /private/tmp/claude-501/r600/project/tmp/600/gsrc
 
 ### version strings in the archive
   src/graftling/__init__.py: __version__ = "0.9.1"
@@ -25,7 +25,7 @@ CHECK 600 B wheel version strings (METADATA, __init__.py, the 3 json) all 0.9.1:
 CHECK 600 B wheel console scripts are exactly subagents, subagents-mcp: PASS
 
 ### wheel == git archive v0.9.1, file by file (593's pkgdiff532.py)
-graftling graftling-0.9.1-py3-none-any.whl vs /private/tmp/claude-501/r600/tmp600/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+graftling graftling-0.9.1-py3-none-any.whl vs /private/tmp/claude-501/r600/project/tmp/600/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
 CHECK 600 B graftling wheel equals git archive v0.9.1: PASS
 CHECK 600 B the wheel's graftling/ files equal git archive v0.9.1: PASS
 
@@ -40,4 +40,8 @@ CHECK 600 B no build/ or __pycache__ in the wheel: PASS
 ### GraphTraj's graftling requirement (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/600-graftling-0-9-1-release/pyproject.toml; information: no change needed)
 REPORT 600 B GraphTraj Requires-Dist graftling<0.10,>=0.9.0 includes 0.9.1: yes, no change needed
 CHECK 600 B GraphTraj's graftling range includes 0.9.1: PASS
-wheel sha256: 0e7e944870f1192082ef3328b8d41fdb5fc040a5bc0bbaec0eeebab5db3b152b  /private/tmp/claude-501/r600/tmp600/wheel/graftling-0.9.1-py3-none-any.whl
+wheel sha256: 85962851792c8dec6fd41b134bf18fae5a8a49083a43e0bb871c7e4e767cc701  /private/tmp/claude-501/r600/project/tmp/600/wheel/graftling-0.9.1-py3-none-any.whl
+
+### the wheel G and I install: /private/tmp/claude-501/r600/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1
+graftling-0.9.1-py3-none-any.whl: OK
+CHECK 600 B /private/tmp/claude-501/r600/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1 holds the v0.9.1 wheel with SHA256SUMS: PASS

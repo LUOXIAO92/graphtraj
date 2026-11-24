@@ -1,0 +1,5 @@
+CHECK 600 Mpre GR passed: PASS
+CHECK 600 Mpre V passed: PASS
+members_idle [Mpre]: Task 600's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [Mpre]: no member execution is active: PASS
+CHECK 600 Mpre no member Worker or swarm batch runs: PASS

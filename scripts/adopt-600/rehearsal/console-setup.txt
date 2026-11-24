@@ -1,0 +1,50 @@
+## setup: graftling scratch clone + bare origin
+## setup: STUB claude (fixture)
+## setup: FAKE PRODUCTION /private/tmp/claude-501/r600/project (fixture built by the real product from 593's real wheels)
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_connection.py", line 111, in connection_operation
+    return exchange(address, document, authenticate=authenticate,
+                    response_timeout=response_timeout, await_accepted=await_accepted, stoppable=stoppable)
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graftling/connection.py", line 336, in connection_operation
+    raise AgentsError(response['error']['code'], response['error']['message'])
+graftling.tool.AgentsError: Agent Runner must be invoked from the Harness Project Root or this Session's Worktree.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/bin/graphtraj", line 7, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/click/core.py", line 1631, in __call__
+    return self.main(*args, **kwargs)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/click/core.py", line 1552, in main
+    rv = self.invoke(ctx)
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/click/core.py", line 2032, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/interfaces/cli/projection.py", line 99, in invoke
+    return super().invoke(ctx)
+           ~~~~~~~~~~~~~~^^^^^
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/click/core.py", line 1415, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/click/core.py", line 910, in invoke
+    return callback(*args, **kwargs)
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/interfaces/cli/project_setup.py", line 55, in setup
+    preview = invoke_tool("project_setup", arguments).document
+              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/interfaces/cli/projection.py", line 44, in invoke_tool
+    forwarded = forward_cli(feature, arguments, context.get('cwd') or Path.cwd())
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/interfaces/hosted_cli.py", line 164, in forward_cli
+    return forward_request({'action': 'execute', 'feature': feature, 'arguments': arguments}, cwd)
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/interfaces/hosted_cli.py", line 189, in forward_request
+    response = connection_operation(address, {
+        'cwd': str(cwd.resolve()),
+        'request': request,
+        **({'native': native} if native is not None else {}),
+    }, authenticate=True, await_accepted=True, stoppable=True)
+  File "/private/tmp/claude-501/r600/project/.venv-runtime/lib/python3.13/site-packages/graphtraj/execution/runner_connection.py", line 114, in connection_operation
+    raise RunnerError(error.code, error.message) from error
+graphtraj.execution.runner_models.RunnerError: Agent Runner must be invoked from the Harness Project Root or this Session's Worktree.
+fake production: graphtraj 0.1.0 graftling 0.9.0 | .mcp.json servers: ['graphtraj'] | hook copy: hooks.json host_context.mjs 

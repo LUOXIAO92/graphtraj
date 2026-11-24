@@ -320,7 +320,7 @@ def continue_task(
 @click.option("--worktree-branch", help="Branch checked out in the Task Worktree when it differs "
               "from the registered branch; both branches are kept.")
 def cleanup(task_id: str | None, worktree_branch: str | None) -> None:
-    """Clean up one safely integrated task by stable identity."""
+    """Clean up one safely integrated or cancelled task by stable identity."""
     if task_id is None:
         error = RunnerError(
             "invalid-input",

@@ -219,6 +219,32 @@ submission, while the old submission and original Session relationships remain
 unchanged. This does not grant control of old children or access to their private
 reports, and is not permission to claim another Agent's work or checks as its own.
 
+## Cancel a Task with a Team
+
+Cancelling records a decision; it stops nothing by itself. For a Task whose
+Team has started, the user's or authorized parent's decision comes first, then:
+
+1. Ask the Leader to stop, or `interrupt` its execution and any running
+   descendant.
+2. Confirm with `subagents` `status` that every member has stopped.
+3. `retire` each stopped member whose release is authorized. A member left
+   unretired stays a standby Agent.
+4. `task_revise` the Task with `disposition: cancelled`, a `retirement_reason`
+   and `replaced_by: []`.
+5. `cleanup` with the Task ID. It refuses `worktree-busy` while a member
+   executes and `cleanup-dirty` for uncommitted changes; commit or remove those
+   first. It then removes the Worktree and the unmerged Task branch and reports
+   the branch's last commit as `task_commit`, with `task_disposition: cancelled`.
+   Keep that commit ID if the work may be needed later.
+6. `task_backup` closes the Task's Issue when the Task is backed up.
+
+Afterwards the Task keeps its `status` and its Team keeps its state; neither is
+changed by cancelling or cleanup. Its definitions, budget record, Team record,
+Traces, Sessions and Worldline events remain. It is no longer active in the
+task graph or the current-member list. Its budget sends no further notice,
+including from a timer started before the cancellation. A superseded Task is
+not cleaned this way: cleanup still refuses it as not integrated.
+
 ## Stop and replace
 
 A Native Process can exist before its Session is ready. Runner retains its owned
@@ -258,6 +284,7 @@ replacement succeeded.
 Task cleanup is separate from Agent retirement. After validated integration,
 it removes the clean Task Worktree and merged branch, moves unstarted allocations
 into their retained Traces, and returns started members as `standby_aliases`.
+A cancelled Task is cleaned the same way without integration (see below).
 Their identities and native Sessions remain available for continuation.
 Retire a member separately only when its removal is authorized. A later
 reports-only continuation uses the original Session and recreates its recorded

@@ -1,4 +1,4 @@
-"""Fail-closed cleanup for one integrated Task Worktree."""
+"""Fail-closed cleanup for one integrated or cancelled Task Worktree."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from graphtraj.graph.task_graph import _load_states
 
 @dataclass(frozen=True)
 class CleanupTarget:
-    """The canonical disposable resources for one integrated Task."""
+    """The canonical disposable resources for one integrated or cancelled Task."""
 
     project: Project
     task_id: str
@@ -41,10 +41,18 @@ class CleanupTarget:
     branch: str
     status: str
     candidate: str | None
+    # Cancelled and never integrated: its unmerged branch is removed (603).
+    cancelled: bool = False
 
 
 def cleanup_task(cwd: Path, task_id: str, worktree_branch: str | None = None) -> CleanupResponse:
     """Remove one integrated Task's disposable resources by Task identity.
+
+    A Task whose current disposition is ``cancelled`` and that was never
+    integrated is cleaned the same way without the integration check (603):
+    its Worktree and its unmerged branch are removed, the branch's last
+    commit is reported as ``task_commit``, and its records, status and Team
+    stay as they are.
 
     ``worktree_branch`` names the branch actually checked out in the Task's
     registered Worktree when it differs from the registered branch, for
@@ -119,12 +127,13 @@ def _target(project: Project, task_id: str) -> CleanupTarget | CleanupResponse:
         branch=branch,
         status=state["status"],
         candidate=state["current_candidate"],
+        cancelled=state["disposition"] == "cancelled" and state["status"] != "integrated",
     )
 
 
 def _cleanup(target: CleanupTarget, worktree_branch: str | None = None) -> CleanupResponse:
     """Verify and remove the Task's resources; see ``cleanup_task``."""
-    if target.status != "integrated":
+    if target.status != "integrated" and not target.cancelled:
         return _refused(
             target,
             "cleanup-not-integrated",
@@ -223,7 +232,9 @@ def _cleanup(target: CleanupTarget, worktree_branch: str | None = None) -> Clean
              "candidate": target.candidate},
         )
     content_integrated = None
-    if not git_succeeds(
+    # A cancelled Task's own branch is removed unmerged; its tip is reported.
+    cancelled = target.cancelled and not mismatched
+    if not cancelled and not git_succeeds(
         target.project.repository,
         "merge-base",
         "--is-ancestor",
@@ -278,7 +289,7 @@ def _cleanup(target: CleanupTarget, worktree_branch: str | None = None) -> Clean
         return _refused(
             target,
             "cleanup-failed",
-            "The integrated Task Worktree could not be cleaned up.",
+            "The Task Worktree could not be cleaned up.",
             {"completed_actions": completed_actions,
              **({"cause": error.as_document()} if isinstance(error, RunnerError) else {})},
         )
@@ -291,7 +302,7 @@ def _cleanup(target: CleanupTarget, worktree_branch: str | None = None) -> Clean
             "aliases_removed": [directory.name for directory in unstarted],
             "standby_aliases": [directory.name for directory in mappings
                                 if directory not in unstarted],
-            "evidence": {
+            "evidence": {"task_disposition": "cancelled", "task_commit": task_commit} if cancelled else {
                 "integration_branch": target.project.integration_branch,
                 "integration_commit": target.project.dev_commit,
                 "task_commit": task_commit,

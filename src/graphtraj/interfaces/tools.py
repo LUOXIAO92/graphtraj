@@ -1113,7 +1113,8 @@ register_tool(
 )
 register_tool(
     "cleanup",
-    "Clean up one safely integrated task by stable identity. When its Worktree is checked "
+    "Clean up one safely integrated task, or one cancelled task (its unmerged branch's last commit "
+    "is reported as task_commit), by stable identity. When its Worktree is checked "
     "out on another branch that contains the accepted candidate, name that branch in "
     "worktree_branch; the Worktree is then removed and both branches are kept.",
     {"type": "object", "properties": {"task_id": {"type": "string"},

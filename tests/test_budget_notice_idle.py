@@ -409,3 +409,45 @@ def test_timer_process_of_a_test_ends_with_the_test(tmp_path, monkeypatch) -> No
         if process.poll() is None:
             process.kill()
             process.wait()
+
+
+def _revise_disposition(task: Path, disposition: str) -> None:
+    """Point the Task at a new current definition with ``disposition``, as task_revise does."""
+    name = "definitions/" + disposition + ".md"
+    (task / "definitions").mkdir(exist_ok=True)
+    metadata = {"task": {"task_id": "445", "task_name": "budget-notice-idle-timed-leader",
+                         "schema_version": 2, "disposition": disposition,
+                         "retirement_reason": "No longer needed."}}
+    (task / name).write_text("---\n" + yaml.safe_dump(metadata) + "---\n" + _budget_body(total=1))
+    record = yaml.safe_load((task / "task.yml").read_text())
+    (task / "task.yml").write_text(yaml.safe_dump({**record, "current_definition": name}))
+
+
+@pytest.mark.parametrize("disposition", ["cancelled", "superseded"])
+def test_a_timer_started_before_the_task_was_cancelled_sends_nothing(
+        team, monkeypatch, disposition) -> None:
+    """Cancelling keeps the Task's status, Team and members; its timers still end (603)."""
+    task, runner, monitor, received = team
+    _set_status(task / "task.yml", "implementing")
+    _set_status(task / "teams" / "1" / "team.yml", "active")
+    clock = Clock(_state(task)["started_at"])
+    monkeypatch.setattr(timers.time, "time", clock)
+    sleep = clock.sleep
+
+    def revised_while_waiting(seconds: float) -> None:
+        if not clock.slept:
+            _revise_disposition(task, disposition)
+        sleep(seconds)
+
+    clock.sleep = revised_while_waiting
+    assert _run(runner, "leader-1", monitor, clock) is False
+    assert received == [] and len(clock.slept) == 1
+    assert _state(task)["parent_notices"] == [] and _state(task)["notifications"] == []
+    # A later execution of the same Task observes and delivers nothing either,
+    # long past the allowance, and samples no stop.
+    clock.now += 3600
+    assert monitor("leader-1").next_elapsed_threshold_at() is None
+    assert monitor("leader-1").check("team_leader", "team_leader") is False
+    monitor("leader-1").deliver_parent_notices(runner / "sessions" / "leader-1")
+    state = _state(task)
+    assert received == [] and state["parent_notices"] == [] and state["stopping_checks"] == 0

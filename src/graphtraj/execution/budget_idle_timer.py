@@ -11,8 +11,9 @@ acting if the Session runs an execution again (that execution's own monitor
 observes it), if a newer timer replaced it, if the Session record was
 removed, or if the Task is stopped or its directory removed. It also exits
 once the watched work ended (490): the member was retired (its active
-``mapping.yml`` is gone), its Team is retiring or retired, or the Task was
-accepted or integrated (cleanup keeps that recorded status). Otherwise it observes the thresholds
+``mapping.yml`` is gone), its Team is retiring or retired, the Task was
+accepted or integrated (cleanup keeps that recorded status), or the Task was
+cancelled or superseded (603). Otherwise it observes the thresholds
 with ``check_elapsed`` (no stopping sample: stops stay with running
 executions) and calls ``deliver_parent_notices`` with the Session as
 observer, so the
@@ -49,6 +50,7 @@ from graphtraj.execution.execution_budget import (
     ExecutionBudgetMonitor,
     execution_budget_monitor_from_environment,
     execution_budget_stage,
+    task_disposition_active,
 )
 from graphtraj.execution.runner_heartbeat import ownership_is_held, read_heartbeat
 from graphtraj.execution.runner_models import RunnerError
@@ -127,13 +129,14 @@ def _work_ended(session_directory: Path, task_directory: Path) -> bool:
 
     Retirement removes the member's active ``mapping.yml``; a Team being
     closed is ``retiring`` or ``retired``; an accepted or integrated Task
-    keeps that status, also after cleanup.
+    keeps that status, also after cleanup. A cancelled or superseded Task
+    keeps its status and Team; its current definition says so (603).
     """
     mapping = _read_record(session_directory / "mapping.yml")
     if mapping is None:
         return True
     task = _read_record(task_directory / "task.yml") or {}
-    if task.get("status") in ENDED_TASK_STATUSES:
+    if task.get("status") in ENDED_TASK_STATUSES or not task_disposition_active(task_directory):
         return True
     team_file = task_directory / "teams" / str(mapping.get("team_generation")) / "team.yml"
     team = _read_record(team_file) or {}

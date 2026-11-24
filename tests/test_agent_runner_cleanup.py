@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import runner_operation, FakeCodex, InstalledCommands, run_process, wait_for_file
+from conftest import current_definition, runner_operation, FakeCodex, InstalledCommands, run_process, wait_for_file
 from runner_fixtures import configure_harness
-from test_task_graph import _change_status, _register, _task
+from test_task_graph import _change_status, _register, _revised, _task
 from test_task_recovery import installed_commands
 from test_pi_runtime import pi_environment
 
@@ -1133,3 +1133,131 @@ def test_cleanup_preserves_shared_worktree_with_another_task_execution(
     assert (foreign / 'mapping.yml').read_bytes() == before
     assert not (foreign / 'stop.yml').exists()
     assert all((directory / 'mapping.yml').exists() for directory in _task_mappings(task))
+
+
+def _retire_task(task: DeliveredTask, disposition: str) -> None:
+    """Record ``disposition`` for the unintegrated Task through the installed task revise (603)."""
+    evidence = task.root / "retirement-evidence.md"
+    evidence.write_text("The user closed this Task without integration.\n", encoding="utf-8")
+    reason = "Closed without integration."
+    tasks = [_revised(_task(task.task_id, task.task_name), current_definition(task.state, task.task_id),
+                      disposition=disposition, retirement_reason=reason,
+                      replaced_by=["86"] if disposition == "superseded" else [])]
+    if disposition == "superseded":
+        tasks.append(_revised(_task("86", "replacement-task"), None))
+    revision = task.root / "retire.yml"
+    revision.write_text(yaml.safe_dump({
+        "product_preserving": True, "caused_by_event_ids": [],
+        "evidence_refs": [evidence.name], "tasks": tasks}, sort_keys=False), encoding="utf-8")
+    revised = run_process([str(task.commands.product), "task", "revise", "--revision-file", str(revision)],
+                          cwd=task.root, env=task.environment)
+    assert revised.returncode == 0, revised.stdout + revised.stderr
+
+
+@pytest.fixture
+def cancelled_task(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> DeliveredTask:
+    """An accepted Task that was then cancelled instead of integrated (603)."""
+    task = _deliver_task(installed_commands, temporary_git_repository, fake_codex, tmp_path,
+                         integrate=False)
+    _retire_task(task, "cancelled")
+    return task
+
+
+def _branch_tip(task: DeliveredTask) -> str | None:
+    found = run_process(["git", "rev-parse", "--verify", "--quiet", "refs/heads/" + task.branch],
+                        cwd=task.repository)
+    return found.stdout.strip() if found.returncode == 0 else None
+
+
+def test_installed_cleanup_removes_a_cancelled_task_worktree_and_unmerged_branch(
+    cancelled_task: DeliveredTask,
+) -> None:
+    """Cleanup removes a cancelled Task's resources and keeps its records and state (603)."""
+    task = cancelled_task
+    tip = _branch_tip(task)
+    dev = run_process(["git", "rev-parse", "dev"], cwd=task.repository).stdout.strip()
+    assert tip and run_process(["git", "merge-base", "--is-ancestor", tip, dev],
+                               cwd=task.repository).returncode == 1
+    task_state = yaml.safe_load((task.task_directory / "task.yml").read_text())
+    team_file = task.task_directory / "teams" / "1" / "team.yml"
+    team_status = yaml.safe_load(team_file.read_text())["status"]
+    durable_before = _durable_contents(task)
+    mappings = _task_mappings(task)
+    assert mappings
+
+    cleaned = _cleanup(task)
+
+    assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
+    document = yaml.safe_load(cleaned.stdout)
+    assert document["cleanup_status"] == "cleaned"
+    assert document["evidence"] == {"task_disposition": "cancelled", "task_commit": tip}
+    assert sorted(document["standby_aliases"]) == sorted(path.name for path in mappings)
+    assert not task.worktree.exists() and _branch_tip(task) is None
+    assert run_process(["git", "rev-parse", "dev"], cwd=task.repository).stdout.strip() == dev
+    # Records, Session records, status and Team stay as they were.
+    _assert_durable_contents(task, durable_before)
+    assert yaml.safe_load((task.task_directory / "task.yml").read_text()) == task_state
+    assert yaml.safe_load(team_file.read_text())["status"] == team_status
+    assert all((path / "mapping.yml").exists() for path in mappings)
+
+    repeated = _cleanup(task)
+
+    assert repeated.returncode == 0, repeated.stderr
+    assert yaml.safe_load(repeated.stdout)["cleanup_status"] == "already-cleaned"
+
+
+def test_installed_cleanup_refuses_a_dirty_cancelled_task(cancelled_task: DeliveredTask) -> None:
+    task = cancelled_task
+    dirty = task.worktree / "unfinished.txt"
+    dirty.write_text("uncommitted work\n", encoding="utf-8")
+    tip = _branch_tip(task)
+
+    result = _cleanup(task)
+
+    assert result.returncode == 1
+    assert yaml.safe_load(result.stdout)["error"]["code"] == "cleanup-dirty"
+    assert dirty.read_text(encoding="utf-8") == "uncommitted work\n"
+    assert _branch_tip(task) == tip
+
+
+def test_installed_cleanup_refuses_a_cancelled_task_with_an_executing_agent(
+    cancelled_task: DeliveredTask,
+) -> None:
+    task = cancelled_task
+    mapping_file = _task_mappings(task)[0] / "mapping.yml"
+    mapping = yaml.safe_load(mapping_file.read_text(encoding="utf-8"))
+    agent = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    mapping["worker_pid"] = mapping["runtime_pid"] = agent.pid
+    mapping_file.write_text(yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8")
+    try:
+        result = _cleanup(task)
+    finally:
+        agent.terminate()
+        agent.wait(timeout=5)
+
+    assert result.returncode == 1
+    assert yaml.safe_load(result.stdout)["error"]["code"] == "worktree-busy"
+    assert task.worktree.is_dir() and _branch_tip(task) is not None
+
+
+def test_installed_cleanup_still_refuses_a_superseded_unintegrated_task(
+    installed_commands: InstalledCommands,
+    temporary_git_repository: Path,
+    fake_codex: FakeCodex,
+    tmp_path: Path,
+) -> None:
+    """Only cancellation replaces integration; a superseded Task keeps its resources (603)."""
+    task = _deliver_task(installed_commands, temporary_git_repository, fake_codex, tmp_path,
+                         integrate=False)
+    _retire_task(task, "superseded")
+
+    result = _cleanup(task)
+
+    assert result.returncode == 1
+    assert yaml.safe_load(result.stdout)["error"]["code"] == "cleanup-not-integrated"
+    assert task.worktree.is_dir() and _branch_tip(task) is not None

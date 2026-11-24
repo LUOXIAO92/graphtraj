@@ -48,7 +48,7 @@ Driver can start the child.
 For a failure before Session registration, preserve and retry the unchanged
 original swarm input. Reuse is limited to a clean canonical Worktree with
 matching recorded ownership and branch. Dirty, foreign or unmarked leftovers
-remain refused. Direct cleanup still requires integration. After successful
+remain refused. Direct cleanup still requires integration or cancellation. After successful
 retry, use ordinary delivery and cleanup.
 
 Keep one execution per Session and communicate only with direct parents/children.
@@ -203,7 +203,8 @@ the task's actual parent, which coordinates its children; stopping does not wait
 for the notice to be processed. A timed Session's elapsed notices (planned end, then
 additional allowance) also arrive while every member is idle: when its execution
 ends, a light Runner timer that runs no model delivers each once to that
-Session's own direct parent (Main for a Leader, the Leader for an Engineer). Keep elapsed accounting and stop history. An
+Session's own direct parent (Main for a Leader, the Leader for an Engineer). A
+cancelled or superseded Task's budget sends no further notice. Keep elapsed accounting and stop history. An
 interruption, recovery or replacement does not authorize more time.
 
 For a failure, stop or replacement, read [recovery](references/recovery.md).
@@ -216,3 +217,7 @@ When evidence changes task boundaries or reveals a common prerequisite, use
 the project's decomposition method and MCP `task_revise` to correct the graph before dependent
 work. Preserve original inputs and causal evidence. Product changes need user
 direction; ordinary product-preserving graph corrections follow project guidance.
+
+To cancel a Task whose Team has started, stop and confirm its executions, retire
+its members, record `disposition: cancelled` with `task_revise`, then `cleanup`
+and `task_backup`. See [Cancel a Task with a Team](references/recovery.md#cancel-a-task-with-a-team).

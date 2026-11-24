@@ -136,7 +136,8 @@ Execute MCP `task_revise` with:
   ```
 
 Include definitions whose relationships change and evidence for parentage,
-retirement and scope changes. A stale definition fails instead of overwriting
+retirement and scope changes. Cancelling a Task whose Team has started follows
+[Cancel a Task with a Team](recovery.md#cancel-a-task-with-a-team). A stale definition fails instead of overwriting
 newer work. Apply confirmed relations through the native revision, preserving
 original definitions and delivery history.
 

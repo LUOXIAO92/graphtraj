@@ -215,8 +215,8 @@ class ExecutionBudgetMonitor:
 
         Only the planned end (``elapsed_minutes``) and then the additional
         allowance are timed; None when both were already notified, the Task
-        has no budget accounting yet, or it is stopped. Reading never starts
-        or changes the accounting.
+        has no budget accounting yet, it is stopped, or it is cancelled or
+        superseded (603). Reading never starts or changes the accounting.
         """
         lock_path = self.task_directory / ".execution-budget.lock"
         if not (self.task_directory / "execution-budget.yml").is_file():
@@ -225,7 +225,7 @@ class ExecutionBudgetMonitor:
             file_lock.flock(lock.fileno(), file_lock.LOCK_EX)
             try:
                 budget = _current_budget(self.task_directory)
-                if budget is None:
+                if budget is None or not task_disposition_active(self.task_directory):
                     return None
                 state, _ = _read_usage(self.task_directory, budget)
             finally:
@@ -465,6 +465,7 @@ class ExecutionBudgetMonitor:
             try:
                 try:
                     budget = _current_budget(self.task_directory)
+                    active = budget is not None and task_disposition_active(self.task_directory)
                 except ExecutionBudgetError as error:
                     raise RunnerError(
                         "TASK_FILE_INVALID",
@@ -487,10 +488,12 @@ class ExecutionBudgetMonitor:
                 stochastic_before = (
                     state["stopping_checks"], state["stopped"]
                 )
+                # A cancelled or superseded Task keeps counting its use but
+                # crosses, samples and notifies nothing further (603).
                 notices = _new_notices(
                     state, budget, self.task_id, self.task_name, role, stage,
                     sample_stop=sample_stop,
-                )
+                ) if active else []
                 changed = changed or stochastic_before != (
                     state["stopping_checks"], state["stopped"]
                 )
@@ -548,14 +551,35 @@ def _ended_by_budget_stop(session_directory: Path | None) -> bool:
     return isinstance(terminal, dict) and terminal.get("budget_stopped") is True
 
 
-def _current_budget(task_directory: Path) -> ExecutionBudget | None:
+def _current_snapshot(task_directory: Path) -> str:
+    """Return the Task's current definition text."""
     try:
         state = yaml.safe_load((task_directory / "task.yml").read_text(encoding="utf-8"))
         definition = task_directory / state["current_definition"]
-        body = definition.read_text(encoding="utf-8")
+        return definition.read_text(encoding="utf-8")
     except (KeyError, OSError, TypeError, yaml.YAMLError) as error:
         raise ExecutionBudgetError("Task budget snapshot is unreadable") from error
-    return read_execution_budget(body)
+
+
+def _current_budget(task_directory: Path) -> ExecutionBudget | None:
+    return read_execution_budget(_current_snapshot(task_directory))
+
+
+def task_disposition_active(task_directory: Path) -> bool:
+    """Whether the Task's current definition keeps its disposition active (603).
+
+    Cancelling or superseding a Task revises only its definition: its status,
+    Team and members stay as they were. Its budget then records and sends no
+    further notice, so a timer started before the revision stays silent. A
+    definition without Task metadata predates dispositions and is active.
+    """
+    front_matter = split_execution_budget_front_matter(_current_snapshot(task_directory))
+    try:
+        metadata = yaml.safe_load(front_matter[1]) if front_matter is not None else None
+    except yaml.YAMLError as error:
+        raise ExecutionBudgetError("Task definition metadata is not YAML") from error
+    task = metadata.get("task") if isinstance(metadata, dict) else None
+    return not isinstance(task, dict) or task.get("disposition", "active") == "active"
 
 
 def _emit_notice(output: str) -> bool:

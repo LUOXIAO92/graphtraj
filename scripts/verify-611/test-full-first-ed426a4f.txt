@@ -1,0 +1,23 @@
+# First full GraphTraj suite (Engineer): started on ed426a4f; src/graphtraj/interfaces/cli/graphtraj.py changed mid-run (1e9fab57, --provider).
+# venv /tmp/claude-501/611/venv: graftling 026267b wheel + GraphTraj editable; TMPDIR=/tmp/claude-501/611/suite-cand-ed426a4f/pt (outside the Harness); scripts/run_test_shards.py --shards 6 --timeout 1500 -- -rA
+test run id: 5dd20c30583c4876 (shard n carries PYTEST_GRAPHTRAJ_RUN=5dd20c30583c4876-<n>)
+shard 0: 40 files -> /tmp/claude-501/611/suite-cand-ed426a4f/shards/shard-0.log
+shard 1: 40 files -> /tmp/claude-501/611/suite-cand-ed426a4f/shards/shard-1.log
+shard 2: 41 files -> /tmp/claude-501/611/suite-cand-ed426a4f/shards/shard-2.log
+shard 3: 40 files -> /tmp/claude-501/611/suite-cand-ed426a4f/shards/shard-3.log
+shard 4: 41 files -> /tmp/claude-501/611/suite-cand-ed426a4f/shards/shard-4.log
+shard 5: 40 files -> /tmp/claude-501/611/suite-cand-ed426a4f/shards/shard-5.log
+leftover processes of run 5dd20c30583c4876: before=0 after-shards=0 stopped=0 remaining=0
+FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start
+FAILED tests/test_claude_runner.py::test_child_registration_follows_its_owning_execution
+FAILED tests/test_desktop_settings.py::test_manual_efforts_survive_native_refresh_and_role_save
+FAILED tests/test_pi_generic_execution.py::test_graphtraj_member_launch_matches_base
+4 failed, 3708 passed, 58 skipped
+logs: /tmp/claude-501/611/suite-cand-ed426a4f/shards
+exit=1
+1 failed, 650 passed, 5 skipped in 993.02s (0:16:33)
+724 passed, 11 skipped in 1133.63s (0:18:53)
+2 failed, 427 passed, 8 skipped in 858.47s (0:14:18)
+641 passed, 10 skipped in 1080.53s (0:18:00)
+1 failed, 650 passed, 11 skipped in 730.84s (0:12:10)
+616 passed, 13 skipped in 844.27s (0:14:04)

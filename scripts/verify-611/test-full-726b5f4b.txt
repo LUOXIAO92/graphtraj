@@ -1,0 +1,25 @@
+# Full GraphTraj suite (Engineer) on 726b5f4b (final source; later commits add only scripts/verify-611 logs).
+# venv /tmp/claude-501/611/venv: graftling 026267b wheel + GraphTraj editable (this Worktree); TMPDIR=/tmp/claude-501/611/suite-final-726b5f4b/pt (outside the Harness)
+# command: cd <Worktree> && TMPDIR=/tmp/claude-501/611/suite-final-726b5f4b/pt python scripts/run_test_shards.py --shards 6 --timeout 1500 --log-dir /tmp/claude-501/611/suite-final-726b5f4b/shards -- -rA
+test run id: 8f318c2687b04f93 (shard n carries PYTEST_GRAPHTRAJ_RUN=8f318c2687b04f93-<n>)
+shard 0: 40 files -> /tmp/claude-501/611/suite-final-726b5f4b/shards/shard-0.log
+shard 1: 40 files -> /tmp/claude-501/611/suite-final-726b5f4b/shards/shard-1.log
+shard 2: 40 files -> /tmp/claude-501/611/suite-final-726b5f4b/shards/shard-2.log
+shard 3: 41 files -> /tmp/claude-501/611/suite-final-726b5f4b/shards/shard-3.log
+shard 4: 40 files -> /tmp/claude-501/611/suite-final-726b5f4b/shards/shard-4.log
+shard 5: 41 files -> /tmp/claude-501/611/suite-final-726b5f4b/shards/shard-5.log
+leftover processes of run 8f318c2687b04f93: before=0 after-shards=0 stopped=0 remaining=0
+FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start
+FAILED tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+FAILED tests/test_mcp_host_tools.py::test_installed_mcp_server_returns_each_caller_its_own_stop
+FAILED tests/test_pi_generic_execution.py::test_graphtraj_member_launch_matches_base
+4 failed, 3708 passed, 58 skipped
+logs: /tmp/claude-501/611/suite-final-726b5f4b/shards
+exit=1
+659 passed, 5 skipped in 913.37s (0:15:13)
+677 passed, 11 skipped in 1088.25s (0:18:08)
+2 failed, 367 passed, 14 skipped in 889.96s (0:14:49)
+1 failed, 688 passed, 10 skipped in 1059.49s (0:17:39)
+1 failed, 677 passed, 5 skipped in 714.26s (0:11:54)
+640 passed, 13 skipped in 792.78s (0:13:12)
+# classification: known (516 current definition 20261122T023936.454919+0900): test_second_child_batch_starts_while_first_batch_is_running, test_installed_mcp_server_returns_each_caller_its_own_stop, test_graphtraj_member_launch_matches_base; pre-existing on base 06353b38 with the same wheel (not in 516): test_intent_queries_find_create[start an agent]. The two 516 flaky ids pass on an isolated rerun (2 passed in 37.46s).

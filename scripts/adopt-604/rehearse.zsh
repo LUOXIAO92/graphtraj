@@ -51,6 +51,7 @@ cl() { env -i HOME=$HOME USER=${USER:-x} PATH=/usr/bin:/bin TMPDIR=$TMPDIR LANG=
   (cd $FH && print y | cl $FRT/bin/graphtraj setup) > /dev/null || exit 1
   for c in $FH/.graphtraj/config.yml(N) $FH/.graphtraj/core/config.yml(N); do
     $CONDA -I -c 'import sys; p = sys.argv[1]; t = open(p).read(); open(p, "w").write(t.replace("state: .graphtraj/state", "state: .graphtraj/core/state").replace("agent_worktrees: .graphtraj/.agent-worktrees", "agent_worktrees: .graphtraj/core/worktrees"))' $c; done
+  for w in $FH/.graphtraj/.agent-worktrees/dev(N/); do mkdir -p $FH/.graphtraj/core/worktrees && git -C $FH worktree move $w $FH/.graphtraj/core/worktrees/dev || exit 1; done   # setup's dev Integration Worktree, moved with the root
   print -r -- "fake project paths (production layout, as the real 601 state records its Worktree): $(grep -E 'agent_worktrees|state:' $FH/.graphtraj/config.yml | tr -s ' ' | tr '\n' ';')"
   (cd $FH && cl $FRT/bin/python -m graphtraj.runtimes.claude.host configuration --project $FH --claude $SB/stub/claude --write) > /dev/null || exit 1
   for t in $T593 $T600 $T603 $T604 $T516 $T601; do mkdir -p $FST/$t && cp -p $REALSTATE/tasks/$t/task.yml $FST/$t/ && cp -Rp $REALSTATE/tasks/$t/definitions $FST/$t/ || exit 1; done

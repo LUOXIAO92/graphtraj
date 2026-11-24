@@ -1,0 +1,11 @@
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 597 00 this uv's 'uv tool install --help' lists --managed-python: PASS (--managed-python       Require use of uv-managed Python versions [env: UV_MANAGED_PYTHON=])
+uv user config: /Users/luoxiao/.config/uv/uv.toml absent; /etc/uv/uv.toml absent; 
+claude: /Users/luoxiao/.local/bin/claude -> /Users/luoxiao/.local/bin/claude | env: /Users/luoxiao/.local/bin/claude: Operation not permitted
+conda: /Users/luoxiao/miniconda3/bin/conda -> /Users/luoxiao/miniconda3/bin/conda | 
+CHECK 597 00 /tmp/claude-501/uvt597g absent: PASS
+graftling agent/597-graftling-install-uv-managed-python HEAD: ca1519fbfc656a3d588a971d1c8bb76070123738 (Install with uv's own managed Python: uv tool install --managed-python (597))
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@<tag-or-commit>"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git@v0.9.0"
+CHECK 597 00 README install line with @v0.9.0 equals C5's command: PASS
+claude probe: skipped (ADOPT597_NOCLAUDE, rehearsal only)

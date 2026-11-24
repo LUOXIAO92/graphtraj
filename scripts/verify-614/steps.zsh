@@ -47,7 +47,8 @@
 # given only to the graphtraj MCP server (in ROOT/mcp-614.json) so the judge can show it never appears. No API key.
 # Rehearsal only (Engineer; Main leaves all unset): VERIFY614_ROOT, VERIFY614_T, VERIFY614_OUT, VERIFY614_USERHOME,
 # VERIFY614_DEPS, VERIFY614_PYTEST_ARGS, VERIFY614_GWAIT, VERIFY614_CLAUDE (a stand-in path recorded by setup, never
-# run), VERIFY614_NO_PROMPT=1 (pre and real stop before claude -p).
+# run), VERIFY614_NO_PS=1 (G/suite-base skip the other-run check where ps cannot list), VERIFY614_NO_PROMPT=1 (pre
+# and real stop before claude -p).
 # A run with any of them set prints REHEARSAL and is not acceptance evidence.
 # No zsh special parameter name is used as a variable (path, status, argv, prompt, reply, match, ...).
 emulate -L zsh
@@ -128,7 +129,10 @@ graftling_wheel() {  # $1 dir: graftling v0.10.0 built offline from git archive 
 venv_ready() { [[ $(cat $VENV/installed 2>/dev/null) == $HEAD ]] || { print -r -- "STOP: $VENV is not HEAD $HEAD; run: zsh $THIS install"; return 1; } }
 other_suites() {  # exit 2 when ps cannot list (never read as "none")
   local listed
-  if ! listed=$(ps -axww -o pid=,command= 2>&1) || [[ -z $listed ]]; then print -r -- "ps cannot list processes"; return 2; fi
+  if ! listed=$(ps -axww -o pid=,command= 2>&1) || [[ -z $listed ]]; then
+    [[ ${VERIFY614_NO_PS:-} == 1 ]] && { print -u2 -r -- "REHEARSAL: ps cannot list processes here; other-run check skipped (VERIFY614_NO_PS=1)"; return 0; }
+    print -r -- "ps cannot list processes"; return 2
+  fi
   print -r -- $listed | grep -E 'run_test_shards|-m pytest' | grep -vE 'grep -E' ; return 0
 }
 cdef_516() {  # Task 516's CURRENT definition file, through its task.yml current_definition

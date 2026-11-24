@@ -65,7 +65,7 @@ def test_installed_proxy_uses_websocket_for_public_refresh(
             elif method == 'mcpServerStatus/list':
                 assert params == {'threadId': 'current-main', 'serverName': 'graphtraj',
                                   'detail': 'toolsAndAuthOnly'}
-                result = {'data': [{'name': 'graphtraj', 'tools': {'agents': {}, 'tasks': {}},
+                result = {'data': [{'name': 'graphtraj', 'tools': {'subagents': {}, 'tasks': {}},
                                     'runtimeStatus': 'connected'}], 'nextCursor': None}
             elif method == 'mcpServer/tool/call':
                 assert params == {'threadId': 'current-main', 'server': 'graphtraj', 'tool': 'tasks',

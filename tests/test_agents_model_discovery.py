@@ -158,6 +158,14 @@ DSH_MODELS = [
 ]
 DSH_PROVIDERS = {'deepseek-official': 'available', 'custom': 'available', 'broken': 'unknown'}
 
+
+def grouped(models: list[dict]) -> list[dict]:
+    """The models by provider, providers in first-seen order, as graftling's ``groups`` (609)."""
+    providers = dict.fromkeys(model['provider'] for model in models)
+    return [{'provider': provider, 'models': [model for model in models if model['provider'] == provider]}
+            for provider in providers]
+
+
 AMBIENT = {'DEEPSEEK_BASE_URL': 'https://ambient.invalid/anthropic',
            'DEEPSEEK_SEARCH_BASE_URL': 'https://ambient-search.invalid/anthropic/v1'}
 DECLARED = 'https://declared.invalid/anthropic'
@@ -241,7 +249,7 @@ def test_codex_reads_configuration_and_every_catalog_page(native, tmp_path: Path
         {'id': 'gpt-a', 'alias': 'GPT A', 'provider': 'controlled-provider',
          'supported_efforts': ['low', 'high']},
         {'id': 'gpt-b', 'alias': 'gpt-b', 'provider': 'controlled-provider', 'supported_efforts': []},
-    ]}
+    ], 'groups': grouped(result['models'])}
     start, *calls = records()
     assert start['argv'] == ['app-server', '--listen', 'stdio://']
     assert start['home']['CODEX_HOME'] == str(home)
@@ -261,7 +269,7 @@ def test_claude_uses_only_the_initialize_catalog(native, tmp_path: Path) -> None
     assert result == {'runtime': 'claude', 'status': 'available', 'message': AVAILABLE, 'models': [
         {'id': 'opus', 'alias': 'Opus', 'provider': 'anthropic', 'supported_efforts': ['low', 'high', 'max']},
         {'id': 'haiku', 'alias': 'haiku', 'provider': 'anthropic', 'supported_efforts': None},
-    ]}
+    ], 'groups': grouped(result['models'])}
     start, stdin = records()
     assert start['home']['CLAUDE_CONFIG_DIR'] == str(tmp_path / 'claude-home')
     for flag in ('--restricted', '--strict-mcp-config'):
@@ -283,7 +291,7 @@ def test_pi_lists_its_catalog_and_filters_the_connection_provider(native, tmp_pa
     assert result == {'runtime': 'pi', 'status': 'available', 'message': AVAILABLE, 'models': [
         {'id': 'model-a', 'alias': 'Model A', 'provider': 'first', 'supported_efforts': None},
         {'id': 'model-b', 'alias': 'model-b', 'provider': 'second', 'supported_efforts': None},
-    ]}
+    ], 'groups': grouped(result['models'])}
     assert [model['id'] for model in selected['models']] == ['model-b']
     start = records()[0]
     assert start['home']['PI_CODING_AGENT_DIR'] != home
@@ -489,7 +497,7 @@ def test_dsh_reads_the_host_catalog_over_its_web_service(native, tmp_path: Path)
     result = discover_models({'runtime': 'dsh', 'home': home})
 
     assert result == {'runtime': 'dsh', 'status': 'available', 'message': AVAILABLE,
-                      'models': DSH_MODELS, 'provider_status': DSH_PROVIDERS}
+                      'models': DSH_MODELS, 'groups': grouped(DSH_MODELS), 'provider_status': DSH_PROVIDERS}
     start, call = records()
     assert start['argv'] == ['web', '--no-open', '--port', '0']
     assert start['home']['DSH_HOME'] == home
@@ -505,11 +513,12 @@ def test_dsh_projects_the_host_catalog_and_provider_status(native, dsh_host, tmp
     home = str(tmp_path / 'dsh-home')
 
     result   = discover_models({'runtime': 'dsh', 'home': home})
-    selected = discover_models({'runtime': 'dsh', 'home': home, 'provider': 'custom'})
+    # Another provider takes DSH's pi-ai route and is checked against the installed DSH (608).
+    selected = discover_models({'runtime': 'dsh', 'home': home, 'provider': 'deepseek-official'})
 
     assert result == {'runtime': 'dsh', 'status': 'available', 'message': AVAILABLE,
-                      'models': DSH_MODELS, 'provider_status': DSH_PROVIDERS}
-    assert [model['id'] for model in selected['models']] == ['custom-model']
+                      'models': DSH_MODELS, 'groups': grouped(DSH_MODELS), 'provider_status': DSH_PROVIDERS}
+    assert [model['id'] for model in selected['models']] == ['deepseek-flash', 'deepseek-plain']
     assert calls[0]['DSH_HOME'] == home and Path(calls[0]['executable']).name == 'dsh'
     assert Path(calls[0]['cwd']).name.startswith('agents-models-')
     assert calls[1:4] == ['start', 'session/modelCatalog', 'close']
@@ -539,7 +548,7 @@ def test_dsh_query_failure_still_closes_the_owned_service(native, dsh_host) -> N
 
     result = discover_models({'runtime': 'dsh'})
 
-    assert result == {'runtime': 'dsh', 'status': 'unknown', 'models': [], 'message': UNKNOWN}
+    assert result == {'runtime': 'dsh', 'status': 'unknown', 'models': [], 'groups': [], 'message': UNKNOWN}
     assert calls[1:] == ['start', 'session/modelCatalog', 'close']
 
 
@@ -555,7 +564,7 @@ def test_native_failure_is_unknown_without_secrets(
 
     result = discover_models({'runtime': runtime, 'api_key_env': 'PI_KEY'})
 
-    assert result == {'runtime': runtime, 'status': 'unknown', 'models': [], 'message': UNKNOWN}
+    assert result == {'runtime': runtime, 'status': 'unknown', 'models': [], 'groups': [], 'message': UNKNOWN}
     assert SECRET not in json.dumps(result)
     assert records(), 'the controlled client was started'
 
@@ -565,7 +574,7 @@ def test_missing_client_is_unknown(native, runtime: str) -> None:
     """A Runtime that is not installed reports unknown, not an empty available catalog."""
     result = discover_models({'runtime': runtime})
 
-    assert result == {'runtime': runtime, 'status': 'unknown', 'models': [], 'message': UNKNOWN}
+    assert result == {'runtime': runtime, 'status': 'unknown', 'models': [], 'groups': [], 'message': UNKNOWN}
 
 
 @pytest.mark.parametrize(('runtime', 'provider'), [
@@ -640,6 +649,7 @@ def test_graphtraj_discovery_keeps_its_document(
 
     expected = {'runtime': runtime, 'source': 'native', 'account_access': 'unknown',
                 'models': [{**model, 'source': 'native'} for model in agents['models']],
+                'groups': grouped([{**model, 'source': 'native'} for model in agents['models']]),
                 'supported_efforts': 'unknown', 'catalog_scope': 'runtime',
                 'status': 'available', 'message': AVAILABLE}
     if runtime == 'dsh':
@@ -654,7 +664,7 @@ def test_graphtraj_discovery_failure_keeps_its_document(native) -> None:
     from graphtraj.runtimes.model_discovery import discover_models as graphtraj_discover
 
     assert graphtraj_discover({'runtime': 'codex', 'providers': {}}) == {
-        'runtime': 'codex', 'source': 'native', 'account_access': 'unknown', 'models': [],
+        'runtime': 'codex', 'source': 'native', 'account_access': 'unknown', 'models': [], 'groups': [],
         'supported_efforts': 'unknown', 'catalog_scope': 'runtime', 'status': 'unknown',
         'message': UNKNOWN,
     }

@@ -128,6 +128,65 @@ def member_worktree(root: Path, alias: str) -> Path | None:
     return worktree
 
 
+def select_role(
+    root: Path,
+    runtime: str,
+    configuration: str | None = None,
+    provider: str | None = None,
+) -> tuple[str, Any]:
+    """Return the name and resolved preset of the role a ``create`` runs.
+
+    An explicit ``configuration`` selects an existing preset, not an identity.
+    Otherwise a preset named after the Runtime wins, or exactly one preset must
+    use that Runtime. ``provider`` (``create``'s, 609) keeps only roles that
+    select a catalog connection of that provider (``runtime/provider/model``);
+    a configuration must be one of them. Inline roles declare no provider.
+
+    Raises
+    ------
+    AgentsError
+        ``invalid-config`` for an unusable or ambiguous configuration, and
+        ``invalid-provider`` when no candidate role uses ``provider``.
+    """
+    from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, resolve_preset
+
+    try:
+        roles = load_project_roles(root)
+        if configuration is not None:
+            name   = roles.resolve(configuration)
+            preset = resolve_preset(roles.presets[name])
+            if preset.runtime != runtime:
+                raise AgentsError('invalid-config',
+                                  f"Configuration {configuration!r} uses {preset.runtime!r}, not {runtime!r}.")
+            if provider is not None and preset.runtime_provider != provider:
+                raise AgentsError('invalid-provider', f"provider {provider!r} contradicts configuration "
+                                                      f"{configuration!r}, whose provider is "
+                                                      f"{preset.runtime_provider!r}.")
+            return name, preset
+
+        presets = {
+            name: resolve_preset(preset)
+            for name, preset in roles.presets.items()
+            if runtime != 'pi' or preset.runtime == 'pi'
+            or (preset.connection or '').startswith('pi/')
+        }
+    except ProjectRolesError as error:
+        raise AgentsError('invalid-config', str(error)) from None
+
+    matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
+    if provider is not None:
+        declared = sorted({presets[name].runtime_provider for name in matches} - {None})
+        matches  = [name for name in matches if presets[name].runtime_provider == provider]
+        if not matches:
+            raise AgentsError('invalid-provider', f"No {runtime} role uses provider {provider!r}; "
+                                                  f"roles use: {declared or 'none'}.")
+    name = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
+    if name is None:
+        raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
+                                            f"role using it; found {matches or 'none'}.")
+    return name, presets[name]
+
+
 class AdapterDriver:
     """Native execution through the selected Runtime's existing Adapter.
 
@@ -201,37 +260,12 @@ class AdapterDriver:
         ``workspace`` replaces the working directory and must lie inside the
         caller's own; every other role setting stays.
         """
-        from graphtraj.configuration.project_roles import (
-            ProjectRolesError, load_project_roles, resolve_preset,
-        )
         from graphtraj.configuration.role_definitions import resolve_child_role
 
         if runtime not in SUPPORTED_RUNTIMES:
             raise AgentsError("unsupported-runtime", f"The Task-free driver does not run {runtime!r} yet.")
         cwd = self.cwd if workspace is None else within_workspace(workspace, self._own_directory(caller))
-        try:
-            roles = load_project_roles(self.root)
-            if configuration is not None:
-                name = roles.resolve(configuration)
-                preset = resolve_preset(roles.presets[name])
-                if preset.runtime != runtime:
-                    raise AgentsError('invalid-config',
-                                      f"Configuration {configuration!r} uses {preset.runtime!r}, not {runtime!r}.")
-            else:
-                presets = {
-                    name: resolve_preset(preset)
-                    for name, preset in roles.presets.items()
-                    if runtime != 'pi' or preset.runtime == 'pi'
-                    or (preset.connection or '').startswith('pi/')
-                }
-                matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
-                name = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
-                if name is None:
-                    raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
-                                                        f"role using it; found {matches or 'none'}.")
-                preset = presets[name]
-        except ProjectRolesError as error:
-            raise AgentsError('invalid-config', str(error)) from None
+        name, preset = select_role(self.root, runtime, configuration)
         try:
             role     = resolve_child_role(name, preset, self.root)
             adapter  = select_runtime_adapter(runtime)

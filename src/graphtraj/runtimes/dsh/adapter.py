@@ -11,7 +11,8 @@ import sys
 from typing import Any, Mapping
 from urllib.parse import urlsplit
 
-from graftling.dsh import dsh_version_refusal
+from graftling import AgentsError
+from graftling.dsh import DshDriver, dsh_version_refusal
 from graphtraj.configuration.role_definitions import ResolvedChildRole
 from graphtraj.runtimes.runtime_adapter import RuntimeAdapterError, finalize_usage, credential_environment
 
@@ -72,7 +73,12 @@ class DshRuntimeAdapter:
         requested_skills: tuple[str, ...],
         report_files: tuple[Path, ...] = (),
     ) -> DshContext:
-        """Validate the official provider, native binary and role before allocation."""
+        """Validate the provider, native binary and role before allocation.
+
+        A catalog connection's provider reaches DSH as it is, unless the
+        provider declares ``base_url``: that remains a Messages endpoint behind
+        DSH's DeepSeek route. Inline roles run ``deepseek-official``.
+        """
         if requested_skills or role.settings.codex or role.allow_runtime_swarm:
             raise RuntimeAdapterError('ROLE_CONFIG_UNSUPPORTED',
                                       'DSH uses native resource discovery; Codex settings/helpers are unsupported.')
@@ -96,6 +102,20 @@ class DshRuntimeAdapter:
         refusal = dsh_version_refusal(package)
         if refusal is not None:
             raise RuntimeAdapterError('RUNTIME_UNSUPPORTED', refusal)
+
+        provider = ('deepseek-official' if not role.settings.connection or role.settings.base_url
+                    else role.settings.runtime_provider or 'deepseek-official')
+        if provider != 'deepseek-official':
+            # graftling refuses a provider the installed DSH does not serve, or one
+            # without a named key; its driver check gives that reason before launch.
+            try:
+                DshDriver(worktree, {'executable': executable}).require_available({
+                    'runtime': 'dsh', 'name': role.settings.connection, 'provider': provider,
+                    'api_key_env': role.settings.api_key_env,
+                })
+            except AgentsError as error:
+                raise RuntimeAdapterError('ROLE_CONFIG_INVALID', error.message) from None
+
         base_url = role.settings.base_url or 'https://api.deepseek.com/anthropic'
         parsed = urlsplit(base_url)
         schemes = {'http', 'https'} if role.settings.connection else {'https'}
@@ -120,7 +140,7 @@ class DshRuntimeAdapter:
             'git_common_directory': str(git_common_directory),
             'model': (role.settings.model if role.settings.connection else
                       role.settings.model.removeprefix('deepseek-official/')),
-            'provider': 'deepseek-official',
+            'provider': provider,
             'runtime_home': role.settings.runtime_home,
             'connection': role.settings.connection,
             'connection_revision': role.settings.connection_revision,

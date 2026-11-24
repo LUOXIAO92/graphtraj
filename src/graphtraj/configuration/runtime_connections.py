@@ -82,8 +82,8 @@ def validate_catalog(document: object) -> dict:
                 if (parsed.scheme not in {'http', 'https'} or not parsed.hostname
                         or parsed.username or parsed.password or parsed.query or parsed.fragment):
                     raise ValueError('Base URL must be HTTP(S) without credentials, query or fragment.')
-            if kind == 'dsh' and not endpoint and provider_id != 'deepseek-official':
-                raise ValueError('DSH custom providers require a Messages Base URL.')
+            # A DSH provider without base_url is DSH's own provider of that id; graftling
+            # refuses one the installed DSH does not serve when it is discovered or launched.
             env = provider.get('api_key_env')
             if env is not None and (not isinstance(env, str) or not ENV_NAME.fullmatch(env)):
                 raise ValueError('api_key_env must be an environment variable name.')
@@ -229,11 +229,16 @@ def _manage_connections(arguments: dict, *, cwd: Path, review: bool) -> dict:
     if action == 'discover':
         from graphtraj.runtimes.model_discovery import discover_models
 
-        runtime = before['runtimes'].get(arguments.get('runtime'))
+        runtime  = before['runtimes'].get(arguments.get('runtime'))
+        provider = arguments.get('provider')
         if runtime is None:
             raise ValueError('Choose a configured Runtime entry.')
+        if provider is not None and not isinstance(provider, str):
+            raise ValueError('provider must name one provider.')
         return {**view, 'discovery': {
-            'runtime_entry': arguments['runtime'], **discover_models(runtime),
+            'runtime_entry': arguments['runtime'],
+            **({'provider': provider} if provider is not None else {}),
+            **discover_models(runtime, provider),
         }}
     if 'changes' in arguments:
         if 'catalog' in arguments:

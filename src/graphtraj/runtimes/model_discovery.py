@@ -3,13 +3,34 @@
 from __future__ import annotations
 
 
-def discover_models(runtime: dict) -> dict:
+def discover_models(runtime: dict, provider: str | None = None) -> dict:
     """Query native catalogs through agents without a turn or an account check.
 
-    ``runtime`` is one entry of the user connections catalog; only its
-    ``runtime`` and ``home`` select the native catalog, as before. The agents
-    result is projected onto GraphTraj's existing document: models and the
-    whole catalog are marked ``native`` and account access stays unknown.
+    Parameters
+    ----------
+    runtime : dict
+        One entry of the user connections catalog; its ``runtime`` and
+        ``home`` select the native catalog.
+    provider : str, optional
+        A provider to list. When the entry declares it, its ``base_url`` and
+        ``api_key_env`` (a variable name) go with it, as for a child of that
+        connection; a DSH provider with ``base_url`` is a Messages endpoint
+        behind DSH's DeepSeek route, so only those two are passed. Without
+        ``provider`` the Runtime's own catalog is listed, as before.
+
+    Returns
+    -------
+    dict
+        GraphTraj's discovery document: models and the whole catalog are
+        marked ``native``, account access stays unknown, and ``groups`` holds
+        the models by provider, ``[{"provider", "models"}]``. No credential
+        value is read or returned.
+
+    Raises
+    ------
+    ValueError
+        graftling refuses the connection, such as a DSH provider the installed
+        DSH does not serve or one without ``api_key_env``.
     """
     from graftling import discover_models as agents_discover_models
 
@@ -18,10 +39,21 @@ def discover_models(runtime: dict) -> dict:
     connection = {'runtime': runtime['runtime']}
     if runtime.get('home'):
         connection['home'] = runtime['home']
+    if provider is not None:
+        declared = runtime['providers'].get(provider, {})
+        connection.update({field: declared[field] for field in ('base_url', 'api_key_env') if field in declared})
+        if not (runtime['runtime'] == 'dsh' and declared.get('base_url')):
+            connection['provider'] = provider
     found = agents_discover_models(connection)
 
+    def native(models: list[dict]) -> list[dict]:
+        """Mark each listed model as coming from the native catalog."""
+        return [{**model, 'source': 'native'} for model in models]
+
     document = {'runtime': found['runtime'], 'source': 'native', 'account_access': 'unknown',
-                'models': [{**model, 'source': 'native'} for model in found['models']],
+                'models': native(found['models']),
+                'groups': [{'provider': group['provider'], 'models': native(group['models'])}
+                           for group in found['groups']],
                 'supported_efforts': 'unknown', 'catalog_scope': 'runtime',
                 'status': found['status']}
     if 'provider_status' in found:

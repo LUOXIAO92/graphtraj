@@ -57,9 +57,18 @@ Providers share that Home and contain `models`, with optional `base_url` and
 `api_key_env`. A model entry has its native `id`, `source` (`native` or `manual`),
 and optional display `alias` and `supported_efforts`.
 
+A DSH provider without `base_url` is the provider of that id that the installed
+DSH serves, such as `opencode-go` or `openrouter`, keyed only by its
+`api_key_env`; `deepseek-official` keeps DSH's DeepSeek route and default key.
+A DSH provider with `base_url` remains a Messages endpoint behind DSH's DeepSeek
+route. Discovery and dispatch refuse a DSH provider the installed DSH does not
+serve, or one other than `deepseek-official` without `api_key_env`.
+
 Authenticate in the original Runtime. Discovery queries its public metadata
 without inference; a listed model is not proof of account access or available
-credit. Manual connections take environment variable names, never key values.
+credit. Discover a Runtime entry's whole catalog, or pass `provider` to list
+one provider with the `base_url` and key variable the entry declares for it;
+results are also grouped by provider. Manual connections take environment variable names, never key values.
 Custom Pi providers also select their supported `api`; extension-only routes
 whose destination cannot be resolved report unsupported. Explicit Pi key
 overrides use native key precedence while preserving shared Home files.
@@ -67,7 +76,8 @@ overrides use native key precedence while preserving shared Home files.
 Project roles can select `connection: runtime-name/provider-name/model-key`
 instead of inline Runtime/model/connection fields, and choose a separate
 `reasoning_effort` from the model's supported values. Existing inline roles
-remain valid. Convert only the roles the user chooses; retain their other fields.
+remain valid. A `subagents` `create` may name `provider` instead of a role: it
+selects the Runtime's role whose connection uses that provider. Convert only the roles the user chooses; retain their other fields.
 Fresh dispatch captures the resolved connection and revision. Resume uses that
 captured routing, even if the catalog later changes. Use its connection
 provenance to identify the provider rather than a Runtime's internal label.

@@ -44,7 +44,8 @@
 # your HOME (their login); GraphTraj processes get HOME=ROOT/home. FAKE614_KEY is a fake value the script makes; it is
 # given only to the graphtraj MCP server (in ROOT/mcp-614.json) so the judge can show it never appears. No API key.
 # Rehearsal only (Engineer; Main leaves all unset): VERIFY614_ROOT, VERIFY614_T, VERIFY614_OUT, VERIFY614_USERHOME,
-# VERIFY614_DEPS, VERIFY614_PYTEST_ARGS, VERIFY614_GWAIT, VERIFY614_NO_PROMPT=1 (pre and real stop before claude -p).
+# VERIFY614_DEPS, VERIFY614_PYTEST_ARGS, VERIFY614_GWAIT, VERIFY614_CLAUDE (a stand-in path recorded by setup, never
+# run), VERIFY614_NO_PROMPT=1 (pre and real stop before claude -p).
 # A run with any of them set prints REHEARSAL and is not acceptance evidence.
 # No zsh special parameter name is used as a variable (path, status, argv, prompt, reply, match, ...).
 emulate -L zsh
@@ -87,7 +88,10 @@ need() { [[ -e $1 ]] || { print -r -- "STOP: $1 missing; run: zsh $THIS $2"; ret
 # Allowlist environment: PATH HOME USER TERM TMPDIR LANG and the given NAME=value words, then the command.
 clean() { env -i PATH=$VENV/bin:$HOME/.local/bin:$BASEPATH HOME=$HOMEDIR USER=${USER:-user} TERM=${TERM:-xterm} \
             TMPDIR=$PYTEST_TMP LANG=en_US.UTF-8 "$@"; }
-claude_bin() { local c=$HOME/.local/bin/claude; [[ -x $c ]] || c=$(command -v claude 2>/dev/null); print -r -- ${c:-claude}; }
+claude_bin() {  # the user's Claude CLI (absolute); VERIFY614_CLAUDE only in a rehearsal (a stand-in path, never run there)
+  local c=${VERIFY614_CLAUDE:-$HOME/.local/bin/claude}; [[ -x $c ]] || c=$(command -v claude 2>/dev/null)
+  print -r -- ${c:-NOT-FOUND}
+}
 inproj() { (cd $P && clean "$@"); }
 user_state() {  # names, sizes and mtimes only, never contents
   local d; for d in $UH/.graphtraj $UH/.codex $UH/.pi/agent $UH/.dsh; do
@@ -182,7 +186,8 @@ pre)
   user_state > $ROOT/user-before.txt; cp $ROOT/user-before.txt $OUT/ 2>/dev/null
   print -r -- "your locations before (names, sizes, mtimes): $(wc -l < $ROOT/user-before.txt | xargs) lines in $ROOT/user-before.txt (~/.claude and ~/.claude.json are not compared: claude -p records its Sessions there)"
   local C=$(claude_bin)
-  print -r -- "claude: $C -> ${C:A} | $(clean HOME=$HOME $C --version 2>&1 | head -1)"
+  [[ -x $C ]] && pass "claude: $C -> ${C:A}" || fail "no Claude CLI at ~/.local/bin/claude or on PATH"
+  [[ ${VERIFY614_NO_PROMPT:-} == 1 ]] || print -r -- "claude --version: $(clean HOME=$HOME $C --version 2>&1 | head -1)"
   print -r -- "claude's environment (names only): $(clean HOME=$HOME /usr/bin/env | cut -d= -f1 | sort | xargs)"
   if [[ ${VERIFY614_NO_PROMPT:-} == 1 ]]; then print -r -- "REHEARSAL: claude -p skipped (VERIFY614_NO_PROMPT=1)"
   else

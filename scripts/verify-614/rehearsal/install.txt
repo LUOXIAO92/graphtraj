@@ -1,0 +1,13 @@
+$ zsh steps.zsh install   (rehearsal 2026-11-25T02:53:29)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY614_T VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+== [install] Main. /tmp/claude-501/614/root/venv: GraphTraj f13110a090cddc2d3f70ba586f9c3a6e21c4878c (wheel) + graftling 0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066 wheel), offline. Dialog: none. No login.
+graphtraj /tmp/claude-501/614/root/venv/lib/python3.13/site-packages/graphtraj/__init__.py | wheel: True | graftling 0.10.0 /tmp/claude-501/614/root/venv/lib/python3.13/site-packages/graftling/__init__.py
+PASS: venv imports graphtraj f13110a090cddc2d3f70ba586f9c3a6e21c4878c (wheel) and graftling 0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066 wheel)
+PASS: installed GraphTraj has role_models (614)
+PASS: /tmp/claude-501/614/root/venv/bin/graphtraj
+PASS: /tmp/claude-501/614/root/venv/bin/graphtraj-mcp
+writes: /tmp/claude-501/614/root/venv and /tmp/claude-501/614/root/venv-src only. dialog: none.
+RESULT 614 install: PASS
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/steps.zsh setup
+STEP-END install rc=0

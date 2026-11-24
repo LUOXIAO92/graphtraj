@@ -191,19 +191,23 @@ venv_ready() {
 }
 # Samples the environment NAMES of the member DSH process of Task $1 while its execution runs.
 sampler() {  # task, env dir, seconds
-  local task=$1 dir=$2 until=$(( SECONDS + $3 )) pid S=$P/.graphtraj/runner/sessions
+  local task=$1 dir=$2 until=$(( SECONDS + $3 )) pid S=$P/.graphtraj/runner/sessions reason='time limit'
+  local -a seen=()
   mkdir -p $dir; : > $dir/sampler.log
   while (( SECONDS < until )); do
     for pid in ${(f)"$($VENV/bin/python -I $X611 pids $S $task 2>>$dir/sampler.log)"}; do
+      [[ -n $pid ]] && (( ! ${seen[(Ie)$pid]} )) && seen+=$pid
       [[ -n $pid && ! -e $dir/env-$pid.txt ]] || continue
       kill -0 $pid 2>/dev/null || { print -r -- "pid $pid already gone" >> $dir/sampler.log; continue; }
       if [[ ${VERIFY611_NO_PS:-} == 1 ]]; then print -r -- "pid $pid: ps -E skipped (rehearsal)" >> $dir/sampler.log; continue; fi
       ps -E -ww -o command= -p $pid 2>>$dir/sampler.log | python3 -I $X611 envnames $dir/env-$pid.txt >> $dir/sampler.log 2>&1
       [[ -s $dir/env-$pid.txt ]] || { rm -f $dir/env-$pid.txt; print -r -- "pid $pid: ps -E gave nothing" >> $dir/sampler.log; }
     done
-    [[ -n $($VENV/bin/python -I $X611 ended $P/.graphtraj/runner/sessions $task 0 2>/dev/null | grep 'execution ended') ]] && break
+    # Exit status 0 only when the member's execution ended; its "not ended" text also says "execution ended".
+    $VENV/bin/python -I $X611 ended $S $task 0 > /dev/null 2>&1 && { reason='execution ended'; break; }
     sleep 0.2
   done
+  print -r -- "sampler stopped: $reason; runtime pids seen: ${seen:-none}" >> $dir/sampler.log
 }
 # One member of Task $1 through ONE swarm call; judged on provider $2, model $3, only credential $4, reply $5.
 member_case() {

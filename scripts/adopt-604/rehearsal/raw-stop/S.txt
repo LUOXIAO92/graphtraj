@@ -1,0 +1,19 @@
+603 record: /private/tmp/claude-501/r604/s603-fixture
+  run.txt: pytest temp root: /private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/verify-603-suite-20261124T185820 (TMPDIR, outside the Harness) | candidate GraphTraj 1fdbbca5a95e68c098cb8e19c3d1159e40e96930 | graftling e8c2e80241dff1151f2122e8957fca5598ec987b (wheel)
+CHECK 604 S 603's suite candidate is 1fdbbca5 (the adoption commit): PASS (1fdbbca5a95e68c098cb8e19c3d1159e40e96930)
+600's wheel GRAFTLING file: v0.9.1 e8c2e80241dff1151f2122e8957fca5598ec987b
+CHECK 604 S 603's suite graftling is the 0.9.1 wheel (e8c2e80241dff1151f2122e8957fca5598ec987b, = production's 600 wheel): PASS (e8c2e80241dff1151f2122e8957fca5598ec987b)
+CHECK 604 S 603's pytest temp root is outside the Harness: PASS (/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/verify-603-suite-20261124T185820)
+516 current definition (task.yml current_definition): /private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+CHECK 604 S 516's current definition is readable: PASS
+totals: 3 failed, 3716 passed, 48 skipped | exit: 1 | expected (603's accepted run): 2 failed (516 items), 3717 passed, 48 skipped; exit=1
+CHECK 604 S totals and exit are 603's accepted run: FAIL
+  known (516): tests/test_claude_runner.py::test_child_registration_follows_its_owning_execution
+  known (516): tests/test_claude_runner.py::test_second_child_batch_starts_while_first_batch_is_running
+  NEW: tests/test_fixture_604.py::test_not_named_in_516
+FAILED/ERROR ids: 3
+CHECK 604 S every FAILED/ERROR id is named in 516's current definition: FAIL
+ABNORMAL / timed-out shard lines: none
+CHECK 604 S no ABNORMAL or timed-out shard: PASS
+603's new-ids.txt non-blank lines: 0
+CHECK 604 S 603's new-ids.txt is empty: PASS

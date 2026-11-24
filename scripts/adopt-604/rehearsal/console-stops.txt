@@ -1,0 +1,4 @@
+## script hygiene
+assigned names: 150 | special names among them: path HOME PATH TERM LANG | other than the intended (clean()'s env -i pass-throughs; path = the PATH array, as 593/600): none
+$NAME: followed by a letter (zsh modifier trap): 0 occurrences
+git diff 1fdbbca5 HEAD -- src tests plugins manuals pyproject.toml: (empty = product unchanged)

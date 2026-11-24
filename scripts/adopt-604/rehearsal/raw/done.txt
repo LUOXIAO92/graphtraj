@@ -1,0 +1,122 @@
+CHECK 604 00 runs under zsh: PASS (zsh 5.9)
+CHECK 604 00 TMPDIR outside the Harness: PASS
+CHECK 604 00 production is graphtraj 0.1.0 (593's wheels-6fe8c8d9) + graftling 0.9.1 (600's wheels-0.9.1): PASS
+CHECK 604 00 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 604 00 production bin has subagents, subagents-mcp (and no agents): PASS
+CHECK 604 00 GraphTraj dev = 1fdbbca5; this Worktree's HEAD contains it, its product (src tests plugins manuals pyproject.toml) equals it, and it is clean: PASS
+CHECK 604 00 backup /private/tmp/claude-501/r604/scr/backup absent: PASS
+CHECK 604 00 probe Task 604 ready (current_definition 20261124T182546.961698+0900.md exists): PASS
+CHECK 604 00 601 is cancelled and was never integrated: PASS
+CHECK 604 00 601's registered Worktree exists on its branch, branch tip 3d7a4113: PASS
+CHECK 604 00 601's Worktree is clean: PASS
+CHECK 604 00 claude -p answers READY-604 (model and login above): PASS
+CHECK 604 00 Main's Session id found: PASS
+CHECK 604 S 603's suite candidate is 1fdbbca5 (the adoption commit): PASS (1fdbbca5a95e68c098cb8e19c3d1159e40e96930)
+CHECK 604 S 603's suite graftling is the 0.9.1 wheel (e8c2e80241dff1151f2122e8957fca5598ec987b, = production's 600 wheel): PASS (e8c2e80241dff1151f2122e8957fca5598ec987b)
+CHECK 604 S 603's pytest temp root is outside the Harness: PASS (/private/var/folders/lw/y7bpg_wj6jg194hgr0gq88qr0000gn/T/verify-603-suite-20261124T185820)
+CHECK 604 S 516's current definition is readable: PASS
+CHECK 604 S totals and exit are 603's accepted run: PASS
+CHECK 604 S every FAILED/ERROR id is named in 516's current definition: PASS
+CHECK 604 S no ABNORMAL or timed-out shard: PASS
+CHECK 604 S 603's new-ids.txt is empty: PASS
+CHECK 604 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+CHECK 604 B graphtraj wheel equals git archive 1fdbbca5: PASS
+CHECK 604 B the wheel's graphtraj/ files equal git archive 1fdbbca5: PASS
+CHECK 604 B data files equal the archive manuals (7 files): PASS
+CHECK 604 B entry_points.txt identical to 593 wheel: PASS
+CHECK 604 B Requires-Dist identical to 593 wheel: PASS
+CHECK 604 B graftling range includes 0.9.1: PASS (graftling<0.10,>=0.9.0)
+CHECK 604 B 603's markers are in the wheel: PASS
+CHECK 604 B no build/ or __pycache__ in the wheel: PASS
+CHECK 604 B /private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/604-graphtraj-603-production-adoption/adoption/wheels-1fdbbca5 holds the wheel with SHA256SUMS and COMMIT 1fdbbca5: PASS
+CHECK 604 V product guard: PASS
+CHECK 604 V scratch venv pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/r604/scr/vvenv vs /private/tmp/claude-501/r604/scr/vvenv)
+CHECK 503 layout one distribution: PASS (1 found: [('0.9.1', '/private/tmp/claude-501/r604/scr/vvenv/lib/python3.13/site-packages/graftling-0.9.1.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.9.1.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1/graftling-0.9.1-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/r604/scr/vvenv/lib/python3.13/site-packages/graftling/__init__.py version 0.9.1)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 604 V one graftling 0.9.1 from the wheel in the scratch venv (onegraft.py): PASS
+CHECK 604 V scratch venv bin has subagents, subagents-mcp, graphtraj-mcp: PASS
+CHECK 604 V the regenerated hook copy is byte-identical to production's (no regeneration in I, no plugin/hooks trust dialog at claude --continue): PASS
+CHECK 604 V isolated project /private/tmp/claude-501/r604/vproject (own git, graphtraj setup): PASS
+CHECK 593 V-scratch MCP tools/list is exactly subagents, tasks: PASS
+CHECK 593 V-scratch MCP tool agents is unknown (error answer, no alias): PASS
+CHECK 604 V-scratch graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (mcp593.py above): PASS
+CHECK 604 Codex hooks entry of /private/tmp/claude-501/r604/scr/vvenv names its python for SessionStart/Stop/SessionEnd: PASS
+CHECK 604 Codex hooks entry of /private/tmp/claude-501/r604/scr/vvenv runs (neutral event answers {}): PASS ({})
+CHECK 604 Mpre S passed: PASS
+CHECK 604 Mpre V passed: PASS
+CHECK 604 Mpre no member Worker or swarm batch runs: PASS
+CHECK 604 I entry files unchanged since V: PASS
+CHECK 604 I pip install of the 1fdbbca5 graphtraj wheel: PASS
+CHECK 604 I graphtraj direct_url is wheels-1fdbbca5: PASS
+CHECK 604 I installed graphtraj equals the 1fdbbca5 wheel: PASS
+CHECK 604 I installed graphtraj files equal the wheel: PASS
+CHECK 604 I share/graphtraj/manuals equals git archive 1fdbbca5's manuals (7 files): PASS
+CHECK 604 I graftling unchanged (installed vs backup): PASS
+CHECK 604 I graftling package unchanged vs the backup: PASS
+CHECK 604 I graftling direct_url is still 600's wheel: PASS
+CHECK 604 I production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 604 I production bin subagents, subagents-mcp, graphtraj-mcp (this venv's python): PASS
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/r604/project/.venv-runtime vs /private/tmp/claude-501/r604/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.9.1', '/private/tmp/claude-501/r604/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.9.1.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.9.1.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1/graftling-0.9.1-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/r604/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.9.1)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+CHECK 604 I one graftling 0.9.1 in production (onegraft.py): PASS
+CHECK 593 I-production MCP tools/list is exactly subagents, tasks: PASS
+CHECK 593 I-production MCP tool agents is unknown (error answer, no alias): PASS
+CHECK 604 I-production graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (mcp593.py above): PASS
+CHECK 604 Codex hooks entry of /private/tmp/claude-501/r604/project/.venv-runtime names its python for SessionStart/Stop/SessionEnd: PASS
+CHECK 604 Codex hooks entry of /private/tmp/claude-501/r604/project/.venv-runtime runs (neutral event answers {}): PASS ({})
+CHECK 604 I hook copy byte-identical to the backup (no configuration --write: V proved no change): PASS
+CHECK 604 I .mcp.json byte-identical to the backup: PASS
+CHECK 604 I .claude/settings.local.json byte-identical to the backup: PASS
+CHECK 604 I .graphtraj/claude-host/config.json byte-identical to the backup: PASS
+CHECK 604 I no process started on /private/tmp/claude-501/r604/project/.venv-runtime during the install: PASS
+CHECK 593 [Main 11111111-2222-3333-4444-555555555604] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 593 [Main 11111111-2222-3333-4444-555555555604] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 604 Mr Main called mcp__graphtraj__subagents and mcp__graphtraj__tasks after I without error (rec593.py above): PASS
+CHECK 455 stored record: configuration and model not null: PASS (configuration='opus_coding_team.advisor' model='claude-opus-5-5')
+CHECK 455 create/status result quoted by the member: configuration and model not null: PASS (configuration values ['"opus_coding_team.advisor"'] model values ['"claude-opus-5-5"'])
+CHECK 576 child created without tools (stored selection.tools is null): PASS (tools=None)
+CHECK 576 child without tools ran Bash and replied DONE-604 (member quotes the last_message): PASS (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/604-graphtraj-603-production-adoption/scripts/adopt-604/rehearsal/raw/N-reply.txt)
+CHECK 576 a Bash tool_use running echo n604-tool is in a Session archive: PASS (/private/tmp/claude-501/r604/project/.graphtraj/swarm/sessions/s-child/session.jsonl)
+CHECK one child execution (create; 499 sends nothing else): PASS (1)
+CHECK 452 child execution ex-1 ended completed, not owner-exited: PASS (outcome=completed error=None)
+CHECK execution ex-1 notification delivered: PASS (delivered)
+CHECK 452 member execution ended and recorded (execution.yml terminal, same execution as the mapping): PASS (outcome=completed)
+CHECK 452 member reported its end to Main (raw/N-main-notice.txt names completed): PASS (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/604-graphtraj-603-production-adoption/scripts/adopt-604/rehearsal/raw/N-main-notice.txt)
+CHECK 477 no parent input pushed for waited execution ex-1: PASS
+CHECK 604 Nr 593's record checks ran (their CHECK lines above): PASS
+CHECK 604 Nr Main got exactly one completed notice of the member: PASS (1)
+CHECK 593 [member 604-x@advisor] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 593 [member 604-x@advisor] no old-name call (mcp__graphtraj__agents, mcp__agents__*): PASS (0 in the window, 0 undated)
+CHECK 604 Nr member called mcp__graphtraj__subagents without error (rec593.py above): PASS
+CHECK 604 Nr swarm result has agent: PASS (ag-member-1)
+CHECK 604 C601 601 is cancelled and never integrated: PASS (status implementing, disposition cancelled)
+CHECK 604 C601 601's Worktree exists, registered on refs/heads/agent/601-graftling-changelog-intro-stale (tip 3d7a4113): PASS (refs/heads/agent/601-graftling-changelog-intro-stale)
+CHECK 604 C601 601's Worktree is clean: PASS
+CHECK 604 C601 dev is b0c01496: PASS
+CHECK 604 C601 no member Worker for 601 runs: PASS
+CHECK 604 C601r raw result cleanup_status cleaned: PASS
+CHECK 604 C601r evidence task_disposition cancelled: PASS
+CHECK 604 C601r task_commit == the pre-recorded tip: PASS (result 3d7a4113ebbd5840bbaf88753af73dbea94b3691, pre 3d7a4113ebbd5840bbaf88753af73dbea94b3691)
+CHECK 604 C601r 601's Worktree path is gone and not in git worktree list: PASS ( listed 0)
+CHECK 604 C601r branch agent/601-graftling-changelog-intro-stale is gone: PASS
+CHECK 604 C601r every pre-recorded record file of 601 is still present: PASS
+CHECK 604 C601r 601's status and disposition unchanged: PASS (status implementing, disposition cancelled)
+CHECK 604 C601r dev unchanged (b0c01496): PASS (b0c01496098aacba7a75ec3e14e878c07ea428cb)
+
+### production now
+graphtraj graftling: 0.1.0 0.9.1
+graphtraj direct_url: {"archive_info": {"hash": "sha256=6d7a982cfc4fefa53714795539cd8fbed9ee0aee43e03c25555acfac26cb77fb", "hashes": {"sha256": "6d7a982cfc4fefa53714795539cd8fbed9ee0aee43e03c25555acfac26cb77fb"}}, "url": "file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/604-graphtraj-603-production-adoption/adoption/wheels-1fdbbca5/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=1b4de5e09bd26db6811318e0d891441b68eac5a1a6e0ec618da3ae3843f3e986", "hashes": {"sha256": "1b4de5e09bd26db6811318e0d891441b68eac5a1a6e0ec618da3ae3843f3e986"}}, "url": "file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1/graftling-0.9.1-py3-none-any.whl"}
+CHECK 604 done production graphtraj from wheels-1fdbbca5, graftling 0.9.1 from 600's wheel: PASS
+steps without a raw file: none | CHECK PASS 114 | CHECK not passed 0
+CHECK 604 done every step ran and every CHECK passed: PASS

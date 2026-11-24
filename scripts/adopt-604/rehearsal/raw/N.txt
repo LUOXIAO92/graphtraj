@@ -1,0 +1,1 @@
+{"tasks":[{"agent":"ag-member-1","alias":"604-x@advisor"}]} (fixture)

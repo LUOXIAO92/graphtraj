@@ -1,0 +1,66 @@
+members_idle [I]: Task 604's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r604/project/.venv-runtime)
+members_idle [I]: no member execution is active: PASS
+I start 2026-11-24 19:35:33
+
+### backup: venv (manifest + cp -Rp), hook copy, entry files (mode 600), the tools R needs; COMPLETE marker
+manifest /private/tmp/claude-501/r604/scr/backup/venv.manifest: 1002 entries
+
+SAME entries=1002 differences=0 (/private/tmp/claude-501/r604/scr/backup/venv)
+manifest /private/tmp/claude-501/r604/scr/backup/plugin.manifest: 5 entries
+backup COMPLETE: /private/tmp/claude-501/r604/scr/backup
+CHECK 604 I entry files unchanged since V: PASS
+members_idle [I-before-pip]: Task 604's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r604/project/.venv-runtime)
+members_idle [I-before-pip]: no member execution is active: PASS
+graphtraj-0.1.0-py3-none-any.whl: OK
+
+### pip install --force-reinstall --no-deps --no-index graphtraj-0.1.0-py3-none-any.whl (same version 0.1.0, so --force-reinstall; graftling not reinstalled)
+Processing /private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/604-graphtraj-603-production-adoption/adoption/wheels-1fdbbca5/graphtraj-0.1.0-py3-none-any.whl
+Installing collected packages: graphtraj
+  Attempting uninstall: graphtraj
+    Found existing installation: graphtraj 0.1.0
+    Uninstalling graphtraj-0.1.0:
+      Successfully uninstalled graphtraj-0.1.0
+Successfully installed graphtraj-0.1.0
+CHECK 604 I pip install of the 1fdbbca5 graphtraj wheel: PASS
+graphtraj direct_url: {"archive_info": {"hash": "sha256=6d7a982cfc4fefa53714795539cd8fbed9ee0aee43e03c25555acfac26cb77fb", "hashes": {"sha256": "6d7a982cfc4fefa53714795539cd8fbed9ee0aee43e03c25555acfac26cb77fb"}}, "url": "file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/604-graphtraj-603-production-adoption/adoption/wheels-1fdbbca5/graphtraj-0.1.0-py3-none-any.whl"}
+CHECK 604 I graphtraj direct_url is wheels-1fdbbca5: PASS
+CHECK 604 I installed graphtraj equals the 1fdbbca5 wheel: PASS
+CHECK 604 I installed graphtraj files equal the wheel: PASS
+diff -r archive manuals vs /private/tmp/claude-501/r604/project/.venv-runtime/share/graphtraj/manuals: none
+CHECK 604 I share/graphtraj/manuals equals git archive 1fdbbca5's manuals (7 files): PASS
+CHECK 604 I graftling unchanged (installed vs backup): PASS
+CHECK 604 I graftling package unchanged vs the backup: PASS
+graftling direct_url: {"archive_info": {"hash": "sha256=1b4de5e09bd26db6811318e0d891441b68eac5a1a6e0ec618da3ae3843f3e986", "hashes": {"sha256": "1b4de5e09bd26db6811318e0d891441b68eac5a1a6e0ec618da3ae3843f3e986"}}, "url": "file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1/graftling-0.9.1-py3-none-any.whl"}
+CHECK 604 I graftling direct_url is still 600's wheel: PASS
+CHECK 604 I production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 604 I production bin subagents, subagents-mcp, graphtraj-mcp (this venv's python): PASS
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/r604/project/.venv-runtime vs /private/tmp/claude-501/r604/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.9.1', '/private/tmp/claude-501/r604/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.9.1.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.9.1.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1/graftling-0.9.1-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/r604/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.9.1)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+503 layout: PASS (0 failed)
+CHECK 604 I one graftling 0.9.1 in production (onegraft.py): PASS
+
+### real entries of production (run in the isolated /private/tmp/claude-501/r604/vproject) and the files that must not change
+I-production server: /private/tmp/claude-501/r604/project/.venv-runtime/bin/graphtraj-mcp | serverInfo: {'name': 'graphtraj', 'version': '0.1.0'} | tools: ['subagents', 'tasks']
+I-production tools/call agents: {"jsonrpc": "2.0", "id": 3, "error": {"code": -32602, "message": "Unknown tool: agents"}}
+CHECK 593 I-production MCP tools/list is exactly subagents, tasks: PASS
+CHECK 593 I-production MCP tool agents is unknown (error answer, no alias): PASS
+CHECK 604 I-production graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (mcp593.py above): PASS
+Codex hooks entry configuration: ['/private/tmp/claude-501/r604/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook'] ['SessionEnd', 'SessionStart', 'Stop']
+CHECK 604 Codex hooks entry of /private/tmp/claude-501/r604/project/.venv-runtime names its python for SessionStart/Stop/SessionEnd: PASS
+CHECK 604 Codex hooks entry of /private/tmp/claude-501/r604/project/.venv-runtime runs (neutral event answers {}): PASS ({})
+CHECK 604 I hook copy byte-identical to the backup (no configuration --write: V proved no change): PASS
+CHECK 604 I .mcp.json byte-identical to the backup: PASS
+CHECK 604 I .claude/settings.local.json byte-identical to the backup: PASS
+CHECK 604 I .graphtraj/claude-host/config.json byte-identical to the backup: PASS
+CHECK 604 I no process started on /private/tmp/claude-501/r604/project/.venv-runtime during the install: PASS

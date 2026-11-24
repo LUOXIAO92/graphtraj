@@ -1,0 +1,8 @@
+[M] Main (resumed with claude --continue, Session 11111111-2222-3333-4444-555555555604). Paste one at a time; Main saves each raw answer as /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/604-graphtraj-603-production-adoption/scripts/adopt-604/rehearsal/raw/M-<letter>.txt. Login: none beyond the running Main. Dialog: none expected (if a tool permission dialog appears: 'Yes' once, not always, and tell the Team).
+Every tool call below passes its arguments INLINE in the "arguments" field; never use arguments_file (600's Mr failed on a nonexistent arguments_file).
+
+[a] Using no tools: list exactly every tool in your current tool list whose name starts with mcp__graphtraj__, mcp__graftling__ or mcp__agents__, and list every GraphTraj/Graftling notice delivered to you since this resume, saying for each whether you had seen it before the resume.
+  Success: only mcp__graphtraj__subagents and mcp__graphtraj__tasks; no notice seen before the resume appears again.
+
+[b] Using only mcp__graphtraj__subagents: execute status with arguments {} given inline (no agent, no arguments_file). Print the raw result and whether it was an error. Then using only mcp__graphtraj__tasks: execute task_graph with arguments {"view":"current","details":["604"]} given inline (no arguments_file) and print only whether an error was returned and Task 604's current definition path.
+  Success: subagents status answers without error; task_graph without error, Task 604's current definition definitions/<time>.md.

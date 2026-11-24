@@ -1,0 +1,4 @@
+
+[C601] Paste in the Claude Main (ONE public cleanup call; arguments INLINE, never arguments_file):
+Using only mcp__graphtraj__tasks: execute cleanup with arguments {"task_id":"601"} given inline in the "arguments" field (no arguments_file). Print the raw result exactly and whether it was an error. Then, with Bash, save that raw result exactly as /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/604-graphtraj-603-production-adoption/scripts/adopt-604/rehearsal/raw/C601.txt.
+  Success: cleanup_status "cleaned", evidence task_disposition "cancelled", task_commit 3d7a4113ebbd5840bbaf88753af73dbea94b3691.

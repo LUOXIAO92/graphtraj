@@ -1,0 +1,5 @@
+CHECK 604 Mpre S passed: PASS
+CHECK 604 Mpre V passed: PASS
+members_idle [Mpre]: Task 604's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 1
+  77 0:10 /private/tmp/claude-501/r604/project/.venv-runtime/bin/python -m graphtraj.execution.runner_worker /private/tmp/claude-501/r604/project/.graphtraj/core/runner/sessions/999-x@engineer/launch.yml
+CHECK 604 Mpre no member Worker or swarm batch runs: FAIL

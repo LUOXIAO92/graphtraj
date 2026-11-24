@@ -1,0 +1,28 @@
+git archive 1fdbbca5a95e68c098cb8e19c3d1159e40e96930 -> /private/tmp/claude-501/r604/scr/gsrc
+CHECK 604 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+wheel: graphtraj-0.1.0-py3-none-any.whl
+
+### wheel == git archive 1fdbbca5, file by file (593's pkgdiff532.py)
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/r604/scr/gsrc/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 604 B graphtraj wheel equals git archive 1fdbbca5: PASS
+CHECK 604 B the wheel's graphtraj/ files equal git archive 1fdbbca5: PASS
+
+### data files share/graphtraj/manuals (pyproject data-files) and metadata vs 593's 6fe8c8d9 wheel
+data files in the pyproject: 7 | in the wheel: 7 | differing or missing: 0
+changed since 593 (information; 603 changes 3): ['share/graphtraj/manuals/task-delivery/guide.md', 'share/graphtraj/manuals/task-delivery/references/command-inputs.md', 'share/graphtraj/manuals/task-delivery/references/recovery.md']
+Requires-Dist: ['Requires-Dist: PyYAML<7,>=6', 'Requires-Dist: click<9,>=8.1', 'Requires-Dist: graftling<0.10,>=0.9.0', 'Requires-Dist: websockets<17,>=15']
+CHECK 604 B data files equal the archive manuals (7 files): PASS
+CHECK 604 B entry_points.txt identical to 593 wheel: PASS
+CHECK 604 B Requires-Dist identical to 593 wheel: PASS
+CHECK 604 B graftling range includes 0.9.1: PASS (graftling<0.10,>=0.9.0)
+
+### 603 markers in the wheel
+  runner_cleanup.py: disposition == cancelled x1 | tools.py cleanup description 'or one cancelled task' x1
+CHECK 604 B 603's markers are in the wheel: PASS
+leaked build/ or __pycache__/ entries: 0
+CHECK 604 B no build/ or __pycache__ in the wheel: PASS
+wheel sha256: 6d7a982cfc4fefa53714795539cd8fbed9ee0aee43e03c25555acfac26cb77fb  /private/tmp/claude-501/r604/scr/wheel/graphtraj-0.1.0-py3-none-any.whl
+
+### the wheel I installs: /private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/604-graphtraj-603-production-adoption/adoption/wheels-1fdbbca5
+graphtraj-0.1.0-py3-none-any.whl: OK
+CHECK 604 B /private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/604-graphtraj-603-production-adoption/adoption/wheels-1fdbbca5 holds the wheel with SHA256SUMS and COMMIT 1fdbbca5: PASS

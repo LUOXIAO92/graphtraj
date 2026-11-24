@@ -1,0 +1,18 @@
+raw result (first 600 chars): task_id: '601'
+cleanup_status: cleaned
+worktree_path: /private/tmp/claude-501/r604/project/.graphtraj/core/worktrees/601-graftling-changelog-intro-stale
+branch: agent/601-graftling-changelog-intro-stale
+aliases_removed: []
+standby_aliases: []
+evidence:
+  task_disposition: cancelled
+  task_commit: 3d7a4113ebbd5840bbaf88753af73dbea94b3691
+CHECK 604 C601r raw result cleanup_status cleaned: PASS
+CHECK 604 C601r evidence task_disposition cancelled: PASS
+CHECK 604 C601r task_commit == the pre-recorded tip: PASS (result 3d7a4113ebbd5840bbaf88753af73dbea94b3691, pre 3d7a4113ebbd5840bbaf88753af73dbea94b3691)
+CHECK 604 C601r 601's Worktree path is gone and not in git worktree list: PASS ( listed 0)
+CHECK 604 C601r branch agent/601-graftling-changelog-intro-stale is gone: PASS
+pre-recorded record files: 21 | missing now: none
+CHECK 604 C601r every pre-recorded record file of 601 is still present: PASS
+CHECK 604 C601r 601's status and disposition unchanged: PASS (status implementing, disposition cancelled)
+CHECK 604 C601r dev unchanged (b0c01496): PASS (b0c01496098aacba7a75ec3e14e878c07ea428cb)

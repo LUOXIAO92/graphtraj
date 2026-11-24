@@ -1,0 +1,32 @@
+PRE status implementing
+PRE disposition cancelled
+PRE worktree /private/tmp/claude-501/r604/project/.graphtraj/core/worktrees/601-graftling-changelog-intro-stale
+PRE branch agent/601-graftling-changelog-intro-stale
+PRE tip 3d7a4113ebbd5840bbaf88753af73dbea94b3691
+PRE dev b0c01496098aacba7a75ec3e14e878c07ea428cb
+PRE file definitions/20261124T133014.279115+0900.md
+PRE file definitions/20261124T133146.854315+0900.md
+PRE file execution-budget.yml
+PRE file task.yml
+PRE file teams/1/team.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/budget-timer.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/claude-diagnostics-0c5b92f843864663963a15acc1bfbbfc.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/claude-settings.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/claude-termination-0c5b92f843864663963a15acc1bfbbfc.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/events.jsonl
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/execution.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/heartbeat.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/launch.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/owner-20062.lock
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/parent-notices.jsonl
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/session.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/stderr.log
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/stop.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/tool-descendants-0c5b92f843864663963a15acc1bfbbfc.json
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/tool-processes-0c5b92f843864663963a15acc1bfbbfc.yml
+PRE file teams/1/traces/601-graftling_changelog_intro_stale-handover0-team_leader@team_leader/runner/worker-stderr.log
+CHECK 604 C601 601 is cancelled and never integrated: PASS (status implementing, disposition cancelled)
+CHECK 604 C601 601's Worktree exists, registered on refs/heads/agent/601-graftling-changelog-intro-stale (tip 3d7a4113): PASS (refs/heads/agent/601-graftling-changelog-intro-stale)
+CHECK 604 C601 601's Worktree is clean: PASS
+CHECK 604 C601 dev is b0c01496: PASS
+CHECK 604 C601 no member Worker for 601 runs: PASS

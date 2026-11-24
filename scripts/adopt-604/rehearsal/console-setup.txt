@@ -1,0 +1,7 @@
+## setup: STUB claude and ps (fixtures)
+## setup: FAKE PRODUCTION /private/tmp/claude-501/r604/project (fixture built by the real product from 593's graphtraj wheel and 600's graftling 0.9.1 wheel)
+fake project paths (production layout, as the real 601 state records its Worktree):  agent_worktrees: .graphtraj/core/worktrees; state: .graphtraj/core/state;
+## setup: SCRATCH cancelled Task 601 (real state copy; fixture branch and Worktree in the scratch project's git)
+601 scratch: worktree /private/tmp/claude-501/r604/project/.graphtraj/core/worktrees/601-graftling-changelog-intro-stale | branch tip 3d7a4113ebbd5840bbaf88753af73dbea94b3691 | dev b0c01496098aacba7a75ec3e14e878c07ea428cb | 601 task.yml status implementing
+fake production: graphtraj 0.1.0 graftling 0.9.1 | .mcp.json servers: ['graphtraj'] | hook copy: hooks.json host_context.mjs 
+## setup: FIXTURE copy of 603's record with one id not named in 516 (S STOP)

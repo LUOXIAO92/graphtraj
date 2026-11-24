@@ -1,0 +1,51 @@
+CHECK 604 00 runs under zsh: PASS (zsh 5.9)
+TMPDIR=/tmp/claude-501 (outside the Harness)
+CHECK 604 00 TMPDIR outside the Harness: PASS
+
+### production /private/tmp/claude-501/r604/project/.venv-runtime (read only)
+production graphtraj graftling: 0.1.0 0.9.1
+graphtraj direct_url: {"archive_info": {"hash": "sha256=8246c97f45646929a65403de7a7ae9a80b4048d25fd32dc1fb6a50c4e3b2cafa", "hashes": {"sha256": "8246c97f45646929a65403de7a7ae9a80b4048d25fd32dc1fb6a50c4e3b2cafa"}}, "url": "file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/593-graftling-0-9-0-release-and-production-adoption/adoption/wheels-6fe8c8d9/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=1b4de5e09bd26db6811318e0d891441b68eac5a1a6e0ec618da3ae3843f3e986", "hashes": {"sha256": "1b4de5e09bd26db6811318e0d891441b68eac5a1a6e0ec618da3ae3843f3e986"}}, "url": "file:///private/tmp/claude-501/r604/project/.graphtraj/core/state/tasks/600-graftling-0-9-1-release/adoption/wheels-0.9.1/graftling-0.9.1-py3-none-any.whl"}
+CHECK 604 00 production is graphtraj 0.1.0 (593's wheels-6fe8c8d9) + graftling 0.9.1 (600's wheels-0.9.1): PASS
+CHECK 604 00 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+production bin: subagents subagents-mcp graphtraj-mcp agent-runner 
+CHECK 604 00 production bin has subagents, subagents-mcp (and no agents): PASS
+
+### this Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/604-graphtraj-603-production-adoption and GraphTraj dev
+product guard: dev 1fdbbca5a95e68c098cb8e19c3d1159e40e96930 | HEAD 5755b163b78f52db890e138a443656fb0fca6ef6 | git diff 1fdbbca5 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 1fdbbca5 outside scripts/adopt-604: none | uncommitted (rehearsal outputs excepted): none
+CHECK 604 00 GraphTraj dev = 1fdbbca5; this Worktree's HEAD contains it, its product (src tests plugins manuals pyproject.toml) equals it, and it is clean: PASS
+git diff --name-only 6fe8c8d9 1fdbbca5 (information; 603's changes): manuals/task-delivery/guide.md manuals/task-delivery/references/command-inputs.md manuals/task-delivery/references/recovery.md src/graphtraj/execution/budget_idle_timer.py src/graphtraj/execution/execution_budget.py src/graphtraj/execution/runner_cleanup.py src/graphtraj/interfaces/cli/agent_runner.py src/graphtraj/interfaces/tools.py tests/test_agent_runner_cleanup.py tests/test_budget_notice_idle.py tests/test_cleanup_content_integrated.py tests/test_task_recovery.py 
+
+### backups
+CHECK 604 00 backup /private/tmp/claude-501/r604/scr/backup absent: PASS
+600's backup /private/tmp/claude-501/r604/project/tmp/600/backup (the older rollback, information): not complete or absent
+
+### Task 604
+CHECK 604 00 probe Task 604 ready (current_definition 20261124T182546.961698+0900.md exists): PASS
+
+### Task 601 (read only; C601 cleans it)
+601 (current definition 20261124T133146.854315+0900.md): status implementing | disposition cancelled | worktree .graphtraj/core/worktrees/601-graftling-changelog-intro-stale | branch agent/601-graftling-changelog-intro-stale
+CHECK 604 00 601 is cancelled and was never integrated: PASS
+601 worktree /private/tmp/claude-501/r604/project/.graphtraj/core/worktrees/601-graftling-changelog-intro-stale: exists | registered on: refs/heads/agent/601-graftling-changelog-intro-stale | branch tip: 3d7a4113ebbd5840bbaf88753af73dbea94b3691
+CHECK 604 00 601's registered Worktree exists on its branch, branch tip 3d7a4113: PASS
+CHECK 604 00 601's Worktree is clean: PASS
+
+### Claude: version and one claude -p probe (the USER pre-approved their Claude login for Task 604: Worldline user-decision 20261124T182814.218485+0900)
+claude: /private/tmp/claude-501/r604/stub/claude -> /private/tmp/claude-501/r604/stub/claude | version: 2.1.330 (stub Claude Code, rehearsal fixture) | recorded at 00: 2.1.330 (stub Claude Code, rehearsal fixture)
+claude answered: READY-604 claude-opus-5-5 LOGGED-IN (stub, rehearsal fixture)
+CHECK 604 00 claude -p answers READY-604 (model and login above): PASS
+
+### Main's Session (I, M, Mr need it)
+no host serving /private/tmp/claude-501/r604/project/.graphtraj/claude-host/config.json found by ps
+source: newest transcript 11111111-2222-3333-4444-555555555604.jsonl
+MAIN=11111111-2222-3333-4444-555555555604 (saved to /private/tmp/claude-501/r604/scr/main.session)
+CHECK 604 00 Main's Session id found: PASS
+plugin and entry files (hashes; V and I require them unchanged):
+  d35a47ddcc32cd8b26e785d0da6071ec2b9f5e5e7585875e9cbc1ca03156dddb  /private/tmp/claude-501/r604/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
+  02299ad72cd0f6316f21f1fccc367b7a4a8e9985e45e9bc4b30b97810f55e9fe  /private/tmp/claude-501/r604/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json
+  ca13e022a2e263a9b635da3e31baea516867694661561dc9e7db923b10f5326b  /private/tmp/claude-501/r604/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json
+  379f146c526f7907e7df8438cd17fb68709bd6a2aefe63de55313e90943b92a6  /private/tmp/claude-501/r604/project/.mcp.json
+  a5941de7df3f3376962ed9ad09d787f801dc87f8f4099a0c8276791c4236aceb  /private/tmp/claude-501/r604/project/.claude/settings.local.json
+  1bfdd47af6f02788a9f9c1bbf69c2e62e1e7e87cd805ea55572a8cc47c00ef9c  /private/tmp/claude-501/r604/project/.graphtraj/claude-host/config.json
+members_idle [00]: Task 604's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [00]: no member execution is active: PASS

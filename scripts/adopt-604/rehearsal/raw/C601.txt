@@ -1,0 +1,9 @@
+task_id: '601'
+cleanup_status: cleaned
+worktree_path: /private/tmp/claude-501/r604/project/.graphtraj/core/worktrees/601-graftling-changelog-intro-stale
+branch: agent/601-graftling-changelog-intro-stale
+aliases_removed: []
+standby_aliases: []
+evidence:
+  task_disposition: cancelled
+  task_commit: 3d7a4113ebbd5840bbaf88753af73dbea94b3691

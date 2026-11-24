@@ -1,0 +1,45 @@
+[L] Main. Key: OPENCODE_API_KEY (approved by the USER; Main asks first). Login: none. Dialog: none. ~2-5 min, small inference.
+OPENCODE_API_KEY: SET (value not shown)
+cred_guard: started processes carry only these credential-like names: OPENCODE_API_KEY
+
+### (a) installed graftling's discover_models for each declared connection (no inference)
+graftling 0.9.1 from /private/tmp/claude-501/graftling-609-rh/venv/lib/python3.13/site-packages/graftling
+connection pi-opencode: provider opencode, api_key_env OPENCODE_API_KEY, status available
+  group opencode: 83 models: claude-fable-5 claude-fable-5-1 claude-haiku-4-5 claude-haiku-5-5 claude-opus-4-5 claude-opus-4-6 claude-opus-4-7 claude-opus-4-8 claude-opus-5 claude-opus-5-5 claude-sonnet-4-5 claude-sonnet-4-6 claude-sonnet-5 claude-sonnet-5-5 qwen3.5-plus qwen3.6-plus qwen3.8-flash gemini-3-flash gemini-3.1-pro gemini-3.5-flash gemini-3.5-flash-lite gemini-3.6-flash gemini-3.7-flash gemini-3.8-flash gemini-4-argon beam-free big-pickle deepseek-v4-flash deepseek-v4-pro deepseek-v4.1-flash deepseek-v4.1-flash-free flint-40b-free glm-5 glm-5.1 glm-5.2 glm-5.3 glm-5.3-flash glm-5.3-flash-free kimi-k2.5 kimi-k2.6 kimi-k2.7-code kimi-k3 longcat-2.5-preview-free mimo-v2.6-flash-free minimax-m2.5 minimax-m2.7 minimax-m3 minimax-m3.1-flash-free mistral-large-4 nemotron-3-ultra-free nemotron-3.5-lightning-free nemotron-3.5-super-vl-free qwen3.8-max gpt-5 gpt-5-codex gpt-5-nano gpt-5.1 gpt-5.1-codex gpt-5.1-codex-max gpt-5.1-codex-mini gpt-5.2 gpt-5.2-codex gpt-5.3-codex gpt-5.4 gpt-5.4-mini gpt-5.4-nano gpt-5.4-pro gpt-5.5 gpt-5.5-pro gpt-5.6-luna gpt-5.6-sol gpt-5.6-terra gpt-6-astra gpt-6-luna gpt-6-sol gpt-6.1-sol grok-4.5 grok-4.6 grok-4.7 grok-build-0.1 muse-spark-1.2 muse-spark-1.3 muse-wonder-1.0
+CHECK 609 discover_models pi-opencode lists only its provider 'opencode': PASS (groups ['opencode'])
+connection pi-opencode-go: provider opencode-go, api_key_env OPENCODE_API_KEY, status available
+  group opencode-go: 29 models: claude-haiku-5-5 minimax-m3 qwen3.7-plus qwen3.8-flash qwen3.8-max gemini-4-argon-contributor beam-free deepseek-v4-pro deepseek-v4.1-flash glm-5.2 glm-5.3 glm-5.3-flash hy3 hy4-preview kimi-k2.7-code kimi-k3 longcat-2.0 longcat-2.5-preview-free mimo-v2.5 mimo-v2.5-pro mimo-v2.6-flash mimo-v2.6-pro minimax-m3.1-flash-free step-5-preview gpt-5.6-luna gpt-6-luna grok-4.7 muse-spark-1.2-contributor muse-spark-1.3-contributor
+CHECK 609 discover_models pi-opencode-go lists only its provider 'opencode-go': PASS (groups ['opencode-go'])
+ids offered by both providers (create needs provider to choose one): beam-free claude-haiku-5-5 deepseek-v4-pro deepseek-v4.1-flash glm-5.2 glm-5.3 glm-5.3-flash gpt-5.6-luna gpt-6-luna grok-4.7 kimi-k2.7-code kimi-k3 longcat-2.5-preview-free minimax-m3 minimax-m3.1-flash-free qwen3.8-flash qwen3.8-max
+choice for the Pi Main and C: provider=opencode-go model=deepseek-v4-pro (matches glm|deepseek)
+
+### (b) pi Main (opencode-go/deepseek-v4-pro) with graftling's Pi extension: models, create without provider, create with an undeclared provider
+pi Main: --model opencode-go/deepseek-v4-pro, session r609-0b11361b, cwd /private/tmp/claude-501/graftling-609-rh/work, PI_CODING_AGENT_DIR=/private/tmp/claude-501/graftling-609-rh/pi-home, GRAFTLING_PYTHON=/private/tmp/claude-501/graftling-609-rh/venv/bin/python, -e /private/tmp/claude-501/graftling-609-rh/venv/lib/python3.13/site-packages/graftling/pi/extension.mjs, --agents-config /private/tmp/claude-501/graftling-609-rh/pi-host.json
+pi rc=0 (142 = 900 s limit)
+records: /private/tmp/claude-501/609-rh/out/L-20261124T211415/stdout.jsonl, /private/tmp/claude-501/609-rh/out/L-20261124T211415/sessions/, /private/tmp/claude-501/609-rh/out/L-20261124T211415/stderr.txt, /private/tmp/claude-501/609-rh/out/L-20261124T211415/data/ (copy of the data root)
+
+### checks
+CHECK 609 L models through mcp__graftling__subagents lists both connections, each as its own provider group with models: FAIL (0 models result(s))
+create errors seen: []
+CHECK 609 L create without provider -> ambiguous-connection: FAIL
+CHECK 609 L create with an undeclared provider -> invalid-provider: FAIL
+CHECK 609 L no Agent record was created: PASS (0 record(s))
+CHECK 609 no OPENCODE_API_KEY value in the records: PASS
+
+----- summary for Main (L) -----
+connection pi-opencode: provider opencode, api_key_env OPENCODE_API_KEY, status available
+  group opencode: 83 models: claude-fable-5 claude-fable-5-1 claude-haiku-4-5 claude-haiku-5-5 claude-opus-4-5 claude-opus-4-6 claude-opus-4-7 claude-opus-4-8 claude-opus-5 claude-opus-5-5 claude-sonnet-4-5 claude-sonnet-4-6 claude-sonnet-5 claude-sonnet-5-5 qwen3.5-plus qwen3.6-plus qwen3.8-flash gemini-3-flash gemini-3.1-pro gemini-3.5-flash gemini-3.5-flash-lite gemini-3.6-flash gemini-3.7-flash gemini-3.8-flash gemini-4-argon beam-free big-pickle deepseek-v4-flash deepseek-v4-pro deepseek-v4.1-flash deepseek-v4.1-flash-free flint-40b-free glm-5 glm-5.1 glm-5.2 glm-5.3 glm-5.3-flash glm-5.3-flash-free kimi-k2.5 kimi-k2.6 kimi-k2.7-code kimi-k3 longcat-2.5-preview-free mimo-v2.6-flash-free minimax-m2.5 minimax-m2.7 minimax-m3 minimax-m3.1-flash-free mistral-large-4 nemotron-3-ultra-free nemotron-3.5-lightning-free nemotron-3.5-super-vl-free qwen3.8-max gpt-5 gpt-5-codex gpt-5-nano gpt-5.1 gpt-5.1-codex gpt-5.1-codex-max gpt-5.1-codex-mini gpt-5.2 gpt-5.2-codex gpt-5.3-codex gpt-5.4 gpt-5.4-mini gpt-5.4-nano gpt-5.4-pro gpt-5.5 gpt-5.5-pro gpt-5.6-luna gpt-5.6-sol gpt-5.6-terra gpt-6-astra gpt-6-luna gpt-6-sol gpt-6.1-sol grok-4.5 grok-4.6 grok-4.7 grok-build-0.1 muse-spark-1.2 muse-spark-1.3 muse-wonder-1.0
+CHECK 609 discover_models pi-opencode lists only its provider 'opencode': PASS (groups ['opencode'])
+connection pi-opencode-go: provider opencode-go, api_key_env OPENCODE_API_KEY, status available
+  group opencode-go: 29 models: claude-haiku-5-5 minimax-m3 qwen3.7-plus qwen3.8-flash qwen3.8-max gemini-4-argon-contributor beam-free deepseek-v4-pro deepseek-v4.1-flash glm-5.2 glm-5.3 glm-5.3-flash hy3 hy4-preview kimi-k2.7-code kimi-k3 longcat-2.0 longcat-2.5-preview-free mimo-v2.5 mimo-v2.5-pro mimo-v2.6-flash mimo-v2.6-pro minimax-m3.1-flash-free step-5-preview gpt-5.6-luna gpt-6-luna grok-4.7 muse-spark-1.2-contributor muse-spark-1.3-contributor
+CHECK 609 discover_models pi-opencode-go lists only its provider 'opencode-go': PASS (groups ['opencode-go'])
+choice for the Pi Main and C: provider=opencode-go model=deepseek-v4-pro (matches glm|deepseek)
+pi rc=0 (142 = 900 s limit)
+CHECK 609 L models through mcp__graftling__subagents lists both connections, each as its own provider group with models: FAIL (0 models result(s))
+create errors seen: []
+CHECK 609 L create without provider -> ambiguous-connection: FAIL
+CHECK 609 L create with an undeclared provider -> invalid-provider: FAIL
+CHECK 609 L no Agent record was created: PASS (0 record(s))
+CHECK 609 no OPENCODE_API_KEY value in the records: PASS
+-----
+Success: every 'CHECK 609 ...: PASS'. Records: /private/tmp/claude-501/609-rh/out/L-20261124T211415

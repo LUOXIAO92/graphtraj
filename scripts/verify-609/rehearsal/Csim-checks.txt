@@ -1,0 +1,7 @@
+create: agent agent-x1 connection pi-opencode-go model glm-5.3
+CHECK 609 C create through mcp__graftling__subagents selected the provider's connection and the model: PASS
+wait: outcome completed last_message 'C609-CHILD-OK'
+CHECK 609 C the child ended (wait result outcome completed) with last_message C609-CHILD-OK: PASS
+record: selection {"connection": "pi-opencode-go", "model": "glm-5.3"}; settings provider opencode-go model glm-5.3 api_key_env OPENCODE_API_KEY provider_domain opencode.ai
+CHECK 609 C the child ran on that provider and model with the connection's key variable: PASS
+CHECK 609 C the child was retired: PASS

@@ -1,0 +1,8 @@
+models: connection pi-opencode provider opencode api_key_env OPENCODE_API_KEY status available: opencode 83 models
+models: connection pi-opencode-go provider opencode-go api_key_env OPENCODE_API_KEY status available: opencode-go 29 models
+CHECK 609 L models through mcp__graftling__subagents lists both connections, each as its own provider group with models: PASS (1 models result(s))
+create errors seen: ['ambiguous-connection', 'invalid-provider']
+CHECK 609 L create without provider -> ambiguous-connection: PASS
+CHECK 609 L create with an undeclared provider -> invalid-provider: PASS
+CHECK 609 L no Agent record was created: PASS (0 record(s))
+CHECK 609 no OPENCODE_API_KEY value in the records: PASS

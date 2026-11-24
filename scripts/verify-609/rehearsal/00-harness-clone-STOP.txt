@@ -1,0 +1,12 @@
+[00] Main. Read only. Login: none. Key: none passed (OPENCODE_API_KEY reported SET/UNSET only). Dialog: none.
+cred_guard: started processes carry only these credential-like names: 
+CHECK 609 00 graftling branch agent/609-graftling-provider-listing-and-create in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling: FAIL (absent; fetch it: git -C /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/609-graftling-provider-listing-and-create/scripts/verify-609/graftling-609.bundle agent/609-graftling-provider-listing-and-create:agent/609-graftling-provider-listing-and-create)
+pi: /opt/homebrew/bin/pi 1.4.0 | node: v26.5.0 | npm: 12.2.1 | git: git version 2.50.1 (Apple Git-155)
+conda python (venv base, read only): /Users/luoxiao/miniconda3/bin/python3.13 Python 3.13.11
+CHECK 609 00 rg to link for the Pi sandbox: PASS (/opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@vscode/ripgrep-darwin-arm64/bin/rg: ripgrep 15.0.0 (rev 3a612f88b8))
+CHECK 609 00 Pi maps providers opencode and opencode-go to OPENCODE_API_KEY: PASS (/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/env-api-keys.js)
+OPENCODE_API_KEY: UNSET (name only; L and C need it SET)
+other credential-like names in Main's shell (never passed on): SSH_AUTH_SOCK ALI_BAILIAN_BASE_URL OPENCODE_BASE_URL OPEN_ROUTER_BASE_URL DEEPSEEK_BASE_URL 
+CHECK 609 00 /private/tmp/claude-501/graftling-609-rh absent: PASS
+
+00 STOP: a CHECK failed (see above).

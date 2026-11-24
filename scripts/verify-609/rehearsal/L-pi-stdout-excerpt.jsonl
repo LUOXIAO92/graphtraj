@@ -1,0 +1,9 @@
+{"type": "session", "version": 3, "id": "r609-0b11361b", "timestamp": "2026-11-24T12:14:16.200Z", "cwd": "/private/tmp/claude-501/graftling-609-rh/work"}
+{"type": "message_end", "message": {"role": "assistant", "provider": "opencode-go", "model": "deepseek-v4-pro", "stopReason": "error", "errorMessage": "Connection error."}}
+{"type": "auto_retry_start", "attempt": 1, "maxAttempts": 3, "delayMs": 2000, "errorMessage": "Connection error."}
+{"type": "message_end", "message": {"role": "assistant", "provider": "opencode-go", "model": "deepseek-v4-pro", "stopReason": "error", "errorMessage": "Connection error."}}
+{"type": "auto_retry_start", "attempt": 2, "maxAttempts": 3, "delayMs": 4000, "errorMessage": "Connection error."}
+{"type": "message_end", "message": {"role": "assistant", "provider": "opencode-go", "model": "deepseek-v4-pro", "stopReason": "error", "errorMessage": "Connection error."}}
+{"type": "auto_retry_start", "attempt": 3, "maxAttempts": 3, "delayMs": 8000, "errorMessage": "Connection error."}
+{"type": "message_end", "message": {"role": "assistant", "provider": "opencode-go", "model": "deepseek-v4-pro", "stopReason": "error", "errorMessage": "Connection error."}}
+{"type": "agent_settled", "aborted": false}

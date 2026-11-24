@@ -722,7 +722,7 @@ I0) need_main; print "[I0] Main, before Mpre and a rerun of I (Correction 1). Re
     files=($R/I.txt(N) $R/I.ok(N) $R/I-*(N) $R/R.txt(N) $R/R-*(N) $R/main-console-612-I(N) $R/main-console-612-I.*(N) $R/main-console-612-R(N) $R/main-console-612-R.*(N))
     (( $#files )) && mv $files $R/run$nrun/ || exit 1
     print -r -- "MOVED to $R/run$nrun/: ${files:t}"
-    print -r -- "SUPERSEDED run$nrun: I failed after the install began; R restored production; I0 set its backup and records aside (Correction 1)" > $R/run$nrun/SUPERSEDED
+    print -r -- "I failed after the install began; R restored production; I0 set its backup ($NB) and records aside (Correction 1)" > $R/run$nrun/SUPERSEDED
     [[ ! -e $BK && -e $NB/COMPLETE && ! -e $R/I.txt && ! -e $R/R.txt ]]; ck $? "I0 backup and run$nrun records set aside; $BK and the current I/R records are absent"
     print -r -- "$BK604 (untouched): $([[ -e $BK604/COMPLETE ]] && print COMPLETE || print 'not complete or absent')"
   } 2>&1 | tee -a $R/I0.txt; rc=${pipestatus[1]}

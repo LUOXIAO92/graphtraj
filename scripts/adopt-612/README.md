@@ -70,6 +70,50 @@ Every started process gets the allowlist environment (`clean()`: HOME USER PATH 
 | Pr | Main, read only | none | no | The raw result is a runtime_connections document with `discovery` for the chosen entry and provider; `discovery.groups` is `[{provider, models}]` with at least one model, all of the requested provider; every `api_key_env` is a variable NAME; no field holds a credential-like value; the counts of Agent records (`.graphtraj/swarm/control/agents/*.json`), Session archives (`.graphtraj/swarm/sessions/*`) and member Sessions (`.graphtraj/core/runner/sessions/*`) are unchanged since P (no Agent, no child, no turn) |
 | done | Main, read only | none | no | Every step's CHECK passed (00 rel B G rp gh C5 GR V Mpre I Mr Nr P-pre Pr); production graphtraj from wheels-78f929ee and graftling 0.10.0 from wheels-0.10.0 |
 | R | USER (Main asks first; the USER /exits Main) | none (one Enter) | no | Run from the backup's own copy: `zsh <Harness>/tmp/612/backup/tools/steps.zsh R`. The venv equals the pre-install bytes; hook copy and entries restored; graphtraj from wheels-1fdbbca5 and graftling 0.9.1 again; pip check. |
+| I0 (Correction 1) | Main, before Mpre and a rerun of I | none | no | Applies only when `tmp/612/backup` exists. CHECKs: COMPLETE and INSTALL-STARTED are present; R's record `main-raw/R.txt` exists and every CHECK in it passed; production equals that backup in R's terms (venv by adopt_tree.py compare, hook copy, the 3 entries, graphtraj direct_url wheels-1fdbbca5, graftling 0.9.1 from 600's wheel, pip check). **Then it MOVES, never deletes:** `tmp/612/backup` -> `tmp/612/backup-run<N>-<time>` (with the after-install snapshot inside), and that run's I/R records (`I.txt`, `I.ok`, `I-*` incl. the epochs and `I-and-R-user-terminal.txt`, `R.txt`, `R-*`) -> `main-raw/run<N>/`, with a SUPERSEDED note giving the reason. **Any failed CHECK: STOP, nothing moved.** Without a backup it prints "nothing to set aside". `tmp/604/backup` is not touched. |
+
+## Correction 1: I failed on Claude Code's sandbox marker in the manuals
+
+**What happened in Main's real run:**
+- 00, rel, B, G (RESULT PASS: 2 failed, 3720 passed, 48 skipped, NEW 0), V, rp, gh, C5 and Mpre passed. v0.10.0, main and dev are pushed.
+- The USER ran I. After INSTALL-STARTED, exactly one check failed: `manuals_check`, `Only in .venv-runtime/share/graphtraj/manuals: .claude`. Every other I check passed.
+- The USER ran R and every R check passed. Production is back on 1fdbbca5 + 0.9.1. `tmp/612/backup` holds Main's after-install snapshot.
+
+**The observed extra:** `.venv-runtime/share/graphtraj/manuals/.claude/` (mode 755) holding only the EMPTY directory `.cc-writes` (mode 700). Both are dated 2026-11-24 20:47:07, before I ran. No RECORD names them, so pip leaves them, and R's backup restored them.
+
+**Inference, not confirmed:** this is Claude Code's sandbox write marker. Claude Code creates `<writable root>/.claude/.cc-writes` for a sandboxed session that has that directory writable; 606's investigator ran 20:45-20:50 with this path among its resources. It can come back whenever such a session runs, so removing it is not the fix.
+
+**The fix (steps.zsh only):**
+- **`manuals_check`** (used by I) tolerates EXACTLY a top-level `.claude` directory (not a link) whose only content is an empty directory `.cc-writes` (not a link). It prints `INFO 612 I tolerated in …: .claude/.cc-writes (empty), the Claude Code sandbox write marker (inferred; …)` with both mtimes.
+- Anything else is still a FAIL: a non-empty `.cc-writes`, any other file or directory under `.claude`, or any other extra, missing or differing file.
+- The "(N product files)" count leaves `.claude` out.
+- **Other places that compare production manuals:** none. R and I0 compare the whole venv with the backup's manifest (adopt_tree.py), where the marker is on both sides (an empty directory is no manifest entry). done does not compare manuals.
+- **I0** makes I rerunnable without ever overwriting a backup. I still STOPs while a backup exists; its STOP message now names I0.
+- **done** counts only the current I and R records. It also requires I0 when a set-aside run exists, and lists each `main-raw/run<N>/` as `SUPERSEDED run<N>: <reason> | files | its CHECK FAIL lines (not counted)`.
+- **R** always runs the copy of steps.zsh that I put into the CURRENT backup. After the rerun that is the corrected one: `zsh <Harness>/tmp/612/backup/tools/steps.zsh R`.
+- **Real records stay valid:** 00, rel, B, G, GR, V, rp, gh and C5's checks are unchanged. Mpre and I still read the real `GR.txt` (the `CHECK 612 GR G record …: PASS` line) and `V.ok`. The rehearsal ran Mpre, I and done on copies of Main's real records.
+
+**Rerun order for Main** (each step prints its dialog, login and next command):
+1. `zsh <Worktree>/scripts/adopt-612/steps.zsh I0`: Main; dialog none; login none.
+2. `zsh <Worktree>/scripts/adopt-612/steps.zsh Mpre`: Main, right before I; dialog none; login none.
+3. The USER `/exit`s Main, then runs `zsh <Worktree>/scripts/adopt-612/steps.zsh I` in a Terminal: dialog none (one Enter); login none. Expect the INFO line for the marker and every CHECK PASS.
+4. The USER runs `cd <Harness> && claude --continue`. Expected dialog: none (hook copy and entries unchanged). If a plugin/hooks trust dialog appears anyway: Esc and tell Main.
+5. M, then Mr: Main; inline arguments.
+6. N, then Nr: Main; Claude login, approved.
+7. P, then Pr: Main; the login or key P names.
+8. done: Main, read only.
+
+**Correction 1 rehearsal** (`rehearse-c1.zsh`; outputs `rehearsal/c1-console.txt`, `rehearsal/c1-raw/`), against a scratch production carrying the observed marker:
+- It uses B's real wheels and copies of Main's real records of 00, rel, B, G, rp, gh, C5 and GR.
+- **Run 1:** the SUBMITTED steps.zsh (aa8a4948) fails I with exactly the real line, and R (the backup's copy) restores production.
+- **Then, with the corrected steps.zsh:**
+  - I STOPs, naming I0;
+  - I0 STOPs with R's record missing, and with production differing from the backup (nothing moved in either case);
+  - I0 PASS moves run 1, and I0 again has nothing to move;
+  - Mpre, then **I PASS with the INFO line**;
+  - **done PASS**, with run1 listed as superseded and not counted. Its M/N/P records are the main rehearsal's labelled fixtures;
+  - R from the NEW backup's corrected copy.
+- **A different extra file** (`manuals/stray-c1.txt`) after I0 (run 2) and Mpre: **I FAILs** (the marker still INFO), and R restores.
 
 ## Steps that run a suite wait for it (user rule, 2026-11-25)
 

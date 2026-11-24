@@ -1,0 +1,23 @@
+roles_file: /private/tmp/claude-501/614/root/proj/.graphtraj/roles.yml
+roles:
+  claude:
+    connection: claude-614/anthropic/opus
+  routed:
+    connection: claude-614/gw614/sonnet
+  inline:
+    runtime: claude
+    model: claude-haiku-5-5
+  coder:
+    connection: codex-614/openai/gpt
+role_tree:
+  claude: {}
+  routed: {}
+  inline: {}
+  coder: {}
+presets:
+- claude
+- coder
+- inline
+- routed
+edges: []
+revision: 8a1816d15998a2172ac8c14c818f11d83c72d1491d21365dd2cca01a42763103

@@ -1,0 +1,20 @@
+SYNTHETIC stream (rehearsal of the judge, not a real host): /tmp/claude-501/614/root/selftest-stream.jsonl
+init: model SYNTHETIC | apiKeySource none | plugins ['graphtraj-claude-host'] | mcp servers [('graphtraj', 'connected')] | tools with graphtraj: ['mcp__graphtraj__subagents', 'mcp__graphtraj__tasks']
+serving path: native graphtraj-claude-host association (the plugin hook prepares each call; host.py serve answers through NativeCalls)
+call 1: mcp__graphtraj__subagents {"action": "discover", "query": ""} -> {"features": [{"feature": "create", "description": "Create a child Agent on a Runtime; returns before its work finishes."}, {"feature": "models", "description": "List a Runtime's configured connection
+call 2: mcp__graphtraj__subagents {"action": "describe", "feature": "models"} -> {"feature": "models", "description": "List a Runtime's configured connections with their providers and models, grouped by provider; read only, starts no Agent.", "input_schema": {"type": "object", "pr
+call 3: mcp__graphtraj__subagents {"action": "execute", "feature": "models", "arguments": {"runtime": "claude"}} -> {"action": "models", "agent": null, "session": null, "execution": null, "message": null, "result": {"runtime": "claude", "status": "available", "models": [{"id": "claude-opus-5-5", "provider": "anthro
+mcp__graphtraj__subagents calls: 3; other tool calls: 0
+final: 'DONE-614 (synthetic)' | is_error False | models used []
+CHECK 614 the three calls were made inline, in order, and nothing else: PASS
+CHECK 614 discover lists models: PASS (features: ['create', 'models', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 'retire', 'ask_parent', 'session_read'])
+CHECK 614 describe models answers: PASS
+CHECK 614 execute models is not an error: PASS
+models groups (provider -> roles): {'anthropic': ['claude'], None: ['inline'], 'gw614': ['routed']}
+  model claude-opus-5-5 | provider anthropic | configuration claude | connection claude-614/anthropic/opus | api_key_env None | supported_efforts ['low', 'medium', 'high']
+  model claude-haiku-5-5 | provider None | configuration inline | connection None | api_key_env None | supported_efforts None
+  model claude-sonnet-5-5 | provider gw614 | configuration routed | connection claude-614/gw614/sonnet | api_key_env FAKE614_KEY | supported_efforts None
+CHECK 614 grouped by provider: anthropic, gw614 and the provider-null inline role; no codex role: PASS (expected {'anthropic': ['claude'], None: ['inline'], 'gw614': ['routed']})
+CHECK 614 key NAMES only: routed names FAKE614_KEY, the others none: PASS ({'claude': None, 'inline': None, 'routed': 'FAKE614_KEY'})
+CHECK 614 the fake key value appears nowhere in the record: PASS
+RESULT 614 judge: PASS

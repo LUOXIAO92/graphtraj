@@ -1,9 +1,9 @@
-$ zsh steps.zsh pre   (rehearsal 2026-11-25T02:53:29)
+$ zsh steps.zsh pre   (rehearsal 2026-11-25T02:57:08)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
-REHEARSAL (not acceptance evidence): VERIFY614_T VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
 == [pre] Main. Preflight; creates /tmp/claude-501/614/root; ONE one-line claude -p (no MCP, no tool). LOGIN: the user's Claude login (Main asks the user first). Dialog: none.
 zsh 5.9 runs /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/steps.zsh
-candidate HEAD f13110a090cddc2d3f70ba586f9c3a6e21c4878c (614: verify-614 steps (pre, install, setup, trust, real, plain, post, G, SR, suite-base), )
+candidate HEAD 0eda659b55ea9b1f2f9a80e0ad47e4bf5d9274a0 (614: setup STOPs without a Claude CLI; rehearse.zsh separates VERIFY614_GWAIT and VERIFY61)
 PASS: base GraphTraj 78f4c207c9261e5f66420ac7c8b135406d3d54f5 resolvable
 PASS: graftling v0.10.0 = 6f4aeb8fe9f47b71d81b9771486167b123308066 in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling (wheel source)
 PASS: no uncommitted change in src, tests, the step files
@@ -13,7 +13,7 @@ PASS: yaml present in /tmp/claude-501/614/venv/lib/python3.13/site-packages /Use
 PASS: websockets present in /tmp/claude-501/614/venv/lib/python3.13/site-packages /Users/luoxiao/miniconda3/lib/python3.13/site-packages
 PASS: /Users/luoxiao/miniconda3/bin/python3.13: Python 3.13.11
 your locations before (names, sizes, mtimes): 1 lines in /tmp/claude-501/614/root/user-before.txt (~/.claude and ~/.claude.json are not compared: claude -p records its Sessions there)
-claude: claude -> /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/claude | env: claude: No such file or directory
+PASS: claude: /usr/bin/true -> /usr/bin/true
 claude's environment (names only): HOME LANG PATH TERM TMPDIR USER
 REHEARSAL: claude -p skipped (VERIFY614_NO_PROMPT=1)
 writes: /tmp/claude-501/614/root and copies in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/rehearsal/out only. dialog: none.

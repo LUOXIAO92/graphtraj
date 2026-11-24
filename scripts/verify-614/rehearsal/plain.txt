@@ -1,0 +1,12 @@
+$ zsh steps.zsh plain   (rehearsal 2026-11-25T02:57:15)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+== [plain] Main (optional supplement). The plain MCP entry /tmp/claude-501/614/root/venv/bin/graphtraj-mcp in /tmp/claude-501/614/root/proj (no Claude, no native association): discover, describe models, execute models, execute status. Without a verified caller this entry refuses every subagents action alike; PASS = models is listed and refused only as status is (never not-implemented). Dialog: none. No login.
+serving path: plain MCP (/tmp/claude-501/614/root/venv/bin/graphtraj-mcp; no native association) | tools/list: ['subagents', 'tasks']
+discover features: ['create', 'models', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 'retire', 'ask_parent', 'session_read']
+execute models -> error authority-unavailable | execute status -> error authority-unavailable
+CHECK 614 plain MCP lists models and refuses it only as it refuses status (caller check, code authority-unavailable), never not-implemented: PASS
+RESULT 614 judge: PASS (plain path: unverified caller)
+RESULT 614 plain: PASS
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/steps.zsh post
+STEP-END plain rc=0

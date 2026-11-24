@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "graphtraj": {
+      "command": "/tmp/claude-501/614/root/venv/bin/python",
+      "args": [
+        "-m",
+        "graphtraj.runtimes.claude.host",
+        "serve",
+        "--config",
+        "/private/tmp/claude-501/614/root/proj/.graphtraj/claude-host/config.json"
+      ],
+      "env": {
+        "HOME": "/tmp/claude-501/614/root/home",
+        "FAKE614_KEY": "fake-614-6e609c96446e4670476a7ffd"
+      }
+    }
+  }
+}

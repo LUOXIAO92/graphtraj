@@ -1,0 +1,9 @@
+$ zsh steps.zsh post   (rehearsal 2026-11-25T02:57:15)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+== [post] Main. Your ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh vs pre (names, sizes, mtimes). <5 s.
+PASS: your locations are unchanged
+outputs: /tmp/claude-501/614/root (copies in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/rehearsal/out). To remove everything afterwards: rm -rf '/tmp/claude-501/614/root'
+RESULT 614 post: PASS
+next (paste): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/steps.zsh G
+STEP-END post rc=0

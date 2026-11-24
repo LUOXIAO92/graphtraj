@@ -1,0 +1,2 @@
+02:57:17 started (6 shards; this step waits for them)
+02:57:20 ended: exit=1

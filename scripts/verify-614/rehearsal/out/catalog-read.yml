@@ -1,0 +1,82 @@
+scope: user
+path: /tmp/claude-501/614/root/home/.graphtraj/connections.yml
+revision: ab2f9b849d325dc3d7fb1b2d88c637ab83d96e1a8b5deb88aeca5e347c2458fa
+catalog:
+  version: 1
+  runtimes:
+    claude-614:
+      runtime: claude
+      providers:
+        anthropic:
+          models:
+            opus:
+              id: claude-opus-5-5
+              source: manual
+              supported_efforts:
+              - low
+              - medium
+              - high
+        gw614:
+          base_url: https://gateway-614.invalid/v1
+          api_key_env: FAKE614_KEY
+          models:
+            sonnet:
+              id: claude-sonnet-5-5
+              source: manual
+    codex-614:
+      runtime: codex
+      providers:
+        openai:
+          models:
+            gpt:
+              id: gpt-5.5
+              source: manual
+account_access: unknown
+capabilities:
+  read: true
+  preview: true
+  save: true
+  reasoning_efforts:
+    claude:
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    codex:
+    - none
+    - minimal
+    - low
+    - medium
+    - high
+    - xhigh
+    - max
+    - ultra
+    pi:
+    - 'off'
+    - minimal
+    - low
+    - medium
+    - high
+    - xhigh
+    dsh:
+    - 'off'
+    - low
+    - high
+    - max
+  model_discovery:
+    codex: native
+    pi: native
+    dsh: native-host
+    claude: native
+  custom_api:
+    codex:
+    - responses
+    pi:
+    - openai-completions
+    - openai-responses
+    - anthropic-messages
+    dsh:
+    - anthropic-messages
+    claude:
+    - anthropic-messages

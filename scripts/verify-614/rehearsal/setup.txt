@@ -1,0 +1,62 @@
+$ zsh steps.zsh setup   (rehearsal 2026-11-25T02:57:13)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+== [setup] Main. Project /tmp/claude-501/614/root/proj, isolated catalog /tmp/claude-501/614/root/home/.graphtraj/connections.yml, roles, Claude host material. Dialog: none. No login.
+Create dev from 0021ebb4fb7a44f1533533db35ac26900d21dc56? [y/N]: Created Integration Worktree on dev.
+GraphTraj project setup complete.
+PASS: graphtraj setup created /tmp/claude-501/614/root/proj/.graphtraj
+catalog draft /tmp/claude-501/614/root/catalog-draft.yml:
+version: 1
+runtimes:
+  claude-614:
+    runtime: claude
+    providers:
+      anthropic:
+        models:
+          opus:
+            id: claude-opus-5-5
+            source: manual
+            supported_efforts:
+            - low
+            - medium
+            - high
+      gw614:
+        base_url: https://gateway-614.invalid/v1
+        api_key_env: FAKE614_KEY
+        models:
+          sonnet:
+            id: claude-sonnet-5-5
+            source: manual
+  codex-614:
+    runtime: codex
+    providers:
+      openai:
+        models:
+          gpt:
+            id: gpt-5.5
+            source: manual
+PASS: public preview accepts the catalog (gw614: base_url + api_key_env)
+PASS: public read uses the isolated catalog (revision: ab2f9b849d325dc3d7fb1b2d88c637ab83d96e1a8b5deb88aeca5e347c2458fa)
+roles file /tmp/claude-501/614/root/proj/.graphtraj/roles.yml:
+roles:
+  claude:
+    connection: claude-614/anthropic/opus
+  routed:
+    connection: claude-614/gw614/sonnet
+  inline:
+    runtime: claude
+    model: claude-haiku-5-5
+  coder:
+    connection: codex-614/openai/gpt
+role_tree:
+  claude: {}
+  routed: {}
+  inline: {}
+  coder: {}
+PASS: public role preview: claude coder inline routed
+PASS: Claude host material written: ["/private/tmp/claude-501/614/root/proj/.claude/settings.local.json","/private/tmp/claude-501/614/root/proj/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json","/private/tmp/claude-501/61
+/tmp/claude-501/614/root/mcp-614.json: graphtraj -> /tmp/claude-501/614/root/venv/bin/python -m graphtraj.runtimes.claude.host serve --config /private/tmp/claude-501/614/root/proj/.graphtraj/claude-host/config.json | env names: ['FAKE614_KEY', 'HOME']
+writes: /tmp/claude-501/614/root only (project, isolated HOME, the fake value /tmp/claude-501/614/root/fake614.value). dialog: none.
+RESULT 614 setup: PASS
+next: the USER runs the trust step once (zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/steps.zsh trust prints it), then Main: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/steps.zsh real
+STEP-END setup rc=0

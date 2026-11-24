@@ -1,0 +1,6 @@
+pytest temp root: /private/tmp/claude-501/verify-614-G-20261125T025716 (TMPDIR=/tmp/claude-501, outside the Harness)
+launch environment: PATH HOME USER TERM TMPDIR LANG only (clean(); no provider credential)
+candidate: 0eda659b55ea9b1f2f9a80e0ad47e4bf5d9274a0 | graftling wheel from git archive 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0)
+test interpreter: click 8.2.1 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.0 | graphtraj 0.1.0
+REHEARSAL (not evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+REHEARSAL: extra pytest args after -- -rA: -k test_role_models_614 or test_agents_discovery_intents

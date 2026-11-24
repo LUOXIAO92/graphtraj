@@ -1,0 +1,5 @@
+serving path: plain MCP (/tmp/claude-501/614/root/venv/bin/graphtraj-mcp; no native association) | tools/list: ['subagents', 'tasks']
+discover features: ['create', 'models', 'send', 'status', 'wait', 'interrupt', 'resume', 'requests', 'reply', 'retire', 'ask_parent', 'session_read']
+execute models -> error authority-unavailable | execute status -> error authority-unavailable
+CHECK 614 plain MCP lists models and refuses it only as it refuses status (caller check, code authority-unavailable), never not-implemented: PASS
+RESULT 614 judge: PASS (plain path: unverified caller)

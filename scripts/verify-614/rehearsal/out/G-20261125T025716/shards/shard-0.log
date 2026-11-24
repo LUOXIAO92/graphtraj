@@ -1,0 +1,8 @@
+....                                                                     [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_role_models_614.py::test_models_groups_the_roles_create_can_select_by_provider
+PASSED tests/test_role_models_614.py::test_models_provider_filter_and_invalid_provider_match_create
+PASSED tests/test_role_models_614.py::test_models_shows_key_names_only_and_any_caller_may_read
+PASSED tests/test_role_models_614.py::test_every_feature_graftling_discovers_for_graphtraj_executes_models
+4 passed, 644 deselected in 1.14s

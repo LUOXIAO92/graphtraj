@@ -1,0 +1,16 @@
+test run id: 841f7f7de5834178 (shard n carries PYTEST_GRAPHTRAJ_RUN=841f7f7de5834178-<n>)
+shard 0: 40 files -> /tmp/claude-501/614/T/G-20261125T025716/shards/shard-0.log
+shard 1: 39 files -> /tmp/claude-501/614/T/G-20261125T025716/shards/shard-1.log
+shard 2: 41 files -> /tmp/claude-501/614/T/G-20261125T025716/shards/shard-2.log
+shard 3: 41 files -> /tmp/claude-501/614/T/G-20261125T025716/shards/shard-3.log
+shard 4: 41 files -> /tmp/claude-501/614/T/G-20261125T025716/shards/shard-4.log
+shard 5: 41 files -> /tmp/claude-501/614/T/G-20261125T025716/shards/shard-5.log
+leftover processes of run 841f7f7de5834178: before=0 after-shards=0 stopped=0 remaining=0
+FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start
+ABNORMAL /tmp/claude-501/614/T/G-20261125T025716/shards/shard-1.log: exit 5
+ABNORMAL /tmp/claude-501/614/T/G-20261125T025716/shards/shard-3.log: exit 5
+ABNORMAL /tmp/claude-501/614/T/G-20261125T025716/shards/shard-4.log: exit 5
+ABNORMAL /tmp/claude-501/614/T/G-20261125T025716/shards/shard-5.log: exit 5
+1 failed, 12 passed, 3761 deselected
+logs: /tmp/claude-501/614/T/G-20261125T025716/shards
+exit=1

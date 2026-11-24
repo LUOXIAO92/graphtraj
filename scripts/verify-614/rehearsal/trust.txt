@@ -1,0 +1,14 @@
+$ zsh steps.zsh trust   (rehearsal 2026-11-25T02:57:15)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+== [trust] USER, once per path /tmp/claude-501/614/root/proj (Main cannot: it needs a terminal and a dialog). In a plain macOS Terminal:
+  cd '/tmp/claude-501/614/root/proj' && /usr/bin/true --strict-mcp-config
+Dialog: 'Do you trust the files in this folder?' naming /tmp/claude-501/614/root/proj. Choose 'Yes, proceed'.
+If a second dialog asks about this project's plugin graphtraj-claude-host or its hooks, approve it for this project.
+Then type /exit and press Enter. Send no message. Any other dialog: press Esc and tell Main its title.
+Why: Claude Code loads a project's plugin (here the graphtraj-claude-host hook that prepares each native call)
+only in a trusted folder, and records trust only through this dialog; claude -p never asks.
+--strict-mcp-config: this start loads no MCP server, so no MCP approval dialog appears.
+RESULT 614 trust: instructions printed (nothing was run)
+next (Main, after the USER's /exit): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery/scripts/verify-614/steps.zsh real
+STEP-END trust rc=0

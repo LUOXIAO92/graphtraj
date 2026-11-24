@@ -1,0 +1,10 @@
+$ zsh steps.zsh real   (rehearsal 2026-11-25T02:57:15)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+== [real] Main. ONE claude -p in /tmp/claude-501/614/root/proj: subagents discover, describe models, execute models {runtime: claude}. LOGIN: the user's Claude login. Dialog: none (the folder was trusted in the trust step). ~1-2 min.
+prompt (one line): Use only the mcp__graphtraj__subagents tool, inline arguments, one call at a time in this order: call 1 = {"action":"discover","query":""}; call 2 = {"action":"describe","feature":"models"}; call 3 = {"action":"execute","feature":"models","arguments":{"runtime":"claude"}}. Make no other call. Then reply with exactly one line: DONE-614.
+MCP: /tmp/claude-501/614/root/venv/bin/python -m graphtraj.runtimes.claude.host serve --config /private/tmp/claude-501/614/root/proj/.graphtraj/claude-host/config.json | env names: ['FAKE614_KEY', 'HOME']
+claude's environment (names only): HOME LANG PATH TERM TMPDIR USER | allowed tools: mcp__graphtraj__subagents
+REHEARSAL: claude -p skipped (VERIFY614_NO_PROMPT=1)
+RESULT 614 real: NOT RUN (rehearsal)
+STEP-END real rc=0

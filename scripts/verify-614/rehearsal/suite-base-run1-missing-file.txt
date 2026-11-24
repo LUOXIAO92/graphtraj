@@ -1,0 +1,17 @@
+$ zsh steps.zsh suite-base <two ids>   (rehearsal)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_OUT VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_DEPS
+== [suite-base] Main, only for SR's NEW ids (2): base GraphTraj 78f4c207c9261e5f66420ac7c8b135406d3d54f5 vs candidate HEAD 965f23bc66af864169b2c86a2beee628ab200df3, both with graftling 0.10.0 (wheel). pytest temp under TMPDIR (outside the Harness). Dialog: none.
+REHEARSAL: ps cannot list processes here; other-run check skipped (VERIFY614_NO_PS=1)
+reusing /tmp/claude-501/614/T/gvenv-614
+base: pytest in /tmp/claude-501/614/T/graphtraj-base | temp /private/tmp/claude-501/verify-614-sb-base-20261125T025549
+base: pytest exit=5,  (/tmp/claude-501/614/T/suite-base-20261125T025549/base.txt)
+candidate: pytest in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/614-graphtraj-subagents-models-discovery | temp /private/tmp/claude-501/verify-614-sb-candidate-20261125T025550
+candidate: pytest exit=1, 1 failed, 1 passed in 0.22s (/tmp/claude-501/614/T/suite-base-20261125T025549/candidate.txt)
+base not run, candidate passed: tests/test_role_models_614.py::test_models_groups_the_roles_create_can_select_by_provider   [base not run | candidate passed]
+candidate-only (not run on base: missing there?): tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]   [base not run | candidate failed]
+candidate-only: 1
+
+RESULT 614 suite-base: FAIL (classification above) | ids: 2 | record: /tmp/claude-501/614/T/suite-base-20261125T025549
+next: report the classification; a candidate-only id is a regression of this Task
+STEP-END suite-base rc=1

@@ -1,9 +1,9 @@
-$ zsh steps.zsh install   (rehearsal 2026-11-25T02:53:29)
+$ zsh steps.zsh install   (rehearsal 2026-11-25T02:57:08)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
-REHEARSAL (not acceptance evidence): VERIFY614_T VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
-== [install] Main. /tmp/claude-501/614/root/venv: GraphTraj f13110a090cddc2d3f70ba586f9c3a6e21c4878c (wheel) + graftling 0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066 wheel), offline. Dialog: none. No login.
+REHEARSAL (not acceptance evidence): VERIFY614_NO_PS VERIFY614_T VERIFY614_CLAUDE VERIFY614_OUT VERIFY614_PYTEST_ARGS VERIFY614_ROOT VERIFY614_USERHOME VERIFY614_NO_PROMPT VERIFY614_GWAIT VERIFY614_DEPS
+== [install] Main. /tmp/claude-501/614/root/venv: GraphTraj 0eda659b55ea9b1f2f9a80e0ad47e4bf5d9274a0 (wheel) + graftling 0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066 wheel), offline. Dialog: none. No login.
 graphtraj /tmp/claude-501/614/root/venv/lib/python3.13/site-packages/graphtraj/__init__.py | wheel: True | graftling 0.10.0 /tmp/claude-501/614/root/venv/lib/python3.13/site-packages/graftling/__init__.py
-PASS: venv imports graphtraj f13110a090cddc2d3f70ba586f9c3a6e21c4878c (wheel) and graftling 0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066 wheel)
+PASS: venv imports graphtraj 0eda659b55ea9b1f2f9a80e0ad47e4bf5d9274a0 (wheel) and graftling 0.10.0 (6f4aeb8fe9f47b71d81b9771486167b123308066 wheel)
 PASS: installed GraphTraj has role_models (614)
 PASS: /tmp/claude-501/614/root/venv/bin/graphtraj
 PASS: /tmp/claude-501/614/root/venv/bin/graphtraj-mcp

@@ -507,20 +507,34 @@ def test_codex_references_reach_fresh_and_resumed_native_sessions(
     document['runtimes']['shared']['providers']['openai'] = {'models': {
         'model': {'id': 'actual-model', 'source': 'native'},
     }}
+    # Name only: a provider defined in the Home's own config.toml (Task 610).
+    document['runtimes']['shared']['providers']['home-defined'] = {'models': {
+        'model': {'id': 'actual-model', 'source': 'manual'},
+    }}
+    # A key override on the built-in provider uses GraphTraj's own entry.
+    document['runtimes']['keyed'] = {**document['runtimes']['shared'], 'providers': {'openai': {
+        'api_key_env': 'CUSTOM_KEY', 'models': {'model': {'id': 'actual-model', 'source': 'native'}},
+    }}}
     save(project, document)
     approval = {'approval': {'model': 'review', 'base_url': 'https://review.example/v1',
                              'api_key_env': 'REVIEW_KEY'}}
+    names = [('one', 'first'), ('two', 'second'), ('keyed', 'openai'),
+             ('native', 'openai'), ('named', 'home-defined')]
     request = {'change': {'set_presets': {
-        name: {'connection': f'shared/{provider}/model', 'codex': approval}
-        for name, provider in [('one', 'first'), ('two', 'second'), ('native', 'openai')]
+        name: {'connection': f"{'keyed' if name == 'keyed' else 'shared'}/{provider}/model", 'codex': approval}
+        for name, provider in names
     }}}
     bind(project, recovery_reviewer=lambda proposal: {'decision': 'accept'})(
         {'action': 'execute', 'feature': 'role_organization', 'arguments': request},
     )
     contexts = [codex_context(project.parent / name, peer, resolve_child_role(
         name, load_project_roles(project).preset(name), project,
-    )) for name in ('one', 'two', 'native')]
+    )) for name, _ in names]
     retained = [item.launch_document() for item in contexts]
+    assert [(item.evidence_document()['provider'], item.evidence_document()['model_provider'])
+            for item in contexts] == [('first', 'graphtraj-role'), ('second', 'graphtraj-role'),
+                                      ('openai', 'graphtraj-role'), ('openai', 'openai'),
+                                      ('home-defined', 'home-defined')]
     save(project, {'version': 1, 'runtimes': {}})
 
     async def exercise() -> None:
@@ -536,14 +550,17 @@ def test_codex_references_reach_fresh_and_resumed_native_sessions(
                     turn = await server.start_execution(session, 'configuration')
                     observed = json.loads((await server.wait(turn, timeout=2))['last_agent_message'])
                     assert observed['model'] == 'actual-model'
-                    if index == 2:
-                        assert observed['config']['model_provider'] == 'openai'
+                    if index >= 3:
+                        assert observed['config']['model_provider'] == names[index][1]
+                        assert 'model_providers' not in observed['config']
                         assert set(context.runtime_environment()) == {'CODEX_HOME'}
                         continue
+                    assert observed['config']['model_provider'] == 'graphtraj-role'
                     provider = observed['config']['model_providers']['graphtraj-role']
-                    assert provider['base_url'] == ['https://provider.example/v1',
-                                                    'http://localhost:8080/v1'][index]
-                    assert provider['env_key'] == ['CUSTOM_KEY', 'OTHER_KEY'][index]
+                    assert provider['name'] == names[index][1]
+                    assert provider['base_url'] == ['https://provider.example/v1', 'http://localhost:8080/v1',
+                                                    'https://api.openai.com/v1'][index]
+                    assert provider['env_key'] == ['CUSTOM_KEY', 'OTHER_KEY', 'CUSTOM_KEY'][index]
                     assert provider['requires_openai_auth'] is False
             assert context.launch_document() == retained[index]
 

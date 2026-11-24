@@ -107,6 +107,8 @@ class _CodexRole:
     runtime_home: str | None = None
     unix_sockets: Mapping[str, Any] | None = None
     local_websocket: Mapping[str, Any] | None = None
+    provider: str | None = None
+    model_provider: str | None = None
 
     def _launch_request(
         self,
@@ -258,6 +260,10 @@ class _CodexRuntimePreflight:
                 "runtime": "codex", "effective_role": self._role.name,
                 "model": self._model,
                 "model_reasoning_effort": self._role.reasoning_effort,
+                # Catalog provider and the native provider actually written;
+                # "native" means GraphTraj left Codex's own choice in place.
+                "provider": self._role.provider or "native",
+                "model_provider": self._role.model_provider or "native",
                 "native_skills": self._native_skills,
                 "approvals_reviewer": dict(zip(
                     ("requested", "source"),
@@ -1030,7 +1036,8 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
     if role.settings.base_url is not None or (role.settings.connection and role.settings.api_key_env):
         document["model_provider"] = "graphtraj-role"
         document["model_providers"] = {"graphtraj-role": {
-            "name": "GraphTraj role",
+            # Codex shows this name; keep the catalog provider recognizable.
+            "name": role.settings.runtime_provider or "GraphTraj role",
             "base_url": role.settings.base_url or "https://api.openai.com/v1",
             **({"env_key": api_key_env} if api_key_env else {}),
             "requires_openai_auth": False,
@@ -1057,6 +1064,8 @@ def _resolve_codex_role(role: ResolvedChildRole, harness_root: Path) -> _CodexRo
                          if (role.settings.codex or {}).get('local_websocket_access') is True else None),
         unix_sockets=(role.settings.codex or {}).get('unix_sockets'),
         runtime_home=role.settings.runtime_home,
+        provider=role.settings.runtime_provider,
+        model_provider=document.get("model_provider"),
         approval=approval_route(
             role.settings.codex,
             custom=document.get("model_provider", "openai") != "openai",

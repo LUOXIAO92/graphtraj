@@ -163,28 +163,93 @@ def select_role(
                                                       f"{configuration!r}, whose provider is "
                                                       f"{preset.runtime_provider!r}.")
             return name, preset
+    except ProjectRolesError as error:
+        raise AgentsError('invalid-config', str(error)) from None
 
+    presets = _candidates(root, runtime)
+    matches = _with_provider(runtime, presets, provider)
+    name = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
+    if name is None:
+        raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
+                                            f"role using it; found {matches or 'none'}.")
+    return name, presets[name]
+
+
+def _candidates(root: Path, runtime: str) -> dict[str, Any]:
+    """Return the resolved roles ``create`` without a configuration chooses among for ``runtime``."""
+    from graphtraj.configuration.project_roles import ProjectRolesError, load_project_roles, resolve_preset
+
+    try:
         presets = {
             name: resolve_preset(preset)
-            for name, preset in roles.presets.items()
+            for name, preset in load_project_roles(root).presets.items()
             if runtime != 'pi' or preset.runtime == 'pi'
             or (preset.connection or '').startswith('pi/')
         }
     except ProjectRolesError as error:
         raise AgentsError('invalid-config', str(error)) from None
+    return {name: presets[name] for name in sorted(presets) if presets[name].runtime == runtime}
 
-    matches = sorted(name for name, preset in presets.items() if preset.runtime == runtime)
+
+def _with_provider(runtime: str, presets: Mapping[str, Any], provider: str | None) -> list[str]:
+    """Keep the candidate role names whose catalog provider is ``provider``; ``invalid-provider`` for none."""
+    matches = list(presets)
     if provider is not None:
         declared = sorted({presets[name].runtime_provider for name in matches} - {None})
         matches  = [name for name in matches if presets[name].runtime_provider == provider]
         if not matches:
             raise AgentsError('invalid-provider', f"No {runtime} role uses provider {provider!r}; "
                                                   f"roles use: {declared or 'none'}.")
-    name = runtime if runtime in matches else matches[0] if len(matches) == 1 else None
-    if name is None:
-        raise AgentsError("invalid-config", f"Configure one role named {runtime!r} or exactly one "
-                                            f"role using it; found {matches or 'none'}.")
-    return name, presets[name]
+    return matches
+
+
+ROLE_MODELS_MESSAGE = (
+    "The project roles create can select for this Runtime, grouped by each role's catalog provider: pass a "
+    "model's configuration (or its provider) to create. This lists the roles' catalog choices, not the "
+    "Runtime's native catalog; tasks runtime_connections discover lists a catalog entry's native models. "
+    "api_key_env is a variable name; no key value is read.")
+
+
+def role_models(root: Path, runtime: str, provider: str | None = None) -> dict:
+    """List the roles ``create`` can select for ``runtime`` as models grouped by provider (614).
+
+    Read only: the project roles and the user catalog are read; no native
+    query, Agent, Session or network is used and no key value is read. The
+    candidates and the ``invalid-provider`` refusal are :func:`select_role`'s.
+
+    Returns
+    -------
+    dict
+        ``{"runtime", "status", "models", "groups": [{"provider", "models"}],
+        "message"}``; each model is ``{"id", "provider", "configuration",
+        "connection", "api_key_env", "supported_efforts"}``. A role without a
+        catalog provider is in the ``provider: None`` group.
+    """
+    from graphtraj.configuration.runtime_connections import read_catalog
+
+    if runtime not in SUPPORTED_RUNTIMES:
+        raise AgentsError("unsupported-runtime", f"No driver is available for Runtime {runtime!r}.")
+    presets = _candidates(root, runtime)
+    names   = _with_provider(runtime, presets, provider)
+    catalog = read_catalog()[0] if any(presets[name].connection for name in names) else {}
+    models  = []
+    for name in names:
+        preset = presets[name]
+        entry  = {}
+        if preset.connection:
+            entry_runtime, entry_provider, entry_model = preset.connection.split('/')
+            entry = catalog['runtimes'][entry_runtime]['providers'][entry_provider]['models'][entry_model]
+        efforts = entry.get('supported_efforts')
+        models.append({'id': entry.get('id', preset.model), 'provider': preset.runtime_provider,
+                       'configuration': name, 'connection': preset.connection,
+                       'api_key_env': preset.api_key_env,
+                       'supported_efforts': list(efforts) if efforts is not None else None})
+    groups: dict[Any, list[dict]] = {}
+    for model in models:
+        groups.setdefault(model['provider'], []).append(model)
+    return {'runtime': runtime, 'status': 'available', 'models': models,
+            'groups': [{'provider': key, 'models': members} for key, members in groups.items()],
+            'message': ROLE_MODELS_MESSAGE}
 
 
 class AdapterDriver:

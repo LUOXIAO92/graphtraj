@@ -258,6 +258,8 @@ def test_create_provider_selects_the_role_using_it(claude_project: Path, claude_
                              instruction='hello', provider='gateway', configuration='inline')
     assert failed and refused['error']['code'] == 'invalid-provider', refused
 
-    # The core's models listing does not describe GraphTraj's role choices; it says where they are.
+    # models lists the same role choices create took (614; tests/test_role_models_614.py).
     listed, failed = agents(claude_project, cwd, 'main-a', action='models', runtime='claude')
-    assert failed and listed['error']['code'] == 'not-implemented', listed
+    assert not failed, listed
+    assert {model['configuration']: model['provider'] for model in listed['result']['models']} == {
+        'claude': 'anthropic', 'routed': 'gateway', 'inline': None}

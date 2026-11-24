@@ -341,10 +341,10 @@ class GraphTrajAgents:
             if action == "session_read":
                 return self.control.operate(action, self._member_session(arguments), binding)
             if action == "models":
-                # The core lists its own config.yml connections, which GraphTraj does not use.
-                raise unavailable("models", "GraphTraj chooses a child by project role: create takes "
-                                            "configuration or provider, and runtime_connections discover "
-                                            "lists a catalog entry's models by provider.")
+                # GraphTraj's choices are project roles, not the core's config.yml connections (614).
+                from graphtraj.execution.agent_driver import role_models
+
+                return Outcome(role_models(self.root, arguments["runtime"], arguments.get("provider")))
             member = self._member_alias(agent)
             core = member is None and (action == "create" or (agent or "").startswith(AGENT_PREFIX))
             if not core and action not in {"status", "wait"} and binding.caller.agent is None:

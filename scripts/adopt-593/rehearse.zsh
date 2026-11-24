@@ -480,18 +480,20 @@ steps Nr > $F/Nr-neg.out 2>&1; NRN=$?
 check "Nr negative: a child created WITH tools, or without DONE-593, FAILs the 576 checks" sh -c "[ $NRN -ne 0 ] && grep -q 'CHECK 576 child created without tools (stored selection.tools is null): FAIL' $F/Nr-neg.out && grep -q 'CHECK 576 child without tools ran Bash and replied DONE-593 (member quotes the last_message): FAIL' $F/Nr-neg.out"
 rm -rf $CA $FH/.graphtraj/core/runner/sessions/593-x@advisor $FH/.graphtraj/swarm/sessions/s-member $FH/.graphtraj/swarm/sessions/s-child $RW/N-reply.txt $RW/N-main-notice.txt $RW/N.txt
 
-head1 "X judge (review exemption) on a REHEARSAL FIXTURE data root; the reviewer command itself is real; inventory reads names only"
-XR=$F/xroot; mkdir -p $XR/control/agents $XR/control/agents/ag-x $XR/sessions/s-x
+head1 "X judge (review exemption) on a REHEARSAL FIXTURE data root shaped like graftling's own host (<project>/.agents-control: control/agents, sessions/<sha256>/session.jsonl); the reviewer command itself is real; inventory reads names only"
+XR=$F/xproj/.agents-control; XS=$(print -rn -- claude:x-child | shasum -a 256 | cut -c1-64); mkdir -p $XR/control/agents $XR/control/agents/ag-x $XR/sessions/$XS
+ln -s $XS $XR/sessions/s-x
 print -r -- '{"name":"x593","agent":"ag-x","selection":{"review":"x593-review"},"executions":[{"id":"ex-x","outcome":"completed"}]}' > $XR/control/agents/ag-x.json
 print -r -- '{"version":1,"runtime":"subagents","tool":"subagents/connectivity-check","input":{}}' | $CONDA -I -c 'import json,sys; print(json.dumps({"policy":"p","request":json.loads(sys.stdin.read())}))' | $CONDA -I $SD/x593.py reviewer $F/x-review.jsonl > $F/x-answer.txt
 print -r -- '{"policy":"p","request":{"runtime":"claude","tool":"Bash","input":{"command":"echo x593-tool"}}}' | $CONDA -I $SD/x593.py reviewer $F/x-review.jsonl >> $F/x-answer.txt
 check "x593 reviewer (real command): answers one valid allow decision per request and logs only the tool name, never the input" sh -c "[ \$(grep -c '\"decision\": \"allow\"' $F/x-answer.txt) -eq 2 ] && ! grep -q 'echo x593-tool' $F/x-review.jsonl && grep -q 'subagents/connectivity-check' $F/x-review.jsonl"
 print -r -- '{"at":1,"runtime":"claude","tool":"Bash","request_id":"r1","decision":"allow","reason":"ok"}' > $XR/control/agents/ag-x/review.jsonl
-print -r -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"s1","name":"mcp__graphtraj__subagents","input":{}},{"type":"tool_use","id":"b1","name":"Bash","input":{}}]}}' > $XR/sessions/s-x/session.jsonl
-print -r -- '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"s1","content":"{}"}]}}' >> $XR/sessions/s-x/session.jsonl
-$CONDA -I $SD/x593.py judge $XR $F/x-review.jsonl x593 > $F/xjudge.out 2>&1; XJ=$?; grep CHECK $F/xjudge.out
-check "X judge (fixture): review active (probe under the new name, Bash), subagents exempt, child ran it, completed -> five PASS" sh -c "[ $XJ -eq 0 ] && [ \$(grep -c '^CHECK 593 X .*: PASS' $F/xjudge.out) -eq 5 ]"
-print -r -- '{"at":2,"tool":"mcp__graphtraj__subagents","runtime":"claude"}' >> $F/x-review.jsonl
+rm $XR/sessions/s-x
+print -r -- '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"s1","name":"mcp__graftling__subagents","input":{}},{"type":"tool_use","id":"b1","name":"Bash","input":{}}]}}' > $XR/sessions/$XS/session.jsonl
+print -r -- '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"s1","content":"{}"}]}}' >> $XR/sessions/$XS/session.jsonl
+$CONDA -I $SD/x593.py judge $XR $F/x-review.jsonl x593 > $F/xjudge.out 2>&1; XJ=$?; grep -E 'CHECK|archived' $F/xjudge.out
+check "X judge (graftling-shaped fixture): review active (probe subagents/connectivity-check, Bash), mcp__graftling__subagents exempt and ran, completed -> five PASS" sh -c "[ $XJ -eq 0 ] && [ \$(grep -c '^CHECK 593 X .*: PASS' $F/xjudge.out) -eq 5 ] && grep -q \"archived subagents calls: 1; with a non-error result: 1 \\[('mcp__graftling__subagents'\" $F/xjudge.out"
+print -r -- '{"at":2,"tool":"mcp__graftling__subagents","runtime":"claude"}' >> $F/x-review.jsonl
 $CONDA -I $SD/x593.py judge $XR $F/x-review.jsonl x593 > $F/xjudge-neg.out 2>&1; XJN=$?
 check "X judge negative: a subagents call that reached the reviewer -> FAIL (not exempt)" sh -c "[ $XJN -ne 0 ] && grep -q 'CHECK 593 X exempt: no subagents call reached the reviewer or review.jsonl: FAIL' $F/xjudge-neg.out"
 print -l 'connections:' '  a:' '    runtime: claude' '    review: r1' '    api_key_env: SECRET_NAME_NOT_PRINTED' 'reviewers:' '  r1:' '    command: [/x/secret-path-not-printed]' > $F/x-config.yml
@@ -508,6 +510,7 @@ head1 "C5 interpreter check (correction 1): sys.prefix = the uv tool environment
 # conda class, REAL: a venv at <uvt>/tools/graftling made from Miniconda's Python with the B graftling 0.9.0 wheel (what uv
 # would make if it chose conda's Python); the conda root is the real one (read only).
 UC=$F/uvc-conda; $CONDA -m venv $UC/tools/graftling && $UC/tools/graftling/bin/python -m pip install -q --disable-pip-version-check --no-cache-dir --no-index --no-deps $W/wheels-${NEW[1,8]}/graftling-0.9.0-*.whl
+for d in yaml _yaml pyyaml-6.0.3.dist-info websockets websockets-16.1.1.dist-info; do cp -Rp $REALS/$d $UC/tools/graftling/lib/python3.13/site-packages/ 2>/dev/null; done   # graftling's own two dependencies, as uv installs them
 ADOPT593_UVT=$UC steps _c5interp > $F/c5i-conda.out 2>&1; CI1=$?; cat $F/c5i-conda.out
 check "C5 class conda (real venv on Miniconda's Python): CHECK PASS, REPORT (conda), the NOTE printed, exit 0 (not a FAIL)" sh -c "[ $CI1 -eq 0 ] && grep -q 'CHECK 593 C5 one install from GitHub v0.9.0 in the uv tool environment $UC/tools/graftling (sys.prefix), graftling 0.9.0: PASS' $F/c5i-conda.out && grep -q '^REPORT 593 C5 base interpreter: /Users/luoxiao/miniconda3/.* (conda)$' $F/c5i-conda.out && grep -q '^NOTE 593 C5: the uv tool environment is based on conda.s Python' $F/c5i-conda.out && ! grep -q ': FAIL' $F/c5i-conda.out"
 # uv-managed class, REHEARSAL FIXTURE interpreter: a stand-in bin/python that answers like a uv tool environment whose
@@ -522,8 +525,30 @@ ADOPT593_UVT=$F/uvt-none steps C5r > $F/C5r-none.out 2>&1; C5N=$?
 check "C5r negative: without the uv installation -> STOP (no install attempted, conda not touched), no success text" sh -c "[ $C5N -ne 0 ] && grep -q 'STOP: no uv installation under $F/uvt-none' $F/C5r-none.out && grep -q 'C5r STOP' $F/C5r-none.out && ! grep -q '^成功' $F/C5r-none.out"
 check "C5 negative: no success text after its STOP" sh -c "grep -q 'C5 STOP' $F/C5-exists.out && ! grep -q '^成功' $F/C5-exists.out"
 
+head1 "X (correction 3) on graftling's own host project <uvt>/project: STOP without C5/C5r; real config placement; production and vproject untouched"
+ADOPT593_UVT=$F/x-none steps X > $F/X-none.out 2>&1; XN=$?
+check "X negative: no <uvt>/project (no C5) -> STOP naming C5, nothing written" sh -c "[ $XN -ne 0 ] && grep -q 'STOP: no graftling host project at $F/x-none/project (or no uv installation): run C5 first' $F/X-none.out && [ ! -e $F/x-none ]"
+# Scratch <uvt>/project with the REAL graftling 0.9.0 venv from the C5 interpreter case and the files configuration --write
+# makes (written here by graftling's own configuration --write from that venv).
+XP=$UC/project; mkdir -p $XP
+(cd $XP && env -i HOME=$HOME PATH=/usr/bin:/bin TMPDIR=$TMPDIR $UC/tools/graftling/bin/python -m graftling.claude.host configuration --project $XP --claude $F/stub/claude --write) > $F/X-cw.out 2>&1
+print -l '# the project owner comment (rehearsal)' 'save_normalized_sessions: false' > $XP/.agents-control/config.yml; cp -p $XP/.agents-control/config.yml $F/X-config-original.yml
+for f in $FB/vproject/.graphtraj/swarm/config.yml $FH/.graphtraj/swarm/config.yml(N); do [[ -f $f ]] && shasum -a 256 $f; done > $F/X-untouched.sha256; shasum -a 256 $FRT/bin/python >> $F/X-untouched.sha256
+rm -f $RW/C5r.txt
+ADOPT593_UVT=$UC steps X > $F/X-noc5r.out 2>&1; XNR=$?
+check "X negative: project present but C5r not passed (its trust comes from C5u) -> STOP naming C5u/C5r" sh -c "[ $XNR -ne 0 ] && grep -q 'STOP: C5r has not passed in $XP' $F/X-noc5r.out && cmp -s $XP/.agents-control/config.yml $F/X-config-original.yml"
+print -r -- 'CHECK 593 C5 the child created through mcp__graftling__subagents ended and replied C5-CHILD-OK: PASS' > $RW/C5r.txt   # REHEARSAL FIXTURE
+ADOPT593_UVT=$UC steps X > $F/X.out 2>&1; XRC=$?; grep -E '^(graftling host project|kept a copy|wrote|graftling reads|STOP|CHECK)|next' $F/X.out | cut -c1-220
+check "X: data root from claude-host.json root = <uvt>/project/.agents-control; existing config copied; merged config read by graftling 0.9.0 itself" sh -c "grep -q 'data root (claude-host.json root): $XP/.agents-control | config: $XP/.agents-control/config.yml' $F/X.out && grep -q 'kept a copy of the existing config' $F/X.out && cmp -s $RW/X-config-before.yml $F/X-config-original.yml && grep -q \"graftling reads it: \\['x593c'\\] \\['x593'\\] \\['x593-review'\\]\" $F/X.out"
+check "X: merged config keeps the project's own fields, turns archiving on and points the reviewer at x593.py with X's log" sh -c "grep -q '^save_normalized_sessions: true' $XP/.agents-control/config.yml && grep -q 'review: x593-review' $XP/.agents-control/config.yml && grep -q '$SD/x593.py' $XP/.agents-control/config.yml && grep -q '$RW/X-reviewer.jsonl' $XP/.agents-control/config.yml"
+check "X: claude -p ran in <uvt>/project with --allowedTools mcp__graftling__subagents only; judge read that data root (stub claude: no child, so the judge does not PASS)" sh -c "grep -q 'Using only mcp__graftling__subagents' $RW/X-prompt.txt && grep -qF '\"preset\":\"x593\"' $RW/X-prompt.txt && grep -q 'claude -p rc=' $F/X.out && grep -q 'NO child named x593 under $XP/.agents-control/control/agents' $F/X.out && [ $XRC -ne 0 ]"
+check "X: production config, .venv-runtime and /private/tmp/vproject-593's stand-in untouched; next is done" sh -c "shasum -a 256 -c --quiet $F/X-untouched.sha256 && grep -q \"next.*: zsh $SD/steps.zsh done\" $F/X.out"
+# done with X's new raw output: a passed X record (the graftling-shaped judge fixture above) in raw/X.txt.
+cp $F/xjudge.out $RW/X.txt
+
 export FAKE_PROBE_API_KEY=sk-rehearsal-value-123456
 steps done > $F/done.out 2>&1
+check "done (correction 3): reads X's new raw output: the five X CHECKs appear PASS in its summary" sh -c "[ \$(grep -o 'X [a-z][^;]*PASS' $F/done.out | sort -u | wc -l) -ge 5 ] && grep -q 'X exempt: no subagents call reached the reviewer or review.jsonl PASS' $F/done.out"
 check "done: versions, direct_urls, real entries PASS, no key value" sh -c "grep -q '^Version: 0.9.0' $F/done.out && grep -q 'graftling direct_url: .*wheels-${NEW[1,8]}' $F/done.out && grep -q 'CHECK 593 production-graphtraj-mcp MCP tools/list is exactly subagents, tasks: PASS' $F/done.out && grep -q 'raw files containing an exported key value: 0' $F/done.out && grep -q '^production bin now: subagents subagents-mcp' $F/done.out && grep -q 'REPORT 593 old-name scan \[after-I\]: live configuration hits 0' $F/done.out"
 check "done: counts are 0 when nothing matches (560's miscount fixed): '0.8.0 dist-info left: 0', 'task.md 0'" sh -c "grep -q 'graftling 0.8.0 dist-info left: 0 (expect 0)' $F/done.out && grep -q 'Task state now: task.md 0 ' $F/done.out"
 

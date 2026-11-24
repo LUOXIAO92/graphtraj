@@ -47,8 +47,9 @@
 # Order: 00 → scan → rel → rp (pre-approved push) → gh → B → G (waits for other suites) → GR
 #        (→ SR → suite-base only if GR names NEW ids) → V → Vu (USER once, only if Vc asks) → Vc → [scanhome: Main asks
 #        the USER first] → Mpre → [593's Leader and Engineer have ended their turns; Main asks the USER to /exit Main and
-#        run I] → I (USER) → [USER: cd <Harness> && claude --continue] → M → Mr → Mp → Mps → inbox → Nw → N → Nr → X
-#        → Nt → scan (after) → C5 → done → [Leader accepts 593] → [Main integrates this Task's branch] → T.
+#        run I] → I (USER) → [USER: cd <Harness> && claude --continue] → M → Mr → Mp → Mps → inbox → Nw → N → Nr
+#        → Nt → scan (after) → C5 → C5u (USER) → C5r → X (correction 3: on graftling's own host in the C5 project)
+#        → done → [Leader accepts 593] → [Main integrates this Task's branch] → T.
 #        Rollback: R (Main asks the USER first; the USER /exits Main and runs it).  Timer listing at any time: timers.
 # B does not need the candidate on dev: it builds from `git archive $TARGET` behind product_guard.
 # Restart: Main's tasks/agents calls run inside its host process `graphtraj.runtimes.claude.host serve`, which keeps
@@ -1400,7 +1401,7 @@ step_G() {
 }
 
 case $STEP in
-help) print "顺序: 00 → scan（旧名扫描，安装前）→ rel（graftling 发布：dev 到 $GTAG（快进，或 dev 已移动时做 noreply 合并，冲突即停），main 快进到 $GTAG，建注释 tag）→ rp（推送 main 与 tag：USER 已预先同意，Worldline user-decision 20261124T030105.522331+0900）→ gh（结果 4：只读确认 GitHub 的 main 与 $GTAG 指向 $GCOMMIT，不安装）→ B → G（全套测试；另一套在跑时排队等待）→ GR（有 NEW 时 → SR → suite-base）→ V → Vc（若要求则先 USER 做 Vu）→ [Main 先问 USER] scanhome → Mpre → [593 的 Leader 与 Engineer 已结束各自的回合；Main 先问 USER] USER /exit Main → I（USER：备份并安装两个 wheel）→ USER: cd $H && claude --continue（预计出现 graphtraj-claude-host 的插件/hooks 信任框：选信任）→ M → Mr → Mp → Mps → inbox → Nw → N → Nr → X → Nt → scan（安装后）→ C5（结果 5，gh 之后）→ done → [Leader 接受 593] → [Main 把本 Task 的分支集成进 GraphTraj dev] → T；任何时候列计时器: timers；备份完成后可回退: R（Main 先问 USER；两个包、插件与入口文件；593 不动 Task 状态）。"
+help) print "顺序: 00 → scan（旧名扫描，安装前）→ rel（graftling 发布：dev 到 $GTAG（快进，或 dev 已移动时做 noreply 合并，冲突即停），main 快进到 $GTAG，建注释 tag）→ rp（推送 main 与 tag：USER 已预先同意，Worldline user-decision 20261124T030105.522331+0900）→ gh（结果 4：只读确认 GitHub 的 main 与 $GTAG 指向 $GCOMMIT，不安装）→ B → G（全套测试；另一套在跑时排队等待）→ GR（有 NEW 时 → SR → suite-base）→ V → Vc（若要求则先 USER 做 Vu）→ [Main 先问 USER] scanhome → Mpre → [593 的 Leader 与 Engineer 已结束各自的回合；Main 先问 USER] USER /exit Main → I（USER：备份并安装两个 wheel）→ USER: cd $H && claude --continue（预计出现 graphtraj-claude-host 的插件/hooks 信任框：选信任）→ M → Mr → Mp → Mps → inbox → Nw → N → Nr → Nt → scan（安装后）→ C5（结果 5，gh 之后）→ C5u（USER）→ C5r → X（更正 3：在 C5 项目的 graftling host 上）→ done → [Leader 接受 593] → [Main 把本 Task 的分支集成进 GraphTraj dev] → T；任何时候列计时器: timers；备份完成后可回退: R（Main 先问 USER；两个包、插件与入口文件；593 不动 Task 状态）。"
   print "USER 只做: Vu（仅当 Vc 要求；信任框 'Yes, proceed'）、/exit Main 与 I（Main 先问）、claude --continue（预测出现 graphtraj-claude-host 的插件/hooks 信任框：选信任，见 V），失败时 R（Main 先问）；scanhome 读 USER 的 ~/.claude 允许规则（只读，Main 先问 USER）。rp 的推送与 Claude 登录已由 USER 预先同意（20261124T030105.522331+0900）。其余都由 Main 运行。"
   next "zsh $THIS 00" ;;
 
@@ -1661,9 +1662,9 @@ Nr) print "[Nr] Main. 子级与成员记录、通知一次、成员的工具调�
   print "成功: 每一行 CHECK 都是 PASS（455 两行、一个子级 execution、452 子级 completed 与成员结束、通知 delivered、477 没有推送输入、'CHECK 593 Main got exactly one completed notice'、成员 mcp__graphtraj__subagents 调用无错误、成员没有旧名调用、swarm 有 agent）。"
   print "  REPORT 行（Worker CPU 两行 'REPORT 525 468 Worker CPU 30 s before/after child creation' 与 'REPORT 532 Worker CPU comparison'（对照 528 的 0.559/0.107 与 531 的 0.488 -> 0.116）；'REPORT 532 526 .gitignore …' 只是信息）是报告，不阻塞；NOT OBSERVED 时把 $R/Nw468.txt 交 Main。PENDING: 子级还在运行或通知尚未保存，稍后重跑 Nr。CHECK BY HAND 用下面的 session_read。"
   [[ -n $SID ]] && print "\n复核（Main 粘贴）:\nUsing only the tasks tool: session_read with {\"session_id\":\"$SID\",\"limit\":400} (page with after until has_more is false). Count, per $CHILD execution id printed by Nr, the user/message events that deliver a parent input with source graphtraj naming it; print the counts by event type and each such input's execution field only."
-  if [[ -n $SWARM_AGENT ]]; then print "\n清退成员（Main 粘贴，Nr、X 与 Nt 之后）:\nUsing only mcp__graphtraj__subagents: retire with {\"agent\":\"$SWARM_AGENT\"} (the agent value of the N swarm result, not the alias), and print the raw result."
+  if [[ -n $SWARM_AGENT ]]; then print "\n清退成员（Main 粘贴，Nr 与 Nt 之后）:\nUsing only mcp__graphtraj__subagents: retire with {\"agent\":\"$SWARM_AGENT\"} (the agent value of the N swarm result, not the alias), and print the raw result."
   else print "\n清退成员: 先把 N 的 swarm 原始结果存到 $R/N.txt 再重跑 Nr。"; fi
-  next "zsh $THIS X    （然后 zsh $THIS Nt；清退成员后再跑一次 Nt，然后 zsh $THIS scan 与 zsh $THIS C5）"; exit $rc ;;
+  next "zsh $THIS Nt    （清退成员后再跑一次 Nt，然后 zsh $THIS scan 与 zsh $THIS C5）"; exit $rc ;;
 
 _c5interp) c5_interp ${IDS[1]:-$UVT/tools/graftling/bin/python}; exit $? ;;   # rehearsal only
 
@@ -1733,36 +1734,42 @@ C5r) cv; print "[C5r] Main，C5 与 C5u 之后。在 USER 已有的 conda 环境
   grep -q '^CHECK 593 C5 .*: FAIL' $R/C5r.txt && rc=1
   summary C5r "$(grep -E '^(conda active|subagents CLI|claude -p rc|PASS|FAIL|CHECK|REPORT)' $R/C5r.txt)"
   print "成功: 'conda active: …'（python 在 conda 下）；'subagents CLI: …' 有 usage 行；四行 'CHECK 593 C5 …: PASS'（PASS mcp__graftling__subagents；子级回复；graftling 进程在 uv 工具的 Python 上；conda 与 USER 目录不变）。若发现必须在 conda 环境里另装才能工作: 本步不安装，如实报告并 STOP，交 Main。"
-  next "zsh $THIS done" ; exit $rc ;;
+  next "zsh $THIS X    （更正 3：审查豁免在本项目的 graftling host 上；然后 zsh $THIS done）" ; exit $rc ;;
 
-X) cv; print "[X] Main，Nr 之后。审查豁免在新名下（真实）。1) 只读列出生产 graftling 配置里的 reviewer 与指向 reviewer 的 connection（只列名字）；2) 在隔离项目 $VPROJECT（不是生产）里用已安装的 $RT 重写其入口，并在它自己的 .graphtraj/swarm/config.yml 加一个本地命令 reviewer（x593.py reviewer：只记录工具名并允许，不需要 provider）与使用它的 connection/preset x593；3) 一次真实的 claude -p（Claude 登录已由 USER 预先同意；干净环境，无 provider 凭据）以 mcp__graphtraj__subagents 创建带审查的 Claude 子级 x$TASK_ID，子级先调用自己的 subagents 工具（status），再用 Bash 运行 echo x$TASK_ID-tool，回复 DONE-X$TASK_ID；4) 只读判定。为什么在隔离项目: 生产若没有声明 reviewer，生产的成员与子级不经审查，豁免无从观察；这里是让审查真正开启的最小真实检查。对话框: 无（claude -p，--allowedTools 只含 mcp__graphtraj__subagents 与 tasks）。约 3 分钟。"
+X) cv; print "[X] Main，C5r 之后（更正 3）。审查豁免在新名下（真实），在 graftling 自己的 Claude host 上：C5 建的项目 $UVT/project（uv 从 GitHub v0.9.0 安装；USER 在 C5u 信任了这个文件夹）。GraphTraj 的 driver 只按 roles.yml 的 configuration 选择，graftling 拒绝 preset（control.py），所以不在 GraphTraj host 上做。1) 只读列出生产的 reviewer 名字；2) 在该项目的 graftling 数据根（claude-host.json 的 root）的 config.yml 里（先保留原文件副本）加本地命令 reviewer x593-review（x593.py reviewer：只记录工具名并允许，不需要 provider）、connection x593c（runtime claude，review x593-review）、preset x593，并打开 save_normalized_sessions；只写在 $UVT 下，不碰生产配置、.venv-runtime 或 $VPROJECT；3) 一次真实的 claude -p（干净环境，Claude 登录已由 USER 预先同意；--allowedTools mcp__graftling__subagents）用 preset x593 创建带审查的 Claude 子级 x$TASK_ID，子级先调用自己的 subagents 工具（status），再用 Bash 运行 echo x$TASK_ID-tool，回复 DONE-X$TASK_ID，等待结束后清退；4) 只读判定。对话框: 预计无（文件夹已在 C5u 信任；若 Claude 问到项目 MCP server 'graftling'，为本项目批准）。没有 $UVT/project 或 C5r 未通过（信任来自 C5u）时 STOP，指向 C5/C5u/C5r。约 3 分钟。"
+  # Correction 3: GraphTraj's driver selects only through roles.yml configurations (graftling/control.py refuses a
+  # preset when the driver's prepare takes no selection), so X runs on graftling's own Claude host in the C5 project.
+  for f in X.txt X-reviewer.jsonl X-stream.jsonl X.err; do [[ -e $R/$f ]] && mv $R/$f $R/${f:r}-$(date +%Y%m%dT%H%M%S).${f:e}; done
   : > $R/X.txt
-  { say "production reviewers (names only; read only)"
+  { XP=$UVT/project UVPY=$UVT/tools/graftling/bin/python
+    [[ -x $UVPY && -f $XP/.mcp.json && -f $XP/.agents-control/claude-host.json ]] || { print "STOP: no graftling host project at $XP (or no uv installation): run C5 first (then the USER's C5u, then C5r)"; exit 1; }
+    grep -q '^CHECK 593 C5 the child created through mcp__graftling__subagents ended and replied C5-CHILD-OK: PASS' $R/C5r.txt 2>/dev/null \
+      || { print "STOP: C5r has not passed in $XP (its folder trust comes from the USER's C5u): run C5u, then C5r, first"; exit 1; }
+    say "production reviewers (names only; read only)"
     $CONDA -I $SD/x593.py inventory $H/.graphtraj/swarm/config.yml $HOME/.graphtraj/config.yml
-    print "(production review is on only for a connection that names a reviewer; when none is listed, production members and children run without review, so X checks the exemption in the isolated project)"
-    say "isolated project $VPROJECT with the INSTALLED $RT (configuration --write there; never production)"
-    vproject_init $RT/bin/graphtraj || exit 1
-    (cd $VPROJECT && clean $RT/bin/python -m graphtraj.runtimes.claude.host configuration --project $VPROJECT --claude $(claude_bin) --write) || exit 1
-    vsettings
-    XC=$VPROJECT/.graphtraj/swarm/config.yml XLOG=$R/X-reviewer.jsonl; : > $XLOG
-    if ! grep -q '^  x593-review:' $XC 2>/dev/null; then
-      cp -p $XC $R/X-config-before.yml 2>/dev/null
-      print -l -- "connections:" "  x593c:" "    runtime: claude" "    review: x593-review" "presets:" "  x593:" "    connection: x593c" \
-        "reviewers:" "  x593-review:" "    command: [$CONDA, -I, $SD/x593.py, reviewer, $XLOG]" >> $XC
-    fi
-    print -r -- "isolated config.yml sections: $(grep -E '^(connections|presets|reviewers):' $XC | tr '\n' ' ')"
-    say "real claude -p in $VPROJECT: create the reviewed child x$TASK_ID with preset x593 through mcp__graphtraj__subagents"; cv
-    print -r -- "Using only mcp__graphtraj__subagents: (1) execute create with arguments {\"runtime\":\"claude\",\"preset\":\"x593\",\"name\":\"x$TASK_ID\",\"instruction\":\"Scripted probe. First call your own subagents tool (its name ends with __subagents) with {\\\"action\\\":\\\"execute\\\",\\\"feature\\\":\\\"status\\\",\\\"arguments\\\":{}}. Then call Bash once with exactly: echo x$TASK_ID-tool . Then reply with exactly: DONE-X$TASK_ID\"}. (2) execute wait with {\"agent\": <the agent id>, \"timeout_seconds\": 300}, repeating until the execution has ended; if the child asks you to approve a Bash command, reply to approve exactly that command. (3) Print the final last_message, then retire the child. Print one line DONE and stop." > $R/X-prompt.txt
-    (cd $VPROJECT && clean /usr/bin/perl -e 'alarm shift; exec @ARGV' 600 $(claude_bin) -p --model $MODEL --output-format stream-json --verbose \
-        --mcp-config $VPROJECT/.mcp.json --strict-mcp-config --allowedTools mcp__graphtraj__subagents,mcp__graphtraj__tasks < $R/X-prompt.txt > $R/X-stream.jsonl 2> $R/X.err)
+    print "(production review is on only for a connection that names a reviewer; X checks the exemption on graftling's own host in $XP)"
+    # The data root is the host configuration's 'root' (graftling/claude/host.py: <project>/.agents-control by default),
+    # and graftling reads config.yml there (graftling/config.py).
+    XROOT=$($CONDA -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["root"])' $XP/.agents-control/claude-host.json) || exit 1
+    XC=$XROOT/config.yml XLOG=$R/X-reviewer.jsonl; : > $XLOG
+    print -r -- "graftling host project: $XP | data root (claude-host.json root): $XROOT | config: $XC | .mcp.json graftling: $($CONDA -I -c 'import json,sys; s=json.load(open(sys.argv[1]))["mcpServers"]["graftling"]; print(s.get("command"), *(s.get("args") or []))' $XP/.mcp.json 2>&1)"
+    [[ ${XROOT:A} == ${UVT:A}/* ]] || { print "STOP: the data root $XROOT is outside $UVT; X writes only under $UVT"; exit 1; }
+    [[ -f $XC && ! -e $R/X-config-before.yml ]] && cp -p $XC $R/X-config-before.yml && print -r -- "kept a copy of the existing config: $R/X-config-before.yml"
+    $CONDA -I $SD/x593.py config $XC $CONDA $SD/x593.py $XLOG || exit 1
+    (cd $XP && clean $UVPY -I -c 'import sys; from pathlib import Path; from graftling.config import read_connections; d = read_connections(Path(sys.argv[1])); print("graftling reads it:", sorted(d.get("connections", {})), sorted(d.get("presets", {})), sorted(d.get("reviewers", {})))' $XROOT) || { print "STOP: graftling does not accept $XC"; exit 1; }
+    say "real claude -p in $XP: create the reviewed child x$TASK_ID with preset x593 through mcp__graftling__subagents"; cv
+    print -r -- "Using only mcp__graftling__subagents: (1) execute create with arguments {\"runtime\":\"claude\",\"preset\":\"x593\",\"name\":\"x$TASK_ID\",\"instruction\":\"Scripted probe. First call your own subagents tool (its name ends with __subagents) with {\\\"action\\\":\\\"execute\\\",\\\"feature\\\":\\\"status\\\",\\\"arguments\\\":{}}. Then call Bash once with exactly: echo x$TASK_ID-tool . Then reply with exactly: DONE-X$TASK_ID\"}. (2) execute wait with {\"agent\": <the agent id>, \"timeout_seconds\": 300}, repeating until the execution has ended; if the child asks you to approve a Bash command, reply to approve exactly that command. (3) Print the final last_message, then retire the child. Print one line DONE and stop." > $R/X-prompt.txt
+    (cd $XP && clean /usr/bin/perl -e 'alarm shift; exec @ARGV' 600 $(claude_bin) -p --model $MODEL --output-format stream-json --verbose \
+        --allowedTools mcp__graftling__subagents < $R/X-prompt.txt > $R/X-stream.jsonl 2> $R/X.err)
     print "claude -p rc=$? (142 = 600 s timeout)"
-    tree stream $R/X-stream.jsonl mcp__graphtraj__subagents
-    say "judge (read only): reviewer log, review.jsonl, the child's archive and record"
-    $CONDA -I $SD/x593.py judge $VPROJECT/.graphtraj/swarm $XLOG x$TASK_ID
+    tree stream $R/X-stream.jsonl mcp__graftling__subagents
+    say "judge (read only): reviewer log, review.jsonl, the child's archive and record in $XROOT"
+    $CONDA -I $SD/x593.py judge $XROOT $XLOG x$TASK_ID
   } 2>&1 | tee -a $R/X.txt; rc=${pipestatus[1]}
-  summary X "$(grep -E '^(/|child|reviewer log|review.jsonl|archived|CHECK|claude -p rc|PASS|FAIL)' $R/X.txt)"
-  print "成功: 五行 'CHECK 593 X …: PASS'（reviewer 收到 create 的 subagents/connectivity-check 与子级的 Bash；没有任何 mcp__*__subagents 调用进入 reviewer 或 review.jsonl；子级的 subagents 调用有非错误结果；子级 completed）。FAIL 交 Main/Leader。"
-  next "zsh $THIS Nt" ; exit $rc ;;
+  summary X "$(grep -E '^(/|STOP|graftling host project|graftling reads|wrote|child|reviewer log|review.jsonl|archived|CHECK|claude -p rc|PASS|FAIL)' $R/X.txt)"
+  if grep -q '^STOP' $R/X.txt; then print "\nX STOP（见上）。"; exit 1; fi
+  print "成功: 'graftling reads it: [… x593c …] [… x593 …] [… x593-review …]'；PASS mcp__graftling__subagents；五行 'CHECK 593 X …: PASS'（reviewer 收到 create 的 subagents/connectivity-check 与子级的 Bash；没有任何 mcp__*__subagents 调用进入 reviewer 或 review.jsonl；子级的 subagents 调用有非错误结果；子级 completed）。FAIL 交 Main/Leader。"
+  next "zsh $THIS done" ; exit $rc ;;
 
 Nt) cv; print "[Nt] Main，N 的成员结束之后、清退之前；清退之后再跑一次。490：Task $TASK_ID 的 Session 的预算计时器（只读，从不发信号）。对话框: 无。< 30 秒。"
   { print "at $(date '+%F %T')"

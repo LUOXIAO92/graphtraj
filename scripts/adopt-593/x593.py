@@ -2,6 +2,7 @@
 
 usage: x593.py reviewer <log>                      (graftling runs it as a local command reviewer)
        x593.py inventory <config.yml>...           (read only: reviewer names and the connections that name one)
+       x593.py config <config.yml> <python> <x593.py> <log>   (correction 3: X's entries in the graftling host's config)
        x593.py judge <data root> <reviewer log> <child name>
 
 reviewer: reads graftling's review document {policy, request} from stdin, appends {at, tool, runtime} of the request
@@ -50,6 +51,27 @@ def inventory(paths: list[str]) -> int:
         connections = document.get('connections') or {} if isinstance(document, dict) else {}
         reviewed = sorted(f'{c} -> {v.get("review")}' for c, v in connections.items() if isinstance(v, dict) and v.get('review'))
         print(f'{path}: reviewers {reviewers or "none"} | connections naming a reviewer: {reviewed or "none"}')
+    return 0
+
+
+def config(path: Path, python: str, script: str, log: str) -> int:
+    """Merge X's reviewer, connection and preset into one graftling data root's config.yml (correction 3).
+
+    Every other key stays; save_normalized_sessions is set true so the child's Session is archived for the judge.
+    The caller keeps a copy of an existing file first.
+    """
+    import yaml
+    document = (yaml.safe_load(path.read_text(encoding='utf-8')) or {}) if path.is_file() else {}
+    if not isinstance(document, dict):
+        print(f'STOP: {path} does not hold a mapping'); return 1
+    document['save_normalized_sessions'] = True
+    document.setdefault('connections', {})['x593c'] = {'runtime': 'claude', 'review': 'x593-review'}
+    document.setdefault('presets', {})['x593'] = {'connection': 'x593c'}
+    document.setdefault('reviewers', {})['x593-review'] = {'command': [python, '-I', script, 'reviewer', log]}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(document, sort_keys=False), encoding='utf-8')
+    print(f"wrote {path}: top-level keys {list(document)}; connections {sorted(document['connections'])}; "
+          f"presets {sorted(document['presets'])}; reviewers {sorted(document['reviewers'])}")
     return 0
 
 
@@ -127,6 +149,8 @@ if __name__ == '__main__':
     mode = sys.argv[1] if len(sys.argv) > 1 else ''
     if mode == 'reviewer' and len(sys.argv) == 3:
         sys.exit(reviewer(sys.argv[2]))
+    if mode == 'config' and len(sys.argv) == 6:
+        sys.exit(config(Path(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]))
     if mode == 'inventory':
         sys.exit(inventory(sys.argv[2:]))
     if mode == 'judge' and len(sys.argv) == 5:

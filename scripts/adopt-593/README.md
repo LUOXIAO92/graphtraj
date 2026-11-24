@@ -15,6 +15,35 @@ passed, and G is running. Do not rerun rel, rp or gh. Real-host facts used below
 
 All steps are now written for the new names and rehearsed (`rehearsal-output.txt`).
 
+## Correction 3 (Worldline user-decision 20261124T101325.067460+0900): X on graftling's own host
+
+The real X failed with `invalid-config` (raw-6fe8c8d9/X.txt):
+- X created the child with preset `x593` on the GraphTraj host.
+- graftling `control.py:826-828` refuses a selection when the driver's `prepare` takes no `selection`.
+- GraphTraj's driver (`agent_driver.py:194`) has none: it selects only through roles.yml `configuration`.
+- graftling's own Claude driver (`claude/driver.py:74`) accepts a selection.
+
+So X now runs on graftling's own Claude host in `/private/tmp/uvtool-593/project`. C5 created that project with
+`configuration --write` from the uv install of GitHub v0.9.0; the USER trusted it in C5u, and C5r passed there.
+- **Config:** the data root is `root` in `<project>/.agents-control/claude-host.json` (graftling `claude/host.py`; by
+  default `<project>/.agents-control`). graftling reads `config.yml` there (`config.py`).
+  - X keeps a copy of an existing `config.yml` as raw `X-config-before.yml`. The rewrite does not keep comments; the
+    copy does.
+  - X then merges in: the local command reviewer `x593-review` (`x593.py reviewer`), the connection `x593c` (runtime
+    claude, review x593-review), the preset `x593`, and `save_normalized_sessions: true`, so the child's Session is
+    archived for the judge.
+  - graftling 0.9.0 from that install reads the result back.
+  - X writes only under `/private/tmp/uvtool-593` and its raw directory. It never touches production's config,
+    `.venv-runtime` or `/private/tmp/vproject-593`.
+- **Real run:** `claude -p` in that project, in a clean environment, `--allowedTools mcp__graftling__subagents`. It
+  creates `x593` with preset x593, waits until the child ends and retires it. The child calls its own subagents tool
+  (status) and runs Bash.
+- **Judge:** `x593.py judge <data root>` checks the same five CHECKs. Any `mcp__<server>__subagents`, including
+  `mcp__graftling__subagents`, counts as exempt. The reviewer must see `subagents/connectivity-check`.
+- **Order:** … → C5 → C5u (USER) → C5r → **X** → done. X STOPs, naming C5/C5u/C5r, when the project or C5r's PASS is
+  missing. It runs after C5r's before/after comparison, which therefore does not see X's writes.
+- **No rerun needed:** TARGET stays `6fe8c8d9`, product_guard is unchanged, and only `scripts/` changed.
+
 ## Correction 2 (user option A, Worldline user-decision 20261124T091451.431013+0900)
 
 Main's G on 3eb21101 + v0.9.0 found 4 NEW failures:
@@ -139,10 +168,10 @@ next command with real values filled in.
   `_review_hook`). Review is on only for a connection that names a reviewer in config.yml.
   - X first prints production's reviewers and reviewed connections, names only.
   - Production's config is not readable from the Engineer's sandbox, so X does not assume that production reviews. It
-    runs the minimal real check in the isolated `/private/tmp/vproject-593`, which X reconfigures with the INSTALLED
-    `.venv-runtime`. There a local command reviewer (`x593.py reviewer`) records only tool names and allows; it needs
-    no provider.
-  - A real `claude -p` creates the reviewed Claude child `x593` through `mcp__graphtraj__subagents`.
+    runs the minimal real check with a local command reviewer (`x593.py reviewer`), which records only tool names and
+    allows; it needs no provider. **Since correction 3** this runs on graftling's own host in
+    `/private/tmp/uvtool-593/project`, not in `/private/tmp/vproject-593` (see Correction 3).
+  - A real `claude -p` creates the reviewed Claude child `x593` through `mcp__graftling__subagents`.
   - `x593.py judge`: the reviewer saw the create probe under the new name (`subagents/connectivity-check`) and the
     child's Bash; no `mcp__*__subagents` reached the reviewer or `review.jsonl`; the child's own subagents call ran
     with a non-error result; the child completed.
@@ -183,7 +212,8 @@ adoption.
 
 00 → scan → rel → rp → gh → B → G → GR (→ SR → suite-base only if NEW) → V → Vc → [scanhome, Main asks the USER first]
 → Mpre → [593's Leader and Engineer have ended their turns; Main asks the USER] USER `/exit` → I (USER) → USER
-`cd <Harness> && claude --continue` → M → Mr → Mp → Mps → inbox → Nw → N → Nr → X → Nt → scan (after I) → C5 → done →
+`cd <Harness> && claude --continue` → M → Mr → Mp → Mps → inbox → Nw → N → Nr → Nt → scan (after I) → C5 → C5u (USER)
+→ C5r → X (correction 3) → done →
 [Leader accepts 593] → [Main integrates this Task's branch] → T. Rollback: R.
 
 ## Step table
@@ -206,12 +236,12 @@ adoption.
 | Mr | Main | none | `CHECK 593 [Main …] mcp__graphtraj__subagents …: PASS`, `… tasks …: PASS`; `INFO 593 … old-name calls …` (recorded only) |
 | Mp, Mps, inbox | Main | none | four `CHECK 593 init …: PASS`; host on .venv-runtime after the install; duplicate ids 0 |
 | Nw, N, Nr | Main | none | Nr: 576 CHECKs; `CHECK 593 [member …] mcp__graphtraj__subagents …: PASS`; `… no old-name call …: PASS`; notice once |
-| X | Main | none | five `CHECK 593 X …: PASS` |
 | Nt | Main | none | as 579 |
 | scan (after I) | Main | none | `REPORT 593 old-name scan [after-I]: live configuration hits 0` |
 | C5 | Main | none (network) | `uv tool install rc=0`; `CHECK 593 C5 one install from GitHub v0.9.0 in the uv tool environment /private/tmp/uvtool-593/tools/graftling (sys.prefix), graftling 0.9.0: PASS`; `REPORT 593 C5 base interpreter: … (<class>)`, plus a `NOTE 593 C5: …` only for conda (neither PASS nor FAIL; Main decides) |
 | C5u | USER (once) | folder trust for /private/tmp/uvtool-593/project → Yes, proceed | — |
 | C5r | Main | none | `conda active: …`; `subagents CLI: …`; four `CHECK 593 C5 …: PASS`; `REPORT 593 <dir> unchanged: yes` for each |
+| X (correction 3) | Main | none expected (folder trusted at C5u; if Claude asks about the project MCP server 'graftling': approve for this project) | `graftling reads it: ['x593c'] ['x593'] ['x593-review']`; PASS mcp__graftling__subagents; five `CHECK 593 X …: PASS`; STOP naming C5/C5u/C5r when the project or C5r's PASS is missing |
 | done | Main | none | all CHECKs PASS; production bin `subagents subagents-mcp`; scan after-I live 0; key values 0 |
 | T | Main (after acceptance and integration) | none | as 579 |
 | R | USER (Main asks first) | none at R; at the next `claude --continue` the plugin trust dialog may show again → trust | venv and plugin SAME; restored CHECKs; `CHECK 593 R: bin has 0.8.0's agents, agents-mcp again …: PASS` |

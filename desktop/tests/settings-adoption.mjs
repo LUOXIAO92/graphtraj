@@ -22,7 +22,9 @@ export async function settingsAdoption({ page, firstId, secondId, runtimeHome, s
   // The detail heading's add button acts on the selected Runtime or provider.
   const headingButton = name => page.locator('.d-library-detail-heading').getByRole('button', { name, exact: true });
   const tree = page.getByRole('navigation', { name: 'Runtime provider model hierarchy', exact: true });
-  const agent = reference => page.getByRole('button', { name: `Configure agent ${reference}`, exact: true });
+  // React Flow 12 gives a focusable node role 'group' (node.ariaRole ?? (isFocusable ? 'group' : undefined));
+  // the name is TeamGraph.tsx:50/61 `Configure agent ${roleName(renames, ref)}`, the pending team rename included.
+  const agent = reference => page.getByRole('group', { name: `Configure agent ${reference}`, exact: true });
   const teamTab = name => page.getByRole('navigation', { name: 'Project teams', exact: true }).getByRole('button', { name: new RegExp(`^${name}\\b`) });
   async function globalPage() {
     if (!await button('Agents & models').isVisible()) await button('Settings').click();

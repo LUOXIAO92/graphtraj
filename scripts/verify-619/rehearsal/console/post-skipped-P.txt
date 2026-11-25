@@ -1,0 +1,64 @@
+$ VERIFY619_REMOTE=/tmp/claude-501/619/reh/post-skipped/remote.git VERIFY619_GRAFTLING=/tmp/claude-501/619/reh/post-skipped/graftling VERIFY619_GREMOTE=/tmp/claude-501/619/reh/post-skipped/gremote.git VERIFY619_GH=/tmp/claude-501/619/reh/post-skipped/gh/gh VERIFY619_POLL_S=1 VERIFY619_APPEAR_S=10 VERIFY619_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/619-graftling-windows-import to graftling /tmp/claude-501/619/reh/post-skipped/gremote.git and to GraphTraj /tmp/claude-501/619/reh/post-skipped/remote.git (fast-forward only, never force). Login: git credential helper, ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: .github/workflows/desktop-win-adoption.yml push trigger lists agent/619-graftling-windows-import
+PASS: GRAFTLING_REF stays v0.10.1 for other branches
+PASS: step named: Check out graftling at the version GraphTraj declares
+PASS: step named: Fail unless graftling's linked package documents are real
+PASS: step named: Install pinned build dependencies
+PASS: step named: Build desktop and check Windows native settings
+PASS: step named: Package pinned runtime and application
+PASS: step named: Install archive to persistent user directory
+PASS: step named: Exercise actual installed window and native dialogs
+PASS: bundle verifies against /tmp/claude-501/619/reh/post-skipped/graftling; head 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9 (on 82e9d12b7c4a76e4074d405fbd135f3c38f1103a) = workflow graftling SHA
+PASS: agent/619-graftling-windows-import is absent on graftling /tmp/claude-501/619/reh/post-skipped/gremote.git
+PASS: /tmp/claude-501/619/reh/post-skipped/graftling has no local agent/619-graftling-windows-import (P creates it from the bundle)
+$ git -C /tmp/claude-501/619/reh/post-skipped/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/619-graftling-windows-import/scripts/verify-619/graftling-619.bundle refs/heads/agent/619-graftling-windows-import:refs/heads/agent/619-graftling-windows-import
+  From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/619-graftling-windows-import/scripts/verify-619/graftling-619.bundle
+   * [new branch]      agent/619-graftling-windows-import -> agent/619-graftling-windows-import
+PASS: /tmp/claude-501/619/reh/post-skipped/graftling local agent/619-graftling-windows-import = 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9
+$ git -C /tmp/claude-501/619/reh/post-skipped/graftling push /tmp/claude-501/619/reh/post-skipped/gremote.git refs/heads/agent/619-graftling-windows-import:refs/heads/agent/619-graftling-windows-import   (616671870fb2dd9679ea18fdfdbd2f094b1ae0a9)
+  To /tmp/claude-501/619/reh/post-skipped/gremote.git
+   * [new branch]      agent/619-graftling-windows-import -> agent/619-graftling-windows-import
+PASS: graftling /tmp/claude-501/619/reh/post-skipped/gremote.git agent/619-graftling-windows-import = 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9
+$ git push /tmp/claude-501/619/reh/post-skipped/remote.git refs/heads/agent/619-graftling-windows-import:refs/heads/agent/619-graftling-windows-import   (HEAD 717a6fcd3812bcf7a0e443dd9e380e9bee12dba2)
+  To /tmp/claude-501/619/reh/post-skipped/remote.git
+   * [new branch]        agent/619-graftling-windows-import -> agent/619-graftling-windows-import
+PASS: GraphTraj /tmp/claude-501/619/reh/post-skipped/remote.git agent/619-graftling-windows-import = 717a6fcd3812bcf7a0e443dd9e380e9bee12dba2
+observing .github/workflows/desktop-win-adoption.yml for 717a6fcd3812bcf7a0e443dd9e380e9bee12dba2 on LUOXIAO92/graphtraj (appearance bound 10s, completion bound 30s, poll 1s)
+run present after 1s
+  [15:08:45] in_progress -;
+  [15:08:46] completed failure;
+--- results for 717a6fcd3812bcf7a0e443dd9e380e9bee12dba2
+RUN Windows desktop adoption 266 | id 46100000000 | completed | conclusion failure (information only) | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000
+JOB windows-adoption | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000/job/47100000000
+  step  1 | success   | Set up job | must not fail (success or skipped)
+  step  2 | success   | Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262 | must not fail (success or skipped)
+  step  3 | success   | Keep graftling's symbolic links on this runner | must not fail (success or skipped)
+  step  4 | success   | Check out graftling at the version GraphTraj declares | COUNTED
+  step  5 | success   | Fail unless graftling's linked package documents are real | COUNTED
+  step  6 | success   | Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 | must not fail (success or skipped)
+  step  7 | success   | Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 | must not fail (success or skipped)
+  step  8 | success   | Confirm native desktop session | must not fail (success or skipped)
+  step  9 | success   | Install pinned build dependencies | COUNTED
+  step 10 | success   | Build desktop and check Windows native settings | COUNTED
+  step 11 | success   | Package pinned runtime and application | COUNTED
+  step 12 | success   | Install archive to persistent user directory | COUNTED
+  step 13 | failure   | Exercise actual installed window and native dialogs | not counted (pre-D UI script, 620/621)
+  step 14 | success   | Retain installation artifact | not counted (always() upload)
+  step 15 | success   | Retain exact checks and native UI evidence | not counted (always() upload)
+  step 16 | skipped   | Post Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 | must not fail (success or skipped)
+  step 17 | skipped   | Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 | must not fail (success or skipped)
+  step 18 | success   | Post Check out graftling at the version GraphTraj declares | must not fail (success or skipped)
+  step 19 | success   | Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262 | must not fail (success or skipped)
+  step 20 | success   | Complete job | must not fail (success or skipped)
+NOTE: the run concluded failure only because the not-counted UI step 'Exercise actual installed window and native dialogs' is failure
+job log lines naming graftling 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9: 1
+  2026-11-25T00:00:00Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9
+no other workflow triggered for this SHA
+--- tail of: gh run view 46100000000 --repo LUOXIAO92/graphtraj --log-failed
+windows-adoption	stand-in failed step	2026-11-25T00:00:00Z ERROR: stand-in failed log for run 46100000000
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/619-graftling-windows-import/scripts/verify-619/steps.zsh W 717a6fcd3812bcf7a0e443dd9e380e9bee12dba2    (re-observe; no push)
+next: /tmp/claude-501/619/reh/post-skipped/gh/gh run rerun 46100000000 --repo LUOXIAO92/graphtraj --failed    (only if a counted step failed transiently; not run by this step)
+VERDICT 619 P: PASS (all 6 counted steps success; candidate graftling 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9 in the job log; run 46100000000 conclusion failure)
+[exit 0]

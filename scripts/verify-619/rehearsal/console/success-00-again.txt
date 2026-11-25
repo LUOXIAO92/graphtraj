@@ -1,0 +1,28 @@
+$ VERIFY619_REMOTE=/tmp/claude-501/619/reh/success/remote.git VERIFY619_GRAFTLING=/tmp/claude-501/619/reh/success/graftling VERIFY619_GREMOTE=/tmp/claude-501/619/reh/success/gremote.git VERIFY619_GH=/tmp/claude-501/619/reh/success/gh/gh VERIFY619_POLL_S=1 VERIFY619_APPEAR_S=10 VERIFY619_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), ssh key, git credential helper. Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify619-stand-in | gh path: /tmp/claude-501/619/reh/success/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-619 fake)
+    - Active account: true
+PASS: GraphTraj origin is git@github.com:LUOXIAO92/graphtraj.git
+PASS: /tmp/claude-501/619/reh/success/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/619/reh/success/remote.git is used instead of GraphTraj origin
+NOTE: rehearsal remote /tmp/claude-501/619/reh/success/gremote.git is used instead of graftling origin
+PASS: .github/workflows/desktop-win-adoption.yml push trigger lists agent/619-graftling-windows-import
+PASS: GRAFTLING_REF stays v0.10.1 for other branches
+PASS: step named: Check out graftling at the version GraphTraj declares
+PASS: step named: Fail unless graftling's linked package documents are real
+PASS: step named: Install pinned build dependencies
+PASS: step named: Build desktop and check Windows native settings
+PASS: step named: Package pinned runtime and application
+PASS: step named: Install archive to persistent user directory
+PASS: step named: Exercise actual installed window and native dialogs
+PASS: bundle verifies against /tmp/claude-501/619/reh/success/graftling; head 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9 (on 82e9d12b7c4a76e4074d405fbd135f3c38f1103a) = workflow graftling SHA
+PASS: /tmp/claude-501/619/reh/success/graftling local agent/619-graftling-windows-import = bundle head
+PASS: graftling /tmp/claude-501/619/reh/success/gremote.git already has agent/619-graftling-windows-import at the bundle head
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/619-graftling-windows-import/scripts/verify-619/steps.zsh W 717a6fcd3812bcf7a0e443dd9e380e9bee12dba2
+STOP: GraphTraj /tmp/claude-501/619/reh/success/remote.git already has agent/619-graftling-windows-import at HEAD 717a6fcd3812bcf7a0e443dd9e380e9bee12dba2; nothing to push. Observe instead with the next command.
+[exit 1]

@@ -1,0 +1,6 @@
+$ VERIFY619_GRAFTLING=/tmp/claude-501/619/reh/wstop/graftling (an empty repository, so the bundle's prerequisite 82e9d12 is missing) VERIFY619_REMOTE=/tmp/claude-501/619/reh/success/remote.git VERIFY619_GH=/tmp/claude-501/619/reh/success/gh/gh zsh steps.zsh W
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+  error: Repository lacks these prerequisite commits:
+  error: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a 
+STOP: the bundle does not verify against /tmp/claude-501/619/reh/wstop/graftling
+[exit 1]

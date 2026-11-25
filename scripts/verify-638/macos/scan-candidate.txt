@@ -1,0 +1,4 @@
+claude/execution.py:1161: Popen subprocess.Popen(argv, cwd=self.request['worktree_path'], env=environment, stdin=subprocess.PIPE, stdout=subpr
+codex/app_server.py:248: open self._websocket.open()
+dsh/service.py:97: Popen subprocess.Popen([*argv, '--no-open', '--port', '0'], cwd=self.cwd, env=self.environment, stdin=subprocess.DEV
+pi/execution.py:585: Popen subprocess.Popen(argv, cwd=self.request['worktree_path'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PI

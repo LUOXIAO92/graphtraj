@@ -1,0 +1,75 @@
+$ VERIFY638_GRAFTLING=/tmp/claude-501/w638/rehearsal/guard/graftling VERIFY638_GREMOTE=/tmp/claude-501/w638/rehearsal/guard/gremote.git VERIFY638_GH=/tmp/claude-501/w638/rehearsal/guard/gh/gh VERIFY638_EXPECTED=/tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt VERIFY638_EVIDENCE=/tmp/claude-501/w638/rehearsal/guard/evidence VERIFY638_POLL_S=1 VERIFY638_APPEAR_S=10 VERIFY638_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify638-stand-in | gh path: /tmp/claude-501/w638/rehearsal/guard/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-638 fake)
+    - Active account: true
+PASS: /tmp/claude-501/w638/rehearsal/guard/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/w638/rehearsal/guard/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/w638/rehearsal/guard/graftling; head 6ac51d89039aa742c8870e7a71596903ae424b71 on base defad1db083e911900cbea1cb0ef165e6a66d322
+--- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
+  6ac51d8 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows workflow: run on the 638 branch; the suite's temporary directory has a non-ASCII name (638)
+  cc0f13b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows paths, links and encoding (638)
+PASS: author and committer are the noreply identity
+--- files changed since defad1db083e911900cbea1cb0ef165e6a66d322:
+   .github/workflows/windows.yml                      | 13 +++-
+   src/graftling/claude-plugin/hooks/host_context.mjs |  6 +-
+   src/graftling/claude/display.py                    |  2 +
+   src/graftling/claude/driver.py                     |  4 +-
+   src/graftling/claude/execution.py                  |  7 ++-
+   src/graftling/claude/host.py                       |  9 ++-
+   src/graftling/claude/host_context.mjs              |  6 +-
+   src/graftling/claude/settings.py                   |  9 ++-
+   src/graftling/claude/support.py                    |  2 +-
+   src/graftling/cli.py                               |  2 +
+   src/graftling/codex/host.py                        |  8 ++-
+   src/graftling/codex/managed_session.py             |  7 ++-
+   src/graftling/connection.py                        |  8 +--
+   src/graftling/discovery.py                         | 10 ++-
+   src/graftling/dsh/execution.py                     |  3 +
+   src/graftling/dsh/host.py                          |  2 +
+   src/graftling/dsh/plugin.mjs                       | 13 +++-
+   src/graftling/dsh/settings.py                      |  2 +-
+   src/graftling/links.py                             | 43 +++++++++++++
+   src/graftling/mcp.py                               |  2 +
+   src/graftling/member_processes.py                  |  2 +-
+   src/graftling/models.py                            | 11 +++-
+   src/graftling/pi/execution.py                      | 18 ++++--
+   src/graftling/pi/extension.mjs                     | 13 +++-
+   src/graftling/pi/host.py                           |  4 +-
+   src/graftling/stdio.py                             | 20 ++++++
+   src/graftling/tool_descendants.py                  |  6 +-
+   tests/test_agents_connections_presets.py           | 14 +++--
+   tests/test_child_server_name_551.py                |  4 +-
+   tests/test_claude_archive_batches_468.py           | 15 ++++-
+   tests/test_dsh_plugin_install_python.py            |  3 +-
+   tests/test_dsh_providers_608.py                    |  3 +
+   tests/test_dsh_standalone_host.py                  | 12 ++--
+   tests/test_pi_standalone_host.py                   | 28 +++++----
+   tests/test_tool_name_591.py                        |  2 +-
+   tests/test_windows_symbolic_links_638.py           | 71 ++++++++++++++++++++++
+   36 files changed, 312 insertions(+), 72 deletions(-)
+PASS: pyproject.toml, pytest.ini, the per-file driver, tests/posix_only.py and tests/conftest.py unchanged since defad1db083e911900cbea1cb0ef165e6a66d322
+--- .github/workflows/windows.yml at 6ac51d89039aa742c8870e7a71596903ae424b71 against defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: the only removed line is the push branches line
+PASS: push branches: base list plus agent/638-graftling-windows-paths-encoding
+PASS: the other added lines are exactly the non-ASCII temporary directory setup
+PASS: step names unchanged: Keep symbolic links on this runner | Check out the commit under test | Fail unless the linked package documents are symbolic links | Set up Node 22.18.0 x64 | Set up Python 3.13.7 x64 | Install graftling and pinned test tools | Show runner, Python and pytest versions | Run the graftling test suite | Retain JUnit results
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: TEMP is set before .github/run_test_files.py runs
+PASS: PYTHONUTF8 stays 1
+PASS: /tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt parses: 2 expected Windows failures and 0 expected hangs (W4 (636) 2), 19 allowed environment skips
+STOP: /tmp/claude-501/w638/rehearsal/guard/graftling has local agent/638-graftling-windows-paths-encoding at daa2bc662071542f15271db7d0a8ecd84747d7ff, not an ancestor of the bundle head 6ac51d89039aa742c8870e7a71596903ae424b71; never overwrite. Inspect: git -C /tmp/claude-501/w638/rehearsal/guard/graftling log --oneline -3 agent/638-graftling-windows-paths-encoding
+VERDICT 638 00: STOP
+[exit 1]

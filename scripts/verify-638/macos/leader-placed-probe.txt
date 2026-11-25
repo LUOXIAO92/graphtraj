@@ -1,0 +1,8 @@
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/.scratch/graftling-638/tests/test_zz_leader_placed_probe.py:279: assert not True
+E   graftling.tool.AgentsError: /private/tmp/claude-501/pytest-of-luoxiao/pytest-552/test_one_host_registers_driver0/config.yml:5: connections.work-claude.home: expected an absolute path
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/.scratch/graftling-638/src/graftling/control.py:1147: graftling.tool.AgentsError: /private/tmp/claude-501/pytest-of-luoxiao/pytest-552/test_one_host_registers_driver0/config.yml:5: connections.work-claude.home: expected an absolute path
+=========================== short test summary info ============================
+FAILED tests/test_zz_leader_placed_probe.py::test_explicit_values_equal_to_the_preset_are_accepted
+FAILED tests/test_zz_leader_placed_probe.py::test_discovery_supplies_candidates_and_efforts
+FAILED tests/test_zz_leader_placed_probe.py::test_one_host_registers_drivers_for_several_runtimes
+3 failed in 0.14s

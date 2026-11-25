@@ -1,0 +1,10 @@
+$ python check638.py wfdiff windows-base.yml windows-head.yml agent/638-graftling-windows-paths-encoding 'Run the graftling test suite' 'Retain JUnit results'
+PASS: the only removed line is the push branches line
+PASS: push branches: base list plus agent/638-graftling-windows-paths-encoding
+PASS: the other added lines are exactly the non-ASCII temporary directory setup
+PASS: step names unchanged: Keep symbolic links on this runner | Check out the commit under test | Fail unless the linked package documents are symbolic links | Set up Node 22.18.0 x64 | Set up Python 3.13.7 x64 | Install graftling and pinned test tools | Show runner, Python and pytest versions | Run the graftling test suite | Retain JUnit results
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: TEMP is set before .github/run_test_files.py runs
+PASS: PYTHONUTF8 stays 1
+[exit 0]

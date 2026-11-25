@@ -1,0 +1,5 @@
+# EncodingWarning origins in src/graftling, candidate (graftling 6ac51d89): every warning location pytest's warnings summary attributes to src/graftling/, counted
+# command (from the checkout): python -X warn_default_encoding -m pytest -p no:cacheprovider -q -W always::EncodingWarning
+# result: 929 passed, 21 skipped, 2537 warnings in 247.30s (0:04:07) / exit 0
+   1 src/graftling/claude/execution.py:1161
+   1 src/graftling/dsh/service.py:97

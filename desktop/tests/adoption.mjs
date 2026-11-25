@@ -438,21 +438,31 @@ async function usageHistoryAdoption() {
   await assert.rejects(fs.access(path.join(os.homedir(), '.graphtraj/projects.json')), { code: 'ENOENT' });
   let handle;
   let page;
+  const dashboard = () => page.getByRole('region', { name: 'Usage dashboard', exact: true });
   const selectDates = async (from, to) => {
-    await page.getByLabel('Start date', { exact: true }).fill(from);
-    await page.getByLabel('End date', { exact: true }).fill(to);
+    await dashboard().getByLabel('Start date', { exact: true }).fill(from);
+    await dashboard().getByLabel('End date', { exact: true }).fill(to);
   };
-  const table = caption => page.getByRole('table', { name: caption, exact: true });
-  const inputValue = async (caption, name) => table(caption).getByRole('row').filter({ hasText: name })
-    .locator('td').nth(1).evaluate(cell => cell.firstChild.textContent.replaceAll(',', ''));
-  const waitInput = async (caption, name, value) => {
+  // D has no breakdown/trend/comparison input tables (UsageDashboard.tsx). Exact input is
+  // the dated chart's titles ('<date>: <n> input tokens'); per-project comparison cells use
+  // the totals format (compactNumber, UsageDashboard.tsx:78; 'Unknown' when unreported).
+  const chartInputs = async () => Object.fromEntries((await dashboard().getByRole('img', { name: /^Reported input by date/ })
+    .locator('title').evaluateAll(titles => titles.map(title => title.textContent)).catch(() => []))
+    .map(title => title.match(/^(.+): (.+) input tokens$/).slice(1)).map(([day, value]) => [day, value.replaceAll(/[,.\s]/g, '')]));
+  const chartTotal = async () => String(Object.values(await chartInputs()).reduce((sum, value) => sum + Number(value), 0));
+  const comparison = async root => dashboard().getByRole('table', { name: 'Project comparison', exact: true })
+    .getByRole('row').filter({ has: page.locator(`span[title="${root}"]`) }).getByRole('cell').first().evaluate(cell => cell.firstChild.textContent);
+  const expectedCompact = value => value === 'Unknown' ? 'Unknown' : compactNumber(value);
+  const waitValue = async (read, value) => {
     const until = Date.now() + 30000;
     while (Date.now() < until) {
-      if (await inputValue(caption, name).catch(() => '') === String(value)) return;
+      if (await read().catch(() => '') === String(value)) return;
       await page.waitForTimeout(250);
     }
-    assert.equal(await inputValue(caption, name), String(value));
+    assert.equal(await read(), String(value));
   };
+  const modelButton = name => dashboard().getByRole('button', { name: new RegExp(`^${name.replaceAll('.', '\\.')}\\b`) });
+  const noRecords = () => dashboard().getByRole('heading', { name: /^(No dated usage in this view|Choose a valid date range)$/ });
   try {
     handle = await launch({}, [`--project=${first}`]);
     page = await handle.firstWindow();
@@ -462,17 +472,16 @@ async function usageHistoryAdoption() {
     await handle.evaluate(({ dialog }, folder) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
     }, second);
+    await projectsView(page);
     await page.getByRole('button', { name: 'Add project', exact: true }).click();
     await projectEntry(page, 'usage-second').waitFor();
     await projectEntry(page, 'usage-first').click();
     // Selection saves asynchronously; both retained project monitors have a Task 1.
     // Require this project's title so click cannot latch onto the outgoing monitor.
-    const firstNode = page.locator('.monitor-page:visible .react-flow__node[data-id="1"]')
-      .filter({ has: page.getByText('usage first', { exact: true }) });
-    await firstNode.click();
+    await page.locator('.monitor-page:visible').getByRole('button', { name: 'usage first', exact: true }).click();
     // The collapsed Task detail shows the roster; chat readers activate on expansion.
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
-    const column = page.locator('.monitor-page:visible')
+    const column = page.getByRole('region', { name: 'Expanded agent conversations', exact: true })
       .getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
     const lastMessage = native.events.filter(event => event.kind === 'message').at(-1);
     assert.ok(lastMessage?.text);
@@ -480,45 +489,49 @@ async function usageHistoryAdoption() {
     await column.evaluate(element => { element.scrollTop = 200; element.dispatchEvent(new Event('scroll')); });
     const position = await monitorPosition(page);
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();
-    assert.equal(await page.getByLabel('Start date').inputValue(), defaultDates().from);
-    assert.equal(await page.getByLabel('End date').inputValue(), localDate(today));
-    await waitInput('Model breakdown', 'gpt-5.3-codex', 3000);
-    await page.locator('.usage-filters select').nth(1).selectOption('undated@x2');
-    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
-    await page.locator('.usage-filters select').nth(1).selectOption('');
+    assert.equal(await dashboard().getByLabel('Start date').inputValue(), defaultDates().from);
+    assert.equal(await dashboard().getByLabel('End date').inputValue(), localDate(today));
+    await modelButton('gpt-5.3-codex').click();
+    await waitValue(chartTotal, 3000);
+    await modelButton('All models').click();
+    await dashboard().getByLabel('Agent', { exact: false }).selectOption('undated@x2');
+    await noRecords().waitFor();
+    assert.equal(await dashboard().locator('.d-dated-records > div').count(), 0);
+    await dashboard().getByLabel('Agent', { exact: false }).selectOption('');
     await selectDates(localDate(today), localDate(today));
-    await waitInput('Model breakdown', 'gpt-5.3-codex', 1000);
-    assert.match(await table('Model breakdown').innerText(), /0\.001925/);
-    await page.locator('.usage-filters').getByLabel('Task', { exact: false }).selectOption('1');
-    await page.locator('.usage-filters select').nth(1).selectOption('research@x1');
-    await page.locator('.usage-filters select').nth(2).selectOption('gpt-5.3-codex');
-    await waitInput('Daily trend (local dates)', localDate(today), 1000);
-    assert.doesNotMatch(await page.locator('.usage-dashboard').innerText(), /second-only|unpriced-controlled-model/);
+    await modelButton('gpt-5.3-codex').click();
+    await waitValue(chartTotal, 1000);
+    assert.match(await modelButton('gpt-5.3-codex').innerText(), /0\.001925/);
+    await dashboard().getByLabel('Task', { exact: false }).selectOption('1');
+    await dashboard().getByLabel('Agent', { exact: false }).selectOption('research@x1');
+    await modelButton('gpt-5.3-codex').click();
+    await waitValue(async () => (await chartInputs())[localDate(today)], 1000);
+    assert.doesNotMatch(await dashboard().innerText(), /second-only|unpriced-controlled-model/);
     facts.screenshots.push(await shot(page, 'usage-project-today.png'));
     await selectDates(localDate(today), localDate(yesterday));
-    const invalidAlert = page.locator('.usage-dashboard').getByRole('alert');
+    const invalidAlert = dashboard().getByRole('alert');
     await invalidAlert.waitFor({ state: 'visible' });
     assert.ok((await invalidAlert.innerText()).trim());
-    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
-    assert.equal(await table('Daily trend (local dates)').locator('tbody tr').count(), 0);
+    await noRecords().waitFor();
+    assert.deepEqual(await chartInputs(), {});
     await selectDates('2099-01-01', '2099-01-01');
-    assert.equal(await table('Model breakdown').locator('tbody tr').count(), 0);
-    assert.equal(await table('Daily trend (local dates)').locator('tbody tr').count(), 0);
+    await noRecords().waitFor();
+    assert.deepEqual(await chartInputs(), {});
     facts.screenshots.push(await shot(page, 'usage-no-records.png'));
-    await page.getByRole('button', { name: 'Global usage', exact: true }).click();
-    await waitInput('Project comparison', first, 3000);
-    await waitInput('Project comparison', second, 500);
-    assert.equal(await page.locator('.usage-filters select').count(), 0);
-    assert.equal(await table('Model breakdown').count(), 0);
-    assert.doesNotMatch(await page.locator('.usage-dashboard').innerText(), /research@x1|second-only|unpriced-controlled-model/);
+    await page.getByRole('button', { name: 'All project usage', exact: true }).click();
+    await waitValue(() => comparison(first), expectedCompact(3000));
+    await waitValue(() => comparison(second), expectedCompact(500));
+    assert.equal(await dashboard().getByRole('combobox').count(), 0);
+    assert.equal(await dashboard().getByText('MODELS IN THIS PROJECT', { exact: true }).count(), 0);
+    assert.doesNotMatch(await dashboard().innerText(), /research@x1|second-only|unpriced-controlled-model/);
     await selectDates(localDate(today), localDate(today));
-    await waitInput('Project comparison', first, 1000);
-    await waitInput('Project comparison', second, 500);
-    await waitInput('Daily trend (local dates)', localDate(today), 1500);
+    await waitValue(() => comparison(first), expectedCompact(1000));
+    await waitValue(() => comparison(second), expectedCompact(500));
+    await waitValue(async () => (await chartInputs())[localDate(today)], 1500);
     facts.screenshots.push(await shot(page, 'usage-global-today.png'));
     await selectDates(localDate(yesterday), localDate(yesterday));
-    await waitInput('Project comparison', first, 2000);
-    assert.equal(await inputValue('Project comparison', second), 'Unknown');
+    await waitValue(() => comparison(first), expectedCompact(2000));
+    assert.equal(await comparison(second), 'Unknown');
     await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     assert.deepEqual(await monitorPosition(page), position);
     step('Installed project/global date totals, daily trends, internal isolation, unknown-time and empty/reversed ranges; Monitor reading position preserved.');
@@ -529,11 +542,13 @@ async function usageHistoryAdoption() {
     handle = await launch();
     page = await handle.firstWindow();
     page.setDefaultTimeout(30000);
-    await page.getByRole('button', { name: 'Global usage', exact: true }).click();
+    await page.getByRole('button', { name: 'All project usage', exact: true }).click();
     await selectDates(localDate(today), localDate(today));
-    await waitInput('Project comparison', first, 1000);
-    await waitInput('Project comparison', second, 500);
-    const gap = page.locator('.usage-dashboard details[open] li').first();
+    await waitValue(() => comparison(first), expectedCompact(1000));
+    await waitValue(() => comparison(second), expectedCompact(500));
+    // Coverage notices follow the observation status in the history disclosure (UsageDashboard.tsx footer).
+    await dashboard().locator('.d-usage-history-note > details > summary').click();
+    const gap = dashboard().locator('.d-usage-history-note > details > p[role="status"] ~ p').first();
     await gap.waitFor({ state: 'visible' });
     assert.ok((await gap.innerText()).trim());
     const history = path.join(os.homedir(), '.graphtraj/usage-history');
@@ -543,9 +558,11 @@ async function usageHistoryAdoption() {
     facts.screenshots.push(await shot(page, 'usage-reopened-without-source.png'));
     await fs.rename(trace + '.retained-for-test', trace);
     await page.getByRole('button', { name: 'Reconnect usage', exact: true }).click();
-    await waitInput('Project comparison', first, 1000);
+    await waitValue(() => comparison(first), expectedCompact(1000));
     await page.waitForTimeout(3500);
-    assert.equal(await inputValue('Project comparison', first), '1000');
+    assert.equal(await comparison(first), expectedCompact(1000));
+    // The exact global input for the day stays first 1000 + second 500: no replay duplication.
+    assert.equal((await chartInputs())[localDate(today)], '1500');
     step('Reopened installed app retained dated history without the original Trace; restoring/replaying it did not duplicate totals. Saved files contain normalized usage only.');
     facts.usageHistory = { firstToday: 1000, firstYesterday: 2000, secondToday: 500,
       officialEquivalentTodayUSD: 0.001925, history, unknownTimeExcluded: true };
@@ -583,25 +600,28 @@ async function settingsOnlyAdoption() {
     await projectEntry(page, 'settings-first').waitFor();
     await handle.evaluate(({ dialog }, folder) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
-      globalThis.__gtRealMessageBox = dialog.showMessageBox;
     }, second);
+    // D saves directly (045ef3a4): any message box is a regression and fails that save.
+    await guardApprovals(handle);
+    await projectsView(page);
     await page.getByRole('button', { name: 'Add project', exact: true }).click();
     await projectEntry(page, 'settings-second').waitFor();
     await projectEntry(page, 'settings-first').click();
-    await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]')
-      .filter({ has: page.getByText('settings first', { exact: true }) }).click();
+    await page.locator('.monitor-page:visible').getByRole('button', { name: 'settings first', exact: true }).click();
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
-    const column = page.locator('.monitor-page:visible').getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
+    const column = page.getByRole('region', { name: 'Expanded agent conversations', exact: true })
+      .getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
     await column.getByText(/Controlled retained settings-monitor message 69/).waitFor();
     await column.evaluate(element => { element.scrollTop = 200; element.dispatchEvent(new Event('scroll')); });
     const position = await monitorPosition(page);
     const projects = await page.evaluate(() => window.graphtraj.projects());
     const firstId = projects.projects.find(project => project.root === first).id;
     const secondId = projects.projects.find(project => project.root === second).id;
-    const decide = async response => handle.evaluate(({ dialog }, response) => {
-      dialog.showMessageBox = async () => ({ response, checkboxChecked: false });
-    }, response);
-    facts.settings = await settingsAdoption({ page, decide, firstId, secondId,
+    const checkSave = async label => {
+      assert.equal(await approvalDialogs(handle), 0, `${label}: D saves directly; no approval dialog may appear`);
+      assert.ok(!(await page.evaluate(() => document.body.innerText)).includes(secret), `${label}: no credential value in the window`);
+    };
+    facts.settings = await settingsAdoption({ page, firstId, secondId, checkSave,
       runtimeHome: path.join(isolatedHome, 'codex'), step,
       shot: async name => { facts.screenshots.push(await shot(page, name)); },
     });
@@ -609,38 +629,41 @@ async function settingsOnlyAdoption() {
     assert.match(await fs.readFile(rolesFile, 'utf8'), /report.md/);
     assert.deepEqual(changed(secondBefore, await snapshot(second)), []);
 
-    // Restore the actual host dialog and exercise the global review path in
-    // this same installed window. Failure is retained, never retried in a new window.
-    await handle.evaluate(({ dialog }) => { dialog.showMessageBox = globalThis.__gtRealMessageBox; });
+    // The global write boundary in this same installed window: direct Save and Cancel
+    // (no approval sheet since 045ef3a4). Failure is retained, never retried in a new window.
+    if (!await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible()) {
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    }
     await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
-    await page.getByRole('button', { name: 'Reload connections', exact: true }).waitFor();
-    for (const [provider, answer] of [['native-approved', 'Save settings'], ['native-declined', 'Cancel']]) {
+    await page.getByRole('navigation', { name: 'Runtime provider model hierarchy', exact: true }).waitFor();
+    for (const [provider, answer] of [['native-approved', 'Save'], ['native-declined', 'Cancel']]) {
       const before = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
-      await page.getByLabel('Provider name', { exact: true }).fill(provider);
-      await page.getByRole('button', { name: 'Add Provider', exact: true }).click();
-      await page.getByRole('button', { name: 'Preview connections', exact: true }).click();
-      await page.getByRole('button', { name: 'Save connections', exact: true }).click();
-      await page.waitForTimeout(2500);
-      const outcome = uiAutomation(['tell application "System Events"', 'tell process "GraphTraj"',
-        `click button "${answer}" of sheet 1 of window 1`, 'end tell', 'end tell']);
-      facts.nativeDialogs.push({ name: `Global approval: ${answer}`, required: true, ...outcome });
+      await page.locator('.library-select').filter({ hasText: 'shared' }).first().click();
+      await page.locator('.d-library-detail-heading').getByRole('button', { name: 'Add provider', exact: true }).click();
+      await page.getByRole('dialog').getByLabel('Provider name', { exact: true }).fill(provider);
+      await page.getByRole('dialog').getByRole('button', { name: 'Add provider', exact: true }).click();
+      await page.getByRole('button', { name: answer, exact: true }).click();
+      const outcome = { ok: await approvalDialogs(handle) === 0, command: `click ${answer}; count dialog.showMessageBox`,
+        output: `approval dialogs ${await approvalDialogs(handle)}` };
+      facts.nativeDialogs.push({ name: `Global direct ${answer}`, required: true, ...outcome });
       assert.ok(outcome.ok, outcome.output);
-      if (answer === 'Save settings') {
-        await page.getByRole('status').getByText('Connections saved.', { exact: true }).waitFor();
+      if (answer === 'Save') {
+        await page.getByRole('status').filter({ hasText: 'Connections saved.' }).waitFor();
         const saved = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
         assert.ok(Object.hasOwn(saved.catalog.runtimes.shared.providers, provider));
       } else {
-        await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
+        await page.getByText('All changes saved', { exact: true }).filter({ visible: true }).waitFor();
         assert.equal((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).revision, before.revision);
       }
     }
     facts.settings.global = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
     facts.screenshots.push(await shot(page, '11-native-global-refusal.png'));
-    await page.getByRole('button', { name: 'Global usage', exact: true }).click();
-    await page.getByRole('heading', { name: 'Global usage', exact: true }).waitFor();
+    // D names the merged global view 'All project usage' with heading 'Usage across projects' (UsageDashboard.tsx).
+    await page.getByRole('button', { name: 'All project usage', exact: true }).click();
+    await page.getByRole('heading', { name: 'Usage across projects', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     assert.deepEqual(await monitorPosition(page), position);
-    step('Real global native dialogs approved/refused writes; merged Global usage routing is present; returning from Settings retained monitor selection, viewport and paused reading position.');
+    step('Global direct Save wrote and Cancel discarded with no approval dialog; merged global usage routing is present; returning from Settings retained monitor selection, viewport and paused reading position.');
 
     await bounded('close before Settings readback', handle.close(), 15000);
     handle = await launch({ GRAPHTRAJ_ADOPTION_SECRET: secret });
@@ -652,7 +675,7 @@ async function settingsOnlyAdoption() {
     const rendered = await page.evaluate(() => document.body.innerText);
     assert.ok(!JSON.stringify(facts).includes(secret) && !rendered.includes(secret));
     facts.nativeEvidence = { reused: ['#284 actual Codex/Pi/DSH Runtime evidence (parent retained)', '#286 macOS 38089086556 accepted usage/history', '#285 accepted monitor/index'],
-      controlled: 'Disposable project/Trace fixtures and deterministic host replies for draft scenarios; real OS global dialogs separately verified above. No model execution.' };
+      controlled: 'Disposable project/Trace fixtures; direct Save/Cancel with a counting approval-dialog stub (zero expected). No model execution.' };
     facts.passed = true;
     step('Reopened installed app read back final global connections and project roles. Predecessor execution/usage evidence is reused.');
   } finally {

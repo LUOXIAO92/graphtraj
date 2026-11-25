@@ -98,10 +98,14 @@ def _installation_problem(executable: str = sys.executable, scripts: Optional[Pa
 
     Hosted agents find GraphTraj through the ``graftling.hosts`` entry point,
     and fixtures run ``graphtraj-session`` beside the interpreter; a .pth that
-    only puts the checkout on sys.path gives neither.
+    only puts the checkout on sys.path gives neither. Without ``scripts`` the
+    command may also sit in the interpreter's scripts directory, as
+    ``<prefix>\\Scripts\\graphtraj-session.exe`` does on Windows (618).
     """
     source = (PROJECT_ROOT / "src").resolve()
-    scripts = Path(executable).parent if scripts is None else scripts
+    folders = [Path(executable).parent] if scripts is None else [scripts]
+    if scripts is None and Path(sysconfig.get_path("scripts")) not in folders:
+        folders.append(Path(sysconfig.get_path("scripts")))
     missing = []
     probe = subprocess.run([executable, "-I", "-c", _HOSTS], capture_output=True, text=True, timeout=60)
     origins = probe.stdout.splitlines() if probe.returncode == 0 else []
@@ -110,8 +114,9 @@ def _installation_problem(executable: str = sys.executable, scripts: Optional[Pa
             "probe failed: " + probe.stderr.strip()[-300:])
         missing.append("the graphtraj distribution metadata (entry point graftling.hosts: graphtraj "
                        "under {0}; found {1})".format(source, found))
-    if not (scripts / "graphtraj-session").is_file():
-        missing.append("the graphtraj-session command in {0}".format(scripts))
+    if not any((folder / name).is_file() for folder in folders
+               for name in ("graphtraj-session", "graphtraj-session.exe")):
+        missing.append("the graphtraj-session command in {0}".format(" or ".join(map(str, folders))))
     if not missing:
         return None
     return (

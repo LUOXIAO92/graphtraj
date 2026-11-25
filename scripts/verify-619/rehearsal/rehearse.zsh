@@ -33,6 +33,8 @@ fresh success; step success success-00.txt 00; step success success-P.txt P; ste
 rm -f $S/success/gh/polls; step success success-W.txt W
 fresh counted-fail; step counted-fail counted-fail-P.txt P
 fresh missing; step missing missing-P.txt P
+fresh post-skipped; step post-skipped post-skipped-P.txt P
+fresh other-fail; step other-fail other-fail-P.txt P
 APPEAR=4; fresh timeout; step timeout timeout-P.txt P; APPEAR=10
 # Guard: a local 619 branch in the graftling clone that differs from the bundle head stops 00 (never overwritten).
 fresh guard; git -C $S/guard/graftling branch -q agent/619-graftling-windows-import 82e9d12; step guard guard-local-00.txt 00

@@ -7,6 +7,10 @@ Called as: python fakegh.py <state-dir> <gh arguments...>. <state-dir>/scenario 
   counted-fail  'Build desktop and check Windows native settings' fails, later steps are skipped; FAIL.
   missing       'Install archive to persistent user directory' is absent from the step list; FAIL.
   timeout       only another workflow ever runs for the SHA; appearance timeout, FAIL.
+  post-skipped  as success, but the setup-python and setup-node post steps are skipped (their post-if is
+                success(), and the UI step failed); expected verdict PASS.
+  other-fail    as success, but a step that is neither counted, the UI step nor an upload fails
+                ('Post Run actions/checkout@...', after every counted step, so only that rule can fail it); FAIL.
 Never contacts GitHub.
 """
 import json
@@ -38,7 +42,10 @@ STEPS    = [
     "Exercise actual installed window and native dialogs",
     "Retain installation artifact",
     "Retain exact checks and native UI evidence",
+    # Post steps run in reverse order of their main steps.
     "Post Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1",
+    "Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+    "Post Check out graftling at the version GraphTraj declares",
     "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
     "Complete job",
 ]
@@ -47,7 +54,7 @@ UI = "Exercise actual installed window and native dialogs"
 
 def steps() -> list[dict]:
     """Return the job's step list for this scenario."""
-    names, failed = list(STEPS), None
+    names = list(STEPS)
     if scenario == "missing":
         names.remove("Install archive to persistent user directory")
     failed = "Build desktop and check Windows native settings" if scenario == "counted-fail" else UI
@@ -59,6 +66,10 @@ def steps() -> list[dict]:
             conclusion = "skipped"
         else:
             conclusion = "success"
+        if scenario == "post-skipped" and name.startswith(("Post Run actions/setup-python", "Post Run actions/setup-node")):
+            conclusion = "skipped"
+        if scenario == "other-fail" and name.startswith("Post Run actions/checkout"):
+            conclusion = "failure"
         result.append({"name": name, "status": "completed", "conclusion": conclusion, "number": number})
     return result
 

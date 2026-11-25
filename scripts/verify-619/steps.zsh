@@ -31,8 +31,9 @@
 #   W   Observe only (no push), same output, for the SHA given as 2nd argument or the remote branch head.
 #       Login: gh login. Dialog: none. Network: GitHub.
 # VERDICT (P and W): PASS only when, in the windows-adoption job, every COUNTED step is present with conclusion
-# success, the job log names the candidate graftling SHA, and every other step is success, except the UI step
-# (not counted: its adoption scripts target the pre-D UI, Tasks 620/621) and the always() upload steps.
+# success, the job log names the candidate graftling SHA, and no other step failed: every other step is success or
+# skipped (setup-python/setup-node post steps run only on success(), so a failed UI step skips them), except the UI
+# step (not counted: its adoption scripts target the pre-D UI, Tasks 620/621) and the always() upload steps.
 # Credentials: at start the script unsets every exported credential-class variable (a '_'-separated part ending in
 # KEY, TOKEN, SECRET(S), PASSWORD or CREDENTIAL(S); GIT_CONFIG_KEY_<n> excepted) and every ANTHROPIC_*,
 # CLAUDE_CODE_USE_*, *_BASE_URL and GRAFTLING_CONNECTION variable, printing the removed NAMES. Every started process
@@ -132,10 +133,10 @@ for j in jobs:
         if name in counted: mark = "COUNTED"
         elif name == ui: mark = "not counted (pre-D UI script, 620/621)"
         elif name in uploads: mark = "not counted (always() upload)"
-        else: mark = "must be success"
+        else: mark = "must not fail (success or skipped)"
         print("  step %2s | %-9s | %s | %s" % (s.get("number"), concl, name, mark))
         if name in counted or name == ui or name in uploads: continue
-        if concl != "success": problems.append("step %r is %s" % (name, concl))
+        if concl not in ("success", "skipped"): problems.append("step %r is %s" % (name, concl))
 if job is None:
     problems.append("no windows-adoption job")
 else:
@@ -143,7 +144,7 @@ else:
     for name in counted:
         if name not in seen: problems.append("counted step %r is missing" % name)
         elif seen[name] != "success": problems.append("counted step %r is %s" % (name, seen[name]))
-    others = [n for n, c in seen.items() if c != "success" and n not in uploads]
+    others = [n for n, c in seen.items() if c not in ("success", "skipped") and n not in uploads]
     if cfg["run_conclusion"] == "failure" and others == [ui]:
         print("NOTE: the run concluded failure only because the not-counted UI step %r is %s" % (ui, seen[ui]))
 print("JUDGE", "FAIL" if problems else "PASS", "; ".join(problems) or "all %d counted steps success" % len(counted))'
@@ -329,7 +330,7 @@ P)
   observe $head P
   ;;
 W)
-  check_bundle > /dev/null
+  check_bundle
   local sha=${2:-$(remote_sha)}
   checked $sha
   say "[W] Observe only (no push) the run for ${sha:-<none>}. Login: gh login. Dialog: none. Network: GitHub."

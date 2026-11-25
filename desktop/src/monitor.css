@@ -72,9 +72,14 @@
 .d-inspector-team .shelf-team-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .d-inspector-team .shelf-team-heading .section-label { padding: 0; color: var(--faint); font-size: var(--fs-xs); letter-spacing: .06em; }
 .d-inspector-team .shelf-team-heading small { color: var(--faint); font-size: var(--fs-xs); }
-.d-task-inspector .member-pills { flex-direction: column; flex-wrap: nowrap; gap: 2px; max-height: none; overflow: visible; }
-.d-task-inspector .member-pills > button { width: 100%; padding: 7px var(--sp-2); border: 0; background: transparent; }
-.d-task-inspector .member-pills > button:hover { background: var(--surface-alt); }
+/* The inspector lists members as full-width rows (mockup 01 .member). reader.css, loaded later, styles
+ * `.d-task-shelf .member-pills` as pills for the reading index; these rules are more specific on purpose. */
+.d-task-shelf.d-task-inspector .member-pills { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 2px; max-height: none; overflow: visible; }
+.d-task-shelf.d-task-inspector .member-pills > button { width: 100%; height: auto; min-height: 40px; padding: 6px var(--sp-2); gap: 10px; border: 0; border-radius: var(--r-md); background: transparent; }
+.d-task-shelf.d-task-inspector .member-pills > button:hover, .d-task-shelf.d-task-inspector .member-pills > button.selected { background: var(--surface-alt); }
+.d-task-shelf.d-task-inspector .member-pills > button > span:nth-child(2) { flex: 1; flex-direction: column; align-items: flex-start; gap: 0; }
+.d-task-shelf.d-task-inspector .member-pills strong { max-width: none; font-size: var(--fs-sm); }
+.d-task-shelf.d-task-inspector .member-pills small { color: var(--faint); font-size: var(--fs-xs); }
 .d-inspector-team > .ui-state { margin-top: var(--sp-1); }
 .d-inspector-foot { display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--border-ui); flex-shrink: 0; }
 .d-inspector-foot > .button { flex: 1; }

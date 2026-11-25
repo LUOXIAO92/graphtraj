@@ -353,6 +353,10 @@ role_tree:
     await colours('org tree', [['.d-team-flow .d-org-node:not(.selected)', 'backgroundColor', '--surface'],
       ['.d-team-flow .d-org-node:not(.selected)', 'color', '--ink'],
       ['.d-team-flow .react-flow__controls-button', 'backgroundColor', '--surface']]);
+    // A selected agent shows its properties (V8); the other org cards stay unselected for the colour check above.
+    await page.locator('.d-team-flow .react-flow__node').first().click();
+    await page.getByLabel('Agent name', { exact: true }).filter({ visible: true }).waitFor();
+    await page.waitForTimeout(400);
     await shot('teams-roles');
     stage = `${theme}: agents and models`;
     const settings = page.getByRole('button', { name: 'Settings', exact: true });
@@ -363,6 +367,8 @@ role_tree:
     stage = `${theme}: project usage`;
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();
     await page.locator('.usage-dashboard:visible').first().waitFor();
+    // The fixture's token counts are dated today, inside the default range: the records table has rows (V9).
+    await page.locator('.d-dated-records tbody tr').filter({ visible: true }).first().waitFor();
     await shot('project-usage');
     stage = `${theme}: narrow task graph (1000x760)`;
     await resize(1000, 760);

@@ -1,0 +1,34 @@
+product guard: HEAD c9d0f39f19240e2d8de0e2dd78025f28bfbb3252 | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/adopt-616: none | git diff 78f929ee 4ef36426 -- product: src/graphtraj/execution/agent_driver.py src/graphtraj/interfaces/agents.py tests/test_provider_selection.py tests/test_role_models_614.py  | uncommitted (rehearsal outputs excepted): none
+CHECK 616 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+
+### graftling: 612's wheel /private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0 (production's, reused)
+wheel: graftling-0.10.0-py3-none-any.whl | COMMIT: v0.10.0 6f4aeb8fe9f47b71d81b9771486167b123308066
+graftling-0.10.0-py3-none-any.whl: OK
+CHECK 616 B 612's graftling wheel verifies (SHA256SUMS) and its sha256 is 6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51: PASS
+CHECK 616 B 612's wheels-0.10.0 COMMIT is v0.10.0 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 616 B /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling's v0.10.0 peels to 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS (6f4aeb8fe9f47b71d81b9771486167b123308066)
+graftling graftling-0.10.0-py3-none-any.whl vs /private/tmp/claude-501/r616/scr/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 616 B 612's graftling wheel equals git archive v0.10.0: PASS
+CHECK 616 B 612's graftling wheel's files equal git archive v0.10.0 (built from the same commit as Task 614's suite wheel): PASS
+
+### graphtraj: git archive 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759 -> /private/tmp/claude-501/r616/scr/tsrc
+graphtraj wheel: graphtraj-0.1.0-py3-none-any.whl
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/r616/scr/tsrc/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 616 B graphtraj wheel equals git archive 4ef36426: PASS
+CHECK 616 B the graphtraj wheel's graphtraj/ files equal git archive 4ef36426: PASS
+data files in the pyproject: 7 | in the wheel: 7 | differing or missing: 0
+data files changed since 612s wheels-78f929ee (information; expected none): []
+Requires-Dist: ['PyYAML<7,>=6', 'click<9,>=8.1', 'graftling<0.11,>=0.10.0', 'websockets<17,>=15'] | 612 wheel: ['PyYAML<7,>=6', 'click<9,>=8.1', 'graftling<0.11,>=0.10.0', 'websockets<17,>=15']
+CHECK 616 B graphtraj data files equal the archive manuals (7 files): PASS
+CHECK 616 B graphtraj entry_points.txt identical to 612s wheels-78f929ee: PASS
+CHECK 616 B graphtraj Requires-Dist identical to 612s wheels-78f929ee: PASS
+CHECK 616 B graphtraj requires graftling graftling<0.11,>=0.10.0: includes production 0.10.0, excludes 0.11.0: PASS
+  614 markers: agent_driver.py 'def role_models' x1 | agents.py 'role_models(self.root' x1
+CHECK 616 B 614's markers are in the graphtraj wheel: PASS
+graphtraj wheel build/ or __pycache__/ entries: 0
+CHECK 616 B no build/ or __pycache__ in the graphtraj wheel: PASS
+
+### the wheel V and I install: /private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426
+graphtraj-0.1.0-py3-none-any.whl: OK
+CHECK 616 B /private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426 holds the wheel with SHA256SUMS and COMMIT: PASS
+wheel sha256: c76dc439b9aab15ab311ee9d511c9cf1a702ed34d813d9449f91a278784ec6db  graphtraj-0.1.0-py3-none-any.whl | graftling (reused): 6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51  graftling-0.10.0-py3-none-any.whl

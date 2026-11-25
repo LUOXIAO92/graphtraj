@@ -1,0 +1,43 @@
+CHECK 616 00 runs under zsh: PASS (zsh 5.9)
+TMPDIR=/tmp/claude-501 (outside the Harness)
+CHECK 616 00 TMPDIR outside the Harness: PASS
+
+### production /private/tmp/claude-501/r616/project/.venv-runtime (read only)
+production graphtraj graftling: 0.1.0 0.10.0
+graphtraj direct_url: {"archive_info": {"hash": "sha256=7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525", "hashes": {"sha256": "7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+CHECK 616 00 production is graphtraj 0.1.0 (612's wheels-78f929ee) + graftling 0.10.0 (612's wheels-0.10.0): PASS
+CHECK 616 00 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+production bin: subagents subagents-mcp graphtraj-mcp agent-runner 
+CHECK 616 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
+
+### backups
+612's backup /private/tmp/claude-501/r616/project/tmp/612/backup (the current rollback, information; never written): not complete or absent
+CHECK 616 00 backup /private/tmp/claude-501/r616/scr/backup absent: PASS
+
+### this Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/616-graphtraj-614-production-adoption (the GraphTraj product I installs)
+product guard: HEAD c9d0f39f19240e2d8de0e2dd78025f28bfbb3252 | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/adopt-616: none | git diff 78f929ee 4ef36426 -- product: src/graphtraj/execution/agent_driver.py src/graphtraj/interfaces/agents.py tests/test_provider_selection.py tests/test_role_models_614.py  | uncommitted (rehearsal outputs excepted): none
+CHECK 616 00 HEAD contains TARGET 4ef36426, a descendant of 78f929ee by exactly 614's 4 product files, and differs from it only under scripts/adopt-616; clean: PASS
+GraphTraj dev now (information): 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759
+Task 614's suite record (GR614 judges it): /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/614-graphtraj-subagents-models-discovery/realhost/G-20261125T030159 present
+CHECK 616 00 Task 616 ready (current_definition 20261125T112905.999727+0900.md exists): PASS
+plugin and entry files (hashes; V and I require them unchanged):
+  d35a47ddcc32cd8b26e785d0da6071ec2b9f5e5e7585875e9cbc1ca03156dddb  /private/tmp/claude-501/r616/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
+  02299ad72cd0f6316f21f1fccc367b7a4a8e9985e45e9bc4b30b97810f55e9fe  /private/tmp/claude-501/r616/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json
+  ca13e022a2e263a9b635da3e31baea516867694661561dc9e7db923b10f5326b  /private/tmp/claude-501/r616/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json
+  9911ed39f6d049e7a0619155b3ff63ba060d4deba990f6d15a8a6d8969fb3b8f  /private/tmp/claude-501/r616/project/.mcp.json
+  030a6a0047fdf4da9abf2c1c12e7096160a010c2e79bffee639559596d2436c6  /private/tmp/claude-501/r616/project/.claude/settings.local.json
+  42ef03d30abf0112a466bee60f86cc1535f9aac8950961625ff176a68e63cc5e  /private/tmp/claude-501/r616/project/.graphtraj/claude-host/config.json
+
+### Claude: version and one claude -p probe (the Claude login the user approved (603/604/612), named in Task 616's definition (acceptance))
+claude: /private/tmp/claude-501/r616/stub/claude -> /private/tmp/claude-501/r616/stub/claude | version: 2.1.330 (stub Claude Code, rehearsal fixture) | recorded at 00: 2.1.330 (stub Claude Code, rehearsal fixture)
+claude -p probe: model claude-opus-5-5 | apiKeySource none | answer 'READY-616 claude-opus-5-5 (stub, rehearsal fixture)' (stream: /private/tmp/claude-501/r616/scr/00-probe.jsonl)
+CHECK 616 00 claude -p answers READY-616 on claude-opus-5-5 through the Claude login (apiKeySource none: no API key): PASS
+
+### Main's Session (I, M, Mr, P need it)
+no host serving /private/tmp/claude-501/r616/project/.graphtraj/claude-host/config.json found by ps
+source: newest transcript 11111111-2222-3333-4444-555555555616.jsonl
+MAIN=11111111-2222-3333-4444-555555555616 (saved to /private/tmp/claude-501/r616/scr/main.session)
+CHECK 616 00 Main's Session id found: PASS
+members_idle [00]: Task 616's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [00]: no member execution is active: PASS

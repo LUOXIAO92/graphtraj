@@ -1,0 +1,18 @@
+the failed run being set aside: run1 | backup /private/tmp/claude-501/r616/scr/backup (I start 2026-11-25 11:45:47)
+CHECK 616 I0 /private/tmp/claude-501/r616/scr/backup has COMPLETE and INSTALL-STARTED (an I whose install began): PASS
+CHECK 616 I0 R's record /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/616-graphtraj-614-production-adoption/scripts/adopt-616/rehearsal/raw/R.txt exists and every CHECK in it passed: PASS (5 CHECK lines, 0 FAIL)
+
+### production equals that backup, in R's terms
+
+SAME entries=1008 differences=0 (/private/tmp/claude-501/r616/project/.venv-runtime)
+CHECK 616 I0 production venv equals the backup (adopt_tree.py compare, as R): PASS
+CHECK 616 I0 hook copy equals the backup: PASS
+CHECK 616 I0 .mcp.json, settings.local.json and config.json equal the backup: PASS
+graphtraj direct_url: {"archive_info": {"hash": "sha256=7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525", "hashes": {"sha256": "7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+CHECK 616 I0 graphtraj from wheels-78f929ee and graftling 0.10.0 from 612's wheel: PASS
+CHECK 616 I0 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+MOVED /private/tmp/claude-501/r616/scr/backup -> /private/tmp/claude-501/r616/scr/backup-run1-20261125T114554 (after-install snapshots inside: after-install-20261125T114553 )
+MOVED to /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/616-graphtraj-614-production-adoption/scripts/adopt-616/rehearsal/raw/run1/: I.txt I.ok I-install-end.epoch I-install-start.epoch R.txt
+CHECK 616 I0 backup and run1 records set aside; /private/tmp/claude-501/r616/scr/backup and the current I/R records are absent: PASS
+/private/tmp/claude-501/r616/project/tmp/612/backup (untouched): not complete or absent

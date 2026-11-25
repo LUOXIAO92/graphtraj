@@ -101,10 +101,10 @@ check_tree() {  # branch, clean tracked tree, the four changes at HEAD; prints t
   [[ -z $(g status --porcelain --untracked-files=no) ]] || stop "tracked changes in $WT; commit them or inspect: git -C $WT status"
   for wf in $WORKFLOWS; do
     body=$(g show HEAD:$wf) || stop "$wf missing at HEAD"
-    if [[ $body == *"GRAFTLING_REF: v0.10.1"* && $body == *"agent/618-desktop-workflows-graftling-ref"* && $body != *"graftling/src/graftling"* && $body != *"v0.5.2"* ]]; then
+    if [[ $body == *"GRAFTLING_REF: v0.10.1"* && $body == *"agent/618-desktop-workflows-graftling-ref"* && $body != *graftling/src/graftling[\'\"\ ]* && $body != *"v0.5.2"* ]]; then
       print -r -- "PASS: $wf pins v0.10.1, root layout, 618 trigger"
     else
-      print -r -- "FAIL: $wf lacks v0.10.1 / 618 trigger or still uses graftling/src/graftling"; bad=1
+      print -r -- "FAIL: $wf lacks v0.10.1 / 618 trigger or still installs or packages graftling/src/graftling"; bad=1
     fi
   done
   (( bad == 0 )) || stop "HEAD $(g rev-parse --short HEAD) does not hold the four changes"

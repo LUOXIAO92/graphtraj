@@ -22,11 +22,13 @@
 # bundle, 00 then P (fast-forward only).
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
-#       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling with the single
-#       prerequisite graftling dev defad1db; read through a temporary repository that borrows <Harness>/graftling's
-#       objects (nothing is written there): noreply author and committer, changed files only under src/graftling/
-#       and tests/ plus the workflow (the stat is shown), the workflow equal to defad1db's except the one push
-#       branches line, its job steps present by name; the expected list parses; the local branch in
+#       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its base is
+#       graftling dev bc4298b6 (633 integrated) and every other prerequisite git lists is an ancestor of bc4298b6
+#       (defad1db, the parent of W2's first commit); read through a temporary repository that borrows
+#       <Harness>/graftling's objects (nothing is written there): noreply author and committer, changed files since
+#       bc4298b6 only under src/graftling/ and tests/ plus the workflow (the stat is shown), the workflow equal to
+#       bc4298b6's except the one push branches line, its job steps present by name; the expected list parses; the
+#       local branch in
 #       <Harness>/graftling and the remote branch are each absent, the bundle head, or an ancestor of it (else STOP).
 #       Login: gh login, git credential helper (ls-remote). Dialog: none. Network: GitHub. ~10 s.
 #   P   Publish and wait. OUTWARD-FACING: (1) fetches the bundle into <Harness>/graftling as the local branch (only if
@@ -71,8 +73,9 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/634-graftling-windows-durable-writes
-# graftling dev defad1db (Task 632's workflow), the bundle's only prerequisite.
-BASE=defad1db083e911900cbea1cb0ef165e6a66d322
+# graftling dev bc4298b6 (633, W1, integrated): the bundle's base. W2's own history starts on defad1db, so git
+# also lists defad1db as a prerequisite; check_bundle accepts it only as an ancestor of BASE.
+BASE=bc4298b611afce70dd876c5fe79f764c9f966d8a
 REPO=LUOXIAO92/graftling
 GURL=https://github.com/LUOXIAO92/graftling.git
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
@@ -92,9 +95,9 @@ BUNDLE=${VERIFY634_BUNDLE:-$HERE/graftling-634.bundle}
 WINCHECK=$WT/scripts/verify-632/wincheck.py
 EXPECTED=${VERIFY634_EXPECTED:-$WT/scripts/verify-632/windows-expected.txt}
 EVID=${VERIFY634_EVIDENCE:-$HERE/runs}
-# The one workflow change: the push branches line at defad1db and at the bundle head.
-BRANCHES_BASE="    branches: [agent/632-graftling-windows-ci, dev]"
-BRANCHES_HEAD="    branches: [agent/632-graftling-windows-ci, $BRANCH, dev]"
+# The one workflow change: the push branches line at bc4298b6 and at the bundle head.
+BRANCHES_BASE="    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, dev]"
+BRANCHES_HEAD="    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, $BRANCH, dev]"
 # The job's steps by their exact `name:` in $WORKFLOW (unchanged since defad1db).
 SETUP=("Keep symbolic links on this runner"
        "Check out the commit under test"
@@ -148,14 +151,22 @@ api() {
 
 GSHA=
 bundle_head() { allow $GIT bundle list-heads $BUNDLE refs/heads/$BRANCH | cut -d' ' -f1; }
-bundle_prereq() { gg bundle verify $BUNDLE 2>&1 | awk '/requires this ref/ {getline; print $1}'; }
-check_bundle() {  # the bundle verifies against $GRAFT, needs only BASE; sets GSHA
+# Every prerequisite the bundle lists, one per line.
+bundle_prereqs() { gg bundle verify $BUNDLE 2>&1 | awk '/^The bundle requires/ {on = 1; next} /^The bundle (uses|contains)/ {on = 0} on && NF {print $1}'; }
+check_bundle() {  # the bundle verifies against $GRAFT; BASE is a prerequisite and any other is an ancestor of it; sets GSHA
   [[ -f $BUNDLE ]] || stop "no bundle at $BUNDLE"
   gg bundle verify $BUNDLE > /dev/null 2>&1 || { gg bundle verify $BUNDLE 2>&1 | sed 's/^/  /'; stop "the bundle does not verify against $GRAFT"; }
   GSHA=$(bundle_head)
   [[ $GSHA == [0-9a-f](#c40) ]] || stop "the bundle has no refs/heads/$BRANCH"
-  [[ $(bundle_prereq) == $BASE ]] || stop "the bundle's prerequisite is $(bundle_prereq), not graftling dev $BASE"
-  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA on base $BASE"
+  local -a prereqs=(${(f)"$(bundle_prereqs)"})
+  local prereq
+  (( ${prereqs[(Ie)$BASE]} )) || stop "the bundle's prerequisites are ${prereqs:-none}, without graftling dev $BASE"
+  for prereq in $prereqs; do
+    [[ $prereq == $BASE ]] && continue
+    gg merge-base --is-ancestor $prereq $BASE 2> /dev/null \
+      || stop "the bundle's prerequisite $prereq is not an ancestor of graftling dev $BASE"
+  done
+  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA on base $BASE (prerequisites: ${prereqs}; others are ancestors of the base)"
 }
 PEEK=$WORK/peek.git
 peek_repo() {  # once: $PEEK holds the bundle head as refs/heads/peek, borrowing $GRAFT's objects
@@ -188,7 +199,7 @@ check_head() {
   [[ -z $outside ]] && print -r -- "PASS: changed files are under src/graftling/ and tests/, plus $WORKFLOW" \
     || { print -r -- "FAIL: files changed outside src/graftling/ and tests/: ${(f)outside}"; (( bad++ )); }
 
-  # The workflow equals defad1db's except the push branches line.
+  # The workflow equals the base's except the push branches line.
   wdiff=$(allow $GIT -C $peek diff -U0 $BASE peek -- $WORKFLOW | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) ')
   want="-$BRANCHES_BASE"$'\n'"+$BRANCHES_HEAD"
   if [[ $wdiff == $want ]]; then

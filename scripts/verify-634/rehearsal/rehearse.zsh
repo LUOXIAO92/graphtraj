@@ -50,8 +50,8 @@ step matched matched-W-sha.txt W $HEAD_SHA
 step matched matched-W-run.txt W 51000000634
 print -r -- "--- after P: clone $(git -C $S/matched/graftling rev-parse $BRANCH), remote $(git -C $S/matched/gremote.git rev-parse $BRANCH)" >> $OUT/matched-P.txt
 # <Harness>/graftling and the remote hold the previous candidate, as after Main's last P (round 2: 2fadc6c8; round 3:
-# f64509df); 00 sees an ancestor, P fast-forwards both.
-PREV=f64509dfae441fb875c45d85a2e0055c90492d2d
+# f64509df; integration onto bc4298b6: the accepted 0dd20cfc); 00 sees an ancestor, P fast-forwards both.
+PREV=0dd20cfcc7de0ea19f1e2cf846ace9b9ea082722
 fresh ff; git -C $S/ff/gremote.git update-ref refs/heads/$BRANCH $PREV; git -C $S/ff/graftling branch -q $BRANCH $PREV
 step ff ff-00.txt 00; step ff ff-P.txt P
 print -r -- "--- after P: clone $(git -C $S/ff/graftling rev-parse $BRANCH), remote $(git -C $S/ff/gremote.git rev-parse $BRANCH)" >> $OUT/ff-P.txt
@@ -70,10 +70,15 @@ sed 's/timeout-minutes: 90/timeout-minutes: 120/' $S/badwf-src/.github/workflows
 cp $S/badwf.yml $S/badwf-src/.github/workflows/windows.yml
 git -C $S/badwf-src -c user.name=LUOXIAO92 -c user.email=89069722+LUOXIAO92@users.noreply.github.com \
   commit -q -am 'rehearsal: an extra workflow change'
-git -C $S/badwf-src bundle create -q $S/badwf.bundle defad1db083e911900cbea1cb0ef165e6a66d322..$BRANCH
+git -C $S/badwf-src bundle create -q $S/badwf.bundle bc4298b611afce70dd876c5fe79f764c9f966d8a..$BRANCH
 BUNDLE_KNOB=VERIFY634_BUNDLE=$S/badwf.bundle
 fresh badwf; step badwf badwf-00.txt 00; step badwf badwf-P.txt P
 print -r -- "--- remote branch after P: $(git -C $S/badwf/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/badwf-P.txt
+unset BUNDLE_KNOB
+# The accepted round-3 bundle (defad1db..0dd20cfc) lacks the base bc4298b6: 00 STOPs at the prerequisite check.
+git -C $WT show 11973bdc:scripts/verify-634/graftling-634.bundle > $S/oldbase.bundle
+BUNDLE_KNOB=VERIFY634_BUNDLE=$S/oldbase.bundle
+fresh oldbase; step oldbase oldbase-00.txt 00
 unset BUNDLE_KNOB
 # A local branch in the graftling clone that is not an ancestor of the bundle head stops 00 (never overwritten).
 fresh guard; git -C $S/guard/graftling branch -q $BRANCH \

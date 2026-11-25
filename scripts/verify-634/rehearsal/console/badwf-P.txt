@@ -1,16 +1,17 @@
 $ VERIFY634_GRAFTLING=/tmp/claude-501/rh634/badwf/graftling VERIFY634_GREMOTE=/tmp/claude-501/rh634/badwf/gremote.git VERIFY634_GH=/tmp/claude-501/rh634/badwf/gh/gh VERIFY634_EVIDENCE=/tmp/claude-501/rh634/badwf/runs VERIFY634_POLL_S=1 VERIFY634_APPEAR_S=10 VERIFY634_DONE_S=30 VERIFY634_BUNDLE=/tmp/claude-501/rh634/badwf.bundle zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/634-graftling-windows-durable-writes to graftling /tmp/claude-501/rh634/badwf/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh634/badwf/graftling; head 8887c85069841eba29e00e70ee1586a4fb3f1705 on base defad1db083e911900cbea1cb0ef165e6a66d322
---- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
-  8887c85 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+PASS: bundle verifies against /tmp/claude-501/rh634/badwf/graftling; head c4c6227d622e1025d70e159e3f13351498d1a1ae on base bc4298b611afce70dd876c5fe79f764c9f966d8a (prerequisites: bc4298b611afce70dd876c5fe79f764c9f966d8a defad1db083e911900cbea1cb0ef165e6a66d322; others are ancestors of the base)
+--- bundle commits on bc4298b611afce70dd876c5fe79f764c9f966d8a:
+  c4c6227 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+  478dfd7 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev bc4298b6 (633, W1) into agent/634-graftling-windows-durable-writes
   0dd20cf LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: archive header lookup and test polls of published files retry a transient open refusal (634 correction 2)
   f64509d LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: lock-free readers of published files retry a transient open refusal (634 correction 1)
   2fadc6c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: locks without the 10 s limit, try_exclusive, durable replacement (634)
 PASS: author and committer are the noreply identity
---- files changed since defad1db083e911900cbea1cb0ef165e6a66d322:
+--- files changed since bc4298b611afce70dd876c5fe79f764c9f966d8a:
    .github/workflows/windows.yml          |   4 +-
-   src/graftling/_win32.py                | 146 +++++++++++++++++++
+   src/graftling/_win32.py                | 111 +++++++++++++-
    src/graftling/claude/support.py        |  14 +-
    src/graftling/codex/managed_session.py |  22 +--
    src/graftling/config.py                |   9 +-
@@ -26,11 +27,11 @@ PASS: author and committer are the noreply identity
    tests/test_locks_durable_634.py        | 255 +++++++++++++++++++++++++++++++++
    tests/test_pi_dsh_notice_holding.py    |   3 +-
    tests/test_windows_emulation_619.py    |  24 ++--
-   17 files changed, 705 insertions(+), 127 deletions(-)
+   17 files changed, 668 insertions(+), 129 deletions(-)
 PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml
-FAIL: .github/workflows/windows.yml differs from defad1db083e911900cbea1cb0ef165e6a66d322 otherwise than the one push branches line:
-  -    branches: [agent/632-graftling-windows-ci, dev]
-  +    branches: [agent/632-graftling-windows-ci, agent/634-graftling-windows-durable-writes, dev]
+FAIL: .github/workflows/windows.yml differs from bc4298b611afce70dd876c5fe79f764c9f966d8a otherwise than the one push branches line:
+  -    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, dev]
+  +    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, dev]
   -    timeout-minutes: 90
   +    timeout-minutes: 120
 PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged

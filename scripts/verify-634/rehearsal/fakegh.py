@@ -6,7 +6,8 @@ Called as: python fakegh.py <state-dir> <gh arguments...>. <state-dir> holds:
   fails      node ids the artifact reports as failing (the `fail` entries of the edited windows-expected.txt);
   removed    node ids of the W2 (634) entries this Task removed from the list;
   polls / attempt   counters this stand-in keeps.
-Tests skipped on macOS with a 'Windows-only: ' reason (tests/test_locks_durable_634.py) run on Windows: the artifact
+Tests skipped on macOS with a 'Windows-only: ' (tests/test_locks_durable_634.py) or 'Windows only: ' reason
+(tests/test_process_windows_633.py, from dev bc4298b6) run on Windows: the artifact
 shows them passed.
 Scenarios:
   matched     the push run appears on the 2nd poll and completes on the 3rd; the suite step fails (tests failed), every
@@ -120,7 +121,7 @@ def artifact(directory: Path) -> None:
     cases = {nodeid(case): case for case in tree.getroot().iter("testcase")}
     for case in cases.values():   # the macOS run's own outcomes do not count, except POSIX-only and environment skips
         for child in [c for c in case if c.tag in ("failure", "error")
-                      or (c.tag == "skipped" and (c.get("message") or "").startswith("Windows-only: "))]:
+                      or (c.tag == "skipped" and (c.get("message") or "").startswith(("Windows-only: ", "Windows only: ")))]:
             case.remove(child)
     failing = set(fails)
     if shown == "residual":   # the first listed failure passes (a simulated POSIX-only skip inside it is cleared)

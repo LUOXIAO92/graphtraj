@@ -1,0 +1,78 @@
+$ VERIFY635_GRAFTLING=/tmp/claude-501/rh635/guard/graftling VERIFY635_GREMOTE=/tmp/claude-501/rh635/guard/gremote.git VERIFY635_GH=/tmp/claude-501/rh635/guard/gh/gh VERIFY635_EVIDENCE=/tmp/claude-501/rh635/guard/evidence VERIFY635_POLL_S=1 VERIFY635_APPEAR_S=10 VERIFY635_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/rh635/guard/gh/gh | TMPDIR for started processes: /tmp/claude-501
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-632 fake)
+    - Active account: true
+PASS: /tmp/claude-501/rh635/guard/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/rh635/guard/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/rh635/guard/graftling; head 7609e52089e638c963cc54c28438c99ea3964f99 contains graftling dev d5fb80c7cf5d85a19971c434e7f247568ad22bef (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced bc4298b611afce70dd876c5fe79f764c9f966d8a d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+--- bundle commits on d5fb80c7cf5d85a19971c434e7f247568ad22bef:
+  7609e52 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev d5fb80c7 (638, W6) into agent/635-graftling-windows-process-tree
+  acc18b4 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Breakaway test: read breakaway.json on its own, not as a PID (635 correction 2)
+  e0e6da9 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 478dfd7f (634, W2) into agent/635-graftling-windows-process-tree
+  6f520df LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Confirm-ended tree check on every platform; kill Codex service on adopt failure (635 correction 1)
+  01557f6 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Owned process trees: process group on POSIX, named Job Object on Windows (635, W3)
+PASS: author and committer are the noreply identity
+--- files changed since d5fb80c7cf5d85a19971c434e7f247568ad22bef:
+   .github/workflows/windows.yml     |   2 +-
+   src/graftling/_win32.py           | 227 +++++++++++++++-
+   src/graftling/calls.py            |  27 +-
+   src/graftling/claude/driver.py    |   3 +-
+   src/graftling/claude/execution.py | 114 ++++----
+   src/graftling/codex/app_server.py |  30 ++-
+   src/graftling/codex/driver.py     |   3 +-
+   src/graftling/control.py          |  60 ++++-
+   src/graftling/dsh/driver.py       |   3 +-
+   src/graftling/dsh/service.py      |  31 ++-
+   src/graftling/dsh/watcher.py      |   5 +
+   src/graftling/pi/driver.py        |   5 +-
+   src/graftling/pi/execution.py     |  21 +-
+   src/graftling/process_tree.py     | 230 ++++++++++++++++
+   src/graftling/review.py           |  27 +-
+   tests/test_agent_control.py       |  49 ++--
+   tests/test_process_tree_635.py    | 544 ++++++++++++++++++++++++++++++++++++++
+   17 files changed, 1243 insertions(+), 138 deletions(-)
+PASS: changed paths are within the allowed set: src/graftling/process_tree.py, src/graftling/_win32.py, src/graftling/control.py, src/graftling/calls.py, src/graftling/review.py, src/graftling/claude/execution.py, src/graftling/claude/driver.py, src/graftling/pi/execution.py, src/graftling/pi/driver.py, src/graftling/codex/app_server.py, src/graftling/codex/driver.py, src/graftling/dsh/service.py, src/graftling/dsh/watcher.py, src/graftling/dsh/driver.py, tests/test_process_tree_635.py, tests/test_agent_control.py, .github/workflows/windows.yml
+--- .github/workflows/windows.yml at 7609e52089e638c963cc54c28438c99ea3964f99 against d5fb80c7cf5d85a19971c434e7f247568ad22bef
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev']
+PASS: the workflow is the base one with only its push branches line changed
+--- .github/workflows/windows.yml at d5fb80c7cf5d85a19971c434e7f247568ad22bef (632's accepted workflow with 633's, 634's and 638's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'dev', 'agent/638-graftling-windows-paths-encoding']; judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since d5fb80c7cf5d85a19971c434e7f247568ad22bef
+PASS: the 17 W3 tests of new-tests.txt are defined at 7609e52089e638c963cc54c28438c99ea3964f99 (tests/test_process_tree_635.py, tests/test_agent_control.py)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt parses: 44 expected Windows failures and 0 expected hangs (W4 (636) 42, W5 (637) 1, W8 (not registered; outside this round) 1), 19 allowed environment skips
+expected list: 7 W3 (635) entries at the base: 1 to delete, 6 moved to Main's owners (W4 (636) 5, W5 (637) 1)
+PASS: the W3 (635) lines are deleted or moved to Main's owners as tabled; no W3 (635) line remains; every other line is byte-identical and in order
+STOP: /tmp/claude-501/rh635/guard/graftling has local agent/635-graftling-windows-process-tree at 3b0b1d3d9a399f8c5c67b5938401798caa0dd5f6, not an ancestor of the bundle head 7609e52089e638c963cc54c28438c99ea3964f99; never overwrite. Inspect: git -C /tmp/claude-501/rh635/guard/graftling log --oneline -3 agent/635-graftling-windows-process-tree
+VERDICT 635 00: STOP
+[exit 1]

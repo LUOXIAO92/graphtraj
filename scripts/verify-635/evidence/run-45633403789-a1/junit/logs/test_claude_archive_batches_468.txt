@@ -1,0 +1,29 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 5 items
+
+tests/test_claude_archive_batches_468.py::test_a_batch_commits_once_not_once_per_record PASSED [ 20%]
+tests/test_claude_archive_batches_468.py::test_batch_cost_does_not_grow_with_the_archived_history PASSED [ 40%]
+tests/test_claude_archive_batches_468.py::test_another_writer_between_batches_is_kept PASSED [ 60%]
+tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open FAILED [ 80%]
+tests/test_claude_archive_batches_468.py::test_a_rewritten_transcript_is_read_again PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=0c37b4c031b244b8bc91b5c39f6af10f: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+_________ test_many_sessions_through_one_archive_keep_few_files_open __________
+tests\test_claude_archive_batches_468.py:97: in test_many_sessions_through_one_archive_keep_few_files_open
+    before = len(os.listdir('/dev/fd'))
+E   FileNotFoundError: [WinError 3] The system cannot find the path specified: '/dev/fd'
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_claude_archive_batches_468.xml -
+============================ slowest 10 durations =============================
+1.52s call     tests/test_claude_archive_batches_468.py::test_batch_cost_does_not_grow_with_the_archived_history
+0.07s call     tests/test_claude_archive_batches_468.py::test_another_writer_between_batches_is_kept
+0.07s call     tests/test_claude_archive_batches_468.py::test_a_batch_commits_once_not_once_per_record
+0.06s call     tests/test_claude_archive_batches_468.py::test_a_rewritten_transcript_is_read_again
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open - FileNotFoundError: [WinError 3] The system cannot find the path specified: '/dev/fd'
+========================= 1 failed, 4 passed in 1.80s =========================

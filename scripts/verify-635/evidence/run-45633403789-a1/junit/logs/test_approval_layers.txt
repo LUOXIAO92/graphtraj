@@ -1,0 +1,57 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 36 items
+
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[claude] PASSED [  2%]
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[codex] PASSED [  5%]
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[dsh] PASSED [  8%]
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[pi] PASSED [ 11%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[claude] PASSED [ 13%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[codex] PASSED [ 16%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[dsh] PASSED [ 19%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[pi] PASSED [ 22%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[claude] PASSED [ 25%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[codex] PASSED [ 27%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[dsh] PASSED [ 30%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[pi] PASSED [ 33%]
+tests/test_approval_layers.py::test_parent_cannot_grant_more_than_the_request_asked PASSED [ 36%]
+tests/test_approval_layers.py::test_review_decision_is_read_strictly[{"decision": "allow", "reason": "Reads a file."}-expected0] PASSED [ 38%]
+tests/test_approval_layers.py::test_review_decision_is_read_strictly[answer1-expected1] PASSED [ 41%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[] PASSED [ 44%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[allow] PASSED [ 47%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[[]] PASSED [ 50%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow"}] PASSED [ 52%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": ""}] PASSED [ 55%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "yes", "reason": "x"}] PASSED [ 58%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x", "extra": 1}] PASSED [ 61%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x", "category": "low"}] PASSED [ 63%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x", "decision": "deny"}] PASSED [ 66%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x"} trailing] PASSED [ 69%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[None] PASSED [ 72%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[3] PASSED [ 75%]
+tests/test_approval_layers.py::test_child_asks_parent_for_resources_and_waits_for_the_answer PASSED [ 77%]
+tests/test_approval_layers.py::test_unanswered_ask_returns_no_answer_and_root_callers_cannot_ask PASSED [ 80%]
+tests/test_approval_layers.py::test_ask_parent_is_a_discoverable_feature PASSED [ 83%]
+tests/test_approval_layers.py::test_workspace_narrows_inside_the_parent_and_is_refused_outside PASSED [ 86%]
+tests/test_approval_layers.py::test_a_driver_that_cannot_assign_a_workspace_refuses_instead_of_widening PASSED [ 88%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[claude] PASSED [ 91%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[codex] PASSED [ 94%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[dsh] PASSED [ 97%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[pi] PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=4a23a6678d774029a07fdfe99f896e9d: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_approval_layers.xml -
+============================ slowest 10 durations =============================
+0.24s call     tests/test_approval_layers.py::test_unanswered_ask_returns_no_answer_and_root_callers_cannot_ask
+0.20s call     tests/test_approval_layers.py::test_child_asks_parent_for_resources_and_waits_for_the_answer
+0.13s call     tests/test_approval_layers.py::test_workspace_narrows_inside_the_parent_and_is_refused_outside
+0.05s call     tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[claude]
+0.05s call     tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[dsh]
+0.05s call     tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[pi]
+0.05s call     tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[claude]
+0.05s call     tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[codex]
+0.05s call     tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[codex]
+0.05s call     tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[dsh]
+============================= 36 passed in 1.34s ==============================

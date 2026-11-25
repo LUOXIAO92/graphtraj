@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="8" skipped="2" tests="27" time="1.144" timestamp="2026-11-25T14:27:00.999072+00:00" hostname="runnervmbpeip"><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document0-must be a JSON object]" file="tests\test_pi_standalone_host.py" line="28" time="0.001" /><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document1-adapter_request is no longer accepted]" file="tests\test_pi_standalone_host.py" line="28" time="0.001" /><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document2-Unknown Pi host configuration keys]" file="tests\test_pi_standalone_host.py" line="28" time="0.000" /><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document3-absolute data root]" file="tests\test_pi_standalone_host.py" line="28" time="0.000" /><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document4-absolute data root]" file="tests\test_pi_standalone_host.py" line="28" time="0.000" /><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document5-&quot;claude&quot; must be an object]" file="tests\test_pi_standalone_host.py" line="28" time="0.001"><failure message="AssertionError: Regex pattern did not match.&#10; Regex: '&quot;claude&quot; must be an object'&#10; Input: 'The Pi host configuration needs an absolute data root &quot;root&quot;.'">tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '"claude" must be an object'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document6-worktree_path is always the cwd]" file="tests\test_pi_standalone_host.py" line="28" time="0.001"><failure message="AssertionError: Regex pattern did not match.&#10; Regex: 'worktree_path is always the cwd'&#10; Input: 'The Pi host configuration needs an absolute data root &quot;root&quot;.'">tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'worktree_path is always the cwd'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document7-Unknown or fixed Pi settings]" file="tests\test_pi_standalone_host.py" line="28" time="0.001"><failure message="AssertionError: Regex pattern did not match.&#10; Regex: 'Unknown or fixed Pi settings'&#10; Input: 'The Pi host configuration needs an absolute data root &quot;root&quot;.'">tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'Unknown or fixed Pi settings'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document8-non-empty string]" file="tests\test_pi_standalone_host.py" line="28" time="0.001"><failure message="AssertionError: Regex pattern did not match.&#10; Regex: 'non-empty string'&#10; Input: 'The Pi host configuration needs an absolute data root &quot;root&quot;.'">tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'non-empty string'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document9-absolute paths]" file="tests\test_pi_standalone_host.py" line="28" time="0.001"><failure message="AssertionError: Regex pattern did not match.&#10; Regex: 'absolute paths'&#10; Input: 'The Pi host configuration needs an absolute data root &quot;root&quot;.'">tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'absolute paths'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_configuration_refusals[document10-'read' or 'write']" file="tests\test_pi_standalone_host.py" line="28" time="0.001"><failure message="AssertionError: Regex pattern did not match.&#10; Regex: &quot;'read' or 'write'&quot;&#10; Input: 'The Pi host configuration needs an absolute data root &quot;root&quot;.'">tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: "'read' or 'write'"
+E    Input: 'The Pi host configuration needs an absolute data root "root".'</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_configuration_accepts_root_and_per_runtime_settings" file="tests\test_pi_standalone_host.py" line="47" time="0.001"><failure message="ValueError: The Pi host configuration needs an absolute data root &quot;root&quot;.">tests\test_pi_standalone_host.py:50: in test_configuration_accepts_root_and_per_runtime_settings
+    root, settings = host.read_configuration({'root': '/data'})
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_default_request_comes_from_the_native_parent" file="tests\test_pi_standalone_host.py" line="58" time="0.006" /><testcase classname="tests.test_pi_standalone_host" name="test_default_request_refusals_and_write_access" file="tests\test_pi_standalone_host.py" line="73" time="0.100" /><testcase classname="tests.test_pi_standalone_host" name="test_child_model_is_not_bound_to_the_parent_model" file="tests\test_pi_standalone_host.py" line="88" time="0.001" /><testcase classname="tests.test_pi_standalone_host" name="test_runtime_drivers_use_public_constructors_with_read_defaults" file="tests\test_pi_standalone_host.py" line="156" time="0.040" /><testcase classname="tests.test_pi_standalone_host" name="test_codex_without_settings_is_refused_at_create" file="tests\test_pi_standalone_host.py" line="170" time="0.002" /><testcase classname="tests.test_pi_standalone_host" name="test_pi_host_routes_creates_to_every_runtime" file="tests\test_pi_standalone_host.py" line="179" time="0.126" /><testcase classname="tests.test_pi_standalone_host" name="test_notice_receiver_outcomes" file="tests\test_pi_standalone_host.py" line="263" time="0.064" /><testcase classname="tests.test_pi_standalone_host" name="test_notice_waiting_at_shutdown_is_held_and_later_ones_are_not_written" file="tests\test_pi_standalone_host.py" line="284" time="0.001" /><testcase classname="tests.test_pi_standalone_host" name="test_a_body_being_pushed_is_shown_queueing_with_its_body" file="tests\test_pi_standalone_host.py" line="298" time="0.000" /><testcase classname="tests.test_pi_standalone_host" name="test_each_end_is_pushed_once_and_shutdown_ends_are_held" file="tests\test_pi_standalone_host.py" line="328" time="0.140" /><testcase classname="tests.test_pi_standalone_host" name="test_pi_package_manifest_loads_the_extension" file="tests\test_pi_standalone_host.py" line="355" time="0.001" /><testcase classname="tests.test_pi_standalone_host" name="test_host_starts_from_root_only_and_closes_at_shutdown" file="tests\test_pi_standalone_host.py" line="391" time="0.163"><failure message="AssertionError: Traceback (most recent call last):&#10;    File &quot;&lt;frozen runpy&gt;&quot;, line 198, in _run_module_as_main&#10;    File &quot;&lt;frozen runpy&gt;&quot;, line 88, in _run_code&#10;    File &quot;D:\a\graftling\graftling\src\graftling\pi\host.py&quot;, line 533, in &lt;module&gt;&#10;      main()&#10;      ~~~~^^&#10;    File &quot;D:\a\graftling\graftling\src\graftling\pi\host.py&quot;, line 499, in main&#10;      with agents_connection(root / 'live' / 'pi-host', operate, authenticate,&#10;           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;                             close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:&#10;                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py&quot;, line 141, in __enter__&#10;      return next(self.gen)&#10;    File &quot;D:\a\graftling\graftling\src\graftling\connection.py&quot;, line 420, in agents_connection&#10;      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:&#10;           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^&#10;    File &quot;C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py&quot;, line 141, in __enter__&#10;      return next(self.gen)&#10;    File &quot;D:\a\graftling\graftling\src\graftling\connection.py&quot;, line 68, in worker_connection&#10;      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')&#10;  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.&#10;  &#10;assert 1 == 0&#10; +  where 1 = &lt;Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...&gt;.returncode">tests\test_pi_standalone_host.py:395: in test_host_starts_from_root_only_and_closes_at_shutdown
+    assert process.returncode == 0, process.stderr.read()
+E   AssertionError: Traceback (most recent call last):
+E       File "&lt;frozen runpy&gt;", line 198, in _run_module_as_main
+E       File "&lt;frozen runpy&gt;", line 88, in _run_code
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in &lt;module&gt;
+E         main()
+E         ~~~~^^
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+E         with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                                close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E   assert 1 == 0
+E    +  where 1 = &lt;Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...&gt;.returncode</failure></testcase><testcase classname="tests.test_pi_standalone_host" name="test_host_start_refusals" file="tests\test_pi_standalone_host.py" line="398" time="0.285" /><testcase classname="tests.test_pi_standalone_host" name="test_extension_injects_each_notice_natively_and_acknowledges_it" file="tests\test_pi_standalone_host.py" line="473" time="0.001"><skipped type="pytest.skip" message="POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in">D:\a\graftling\graftling\tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in</skipped></testcase><testcase classname="tests.test_pi_standalone_host" name="test_extension_reports_a_notice_it_could_not_inject" file="tests\test_pi_standalone_host.py" line="486" time="0.001"><skipped type="pytest.skip" message="POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in">D:\a\graftling\graftling\tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in</skipped></testcase></testsuite></testsuites>

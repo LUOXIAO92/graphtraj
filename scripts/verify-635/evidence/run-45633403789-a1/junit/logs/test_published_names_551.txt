@@ -1,0 +1,21 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 7 items
+
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling-extra_tool_table] PASSED [ 14%]
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.codex-apply_tools] PASSED [ 28%]
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.pi-apply_tools] PASSED [ 42%]
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.dsh-apply_tools] PASSED [ 57%]
+tests/test_published_names_551.py::test_the_pi_extension_export_is_listed PASSED [ 71%]
+tests/test_published_names_551.py::test_extra_tool_table_refuses_the_subagents_name PASSED [ 85%]
+tests/test_published_names_551.py::test_codex_apply_tools_refuses_a_name_codex_cannot_express PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=2b4a042292ed421d8f044c19baaf96f7: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_published_names_551.xml -
+============================ slowest 10 durations =============================
+0.01s call     tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.codex-apply_tools]
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 7 passed in 0.08s ==============================

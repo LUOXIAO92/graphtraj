@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.102" timestamp="2026-11-25T14:24:49.640004+00:00" hostname="runnervmbpeip"><testcase classname="tests.test_connection_serve" name="test_removed_control_directory_stops_the_service" file="tests\test_connection_serve.py" line="14" time="0.012"><failure message="graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.">tests\test_connection_serve.py:17: in test_removed_control_directory_stops_the_service
+    with worker_connection(tmp_path, lambda request: {}) as address:
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+src\graftling\connection.py:68: in worker_connection
+    raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E   graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.</failure></testcase></testsuite></testsuites>

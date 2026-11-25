@@ -1,0 +1,23 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 6 items
+
+tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[False] PASSED [ 16%]
+tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[True] PASSED [ 33%]
+tests/test_pi_dsh_extra_tools_551.py::test_pi_connection_environment_differs_only_by_the_descriptors PASSED [ 50%]
+tests/test_pi_dsh_extra_tools_551.py::test_pi_channel_serves_the_extra_tools PASSED [ 66%]
+tests/test_pi_dsh_extra_tools_551.py::test_dsh_plugin_row_and_environment_differ_only_by_the_descriptors PASSED [ 83%]
+tests/test_pi_dsh_extra_tools_551.py::test_dsh_binding_serves_the_extra_tools_on_its_channel PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=20f8195a2cc9444ba665fb7ac76ca8ca: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_dsh_extra_tools_551.xml -
+============================ slowest 10 durations =============================
+0.04s call     tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[False]
+0.04s call     tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[True]
+0.01s call     tests/test_pi_dsh_extra_tools_551.py::test_dsh_plugin_row_and_environment_differ_only_by_the_descriptors
+0.01s setup    tests/test_pi_dsh_extra_tools_551.py::test_pi_connection_environment_differs_only_by_the_descriptors
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 6 passed in 0.20s ==============================

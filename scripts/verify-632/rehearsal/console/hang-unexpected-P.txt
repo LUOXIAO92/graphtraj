@@ -83,9 +83,9 @@ $ git -C /tmp/claude-501/rh632/hang-unexpected/graftling push /tmp/claude-501/rh
      0034097..defad1d  agent/632-graftling-windows-ci -> agent/632-graftling-windows-ci
 PASS: graftling /tmp/claude-501/rh632/hang-unexpected/gremote.git agent/632-graftling-windows-ci = defad1db083e911900cbea1cb0ef165e6a66d322
 looking for the .github/workflows/windows.yml run (event push) of defad1db083e911900cbea1cb0ef165e6a66d322 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
-run 51000000000 present after 2s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+run 51000000000 present after 1s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [21:13:27] run 51000000000: completed failure
+  [21:16:12] run 51000000000: completed failure
 --- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head defad1db083e911900cbea1cb0ef165e6a66d322 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped

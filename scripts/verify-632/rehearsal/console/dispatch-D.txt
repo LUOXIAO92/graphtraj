@@ -6,7 +6,7 @@ $ gh workflow run windows.yml --repo LUOXIAO92/graftling --ref agent/632-graftli
   ✓ Created workflow_dispatch event for windows.yml at agent/632-graftling-windows-ci
 dispatched run 51000000077 present after 0s
 waiting for run 51000000077 (completion bound 30s, poll 1s)
-  [21:13:16] run 51000000077: completed failure
+  [21:16:02] run 51000000077: completed failure
 --- run 51000000077 | attempt 1 | workflow_dispatch | conclusion failure (information only) | head defad1db083e911900cbea1cb0ef165e6a66d322 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000077
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000077/job/52000000000
   step  1 | success   | Set up job | other: success or skipped

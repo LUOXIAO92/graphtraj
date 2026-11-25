@@ -18,8 +18,8 @@
 # STATE: from run 45608819873 (graftling defad1db, the first run to its end: 947 tests, 476 passed, 196 failed,
 # 275 skipped). The `fail` entries below carry the owners Main decided (rules R1-R13, Task 632 round 2 part B;
 # W1=633, W2=634, W3=635, W4=636, W5=637, W6=638, W7=639), applied mechanically by
-# evidence/run-45608819873-a1-rejudged-B/classify.py; each note names its rule. Failures that fit no rule
-# are not listed as entries but as `# undecided` comments at the end, awaiting Main's decision.
+# evidence/run-45608819873-a1-rejudged-B/classify.py; each note names its rule. The 4 that fit no rule
+# were placed by the Leader (notes start 'Leader-placed (inference):'), at the end.
 # Each later Windows Task removes the entries it fixes; a test that starts passing is an unexpected pass.
 
 # --- Environment skips: no native DSH, Pi or Claude SDK is installed on the runner, and no opt-in variable
@@ -238,8 +238,8 @@ fail	tests/test_unified_data_root_577.py::test_pi_configuration_wins_over_the_va
 fail	tests/test_unified_data_root_577.py::test_pi_host_refuses_an_uncreatable_variable	tests/test_unified_data_root_577.py:135	W1 (633)	R3: 'Exact process arguments are unavailable' in the failure text | observed: AssertionError: assert ('GRAFTLING_DATA_ROOT' in 'Exact process arguments are unavailable on this platform') (origin from test assertion, no graftling frame)
 fail	tests/test_unified_data_root_577.py::test_pi_host_uses_the_variable_instead_of_the_project_root	tests/test_unified_data_root_577.py:123	W1 (633)	R3: 'Exact process arguments are unavailable' in the failure text | observed: AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platfor (origin from test assertion, no graftling frame)
 
-# --- Undecided: fit no rule (round 2B); not entries, so the verdict stays FAIL until Main decides them.
-# undecided: NO RULE  tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts | origin tests/test_agents_connections_presets.py:279 (test assertion, no graftling frame) | assert not True
-# undecided: NO RULE  tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted | origin tests/test_agents_connections_presets.py:235 (test assertion, no graftling frame) | assert not True
-# undecided: NO RULE  tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable | origin tests/test_dsh_standalone_child.py:504 (test assertion, no graftling frame) | AssertionError: Traceback (most recent call last):
-# undecided: NO RULE  tests/test_pi_standalone_host.py::test_host_start_refusals | origin tests/test_pi_standalone_host.py:411 (test assertion, no graftling frame) | AssertionError: assert 'invalid-config' == 'runtime-unavailable'
+# --- Fit no rule in round 2B; placed by the Leader (Main delegated these), by inference from sibling failures.
+fail	tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted	tests/test_agents_connections_presets.py:235	W6 (638)	Leader-placed (inference): R9; uses configured(tmp_path) with the module's CONFIG, whose line 5 is `home: /native/claude`; the sibling failures report exactly `config.yml:5: connections.work-claude.home: expected an absolute path` | observed: assert not True (test assertion, no graftling frame)
+fail	tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts	tests/test_agents_connections_presets.py:279	W6 (638)	Leader-placed (inference): R9; same basis as test_explicit_values_equal_to_the_preset_are_accepted (configured(tmp_path), CONFIG line 5 `home: /native/claude`, siblings report `expected an absolute path`) | observed: assert not True (test assertion, no graftling frame)
+fail	tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable	tests/test_dsh_standalone_child.py:504	W4 (636)	Leader-placed (inference): R5; its script creates a DSH child by the same create path as the 13 siblings that fail with 'Windows does not support the authenticated local control pipe'; the script asserts only answered(agent) and does not print the create result, so the refusal text is not captured | observed: child AssertionError at answered(agent) == 'dsh answer: hello' (test assertion, no graftling frame)
+fail	tests/test_pi_standalone_host.py::test_host_start_refusals	tests/test_pi_standalone_host.py:411	W1 (633)	Leader-placed (inference): R3; got 'invalid-config' before the runtime check; the sibling test_host_starts_from_root_only_and_closes_at_shutdown (:395) fails with invalid-config 'Exact process arguments are unavailable on this platform'; the home path is an absolute Windows path, so R9 does not apply; the assertion compares only the code, so the message is not captured | observed: assert 'invalid-config' == 'runtime-unavailable' (test assertion, no graftling frame)

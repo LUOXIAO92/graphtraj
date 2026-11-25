@@ -26,8 +26,11 @@
 #       region on Teams & roles is a hard failure. Per theme: task graph
 #       with task #1 selected, expanded chat, Teams & roles, Project usage, 1440x900 (8 PNGs, plus the 2 narrow shots below). Nothing is saved, no
 #       native dialog is opened. Machine checks per theme: matchMedia(prefers-color-scheme: dark) matches the forced
-#       theme; computed --bg equals the token; X6 edge strokes are edge/accent token values and the dependency edge and
-#       project frame colours differ between themes and equal the tokens; no pageerror; every PNG > 10 kB.
+#       theme; computed --bg equals the token; X6 facts are taken unselected (a plain --edge-dep stroke must exist and
+#       every stroke is one of that theme's edge tokens) and with #1 selected (strokes may also be --accent-ui); strokes
+#       and the project frame fill differ between themes and equal the tokens; computed colours equal tokens (and are
+#       not white in dark) for the X6 minimap ground and viewport border, the unselected org cards (background, text)
+#       and the React Flow controls; no pageerror; every PNG > 10 kB.
 #       V2 narrow evidence: per theme, after the four screens the window is resized to 1000x760, the task graph with
 #       #1 selected is captured as <theme>-narrow-task-graph.png, then 1440x900 is restored (10 PNGs in total).
 #       On any failure the driver records the stage and message in facts.json, takes <theme>-failure.png if the

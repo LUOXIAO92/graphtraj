@@ -3,8 +3,11 @@
  * (prefers-color-scheme), as the spec requires ("默认跟随系统明暗主题").
  * Tokens are declared on :root (document canvas, getComputedStyle readers) and
  * again on .desktop-d so they win over values HeroUI declares on :root/body.
- * Import this file last in main.tsx. */
-:root, .desktop-d {
+ * Import this file last in main.tsx.
+ * They are declared once more on any `.light` / `.dark` / `[data-theme]` element inside the app: React Flow's
+ * default colorMode puts `.light` on `.react-flow`, and HeroUI's theme block (`:root, .light, …`) would otherwise
+ * re-declare --surface, --muted, … there with its own light values (white org cards in dark, Task 626 host run). */
+:root, .desktop-d, .desktop-d :is(.light, .dark, [data-theme]) {
   color-scheme: light;
   --bg: #f6f7f9; --surface: #ffffff; --surface-alt: #f0f2f5; --surface-hover: #e7eaef; --sidebar: var(--surface);
   --ink: #1f2933; --muted: #52606d; --faint: #6b7785;
@@ -22,7 +25,7 @@
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
-  :root, .desktop-d {
+  :root, .desktop-d, .desktop-d :is(.light, .dark, [data-theme]) {
     color-scheme: dark;
     --bg: #14171c; --surface: #1b1f26; --surface-alt: #232831; --surface-hover: #2c323d;
     --ink: #e6e9ee; --muted: #a9b3c0; --faint: #8a95a5;
@@ -44,7 +47,7 @@
  * excepted, which keep HeroUI's light values) is mapped here, so HeroUI
  * components follow the system theme through these tokens without a class.
  * (--surface and --muted share our names and are defined above.) */
-:root, .desktop-d {
+:root, .desktop-d, .desktop-d :is(.light, .dark, [data-theme]) {
   --accent: var(--accent-ui); --accent-foreground: var(--on-accent);
   --background: var(--bg); --foreground: var(--ink);
   --surface-foreground: var(--ink);
@@ -61,5 +64,29 @@
   --success: var(--green); --success-foreground: var(--on-accent);
   --warning: var(--amber); --warning-foreground: var(--on-accent);
 }
+/* React Flow (@xyflow/react 12 dist/style.css) reads var(--xy-<name>, var(--xy-<name>-default)); its defaults are
+ * fixed light/dark literals chosen by colorMode. Map the colour variables onto the tokens (both themes). */
+.desktop-d .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: var(--border-strong); --xy-background-pattern-lines-color: var(--border-ui);
+  --xy-background-pattern-cross-color: var(--border-ui);
+  --xy-node-background-color: var(--surface); --xy-node-color: var(--ink); --xy-node-border: 1px solid var(--border-strong);
+  --xy-node-group-background-color: var(--surface-alt);
+  --xy-node-boxshadow-hover: var(--shadow-sm); --xy-node-boxshadow-selected: 0 0 0 1px var(--accent-ui);
+  --xy-edge-stroke: var(--edge-dep); --xy-edge-stroke-selected: var(--accent-ui);
+  --xy-edge-label-background-color: var(--surface); --xy-edge-label-color: var(--ink);
+  --xy-connectionline-stroke: var(--accent-ui);
+  --xy-handle-background-color: var(--accent-ui); --xy-handle-border-color: var(--surface);
+  --xy-controls-button-background-color: var(--surface); --xy-controls-button-background-color-hover: var(--surface-alt);
+  --xy-controls-button-color: var(--ink); --xy-controls-button-color-hover: var(--ink);
+  --xy-controls-button-border-color: var(--border-ui); --xy-controls-box-shadow: var(--shadow-sm);
+  --xy-attribution-background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+  --xy-minimap-background-color: var(--surface); --xy-minimap-node-background-color: var(--faint);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--bg) 60%, transparent);
+  --xy-selection-background-color: color-mix(in srgb, var(--accent-ui) 8%, transparent);
+  --xy-selection-border: 1px dotted var(--accent-ui); --xy-resize-background-color: var(--accent-ui);
+}
+.desktop-d .react-flow__attribution { font-size: var(--fs-xs); }
+.desktop-d .react-flow__attribution a { color: var(--faint); }
 html, body { background: var(--bg); color: var(--ink); }
 .desktop-d { font-family: var(--font-ui); background: var(--sidebar); color: var(--ink); }

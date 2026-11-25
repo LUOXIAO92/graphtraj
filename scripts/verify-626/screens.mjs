@@ -52,6 +52,29 @@ async function selectTaskOne() {
   await page.getByRole('complementary', { name: 'Task details' }).waitFor();
   await page.waitForTimeout(800);
 }
+// Computed colours of visible elements against a token resolved through a probe in .desktop-d (as rgb()).
+// Any mismatch is a problem; in dark, pure white is a problem too (third-party light defaults).
+async function colours(name, checks) {
+  const result = await page.evaluate(checks => {
+    const root = document.querySelector('.desktop-d');
+    const probe = document.createElement('span');
+    root.append(probe);
+    const rgb = token => { probe.style.color = `var(${token})`; return getComputedStyle(probe).color; };
+    const rows = checks.map(([selector, prop, token]) => {
+      const element = [...document.querySelectorAll(selector)].find(node => node.getClientRects().length);
+      return { selector, prop, token, expected: rgb(token), actual: element ? getComputedStyle(element)[prop] : null };
+    });
+    probe.remove();
+    return rows;
+  }, checks);
+  facts.themes[theme].colours ??= {};
+  facts.themes[theme].colours[name] = result;
+  for (const row of result) {
+    if (row.actual === null) problem(`${theme} ${name}: no visible ${row.selector}`);
+    else if (row.actual !== row.expected) problem(`${theme} ${name}: ${row.selector} ${row.prop} ${row.actual} != ${row.token} ${row.expected}`);
+    if (theme === 'dark' && row.actual === 'rgb(255, 255, 255)') problem(`dark ${name}: ${row.selector} ${row.prop} is white`);
+  }
+}
 const tokens = ['--bg', '--surface', '--ink', '--edge-dep', '--edge-repl', '--edge-accept', '--accent-ui'];
 async function machine() {
   return page.evaluate(({ theme, tokens }) => {
@@ -170,6 +193,16 @@ role_tree:
       throw new Error(`nativeTheme.themeSource=${theme} did not reach the renderer: ${JSON.stringify(facts.themes[theme].themeMismatch)}`);
     }
     facts.themes[theme].nativeThemeAfter = await native();
+    // Unselected first: with #1 selected its related dependency edges are drawn in --accent-ui (by design),
+    // so the plain --edge-dep stroke is only observable without a selection.
+    stage = `${theme}: task graph unselected`;
+    await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+    const close = page.getByRole('button', { name: 'Close details', exact: true });
+    if (await close.isVisible()) await close.click();
+    await page.waitForTimeout(800);
+    facts.themes[theme].machineUnselected = await machine();
+    await colours('minimap', [['.native-minimap .x6-widget-minimap', 'backgroundColor', '--surface'],
+      ['.native-minimap .x6-widget-minimap-viewport', 'borderTopColor', '--accent-ui']]);
     stage = `${theme}: task graph`;
     await selectTaskOne();
     facts.themes[theme].machine = await machine();
@@ -184,6 +217,9 @@ role_tree:
     await page.getByRole('region', { name: 'Team organization tree' }).waitFor().catch(error => {
       throw new Error(`Teams & roles did not render the "Team organization tree" region (fixture team ${JSON.stringify(facts.fixtureTeam)}): ${error.message.split('\n')[0]}`);
     });
+    await colours('org tree', [['.d-team-flow .d-org-node:not(.selected)', 'backgroundColor', '--surface'],
+      ['.d-team-flow .d-org-node:not(.selected)', 'color', '--ink'],
+      ['.d-team-flow .react-flow__controls-button', 'backgroundColor', '--surface']]);
     await shot('teams-roles');
     stage = `${theme}: project usage`;
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();
@@ -197,19 +233,23 @@ role_tree:
   }
   theme = null;
   stage = 'machine checks';
-  const light = facts.themes.light.machine, dark = facts.themes.dark.machine;
   const expectBg = { light: '#f6f7f9', dark: '#14171c' };
-  for (const m of [light, dark]) {
-    if (m.darkMatches !== (m.theme === 'dark')) problem(`${m.theme}: prefers-color-scheme dark=${m.darkMatches}`);
-    if (m.token['--bg'] !== expectBg[m.theme]) problem(`${m.theme}: --bg is ${m.token['--bg']}, expected ${expectBg[m.theme]}`);
-    const allowed = [m.token['--edge-dep'], m.token['--edge-repl'], m.token['--edge-accept'], m.token['--accent-ui']];
-    if (!m.edgeStrokes.length) problem(`${m.theme}: no X6 edge stroke found`);
-    for (const stroke of m.edgeStrokes) if (!allowed.includes(stroke)) problem(`${m.theme}: X6 edge stroke ${stroke} is not an edge/accent token value`);
-    if (m.projectFrameFill !== m.token['--surface']) problem(`${m.theme}: X6 project frame fill ${m.projectFrameFill} != --surface ${m.token['--surface']}`);
+  for (const name of ['light', 'dark']) {
+    const plain = facts.themes[name].machineUnselected, chosen = facts.themes[name].machine;
+    for (const [label, m, withAccent] of [['unselected', plain, false], ['#1 selected', chosen, true]]) {
+      if (m.darkMatches !== (name === 'dark')) problem(`${name} ${label}: prefers-color-scheme dark=${m.darkMatches}`);
+      if (m.token['--bg'] !== expectBg[name]) problem(`${name} ${label}: --bg is ${m.token['--bg']}, expected ${expectBg[name]}`);
+      const allowed = [m.token['--edge-dep'], m.token['--edge-repl'], m.token['--edge-accept'], ...(withAccent ? [m.token['--accent-ui']] : [])];
+      if (!m.edgeStrokes.length) problem(`${name} ${label}: no X6 edge stroke found`);
+      for (const stroke of m.edgeStrokes) if (!allowed.includes(stroke)) problem(`${name} ${label}: X6 edge stroke ${stroke} is not one of this theme's edge tokens ${allowed.join(' ')}`);
+      if (m.projectFrameFill !== m.token['--surface']) problem(`${name} ${label}: X6 project frame fill ${m.projectFrameFill} != --surface ${m.token['--surface']}`);
+    }
+    if (!plain.edgeStrokes.includes(plain.token['--edge-dep'])) problem(`${name} unselected: no plain dependency edge in --edge-dep ${plain.token['--edge-dep']} (strokes ${plain.edgeStrokes.join(' ')})`);
   }
-  if (light.token['--edge-dep'] === dark.token['--edge-dep'] || !light.edgeStrokes.includes(light.token['--edge-dep'])
-    || !dark.edgeStrokes.includes(dark.token['--edge-dep'])) problem('X6 dependency edge colour does not follow the theme');
-  if (light.projectFrameFill === dark.projectFrameFill) problem('X6 project frame fill is the same in both themes');
+  const lightPlain = facts.themes.light.machineUnselected, darkPlain = facts.themes.dark.machineUnselected;
+  if (lightPlain.token['--edge-dep'] === darkPlain.token['--edge-dep']
+    || lightPlain.edgeStrokes.some(stroke => darkPlain.edgeStrokes.includes(stroke))) problem('X6 edge strokes do not differ between themes');
+  if (lightPlain.projectFrameFill === darkPlain.projectFrameFill) problem('X6 project frame fill is the same in both themes');
   stage = 'done';
 } catch (error) {
   problem(`stage "${stage}" failed: ${error?.message ?? error}`);

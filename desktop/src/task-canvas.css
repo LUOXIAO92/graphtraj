@@ -20,6 +20,12 @@
 .native-path-label:empty { display: none; }
 
 .native-minimap { position: absolute; right: 16px; bottom: 16px; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; z-index: 3; background: var(--surface); }
+/* X6 injects .x6-widget-minimap* rules with fixed light colours (@antv/x6 es/plugin/minimap/style/raw.js). */
+.native-minimap .x6-widget-minimap { background-color: var(--surface); }
+.native-minimap .x6-widget-minimap .x6-graph { box-shadow: none; background-color: var(--bg); }
+.native-minimap .x6-widget-minimap .x6-graph-background { background-color: var(--bg); }
+.native-minimap .x6-widget-minimap-viewport { border-color: var(--accent-ui); }
+.native-minimap .x6-widget-minimap-viewport-zoom { background-color: var(--surface); border-color: var(--accent-ui); }
 .native-relation-legend { position: absolute; left: 20px; top: 12px; display: flex; gap: 14px; font-size: var(--fs-xs); background: color-mix(in srgb, var(--surface) 95%, transparent); color: var(--edge-dep); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
 .native-relation-legend span:nth-child(1) { color: var(--muted); }
 .native-relation-legend span:nth-child(2) { color: var(--edge-repl); }

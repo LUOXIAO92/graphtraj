@@ -1,7 +1,7 @@
 name: Windows desktop adoption 266
 on:
   push:
-    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref]
+    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref, agent/622-process-reclaim-windows-noise, agent/619-graftling-windows-import]
 permissions:
   contents: read
 jobs:
@@ -25,11 +25,14 @@ jobs:
       # writes text stubs. Only this disposable runner's configuration changes.
       - name: Keep graftling's symbolic links on this runner
         run: git config --global core.symlinks true
+      # Task 619 only: its branch checks out the unreleased graftling Windows fix at this
+      # exact commit (pushed as graftling's agent/619-graftling-windows-import); the app
+      # is packaged from this same checkout (GRAFTLING_SOURCE). Other branches: GRAFTLING_REF.
       - name: Check out graftling at the version GraphTraj declares
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: LUOXIAO92/graftling
-          ref: ${{ env.GRAFTLING_REF }}
+          ref: ${{ github.ref_name == 'agent/619-graftling-windows-import' && '616671870fb2dd9679ea18fdfdbd2f094b1ae0a9' || env.GRAFTLING_REF }}
           path: graftling
           persist-credentials: false
       - name: Fail unless graftling's linked package documents are real

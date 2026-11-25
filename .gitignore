@@ -12,3 +12,6 @@ uv.lock
 
 # Per-platform GUI provenance generated only while packaging its backend wheel.
 src/graphtraj/interfaces/desktop-host.json
+
+# Controlled Codex peer rollouts written beside test scenarios (tests/runner_codex_peer.py).
+tests/codex-home/

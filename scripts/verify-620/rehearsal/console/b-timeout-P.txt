@@ -1,0 +1,16 @@
+$ VERIFY620_REMOTE=/tmp/claude-501/r620/timeout/remote.git VERIFY620_GH=/tmp/claude-501/r620/timeout/gh/gh VERIFY620_OUT=/tmp/claude-501/r620/timeout/out VERIFY620_POLL_S=1 VERIFY620_APPEAR_S=4 VERIFY620_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push and wait. OUTWARD-FACING: git push <scratch>/timeout/remote.git agent/620-linux-adoption-codex-fixture (fast-forward only, never force). Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: HEAD scenario reads the peer's rollout (codex-home beside the scenario, FAKE_CODEX_SESSION_ID)
+PASS: .github/workflows/desktop-linux-adoption.yml push branches list agent/620-linux-adoption-codex-fixture
+PASS: no other desktop workflow lists agent/620-linux-adoption-codex-fixture
+$ git push <scratch>/timeout/remote.git refs/heads/agent/620-linux-adoption-codex-fixture:refs/heads/agent/620-linux-adoption-codex-fixture   (HEAD 631f1fb6f514e6884cebfdb782ebe55b15e54f12)
+  To <scratch>/timeout/remote.git
+   * [new branch]        agent/620-linux-adoption-codex-fixture -> agent/620-linux-adoption-codex-fixture
+PASS: <scratch>/timeout/remote.git agent/620-linux-adoption-codex-fixture = 631f1fb6f514e6884cebfdb782ebe55b15e54f12
+observing .github/workflows/desktop-linux-adoption.yml for 631f1fb6f514e6884cebfdb782ebe55b15e54f12 on LUOXIAO92/graphtraj (appearance bound 4s, completion bound 30s, poll 1s)
+appearance timeout after 4s: no .github/workflows/desktop-linux-adoption.yml run for 631f1fb6f514e6884cebfdb782ebe55b15e54f12
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/620-linux-adoption-codex-fixture/scripts/verify-620/steps.zsh W 631f1fb6f514e6884cebfdb782ebe55b15e54f12    (re-observe; no push)
+next: gh api 'repos/LUOXIAO92/graphtraj/actions/runs?head_sha=631f1fb6f514e6884cebfdb782ebe55b15e54f12&per_page=100' --jq '.workflow_runs[] | [.path, .status, .conclusion, .html_url] | @tsv'
+VERDICT 620 P: FAIL (.github/workflows/desktop-linux-adoption.yml never appeared within 4s)
+[exit 1]

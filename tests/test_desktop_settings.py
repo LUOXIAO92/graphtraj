@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from contextlib import contextmanager
@@ -427,9 +428,14 @@ def test_approval_connection_save_reopen_and_native_resolution(
     assert saved['codex']['approval'] == {'connection': 'shared/review/selected'}
     role = resolve_child_role('analyst', load_project_roles(project).preset('analyst'), project)
     # The public Adapter preparation seam does not invoke inference or read keys.
-    executable = tmp_path / 'codex-help'
-    executable.write_text('#!/bin/sh\necho --sandbox\n')
-    executable.chmod(0o755)
+    if os.name == 'nt':
+        # CreateProcess cannot start a '#!' script; a batch file prints the same help text (619).
+        executable = tmp_path / 'codex-help.cmd'
+        executable.write_text('@echo --sandbox\n')
+    else:
+        executable = tmp_path / 'codex-help'
+        executable.write_text('#!/bin/sh\necho --sandbox\n')
+        executable.chmod(0o755)
     request = context(tmp_path / 'prepared', executable, role).launch_document()['adapter_request']
     assert request['approval'] == {'model': 'review-model', 'base_url': 'https://review.invalid/v1',
                                    'api_key_env': 'REVIEW_KEY'}

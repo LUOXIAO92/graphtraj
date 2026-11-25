@@ -1,0 +1,3 @@
+$ cd .g619 && venv-cand/bin/python -m pytest -p no:cacheprovider -q tests/test_windows_emulation_619.py   # candidate 82e9d12+worktree
+....                                                                     [100%]
+4 passed in 0.45s

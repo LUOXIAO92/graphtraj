@@ -1,0 +1,20 @@
+$ VERIFY620_REMOTE=/tmp/claude-501/r620/success/remote.git VERIFY620_GH=/tmp/claude-501/r620/success/gh/gh VERIFY620_OUT=/tmp/claude-501/r620/success/out VERIFY620_POLL_S=1 VERIFY620_APPEAR_S=10 VERIFY620_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: your gh login (account shown, no token) and ssh key (git ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify620-stand-in | gh path: <scratch>/success/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-620 fake)
+    - Active account: true
+PASS: origin is git@github.com:LUOXIAO92/graphtraj.git
+NOTE: rehearsal remote <scratch>/success/remote.git is used instead of origin for ls-remote/push
+PASS: HEAD scenario reads the peer's rollout (codex-home beside the scenario, FAKE_CODEX_SESSION_ID)
+PASS: .github/workflows/desktop-linux-adoption.yml push branches list agent/620-linux-adoption-codex-fixture
+PASS: no other desktop workflow lists agent/620-linux-adoption-codex-fixture
+PASS: agent/620-linux-adoption-codex-fixture is absent on <scratch>/success/remote.git (P creates it)
+PASS: output directory <scratch>/success/out (Harness /Users/luoxiao/workspace/you-are-a-product-architect-delivery)
+candidate: 631f1fb6f514e6884cebfdb782ebe55b15e54f12
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/620-linux-adoption-codex-fixture/scripts/verify-620/steps.zsh L    (reads run 45546698887's full log; read only)
+VERDICT 620 00: PASS (candidate 631f1fb6f514e6884cebfdb782ebe55b15e54f12)
+[exit 0]

@@ -38,16 +38,15 @@ def main() -> None:
         print('--config --json --sandbox')
         return
     if sys.argv[1:2] == ['app-server']:
-        session = str(uuid4())
-        # This is the existing peer's Runtime-owned path, not GraphTraj state.
-        native = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
-        os.environ['LINUX_ADOPTION_ROLLOUT'] = str(native / 'sessions/fake' / f'rollout-{session}.jsonl')
         runpy.run_path(str(Path(__file__).with_name('runner_codex_peer.py')),
-                       init_globals={'scenario': __file__, 'session_name': session})
+                       init_globals={'scenario': __file__, 'session_name': str(uuid4())})
         return
 
     sys.stdin.read()
-    native = Path(os.environ['LINUX_ADOPTION_ROLLOUT'])
+    # The existing peer's rollout (runner_codex_peer.py thread/start): beside this
+    # scenario, named by the session the peer passes; not GraphTraj state.
+    native = (Path(__file__).parent / 'codex-home/sessions/fake'
+              / ('rollout-' + os.environ['FAKE_CODEX_SESSION_ID'] + '.jsonl'))
     # The existing peer wrote this context from the Adapter's actual turn/start.
     context = json.loads(native.read_text().splitlines()[-1])['payload']
     output = subprocess.check_output(['/bin/echo', 'controlled tool output'], text=True).strip()

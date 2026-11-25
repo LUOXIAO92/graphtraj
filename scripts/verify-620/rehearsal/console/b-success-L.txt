@@ -1,0 +1,17 @@
+$ VERIFY620_REMOTE=/tmp/claude-501/r620/success/remote.git VERIFY620_GH=/tmp/claude-501/r620/success/gh/gh VERIFY620_OUT=/tmp/claude-501/r620/success/out VERIFY620_POLL_S=1 VERIFY620_APPEAR_S=10 VERIFY620_DONE_S=30 zsh steps.zsh L
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [L] Read run 45546698887's full log, read only. Login: your gh login. Dialog: none. Network: GitHub (read).
+$ gh run view 45546698887 --repo LUOXIAO92/graphtraj --log > <scratch>/success/out/run-45546698887.log
+saved: <scratch>/success/out/run-45546698887.log (3702 bytes, 56 lines)
+--- matches for Traceback|FileNotFoundError|scenario failed|rollout-|LINUX_ADOPTION (3 lines context, first 200 lines)
+49-installed-desktop	Build	2026-11-25T05:00:00Z filler line
+50-installed-desktop	Build	2026-11-25T05:00:00Z filler line
+51-installed-desktop	Exercise the installed desktop under Xvfb	2026-11-25T05:01:00Z launched member observer
+52:installed-desktop	Exercise the installed desktop under Xvfb	2026-11-25T05:01:01Z Traceback (most recent call last):
+53-installed-desktop	Exercise the installed desktop under Xvfb	2026-11-25T05:01:01Z   File "/home/runner/work/graphtraj/graphtraj/tests/linux_adoption_runtime.py", line 50, in main
+54:installed-desktop	Exercise the installed desktop under Xvfb	2026-11-25T05:01:01Z FileNotFoundError: [Errno 2] No such file or directory: '/home/runner/.codex/sessions/fake/rollout-0000.jsonl'
+55:installed-desktop	Exercise the installed desktop under Xvfb	2026-11-25T05:01:01Z turn/completed failed: scenario failed
+56-installed-desktop	Exercise the installed desktop under Xvfb	2026-11-25T05:01:31Z TimeoutError: timed out (tests/linux_adoption_input.py:88)
+--- match count: 3
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/620-linux-adoption-codex-fixture/scripts/verify-620/steps.zsh P    (OUTWARD-FACING: pushes agent/620-linux-adoption-codex-fixture and waits for the run)
+[exit 0]

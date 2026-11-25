@@ -1,0 +1,20 @@
+$ python -I scenario_driver.py fixed <fixed tests> <scratch>
+control socket bind: PermissionError(1, 'Operation not permitted') (sandbox); scenario can reach only connect
+turn id: 4b253079-dda8-48be-acca-4cab0c79f90d
+turn/completed: {"id": "4b253079-dda8-48be-acca-4cab0c79f90d", "status": "failed", "error": {"message": "scenario failed"}, "items": []}
+peer stderr (last 8 lines):
+  Traceback (most recent call last):
+    File "<scratch>/fixed/tests/linux_adoption_runtime.py", line 67, in <module>
+      main()
+      ~~~~^^
+    File "<scratch>/fixed/tests/linux_adoption_runtime.py", line 59, in main
+      connection.connect(os.environ['LINUX_ADOPTION_CONTROL'])
+      ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  FileNotFoundError: [Errno 2] No such file or directory
+rollout files: ['tests/codex-home/sessions/fake/rollout-c0d54c62-7463-4285-a246-bbad29abd207.jsonl']
+rollout records: ['session_meta:-', 'turn_context:-', 'turn_context:-:turn=4b253079-dda8-48be-acca-4cab0c79f90d', 'response_item:message', 'response_item:function_call', 'response_item:function_call_output', 'event_msg:token_count']
+control exchange: not bound
+CHECK rollout read fails on the CODEX_HOME path: no
+CHECK controlled records appended to the peer rollout: YES
+CHECK fails only at the control-socket connect: YES
+[exit 0]

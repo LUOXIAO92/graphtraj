@@ -356,7 +356,7 @@ role_tree:
   await button('Hide sidebar').click(); await shot('chat-sidebar-hidden'); await button('Show sidebar').click();
   step('Installed D graph, details, current/history columns, independent scroll, repeated tools, draggable reading and cross-project retention passed.');
   await button('Project usage').click();
-  await page.locator('.d-dated-records > div').first().waitFor();
+  await page.locator('.d-dated-records tbody tr').first().waitFor();
   const date = new Date().toLocaleDateString('en-CA');
   await field('Start date').fill(date); await field('End date').fill(date);
   for (const [width,height] of [[1440,1000],[1024,820]]) { await size(width,height); await shot('project-usage'); }

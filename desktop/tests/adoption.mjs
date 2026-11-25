@@ -205,9 +205,12 @@ async function shot(page, name) {
   return path.relative(evidence, file);
 }
 
-/** Locate a project entry in the sidebar by its directory name. */
+/**
+ * Locate a project entry in the sidebar by its directory name. Since Task 627 (V11) the entry shows
+ * the parent directory as its subtitle and the full root as its title, so the title is matched.
+ */
 function projectEntry(page, name) {
-  return page.locator('.project-button').filter({ hasText: name });
+  return page.locator(`.project-button[title*=${JSON.stringify(name)}]`);
 }
 
 /**
@@ -328,7 +331,7 @@ async function nativeDialogAttempt(first) {
     await page.waitForTimeout(2000);
     const picked = await projectEntry(page, 'native-project').count();
     attempts.push({ name: 'open panel: the typed directory became a project', required: true, ok: picked > 0,
-      command: "page.locator('.project-button') text match count",
+      command: "page.locator('.project-button[title*=\"native-project\"]') count",
       output: `${picked} entry matching native-project` });
 
     // The real open panel raised by the native "Relocate <root>" entry. D removed the
@@ -519,7 +522,7 @@ async function usageHistoryAdoption() {
     await modelButton('All models').click();
     await dashboard().getByLabel('Agent', { exact: false }).selectOption('undated@x2');
     await noRecords().waitFor();
-    assert.equal(await dashboard().locator('.d-dated-records > div').count(), 0);
+    assert.equal(await dashboard().locator('.d-dated-records tbody tr').count(), 0);
     await dashboard().getByLabel('Agent', { exact: false }).selectOption('');
     await selectDates(localDate(today), localDate(today));
     await modelButton('gpt-5.3-codex').click();
@@ -569,9 +572,10 @@ async function usageHistoryAdoption() {
     await selectDates(localDate(today), localDate(today));
     await waitValue(() => comparison(first), expectedCompact(1000));
     await waitValue(() => comparison(second), expectedCompact(500));
-    // Coverage notices follow the observation status in the history disclosure (UsageDashboard.tsx footer).
+    // Coverage notices are p.usage-coverage in the history disclosure; since Task 627 the observation
+    // status sits on the footer's always-visible line (UsageDashboard.tsx footer).
     await dashboard().locator('.d-usage-history-note > details > summary').click();
-    const gap = dashboard().locator('.d-usage-history-note > details > p[role="status"] ~ p').first();
+    const gap = dashboard().locator('.d-usage-history-note > details > p.usage-coverage').first();
     await gap.waitFor({ state: 'visible' });
     assert.ok((await gap.innerText()).trim());
     const history = path.join(os.homedir(), '.graphtraj/usage-history');
@@ -1054,7 +1058,8 @@ async function main() {
     // D totals show compact counts (compactNumber); the dated chart keeps the exact input.
     const totals = Object.fromEntries(await usageDashboard.locator('.new-usage-totals > span').evaluateAll(cells =>
       cells.map(cell => [cell.querySelector('small').textContent, cell.querySelector('strong').textContent])));
-    const totalLabels = { input: 'INPUT · INCLUDES CACHE', output: 'OUTPUT', cache_read: 'CACHE READ' };
+    // Metric card labels are sentence case since Task 627 (V9); the cost card sits outside .new-usage-totals.
+    const totalLabels = { input: 'Input · includes cache', output: 'Output', cache_read: 'Cache read' };
     const chartTitles = await usageDashboard.getByRole('img', { name: /^Reported input by date/ }).locator('title')
       .evaluateAll(titles => titles.map(title => title.textContent));
     for (const [metric, value] of Object.entries(usage.tokens)) {

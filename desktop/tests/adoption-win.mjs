@@ -9,7 +9,7 @@ import { _electron as electron } from 'playwright';
 import { controlledInput, retainedRecords } from './retained-records.mjs';
 import { settingsAdoption } from './settings-adoption.mjs';
 import { approvalDialogs, datedUsage, guardApprovals, openTask, parallelChat, projectsView,
-  removeIndexEntry, taskCard } from './adoption-shared.mjs';
+  projectEntry, removeIndexEntry, taskCard } from './adoption-shared.mjs';
 import { localDate } from '../src/usage.ts';
 
 assert.equal(process.platform, 'win32', 'Adoption requires an actual Windows desktop');
@@ -257,7 +257,7 @@ async function pick(folder, action = 'pick') {
     throw error;
   }
   if (action !== 'pick') return;
-  await page.locator('.project-button[aria-current="true"]').filter({ hasText: folder }).waitFor();
+  await projectEntry(page, folder, '[aria-current="true"]').waitFor();
   await button('Monitor').click();
   await taskCard(page.locator('.monitor-page:visible'), '1').waitFor();
 }
@@ -314,12 +314,12 @@ try {
   assert.equal(relocatedEntry.root, relocateTo, 'The real Relocate dialog must change only the indexed path');
   await capture('relocated');
   await removeIndexEntry(page, relocateTo);
-  await page.locator('.project-button').filter({ hasText: relocateTo }).waitFor({ state: 'detached' });
+  await projectEntry(page, relocateTo).waitFor({ state: 'detached' });
   assert.equal(await page.locator('.project-button').count(), 2);
   assert.equal(operate(relocateFrom, 'task_graph').tasks.length, 2);
   assert.equal(operate(relocateTo, 'task_graph').tasks.length, 2);
   facts.steps.push('Actual Relocate dialog changed only the indexed path; removing that entry kept both directories');
-  await page.locator('.project-button').filter({ hasText: first }).click();
+  await projectEntry(page, first).click();
   await openTask(page.locator('.monitor-page:visible'), '1');
   await page.getByRole('complementary', { name: 'Task details' }).waitFor();
   const activity = operate(first, 'desktop_activity', { task_id: '1' });
@@ -367,9 +367,10 @@ try {
     const titles = await dashboard.getByRole('img', { name: /^Reported input by date/ }).locator('title')
       .evaluateAll(items => items.map(item => item.textContent));
     assert.ok(titles.some(title => /: 1,?000 input tokens$/.test(title)), JSON.stringify(titles));
-    assert.equal(totals.OUTPUT, '80');
-    assert.equal(totals['CACHE READ'], '600');
-    assert.equal(totals['KNOWN INPUT HIT RATE'], '60.0%');
+    // Metric card labels are sentence case since Task 627 (V9, UsageDashboard.tsx totals).
+    assert.equal(totals.Output, '80');
+    assert.equal(totals['Cache read'], '600');
+    assert.equal(totals['Known input hit rate'], '60.0%');
     assert.match((await model.locator('strong').textContent()).trim(), /^\$0\.001925/);
     facts.steps.push('Controlled 1000 input / 600 cache / 80 output gives 60% cache and $0.001925 at the bundled C snapshot; reasoning is not added twice');
   }
@@ -426,12 +427,12 @@ try {
   await bounded('Normal GUI close', app.close()); app = null;
   assert.deepEqual(operate(first, 'task_graph'), before);
   await launch();
-  await page.locator('.project-button[aria-current="true"]').filter({ hasText: first }).waitFor();
+  await projectEntry(page, first, '[aria-current="true"]').waitFor();
   assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), firstId), settings.roles);
   assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).catalog, settings.global.catalog);
   await datedUsage({ page, first, second, agent: historical.alias, date: usageDate, shot: name => capture(`reopened-${name}`) });
   await removeIndexEntry(page, second);
-  await page.locator('.project-button').filter({ hasText: second }).waitFor({ state: 'detached' });
+  await projectEntry(page, second).waitFor({ state: 'detached' });
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(operate(second, 'task_graph').tasks.length, 2);
   await capture('restart-removal');

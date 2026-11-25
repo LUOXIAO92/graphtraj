@@ -1,2 +1,94 @@
 /* Usage surface (Task 627, advice 5.1): project and all-project usage.
  * Owner in Task 627: E2. Imported in main.tsx after the legacy files and before tokens.css. */
+
+/* Page header and filters on the 24px page margin. */
+.usage-dashboard .new-section-heading { align-items: flex-end; padding: 18px var(--sp-6) var(--sp-3); }
+.usage-dashboard .new-section-heading h1 { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-strong); letter-spacing: -.2px; }
+.d-dated-usage .new-section-heading p { margin-top: 2px; font-size: var(--fs-sm); color: var(--muted); }
+.usage-dashboard .d-rate-reference { height: var(--control-h); padding: 0 var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--muted); }
+.usage-dashboard .d-rate-reference:hover { background: var(--surface-alt); color: var(--ink); text-decoration: none; }
+.d-usage-date-controls { gap: var(--sp-3); padding: 0 var(--sp-6) var(--sp-2); }
+.d-usage-date-controls label { gap: 4px; font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--muted); }
+.d-usage-date-controls input, .d-usage-date-controls select { min-height: var(--control-h); height: var(--control-h); padding: 0 10px; border-radius: var(--r-md); font-size: var(--fs-sm); }
+.d-usage-date-controls > .button { min-height: var(--control-h); height: var(--control-h); font-size: var(--fs-sm); }
+.d-project-usage-filters select { font-size: var(--fs-sm); }
+.d-usage-date-note { padding: 0 var(--sp-6) var(--sp-3); color: var(--faint); }
+
+/* V9: metric cards, cost first (U3: two decimals, full value in title). */
+.usage-kpis { display: grid; grid-template-columns: 1.25fr repeat(4, minmax(0, 1fr)); gap: var(--sp-3); padding: 0 var(--sp-6) var(--sp-4); flex-shrink: 0; }
+.usage-kpis > .new-usage-totals, .d-dated-usage .usage-kpis > .new-usage-totals { display: contents; }
+.usage-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--sp-3) 14px; border: 1px solid var(--border-ui); border-radius: var(--r-lg); background: var(--surface); text-align: left; }
+.usage-kpi > small:first-child, .usage-kpi > span:first-child { font-size: var(--fs-sm); color: var(--muted); letter-spacing: 0; }
+.usage-kpi > strong, .new-cost.usage-kpi > strong { display: block; font-size: 22px; font-weight: var(--fw-strong); letter-spacing: -.3px; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.usage-kpi > strong small { margin-left: 4px; font-size: var(--fs-sm); font-weight: var(--fw-medium); letter-spacing: 0; color: var(--muted); }
+.usage-kpi > small:last-child { font-size: var(--fs-xs); line-height: 1.45; color: var(--faint); letter-spacing: 0; }
+.usage-kpi-lead { background: var(--accent-soft); border-color: transparent; }
+.usage-kpi-lead > strong { color: var(--accent-ink); }
+
+/* Body: model list and detail panels. */
+.d-usage-layout { grid-template-columns: 240px minmax(0, 1fr); }
+.d-model-list { padding: var(--sp-3); }
+.d-model-list > .section-label { margin: 2px var(--sp-2) var(--sp-2); padding: 0; font-size: var(--fs-xs); font-weight: var(--fw-strong); letter-spacing: .06em; color: var(--faint); }
+.d-model-list > button { grid-template-columns: minmax(0, 1fr) auto; gap: 3px var(--sp-2); padding: var(--sp-2) 10px; margin-bottom: 2px; border: 0; border-radius: var(--r-md); }
+.d-model-list > button.selected { background: var(--accent-soft); border-color: transparent; }
+.d-model-list > button > span { font-size: var(--fs-sm); font-weight: var(--fw-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-model-list > button > strong { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--ink); font-variant-numeric: tabular-nums; }
+.d-model-list > button > strong.unpriced { color: var(--amber); }
+.d-model-list > button > i { display: block; height: 4px; margin: 0; border-radius: 2px; background: var(--surface-hover); overflow: hidden; }
+.d-model-list > button > i::after { content: ''; display: block; height: 100%; width: var(--share, 0); background: var(--chart-color); }
+.d-model-list > button > small { color: var(--faint); }
+.d-usage-chart, .d-auxiliary-page .d-usage-chart { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-4) var(--sp-6) var(--sp-6); }
+.d-global-usage-body { padding: var(--sp-4) var(--sp-6) var(--sp-6); }
+.usage-panel { flex-shrink: 0; border: 1px solid var(--border-ui); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+.d-global-usage-body > .usage-panel { margin-top: var(--sp-4); }
+.usage-panel > .d-history-chart-heading { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--border-ui); align-items: center; }
+.d-history-chart-heading h2 { font-size: var(--fs-lg); font-weight: var(--fw-strong); }
+.d-history-chart-heading > span { color: var(--faint); }
+
+/* Trend chart: legend, date axis; dates without reports are hollow markers, never zero. */
+.usage-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.usage-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; vertical-align: -1px; }
+.usage-legend .legend-input { background: var(--chart-color); }
+.usage-legend .legend-cache { background: var(--chart-secondary); }
+.usage-legend .legend-gap { border: 1.5px dashed var(--faint); border-radius: 50%; }
+.d-dated-usage .d-history-trend, .usage-panel .d-history-trend { padding: var(--sp-2) 14px 4px; margin: 0; }
+.d-dated-usage .d-history-trend svg { height: 210px; }
+.trend-chart svg text { fill: var(--faint); font-size: 11px; font-family: var(--font-ui); }
+.chart-baseline { stroke: var(--border-strong); stroke-width: 1; }
+.chart-bar-input { fill: var(--chart-color); }
+.chart-bar-cache { fill: var(--chart-secondary); }
+.chart-gap { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 2 3; }
+.d-history-trend-unavailable { padding: var(--sp-4) 14px; }
+
+/* Records: a table with headers (the all-project 'Project comparison' table is unchanged). */
+.d-dated-records { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.d-dated-records th, .d-dated-records td { padding: var(--sp-2) 14px; text-align: right; border-bottom: 1px solid var(--border-ui); white-space: nowrap; }
+.d-dated-records th { font-size: var(--fs-xs); font-weight: var(--fw-strong); color: var(--faint); background: var(--surface-alt); }
+.d-dated-records th:nth-child(-n+4), .d-dated-records td:nth-child(-n+4) { text-align: left; }
+.d-dated-records td:nth-child(2), .d-dated-records td:nth-child(3) { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.d-dated-records tbody tr:last-child td { border-bottom: 0; }
+.d-dated-records time { color: var(--muted); font-size: var(--fs-sm); }
+.d-dated-records .mono { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.d-dated-records .unpriced { color: var(--amber); }
+
+/* Empty states use the shared V10 block. */
+.usage-dashboard .d-usage-empty { padding: var(--sp-6) 0; max-width: 580px; margin: 0 auto; }
+
+/* V9: one-line footer (first sentence and observation status); 'About this usage history' expands. */
+.d-usage-history-note { padding: var(--sp-2) var(--sp-6); color: var(--faint); font-size: var(--fs-xs); }
+.usage-note-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.usage-note-line > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usage-note-line > span[role="status"] { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.d-usage-history-note > details { margin-top: 4px; }
+.d-usage-history-note > details > summary { color: var(--accent-ink); }
+.d-usage-history-note details p { color: var(--muted); }
+
+@media (max-width: 1250px) {
+  .usage-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .d-usage-layout, .d-auxiliary-page .d-usage-layout { grid-template-columns: 200px minmax(0, 1fr); }
+}
+@media (max-width: 1080px) {
+  .usage-kpis, .d-usage-date-controls, .d-usage-date-note, .d-usage-history-note, .usage-dashboard .new-section-heading { padding-inline: var(--sp-4); }
+  .d-usage-chart, .d-auxiliary-page .d-usage-chart, .d-global-usage-body { padding-inline: var(--sp-4); }
+  .usage-note-line { flex-wrap: wrap; }
+}

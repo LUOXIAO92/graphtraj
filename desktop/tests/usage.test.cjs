@@ -154,3 +154,11 @@ test('local date ranges include whole days across DST and filter after counter d
     assert.equal(records(map).filter(row => row.time === null).length, 1);
   } finally { if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone; }
 });
+
+test('head cost has two decimals and never shows a positive amount as $0.00 (Task 627, U3)', () => {
+  const { headMoney, money } = require('../src/usage.ts');
+  assert.equal(headMoney(184.27), '$184.27');
+  assert.equal(headMoney(0), '$0.00');
+  assert.equal(headMoney(0.001925), '<$0.01');
+  assert.equal(money(0.001925), '$0.001925');
+});

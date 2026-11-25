@@ -9,6 +9,13 @@ export const visibleState = state => state === 'retired' ? 'retired'
  * The main X6 task canvas (TaskCanvas.tsx:264, aria-label 'Native task canvas'). The minimap
  * (:265, 'Task map navigator') reuses the graph model, so every canvas lookup is scoped here.
  */
+/**
+ * The sidebar entry of an indexed project root. Since Task 627 (V11) the entry's subtitle is the
+ * parent directory and its title attribute is the full root, so match the title, not the text.
+ * `state` narrows it, e.g. '[aria-current="true"]'. JSON quoting is also valid CSS string quoting.
+ */
+export const projectEntry = (page, root, state = '') =>
+  page.locator(`.project-button${state}[title*=${JSON.stringify(String(root))}]`);
 export const taskCanvas = scope => scope.getByLabel('Native task canvas', { exact: true });
 /** A task card on the main canvas; its title button carries the accessible name. */
 export const taskCard = (scope, id) => taskCanvas(scope).locator(`.native-task-card[data-task-id="${id}"]`);
@@ -125,7 +132,8 @@ export async function datedUsage({ page, first, second, agent, date, input = 100
   assert.deepEqual(await exactInput(), [`${date}: ${quantity} input tokens`]);
   await dates('2099-01-01', '2099-01-01');
   await dashboard.getByRole('heading', { name: 'No dated usage in this view', exact: true }).waitFor();
-  assert.equal(await dashboard.locator('.d-dated-records > div').count(), 0);
+  // Records are a table since Task 627 (V9, UsageDashboard.tsx); no row is shown for these dates.
+  assert.equal(await dashboard.locator('.d-dated-records tbody tr').count(), 0);
   await dates('2099-01-02', '2099-01-01');
   await dashboard.getByRole('alert').waitFor();
   await dates(date, date);

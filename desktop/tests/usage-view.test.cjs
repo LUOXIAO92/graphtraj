@@ -55,6 +55,10 @@ test('Dashboard filters persisted usage by local dates and keeps global comparis
   const text = () => JSON.stringify(tree.toJSON());
   assert.ok(tree.root.findByProps({ role: 'status' }).children.join('').trim());
   assert.match(text(), /\$2.205000/);
+  // U3 (Task 627): the head cost has two decimals; its title keeps the full value.
+  const head = tree.root.findByProps({ 'data-usage-cost': true });
+  assert.match(head.children[0], /^\$\d+\.\d{2}$/);
+  assert.equal(head.props.title, '$2.205000 USD');
   assert.match(text(), /unknown-model/);
   assert.match(text(), /No verified model price/);
   const modelButton = label => tree.root.findAllByType('button').find(node => node.findAllByType('span').some(child => child.children.join('') === label));

@@ -8,7 +8,7 @@ import { _electron as electron } from 'playwright';
 import fixtures from './fixtures.cjs';
 import { settingsAdoption } from './settings-adoption.mjs';
 import { approvalDialogs, datedUsage, guardApprovals, openTask, parallelChat, projectsView,
-  removeIndexEntry, taskTitle } from './adoption-shared.mjs';
+  projectEntry, removeIndexEntry, taskTitle } from './adoption-shared.mjs';
 import { localDate } from '../src/usage.ts';
 
 // This is an installed-product check, not a mocked-dialog window test. It only
@@ -109,7 +109,7 @@ async function closeApp() {
 }
 
 const button = name => page.getByRole('button', { name, exact: true }).filter({ visible: true });
-const currentProject = () => page.locator('.project-button[aria-current="true"]');
+const currentProject = root => projectEntry(page, root, '[aria-current="true"]');
 const monitorTitle = title => taskTitle(page.locator('.monitor-page:visible'), title);
 
 /** Type a folder into the real GTK chooser and press its Open button. */
@@ -135,7 +135,7 @@ async function pick(folder, name) {
   await projectsView(page);
   await button('Add project').click();
   await chooseFolder('Add existing GraphTraj project', folder, name, 'pickerInput');
-  await currentProject().filter({ hasText: folder }).waitFor();
+  await currentProject(folder).waitFor();
   await button('Monitor').click();
   const graph = fixtures.operate(folder, 'task_graph');
   await monitorTitle(graph.tasks[0].title).waitFor();
@@ -186,11 +186,12 @@ async function modelQuantities() {
   return {
     records: (await model.locator('small').textContent()).trim().match(/^(\d+) reports/)?.[1],
     input: titles.map(title => title.split(': ')[1]).find(Boolean)?.replace(' input tokens', ''),
-    inputTotal: totals['INPUT · INCLUDES CACHE'],
-    output: totals.OUTPUT,
-    cacheRead: totals['CACHE READ'],
+    // Metric card labels are sentence case since Task 627 (V9, UsageDashboard.tsx totals).
+    inputTotal: totals['Input · includes cache'],
+    output: totals.Output,
+    cacheRead: totals['Cache read'],
     cacheWrite: footer.match(/Cache writes: ([^.]+)\./)?.[1],
-    rate: totals['KNOWN INPUT HIT RATE'],
+    rate: totals['Known input hit rate'],
     priced: (await model.locator('strong').textContent()).trim(),
     unpriced: footer.match(/(\d+) unpriced/)?.[1],
   };
@@ -246,10 +247,10 @@ try {
   assert.equal(relocated.root, relocateTo, 'The real Relocate chooser must change only the indexed path');
   await screenshot('relocated');
   await removeIndexEntry(page, relocateTo);
-  await page.locator('.project-button').filter({ hasText: relocateTo }).waitFor({ state: 'detached' });
+  await projectEntry(page, relocateTo).waitFor({ state: 'detached' });
   assert.equal(fixtures.operate(relocateFrom, 'task_graph').tasks.length, 2);
   assert.equal(fixtures.operate(relocateTo, 'task_graph').tasks.length, 2);
-  await page.locator('.project-button').filter({ hasText: second }).click();
+  await projectEntry(page, second).click();
   facts.steps.push('Actual Relocate chooser changed only the indexed path; removing that entry kept both directories');
 
   await openTask(page.locator('.monitor-page:visible'), '1');
@@ -306,13 +307,13 @@ try {
   });
   facts.settings = settings;
   await button('Monitor').click();
-  await page.locator('.project-button').filter({ hasText: first }).click();
+  await projectEntry(page, first).click();
   await monitorTitle(graphBefore.tasks[0].title).waitFor();
   await closeApp();
   assert.deepEqual(fixtures.operate(first, 'task_graph'), graphBefore);
   assert.deepEqual(runningTask(first), runningBefore);
   await launch();
-  await currentProject().filter({ hasText: first }).waitFor();
+  await currentProject(first).waitFor();
   assert.equal(await page.locator('.project-button').count(), 2);
   const taskId = process.env.ADOPTION_TASK_ID;
   assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), settingsId), settings.roles);
@@ -394,11 +395,11 @@ try {
   fixtures.operate(second, 'task_register', fixtures.task('3', 'cli-after-gui-failure', ['2']));
   assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 3);
   await launch();
-  await currentProject().filter({ hasText: first }).waitFor();
+  await currentProject(first).waitFor();
   await datedUsage({ page, first, second, agent: process.env.ADOPTION_AGENT_ALIAS, date: usageDate, shot: name => screenshot(`reopened-${name}`) });
   facts.stage = 'remove project after reopen';
   await removeIndexEntry(page, second);
-  await page.locator('.project-button').filter({ hasText: second }).waitFor({ state: 'detached' });
+  await projectEntry(page, second).waitFor({ state: 'detached' });
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 3);
   assert.deepEqual(runningTask(first), runningBefore);

@@ -42,7 +42,52 @@ def new_run(status, conclusion):
             "head_branch": BRANCH, "html_url": f"https://github.com/{REPO}/actions/runs/{NEW_ID}"}
 
 
+PUSH = [(".github/workflows/desktop-macos-adoption.yml", "desktop-macos-adoption", "Installed macOS artifact and adoption"),
+        (".github/workflows/desktop-linux-adoption.yml", "Linux installed desktop adoption", "installed-desktop")]
+PUSH_BASE = 46200000000
+
+
+def push_run(i, sha, status, conclusion):
+    path, name, _ = PUSH[i]
+    rid = PUSH_BASE + i
+    return {"id": rid, "name": name, "path": path, "head_sha": sha, "event": "push", "status": status,
+            "conclusion": conclusion, "run_attempt": 1, "head_branch": BRANCH,
+            "html_url": f"https://github.com/{REPO}/actions/runs/{rid}"}
+
+
+def push_runs(sha):
+    """push-success: both appear on the 2nd poll, complete on the 3rd; push-fail: Linux fails;
+    push-timeout: only the macOS run ever appears."""
+    n = count("push-polls")
+    if scenario == "push-timeout":
+        return [push_run(0, sha, "queued", None)]
+    if n == 1:
+        return []
+    done = n >= 3
+    runs = [push_run(i, sha, "completed" if done else "in_progress",
+                     (("failure" if scenario == "push-fail" and i == 1 else "success") if done else None)) for i in range(2)]
+    if scenario == "push-fail":
+        runs.append({"id": 46200000009, "name": "other", "path": ".github/workflows/other.yml", "head_sha": sha,
+                     "event": "push", "status": "completed", "conclusion": "success",
+                     "html_url": f"https://github.com/{REPO}/actions/runs/46200000009"})
+    return runs
+
+
 def api(endpoint):
+    m = re.fullmatch(rf"repos/{REPO}/actions/runs\?head_sha=([0-9a-f]+)&per_page=100", endpoint)
+    if m:
+        runs = push_runs(m.group(1))
+        return {"total_count": len(runs), "workflow_runs": runs}
+    j = re.fullmatch(rf"repos/{REPO}/actions/runs/(46200000000|46200000001)/jobs\?per_page=100", endpoint)
+    if j:
+        i = int(j.group(1)) - PUSH_BASE
+        bad = scenario == "push-fail" and i == 1
+        steps = [{"number": 1, "name": "Set up job", "status": "completed", "conclusion": "success"},
+                 {"number": 9, "name": "Exercise the installed desktop under Xvfb" if i else "Installed app adoption, optionality and security",
+                  "status": "completed", "conclusion": "failure" if bad else "success"}]
+        return {"total_count": 1, "jobs": [{"id": 2, "name": PUSH[i][2], "status": "completed",
+                                            "conclusion": "failure" if bad else "success", "steps": steps,
+                                            "html_url": f"https://github.com/{REPO}/actions/runs/{j.group(1)}/job/2"}]}
     if endpoint == f"repos/{REPO}":
         return {"full_name": REPO, "default_branch": "main"}
     if endpoint == f"repos/{REPO}/contents/.github/workflows/{WF}?ref=main":
@@ -74,9 +119,18 @@ def api(endpoint):
     return None
 
 
-def download(run_id, dest):
+def download(run_id, dest, name=ARTIFACT):
     out = Path(dest)
     out.mkdir(parents=True, exist_ok=True)
+    if name.startswith("linux-desktop-"):
+        passed = scenario != "push-fail"
+        ui = {"uiPassed": passed, "stage": "controlled Dashboard", "steps": ["stand-in linux step 1", "stand-in linux step 2"]}
+        if not passed:
+            ui["failure"] = "Error: stand-in Linux failure\n    at adoption-linux.mjs"
+        (out / "evidence").mkdir(exist_ok=True)
+        (out / "evidence" / "ui-result.json").write_text(json.dumps(ui, indent=2) + "\n")
+        (out / "evidence" / "result.json").write_text(json.dumps({"passed": passed, "steps": []}, indent=2) + "\n")
+        return
     (out / "screens").mkdir(exist_ok=True)
     passed = not (run_id == FAILED or scenario == "failure")
     facts = {"passed": passed, "steps": [f"stand-in step {i}" for i in range(1, 9)],
@@ -108,11 +162,12 @@ elif args[:2] == ["workflow", "run"]:
     (state / "dispatched").write_text("1")
     print(f"✓ Created workflow_dispatch event for {WF} at {BRANCH}")
 elif args[:2] == ["run", "download"]:
-    m = re.fullmatch(r"(\d+) --repo " + re.escape(REPO) + " -n " + ARTIFACT + r" -D (\S+)", " ".join(args[2:]))
+    m = re.fullmatch(r"(\d+) --repo " + re.escape(REPO) + r" -n (graphtraj-macos-adoption-evidence|linux-desktop-[0-9a-f]{40}) -D (\S+)",
+                     " ".join(args[2:]))
     if not m:
         print("fake gh: unexpected run download arguments " + " ".join(args[2:]), file=sys.stderr)
         sys.exit(2)
-    download(m.group(1), m.group(2))
+    download(m.group(1), m.group(3), m.group(2))
 elif args[:2] == ["run", "view"] and "--log-failed" in args:
     print(f"Installed macOS artifact and adoption\tInstalled app adoption, optionality and security\t"
           f"2026-11-25T00:00:00Z TimeoutError: stand-in failed log for run {args[2]}")

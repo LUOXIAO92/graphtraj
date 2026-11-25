@@ -1,38 +1,43 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
-# Task 621 Main-run steps: fetch the evidence of the failed macOS adoption run, then push this Task's branch and
-# start desktop-macos-adoption (mode standard) on it by workflow_dispatch, and wait for the result. Modelled on
+# Task 621 Main-run steps: fetch the evidence of the failed macOS adoption run, then push this Task's branch so
+# desktop-macos-adoption and desktop-linux-adoption run on it, and wait for both results. Modelled on
 # verify-618/steps.zsh.
 #
 # LOGIN: the user's own GitHub logins only. git push / ls-remote use the user's ssh key (SSH_AUTH_SOCK); gh uses
 # its stored login (gh auth status shows the account; no token is printed). GH_TOKEN/GITHUB_TOKEN and every other
 # credential-class variable are removed at start, so gh cannot use a token from the environment.
-# REAL ENTRY: no workflow's push trigger lists agent/621-macos-adoption-script-d-ui and this Task edits no workflow,
-# so the run is started by `gh workflow run desktop-macos-adoption.yml --repo LUOXIAO92/graphtraj
-# --ref agent/621-macos-adoption-script-d-ui -f mode=standard` after the push. GitHub runs the workflow file at that
-# ref (unchanged by this Task since BASE); the default branch's copy must offer workflow_dispatch (checked by 00).
+# REAL ENTRY: `git push origin agent/621-macos-adoption-script-d-ui`. The push trigger lists of exactly
+# desktop-macos-adoption.yml and desktop-linux-adoption.yml name that branch (the Task's only workflow edits);
+# Windows (Task 623) and repair are not triggered. D keeps a macOS-only re-run: `gh workflow run
+# desktop-macos-adoption.yml --ref <branch> -f mode=standard` (the default branch's copy must offer workflow_dispatch;
+# checked by 00).
 # Run one step at a time:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh, git and gh versions; gh auth status (account only); origin is LUOXIAO92/graphtraj;
 #       the default branch's desktop-macos-adoption.yml offers workflow_dispatch with mode standard and the workflow
 #       is active; run 45546698537 still lists its evidence artifact unexpired; current branch; the remote branch is
-#       absent, equal to or an ancestor of HEAD (else STOP, never force); whether adoption.mjs changed since the base
-#       (E only, or P ready). Login: gh login, ssh key. Dialog: none. Network: GitHub. ~10 s.
+#       absent, equal to or an ancestor of HEAD (else STOP, never force); the P preconditions (P ready or not).
+#       Login: gh login, ssh key. Dialog: none. Network: GitHub. ~10 s.
 #   E   Evidence, read only on GitHub. Downloads artifact graphtraj-macos-adoption-evidence of run 45546698537 into
 #       <Harness>/tmp/621/mac-evidence-45546698537 (skipped when already non-empty), copies it to
 #       /private/tmp/graphtraj-621/mac-evidence-45546698537 (team sandboxes cannot read Harness tmp), lists the files
 #       and summarises every evidence.json. Login: gh login. Dialog: none. Network: GitHub. ~30 s.
-#   P   Push, dispatch and wait. OUTWARD-FACING: publishes the branch to GitHub (fast-forward only, never force) and
-#       starts one workflow_dispatch run of desktop-macos-adoption.yml (mode standard) on it. Checks first: on the
-#       Task branch, clean tracked tree, base an ancestor, adoption.mjs changed since the base, nothing changed under
-#       .github/workflows desktop/src desktop/electron src. Then waits in this process for the new run of HEAD to
-#       appear (bounded 300 s) and complete (bounded 2700 s, polling every 30 s); prints job and failing-step
-#       conclusions, the tail of --log-failed on failure, downloads that run's evidence like E, the next commands and
-#       the VERDICT last. Login: ssh key, gh login. Dialog: none (ssh may ask a key passphrase if the agent has
-#       none). Network: GitHub. Up to ~55 min.
-#   D   Dispatch and wait, without a push: as P when the remote branch already equals HEAD. OUTWARD-FACING (starts
-#       a GitHub Actions run). Login: gh login, ssh key (ls-remote). Dialog: none. Network: GitHub. Up to ~55 min.
-#   W   Observe only: `W <run-id>`, or `W` alone for the newest dispatched run of HEAD; same waiting and output as P
-#       after the dispatch. Login: gh login. Dialog: none. Network: GitHub. Up to ~45 min.
+#   P   Push and wait. OUTWARD-FACING: publishes the branch to GitHub (fast-forward only, never force); the push starts
+#       the macOS and Linux adoption workflows. Checks first: on the Task branch, clean tracked tree, base an
+#       ancestor, adoption.mjs changed since the base, nothing changed under desktop/src desktop/electron src, and
+#       under .github/workflows exactly the two trigger-line edits that add this branch. Then waits in this process
+#       for the push runs of HEAD of both workflows (by head_sha) to appear (bounded 300 s) and complete (bounded
+#       2700 s, polling every 30 s); prints per-run and per-job results with failing steps, the tail of --log-failed
+#       of a failed run, downloads each run's evidence artifact (macOS graphtraj-macos-adoption-evidence, Linux
+#       linux-desktop-<sha>) into <Harness>/tmp/621 with a copy in /private/tmp/graphtraj-621, the next commands and
+#       the VERDICT last: PASS only when both runs succeed. Login: ssh key, gh login. Dialog: none (ssh may ask a
+#       key passphrase if the agent has none). Network: GitHub. Up to ~55 min.
+#   D   macOS-only re-run without a push: workflow_dispatch of desktop-macos-adoption.yml (mode standard) on the
+#       already pushed HEAD; waits for that run and downloads its evidence. OUTWARD-FACING (starts a GitHub Actions
+#       run). Login: gh login, ssh key (ls-remote). Dialog: none. Network: GitHub. Up to ~55 min.
+#   W   Observe only (no push, no dispatch): `W` for the pushed branch head or `W <sha>`; same waiting and output as
+#       P after the push. `W <run-id>` observes one run (a D re-run). Login: gh login. Dialog: none. Network: GitHub.
+#       Up to ~45 min.
 # Credentials: at start the script unsets every exported credential-class variable (a '_'-separated part ending in
 # KEY, TOKEN, SECRET(S), PASSWORD or CREDENTIAL(S); GIT_CONFIG_KEY_<n> excepted) and every ANTHROPIC_*,
 # CLAUDE_CODE_USE_*, *_BASE_URL and GRAFTLING_CONNECTION variable, printing the removed NAMES. Every started process
@@ -67,7 +72,11 @@ APPEAR_S=${VERIFY621_APPEAR_S:-300}
 DONE_S=${VERIFY621_DONE_S:-2700}
 POLL_S=${VERIFY621_POLL_S:-30}
 PYTMP=${TMPDIR:-/tmp}
-FROZEN=(.github/workflows desktop/src desktop/electron src)
+FROZEN=(desktop/src desktop/electron src)
+# The two workflows the push triggers, and their evidence artifact names (Linux names it per SHA).
+WORKFLOWS=(.github/workflows/desktop-macos-adoption.yml .github/workflows/desktop-linux-adoption.yml)
+artifact_for() { [[ $1 == *macos* ]] && print -r -- $ARTIFACT || print -r -- linux-desktop-$2; }
+prefix_for() { [[ $1 == *macos* ]] && print -r -- mac-evidence || print -r -- linux-evidence; }
 RUNS_API="repos/$REPO/actions/workflows/$WF/runs?branch=$BRANCH&event=workflow_dispatch&per_page=30"
 
 say() { print -r -- "== $*"; }
@@ -129,19 +138,39 @@ check_tree() {
   changed=$(g diff --name-only $BASE HEAD -- $FROZEN 2> /dev/null)
   [[ -z $changed ]] && print -r -- "PASS: nothing changed since base under ${FROZEN}" \
     || { print -r -- "FAIL: changed since base under ${FROZEN}:"; print -r -- $changed | sed 's/^/  /'; (( bad++ )); }
+  # Under .github/workflows only the two trigger lines may change, each adding exactly this branch.
+  local -a wfchanged=("${(@f)$(g diff --name-only $BASE HEAD -- .github/workflows 2> /dev/null)}")
+  wfchanged=(${wfchanged:#})
+  if [[ ${(j: :)${(o)wfchanged}} != ${(j: :)${(o)WORKFLOWS}} ]]; then
+    print -r -- "FAIL: workflow files changed since base must be exactly ${WORKFLOWS}; saw: ${wfchanged:-none}"; (( bad++ ))
+  else
+    local wf minus plus
+    local -a lines
+    for wf in $WORKFLOWS; do
+      lines=("${(@f)$(g diff -U0 $BASE HEAD -- $wf | grep -E '^[-+]' | grep -vE '^(---|\+\+\+) ')}")
+      minus=${${(M)lines:#-*}#-}; plus=${${(M)lines:#+*}#+}
+      if (( ${#lines} == 2 )) && [[ $plus == *"branches: ["*", $BRANCH]" && ${plus/, $BRANCH]/]} == $minus ]]; then
+        print -r -- "PASS: $wf changes only its push branches line, adding $BRANCH"
+      else
+        print -r -- "FAIL: $wf has changes other than adding $BRANCH to its push branches line:"; print -lr -- $lines | sed 's/^/  /'; (( bad++ ))
+      fi
+    done
+  fi
   return $bad
 }
 
-# fetch_evidence <run-id>: download the run's evidence artifact (unless present), copy it for team sandboxes, summarise.
+# fetch_evidence <run-id> [artifact] [dir prefix]: download a run's evidence artifact (unless present), copy it for
+# team sandboxes, summarise. Defaults: the macOS artifact into mac-evidence-<run-id>.
 fetch_evidence() {
-  local rid=$1 dest=$HTMP/mac-evidence-$1 copy=$PTMP/mac-evidence-$1
+  local rid=$1 name=${2:-$ARTIFACT} prefix=${3:-mac-evidence}
+  local dest=$HTMP/$prefix-$rid copy=$PTMP/$prefix-$rid
   mkdir -p $HTMP $PTMP
   if [[ -d $dest && -n $(ls -A $dest) ]]; then
     print -r -- "already present, not downloaded again: $dest"
   else
-    print -r -- "\$ gh run download $rid --repo $REPO -n $ARTIFACT -D $dest"
-    allow $GH run download $rid --repo $REPO -n $ARTIFACT -D $dest 2>&1 | sed 's/^/  /'
-    (( ${pipestatus[1]} == 0 )) || { print -r -- "FAIL: download of $ARTIFACT from run $rid failed"; return 1; }
+    print -r -- "\$ gh run download $rid --repo $REPO -n $name -D $dest"
+    allow $GH run download $rid --repo $REPO -n $name -D $dest 2>&1 | sed 's/^/  /'
+    (( ${pipestatus[1]} == 0 )) || { print -r -- "FAIL: download of $name from run $rid failed"; return 1; }
   fi
   if [[ -d $copy && -n $(ls -A $copy) ]]; then
     print -r -- "copy already present: $copy"
@@ -185,6 +214,68 @@ wait_run() {
   [[ $concl != success ]] && print -r -- "next: after a committed correction, zsh $THIS 00 then zsh $THIS P"
   [[ $concl == success ]] && { print -r -- "VERDICT 621 $label: PASS (run $rid success; evidence download $evid; $url)"; exit 0; }
   print -r -- "VERDICT 621 $label: FAIL (run $rid $concl; evidence download $evid; $url)"; exit 1
+}
+
+# observe_push <sha> <label>: wait for the push runs of both workflows for sha, print results, fetch both
+# artifacts; ends with the VERDICT (PASS only when both succeeded).
+observe_push() {
+  local sha=$1 label=$2 start=$SECONDS line prev= ok=0 rid wf concl evid
+  local -a rows missing others failed notes
+  local runs_api="repos/$REPO/actions/runs?head_sha=$sha&per_page=100"
+  summ() {
+    if api $WORK/runs.json $runs_api; then rows=("${(@f)$(hj pushruns $WORK/runs.json $WORKFLOWS)}")
+    else rows=(${WORKFLOWS/#/MISSING$'\t'}); fi
+    missing=(${(M)rows:#MISSING*}); others=(${(M)rows:#OTHER*})
+  }
+  print -r -- "observing push runs of ${WORKFLOWS:t} for $sha (appearance bound ${APPEAR_S}s, completion bound ${DONE_S}s, poll ${POLL_S}s)"
+  while true; do
+    summ
+    (( ${#missing} == 0 )) && break
+    if (( SECONDS - start >= APPEAR_S )); then
+      print -r -- "appearance timeout after $((SECONDS - start))s; present:"; print -lr -- ${(M)rows:#RUN*} | sed 's/^/  /'
+      print -r -- "missing:"; print -lr -- $missing | sed 's/^/  /'
+      (( ${#others} )) && { print -r -- "other workflows for this SHA:"; print -lr -- $others | sed 's/^/  /'; }
+      print -r -- "next: zsh $THIS W $sha    (re-observe; no push)"
+      print -r -- "VERDICT 621 $label: FAIL (0/2 success; ${#missing} of 2 workflows never appeared within ${APPEAR_S}s)"
+      exit 1
+    fi
+    sleep $POLL_S
+  done
+  print -r -- "both push runs present after $((SECONDS - start))s"
+  start=$SECONDS
+  while true; do
+    line=$(print -lr -- ${(M)rows:#RUN*} | cut -f2,4,5 | tr '\t\n' ' ;')
+    [[ $line != "$prev" ]] && print -r -- "  [$(date +%H:%M:%S)] $line"; prev=$line
+    (( ${#missing} == 0 )) && [[ -z $(print -lr -- ${(M)rows:#RUN*} | cut -f4 | grep -v '^completed$') ]] && break
+    if (( SECONDS - start >= DONE_S )); then print -r -- "completion timeout after $((SECONDS - start))s"; break; fi
+    sleep $POLL_S; summ
+  done
+  print -r -- "--- results for $sha"
+  for line in ${(M)rows:#RUN*}; do
+    local -a f=("${(@ps:\t:)line}")
+    wf=$f[2]; rid=$f[3]; concl=$f[5]
+    print -r -- "RUN ${wf:t} | id $rid | ${f[4]} | $concl | ${f[6]}"
+    api $WORK/jobs.json "repos/$REPO/actions/runs/$rid/jobs?per_page=100" && hj jobs $WORK/jobs.json
+    if [[ ${f[4]} == completed && $concl == success ]]; then (( ok++ )); else failed+=$rid; fi
+  done
+  (( ${#others} )) && { print -r -- "OTHER workflows triggered for this SHA:"; print -lr -- $others | sed 's/^/  /'; } \
+    || print -r -- "no other workflow triggered for this SHA"
+  for rid in $failed; do
+    print -r -- "--- tail of: gh run view $rid --repo $REPO --log-failed"
+    allow $GH run view $rid --repo $REPO --log-failed 2>&1 | tail -n 60
+  done
+  for line in ${(M)rows:#RUN*}; do
+    local -a f=("${(@ps:\t:)line}")
+    wf=$f[2]; rid=$f[3]
+    [[ $f[4] == completed ]] || { notes+="${wf:t} evidence not fetched (run not completed)"; continue; }
+    print -r -- "--- evidence of ${wf:t} run $rid"
+    fetch_evidence $rid $(artifact_for $wf $sha) $(prefix_for $wf) && evid=ok || evid=failed
+    notes+="${wf:t} evidence $evid"
+  done
+  print -r -- "next: zsh $THIS W $sha    (re-observe; no push)"
+  for rid in $failed; do print -r -- "next: $GH run rerun $rid --repo $REPO --failed    (only if the failure is transient; not run by this step)"; done
+  (( ok == 2 )) && { print -r -- "VERDICT 621 $label: PASS (2/2 success; ${(j:; :)notes})"; exit 0; }
+  print -r -- "VERDICT 621 $label: FAIL ($ok/2 success; ${(j:; :)notes})"; exit 1
 }
 
 # dispatch_and_wait <head> <label>: record existing dispatch runs, dispatch, find the new run of head, wait for it.
@@ -263,9 +354,10 @@ case $STEP in
   local ready=yes; check_tree || ready=no
   [[ $evstate == available ]] && print -r -- "next: zsh $THIS E    (downloads the evidence of run $FAILED_RUN; read only)"
   if [[ $ready == yes && $remote_state == equal ]]; then
-    print -r -- "next: zsh $THIS D    (dispatches on the already pushed HEAD and waits)"
+    print -r -- "next: zsh $THIS W    (observes the push runs of the already pushed HEAD; no push)"
+    print -r -- "next: zsh $THIS D    (macOS-only workflow_dispatch re-run on the already pushed HEAD)"
   elif [[ $ready == yes ]]; then
-    print -r -- "next: zsh $THIS P    (pushes $BRANCH, dispatches and waits)"
+    print -r -- "next: zsh $THIS P    (pushes $BRANCH; the push starts the macOS and Linux runs; waits for both)"
   fi
   print -r -- "VERDICT 621 00: PASS (E $evstate; P ready: $ready; remote branch $remote_state; candidate $head)"
   ;;
@@ -276,14 +368,14 @@ E)
   ;;
 P|D)
   if [[ $STEP == P ]]; then
-    say "[P] Push, dispatch and wait. OUTWARD-FACING: git push $REMOTE $BRANCH (fast-forward only, never force) and gh workflow run $WF. Login: ssh key, gh login. Dialog: none. Network: GitHub."
+    say "[P] Push and wait. OUTWARD-FACING: git push $REMOTE $BRANCH (fast-forward only, never force); the push starts ${WORKFLOWS:t}. Login: ssh key, gh login. Dialog: none. Network: GitHub."
   else
-    say "[D] Dispatch and wait (no push). OUTWARD-FACING: gh workflow run $WF. Login: gh login, ssh key. Dialog: none. Network: GitHub."
+    say "[D] macOS-only re-run (no push). OUTWARD-FACING: gh workflow run $WF. Login: gh login, ssh key. Dialog: none. Network: GitHub."
   fi
   check_tree || stop "HEAD does not meet the preconditions above; run: zsh $THIS 00"
   local head=$(g rev-parse HEAD) rsha=$(remote_sha)
   if [[ $STEP == P ]]; then
-    [[ $rsha == $head ]] && stop "$REMOTE already has $BRANCH at $head; run: zsh $THIS D"
+    [[ $rsha == $head ]] && stop "$REMOTE already has $BRANCH at $head; observe with: zsh $THIS W   (or macOS re-run: zsh $THIS D)"
     [[ -z $rsha ]] || g merge-base --is-ancestor $rsha $head 2> /dev/null || stop "$REMOTE has $BRANCH at $rsha, not an ancestor of HEAD; never force. Run: zsh $THIS 00"
     print -r -- "\$ git push $REMOTE refs/heads/${BRANCH}:refs/heads/${BRANCH}   (HEAD $head)"
     g push $REMOTE refs/heads/${BRANCH}:refs/heads/${BRANCH} 2>&1 | sed 's/^/  /'
@@ -291,19 +383,21 @@ P|D)
   fi
   [[ $(remote_sha) == $head ]] || stop "$REMOTE does not show $BRANCH at $head; run: zsh $THIS 00"
   print -r -- "PASS: $REMOTE $BRANCH = $head"
+  [[ $STEP == P ]] && observe_push $head P
   dispatch_and_wait $head $STEP
   ;;
 W)
-  local rid=${2:-} head=$(g rev-parse HEAD) found
-  say "[W] Observe only (no push, no dispatch) run ${rid:-<newest dispatch of $head>}. Login: gh login. Dialog: none. Network: GitHub."
-  if [[ -z $rid ]]; then
-    api $WORK/after.json $RUNS_API || stop "cannot list dispatch runs; run: zsh $THIS 00"
-    found=$(hj newrun $WORK/after.json $head)
-    [[ -n $found ]] || stop "no dispatch run of $WF on $BRANCH for HEAD $head; run: zsh $THIS 00"
-    rid=${found%%$'\t'*}
+  # W [sha]: both push runs of the pushed head (or sha). W <run-id>: one run (e.g. a D re-run).
+  local target=${2:-}
+  if [[ $target == <-> ]]; then
+    say "[W] Observe only (no push, no dispatch) run $target. Login: gh login. Dialog: none. Network: GitHub."
+    wait_run $target W
   fi
-  [[ $rid == <-> ]] || stop "run id $rid is not a number"
-  wait_run $rid W
+  [[ -n $target ]] || target=$(remote_sha)
+  say "[W] Observe only (no push, no dispatch) the push runs of ${target:-<none>}. Login: gh login. Dialog: none. Network: GitHub."
+  [[ -n $target ]] || stop "$BRANCH is not on $REMOTE; run: zsh $THIS 00"
+  [[ $target == $(g rev-parse HEAD) ]] || print -r -- "NOTE: observed SHA $target differs from local HEAD $(g rev-parse HEAD)"
+  observe_push $target W
   ;;
 *)
   print -r -- "usage: zsh $THIS 00|E|P|D|W [run-id]"; exit 2 ;;

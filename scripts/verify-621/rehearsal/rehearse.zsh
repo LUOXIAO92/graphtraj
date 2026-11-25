@@ -33,6 +33,18 @@ step() {  # step <scenario> <file> <step> [args]: run one step with the knobs, k
   env $(knobs $sc ${APPEAR:-10}) zsh $STEPS "$@" >> $OUT/$file 2>&1; print -r -- "[exit $?]" >> $OUT/$file
   print -r -- "--- $file"; tail -3 $OUT/$file
 }
+# `rehearse.zsh <dir> push`: HEAD holds the port and the two trigger lines; P pushes and observes both push runs.
+if [[ ${2:-} == push ]]; then
+  fresh push-success; step push-success push-00.txt 00; step push-success push-P-success.txt P
+  step push-success push-00-after-P.txt 00; rm -f $S/push-success/gh/push-polls; step push-success push-W.txt W
+  fresh push-fail; step push-fail push-P-linux-fails.txt P
+  APPEAR=4; fresh push-timeout; step push-timeout push-P-appearance-timeout.txt P; APPEAR=10
+  # Contrast: any other workflow edit since the base is refused.
+  print -r -- "# rehearsal-only extra edit" >> $S/repo/.github/workflows/desktop-win-adoption.yml
+  git -C $S/repo commit -q -am "rehearsal stand-in: extra workflow edit"
+  fresh push-extra; step push-extra push-00-extra-workflow-edit.txt 00; step push-extra push-P-extra-workflow-edit.txt P
+  exit 0
+fi
 # `rehearse.zsh <dir> early`: HEAD already holds the port; only 00 and P success (macOS dispatch).
 if [[ ${2:-} == early ]]; then
   fresh success; step success early-00.txt 00; step success early-P-success.txt P

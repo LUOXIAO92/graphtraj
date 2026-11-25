@@ -29,8 +29,8 @@ import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import fixtures from './fixtures.cjs';
 import { settingsAdoption } from './settings-adoption.mjs';
-import { approvalDialogs, guardApprovals, openTask, projectsView, removeIndexEntry, selectedTask, taskCard,
-  visibleState } from './adoption-shared.mjs';
+import { approvalDialogs, guardApprovals, openTask, projectsView, removeIndexEntry, selectedTask, taskCanvas, taskCard,
+  taskTitle, visibleState } from './adoption-shared.mjs';
 
 const desktop = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const require = createRequire(import.meta.url);
@@ -199,9 +199,10 @@ async function monitorPosition(page) {
     return {
       query: element.querySelector('input[aria-label="Search tasks"]').value,
       filter: element.querySelector('select[aria-label="Task status"]').value,
-      selected: element.querySelector('.native-task-card .native-task-title[aria-pressed="true"]')
+      // The main canvas only; the minimap ('Task map navigator') has its own X6 viewport.
+      selected: element.querySelector('[aria-label="Native task canvas"] .native-task-card .native-task-title[aria-pressed="true"]')
         ?.closest('.native-task-card').getAttribute('data-task-id'),
-      viewport: element.querySelector('.x6-graph-svg-viewport').getAttribute('transform'),
+      viewport: element.querySelector('[aria-label="Native task canvas"] .x6-graph-svg-viewport').getAttribute('transform'),
       horizontal: reader?.querySelector('.agent-columns')?.scrollLeft ?? null,
       vertical: [...(reader?.querySelectorAll('.activity-history') ?? [])].map(column => column.scrollTop),
       following: [...(reader?.querySelectorAll('.reading-toolbar') ?? [])].map(controls => controls.querySelector('button').textContent),
@@ -478,7 +479,7 @@ async function usageHistoryAdoption() {
     await projectEntry(page, 'usage-first').click();
     // Selection saves asynchronously; both retained project monitors have a Task 1.
     // Require this project's title so click cannot latch onto the outgoing monitor.
-    await page.locator('.monitor-page:visible').getByRole('button', { name: 'usage first', exact: true }).click();
+    await taskTitle(page.locator('.monitor-page:visible'), 'usage first').click();
     // The collapsed Task detail shows the roster; chat readers activate on expansion.
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const column = page.getByRole('region', { name: 'Expanded agent conversations', exact: true })
@@ -607,7 +608,7 @@ async function settingsOnlyAdoption() {
     await page.getByRole('button', { name: 'Add project', exact: true }).click();
     await projectEntry(page, 'settings-second').waitFor();
     await projectEntry(page, 'settings-first').click();
-    await page.locator('.monitor-page:visible').getByRole('button', { name: 'settings first', exact: true }).click();
+    await taskTitle(page.locator('.monitor-page:visible'), 'settings first').click();
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const column = page.getByRole('region', { name: 'Expanded agent conversations', exact: true })
       .getByRole('article', { name: 'research@x1', exact: true }).locator('.activity-history');
@@ -805,7 +806,7 @@ async function main() {
       // The Projects view does not navigate; return to the selected project's monitor.
       await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     }
-    const monitorTitle = title => page.locator('.monitor-page:visible').getByRole('button', { name: title, exact: true });
+    const monitorTitle = title => taskTitle(page.locator('.monitor-page:visible'), title);
     await projectEntry(page, 'first-project').waitFor();
     const migrated = await page.evaluate(() => window.graphtraj.projects());
     assert.equal(migrated.selected, 'first');
@@ -880,9 +881,9 @@ async function main() {
     step('GLOBAL and PROJECTS independently toggle; selected project/navigation remain outside list; Settings submenu toggles itself');
 
     // Retain a deliberately changed viewport and filter, not merely defaults.
-    const initialViewport = await monitor.locator('.x6-graph-svg-viewport').getAttribute('transform');
+    const initialViewport = await taskCanvas(monitor).locator('.x6-graph-svg-viewport').getAttribute('transform');
     await monitor.getByRole('button', { name: 'Zoom in', exact: true }).click();
-    await page.waitForFunction(before => document.querySelector('.monitor-page[aria-hidden="false"] .x6-graph-svg-viewport')?.getAttribute('transform') !== before, initialViewport);
+    await page.waitForFunction(before => document.querySelector('.monitor-page[aria-hidden="false"] [aria-label="Native task canvas"] .x6-graph-svg-viewport')?.getAttribute('transform') !== before, initialViewport);
     const status = cardStatus(nativeGraph.tasks.find(task => task.task_id === '1'));
     await monitor.getByLabel('Task status', { exact: true }).selectOption(status);
     await monitor.getByLabel('Search tasks', { exact: true }).fill('first project');

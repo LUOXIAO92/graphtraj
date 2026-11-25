@@ -9,7 +9,7 @@ import { _electron as electron } from 'playwright';
 import { controlledInput, retainedRecords } from './retained-records.mjs';
 import { settingsAdoption } from './settings-adoption.mjs';
 import { approvalDialogs, datedUsage, guardApprovals, openTask, parallelChat, projectsView,
-  removeIndexEntry } from './adoption-shared.mjs';
+  removeIndexEntry, taskCard } from './adoption-shared.mjs';
 import { localDate } from '../src/usage.ts';
 
 assert.equal(process.platform, 'win32', 'Adoption requires an actual Windows desktop');
@@ -259,7 +259,7 @@ async function pick(folder, action = 'pick') {
   if (action !== 'pick') return;
   await page.locator('.project-button[aria-current="true"]').filter({ hasText: folder }).waitFor();
   await button('Monitor').click();
-  await page.locator('.monitor-page:visible .native-task-card').first().waitFor();
+  await taskCard(page.locator('.monitor-page:visible'), '1').waitFor();
 }
 async function capture(name) {
   assert.ok(!(await page.locator('body').innerText()).includes('CONTROLLED-SECRET-MUST-NOT-APPEAR'));

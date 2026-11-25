@@ -8,7 +8,7 @@ import { _electron as electron } from 'playwright';
 import fixtures from './fixtures.cjs';
 import { settingsAdoption } from './settings-adoption.mjs';
 import { approvalDialogs, datedUsage, guardApprovals, openTask, parallelChat, projectsView,
-  removeIndexEntry } from './adoption-shared.mjs';
+  removeIndexEntry, taskTitle } from './adoption-shared.mjs';
 import { localDate } from '../src/usage.ts';
 
 // This is an installed-product check, not a mocked-dialog window test. It only
@@ -110,7 +110,7 @@ async function closeApp() {
 
 const button = name => page.getByRole('button', { name, exact: true }).filter({ visible: true });
 const currentProject = () => page.locator('.project-button[aria-current="true"]');
-const monitorTitle = title => page.locator('.monitor-page:visible').getByRole('button', { name: title, exact: true });
+const monitorTitle = title => taskTitle(page.locator('.monitor-page:visible'), title);
 
 /** Type a folder into the real GTK chooser and press its Open button. */
 async function chooseFolder(title, folder, name, action) {

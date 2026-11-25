@@ -5,12 +5,19 @@ import { defaultDates } from '../src/usage.ts';
 export const visibleState = state => state === 'retired' ? 'retired'
   : state === 'running' || state === 'unreachable' || state === 'active' ? 'active' : 'standby';
 
-/** A task card on the X6 monitor canvas; its title button carries the accessible name. */
-export const taskCard = (scope, id) => scope.locator(`.native-task-card[data-task-id="${id}"]`);
+/**
+ * The main X6 task canvas (TaskCanvas.tsx:264, aria-label 'Native task canvas'). The minimap
+ * (:265, 'Task map navigator') reuses the graph model, so every canvas lookup is scoped here.
+ */
+export const taskCanvas = scope => scope.getByLabel('Native task canvas', { exact: true });
+/** A task card on the main canvas; its title button carries the accessible name. */
+export const taskCard = (scope, id) => taskCanvas(scope).locator(`.native-task-card[data-task-id="${id}"]`);
+/** A task's title button on the main canvas (accessible name = task title). */
+export const taskTitle = (scope, title) => taskCanvas(scope).getByRole('button', { name: title, exact: true });
 /** Select a task by its title button (TaskCanvas.tsx card). */
 export const openTask = (scope, id) => taskCard(scope, id).locator('.native-task-title').click();
 /** The selected task id: the card whose title button is pressed. */
-export const selectedTask = scope => scope.locator('.native-task-card')
+export const selectedTask = scope => taskCanvas(scope).locator('.native-task-card')
   .filter({ has: scope.page().getByRole('button', { pressed: true }) }).getAttribute('data-task-id');
 
 /** Open the Projects view, the only place for Add/Check/Relocate/Remove (main.tsx ProjectIndexEditor). */

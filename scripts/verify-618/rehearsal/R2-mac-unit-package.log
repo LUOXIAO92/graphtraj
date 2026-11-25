@@ -1,0 +1,22 @@
+env: _ electron_config_cache HOME HTTP_PROXY HTTPS_PROXY LANG LOGNAME NO_PROXY NODE_USE_ENV_PROXY npm_config_cache OLDPWD PATH PWD SHLVL TMPDIR 
+node v26.5.0 npm 12.2.1 python Python 3.13.11 tool /tmp/claude-501/618/venv-mac/bin/graphtraj-tool
+unit-exit=0
+ℹ tests 97
+ℹ pass 97
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+package-exit=0
+✓ built in 3.96s
+Packaging app for platform darwin arm64 using electron v44.5.1
+packaged app: /private/tmp/claude-501/618/graphtraj/desktop/dist-package/GraphTraj-darwin-arm64/GraphTraj.app
+artifact: /private/tmp/claude-501/618/graphtraj/desktop/dist-package/GraphTraj-darwin-arm64.zip
+artifact sha256: 92531165c60d11169307e3d8ea97a3b2b0065b59da16e99eaa33a5e7586a663a
+total 362456
+drwxr-xr-x   5 luoxiao  wheel        160 Nov 25 13:12 .
+drwxr-xr-x  19 luoxiao  wheel        608 Nov 25 13:09 ..
+drwx------   6 luoxiao  wheel        192 Nov 25 13:12 GraphTraj-darwin-arm64
+-rw-r--r--   1 luoxiao  wheel        456 Nov 25 13:12 GraphTraj-darwin-arm64.json
+-rw-r--r--   1 luoxiao  wheel  169120954 Nov 25 13:12 GraphTraj-darwin-arm64.zip
+tracked-clean-exit=0
+R2B-EXIT=0

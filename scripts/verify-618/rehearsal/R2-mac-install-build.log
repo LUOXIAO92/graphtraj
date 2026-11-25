@@ -1,0 +1,328 @@
++/tmp/claude-501/618/scripts/r2.sh:6> cd /tmp/claude-501/618/graphtraj
++/tmp/claude-501/618/scripts/r2.sh:7> git rev-parse HEAD
+e96adbb20c0f9cf9e90cd293274b15d027face8f
++/tmp/claude-501/618/scripts/r2.sh:7> git status --porcelain '--untracked-files=no'
++/tmp/claude-501/618/scripts/r2.sh:8> /Users/luoxiao/miniconda3/bin/python3.13 -m venv /tmp/claude-501/618/venv-mac
++/tmp/claude-501/618/scripts/r2.sh:9> source /tmp/claude-501/618/venv-mac/bin/activate
++/tmp/claude-501/618/scripts/r2.sh:10> python --version
+Python 3.13.11
++/tmp/claude-501/618/scripts/r2.sh:12> python -m pip install --disable-pip-version-check ./graftling .
+Processing ./graftling
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Processing /private/tmp/claude-501/618/graphtraj
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting PyYAML<7,>=6 (from graftling==0.10.1)
+  Downloading pyyaml-6.0.4-cp313-cp313-macosx_11_0_arm64.whl.metadata (2.3 kB)
+Collecting websockets<17,>=15 (from graftling==0.10.1)
+  Downloading websockets-16.1.1-cp313-cp313-macosx_11_0_arm64.whl.metadata (6.8 kB)
+Collecting click<9,>=8.1 (from graphtraj==0.1.0)
+  Downloading click-8.5.1-py3-none-any.whl.metadata (2.6 kB)
+Downloading click-8.5.1-py3-none-any.whl (126 kB)
+Downloading pyyaml-6.0.4-cp313-cp313-macosx_11_0_arm64.whl (179 kB)
+Downloading websockets-16.1.1-cp313-cp313-macosx_11_0_arm64.whl (177 kB)
+Building wheels for collected packages: graftling, graphtraj
+  Building wheel for graftling (pyproject.toml): started
+  Building wheel for graftling (pyproject.toml): finished with status 'done'
+  Created wheel for graftling: filename=graftling-0.10.1-py3-none-any.whl size=524667 sha256=fbeff6566c6eb2f39c0c053f67313628d22cf7e810d735393f16a778cc546fce
+  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-oljvd7v1/wheels/93/19/fe/c0c73c19d9fd8f8807fb861402880f9ed977e4ea3943c19354
+  Building wheel for graphtraj (pyproject.toml): started
+  Building wheel for graphtraj (pyproject.toml): finished with status 'done'
+  Created wheel for graphtraj: filename=graphtraj-0.1.0-py3-none-any.whl size=633252 sha256=0895ed9712bb4b2a0ebcd72617ca896180e01a251dc67d68c2578112f00c550d
+  Stored in directory: /private/tmp/claude-501/pip-ephem-wheel-cache-oljvd7v1/wheels/90/45/19/1c4549bebb0640415791496e1a8fa2b5ae68ede62167f22d8b
+Successfully built graftling graphtraj
+Installing collected packages: websockets, PyYAML, click, graftling, graphtraj
+
+Successfully installed PyYAML-6.0.4 click-8.5.1 graftling-0.10.1 graphtraj-0.1.0 websockets-16.1.1
++/tmp/claude-501/618/scripts/r2.sh:13> which graphtraj-tool
+/tmp/claude-501/618/venv-mac/bin/graphtraj-tool
++/tmp/claude-501/618/scripts/r2.sh:14> python -c 'import graftling, graphtraj, importlib.metadata as m; print("graftling", m.version("graftling"), graftling.__file__); print("graphtraj", graphtraj.__file__)'
+graftling 0.10.1 /tmp/claude-501/618/venv-mac/lib/python3.13/site-packages/graftling/__init__.py
+graphtraj /tmp/claude-501/618/venv-mac/lib/python3.13/site-packages/graphtraj/__init__.py
++/tmp/claude-501/618/scripts/r2.sh:15> head -3 /tmp/claude-501/618/venv-mac/bin/graphtraj-tool
+#!/tmp/claude-501/618/venv-mac/bin/python
+import sys
+from graphtraj.interfaces.local_tool import main
++/tmp/claude-501/618/scripts/r2.sh:16> /tmp/claude-501/618/venv-mac/bin/python -c 'import importlib.metadata as m; print("graphtraj-tool interpreter resolves graftling", m.version("graftling"))'
+graphtraj-tool interpreter resolves graftling 0.10.1
++/tmp/claude-501/618/scripts/r2.sh:17> graphtraj-tool --help
++/tmp/claude-501/618/scripts/r2.sh:17> head -5
+usage: graphtraj-tool [-h] [--desktop-settings |
+                      --allowed-features ALLOWED_FEATURES]
+                      [--desktop-observer]
+
+Serve GraphTraj discover, describe and execute requests for the owning host's
++/tmp/claude-501/618/scripts/r2.sh:18> cd desktop
++/tmp/claude-501/618/scripts/r2.sh:19> npm ci --no-audit --no-fund
+
+added 304 packages in 4s
+npm warn install-scripts 3 packages had install scripts blocked because they are not covered by allowScripts:
+npm warn install-scripts   esbuild@0.27.7 (postinstall: node install.js)
+npm warn install-scripts   fsevents@2.3.2 (install: (install scripts present))
+npm warn install-scripts   fsevents@2.3.3 (install: (install scripts present))
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+npm notice
+npm notice New patch version of npm available! 12.2.1 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice
++/tmp/claude-501/618/scripts/r2.sh:20> npm run build
+npm notice run graphtraj-desktop@0.1.0 build
+npm notice run node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js -p tsconfig.electron.json && node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js --noEmit && node --preserve-symlinks --preserve-symlinks-main node_modules/vite/bin/vite.js build --configLoader native
+vite v7.3.6 building client environment for production...
+(node:89156) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+transforming...
+node_modules/@heroui/react/dist/components/alert-dialog/alert-dialog.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/alert-dialog/alert-dialog.js" was ignored.
+node_modules/@heroui/react/dist/components/accordion/accordion.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/accordion/accordion.js" was ignored.
+node_modules/@heroui/react/dist/components/avatar/avatar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/avatar/avatar.js" was ignored.
+node_modules/@heroui/react/dist/components/autocomplete/autocomplete.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/autocomplete/autocomplete.js" was ignored.
+node_modules/@heroui/react/dist/components/badge/badge.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/badge/badge.js" was ignored.
+node_modules/@heroui/react/dist/components/button-group/button-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/button-group/button-group.js" was ignored.
+node_modules/@heroui/react/dist/components/breadcrumbs/breadcrumbs.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/breadcrumbs/breadcrumbs.js" was ignored.
+node_modules/@heroui/react/dist/components/card/card.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/card/card.js" was ignored.
+node_modules/@heroui/react/dist/components/checkbox/checkbox.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/checkbox/checkbox.js" was ignored.
+node_modules/@heroui/react/dist/components/button/button.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/button/button.js" was ignored.
+node_modules/@heroui/react/dist/components/checkbox-group/checkbox-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/checkbox-group/checkbox-group.js" was ignored.
+node_modules/@heroui/react/dist/components/color-area/color-area.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-area/color-area.js" was ignored.
+node_modules/@heroui/react/dist/components/color-field/color-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-field/color-field.js" was ignored.
+node_modules/@heroui/react/dist/components/chip/chip.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/chip/chip.js" was ignored.
+node_modules/@heroui/react/dist/components/color-picker/color-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-picker/color-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/color-swatch/color-swatch.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-swatch/color-swatch.js" was ignored.
+node_modules/@heroui/react/dist/components/color-swatch-picker/color-swatch-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-swatch-picker/color-swatch-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/close-button/close-button.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/close-button/close-button.js" was ignored.
+node_modules/@heroui/react/dist/components/color-slider/color-slider.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-slider/color-slider.js" was ignored.
+node_modules/@heroui/react/dist/components/combo-box/combo-box.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/combo-box/combo-box.js" was ignored.
+node_modules/@heroui/react/dist/components/date-field/date-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-field/date-field.js" was ignored.
+node_modules/@heroui/react/dist/components/date-picker/date-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-picker/date-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/date-range-picker/date-range-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-range-picker/date-range-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/drawer/drawer.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/drawer/drawer.js" was ignored.
+node_modules/@heroui/react/dist/components/progress-circle/progress-circle.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/progress-circle/progress-circle.js" was ignored.
+node_modules/@heroui/react/dist/components/progress-bar/progress-bar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/progress-bar/progress-bar.js" was ignored.
+node_modules/@heroui/react/dist/components/time-field/time-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/time-field/time-field.js" was ignored.
+node_modules/@heroui/react/dist/components/disclosure/disclosure.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/disclosure/disclosure.js" was ignored.
+node_modules/@heroui/react/dist/components/disclosure-group/disclosure-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/disclosure-group/disclosure-group.js" was ignored.
+node_modules/@heroui/react/dist/components/error-message/error-message.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/error-message/error-message.js" was ignored.
+node_modules/@heroui/react/dist/components/kbd/kbd.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/kbd/kbd.js" was ignored.
+node_modules/@heroui/react/dist/components/link/link.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/link/link.js" was ignored.
+node_modules/@heroui/react/dist/components/popover/popover.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/popover/popover.js" was ignored.
+node_modules/@heroui/react/dist/components/scroll-shadow/scroll-shadow.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/scroll-shadow/scroll-shadow.js" was ignored.
+node_modules/@heroui/react/dist/components/separator/separator.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/separator/separator.js" was ignored.
+node_modules/@heroui/react/dist/components/skeleton/skeleton.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/skeleton/skeleton.js" was ignored.
+node_modules/@heroui/react/dist/components/spinner/spinner.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/spinner/spinner.js" was ignored.
+node_modules/@heroui/react/dist/components/surface/surface.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/surface/surface.js" was ignored.
+node_modules/@heroui/react/dist/components/toggle-button/toggle-button.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toggle-button/toggle-button.js" was ignored.
+node_modules/@heroui/react/dist/components/switch/switch.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/switch/switch.js" was ignored.
+node_modules/@heroui/react/dist/components/switch-group/switch-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/switch-group/switch-group.js" was ignored.
+node_modules/@heroui/react/dist/components/toast/toast.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toast/toast.js" was ignored.
+node_modules/@heroui/react/dist/components/tag/tag.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tag/tag.js" was ignored.
+node_modules/@heroui/react/dist/components/tag-group/tag-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tag-group/tag-group.js" was ignored.
+node_modules/@heroui/react/dist/components/toggle-button-group/toggle-button-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toggle-button-group/toggle-button-group.js" was ignored.
+node_modules/@heroui/react/dist/components/tabs/tabs.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tabs/tabs.js" was ignored.
+node_modules/@heroui/react/dist/components/toolbar/toolbar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toolbar/toolbar.js" was ignored.
+node_modules/@heroui/react/dist/components/tooltip/tooltip.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tooltip/tooltip.js" was ignored.
+node_modules/@heroui/react/dist/components/input/input.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/input/input.js" was ignored.
+node_modules/@heroui/react/dist/components/input-group/input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/input-group/input-group.js" was ignored.
+node_modules/@heroui/react/dist/components/textfield/textfield.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/textfield/textfield.js" was ignored.
+node_modules/@heroui/react/dist/components/search-field/search-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/search-field/search-field.js" was ignored.
+node_modules/@heroui/react/dist/components/textarea/textarea.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/textarea/textarea.js" was ignored.
+node_modules/@heroui/react/dist/components/label/label.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/label/label.js" was ignored.
+node_modules/@heroui/react/dist/components/description/description.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/description/description.js" was ignored.
+node_modules/@heroui/react/dist/components/empty-state/empty-state.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/empty-state/empty-state.js" was ignored.
+node_modules/@heroui/react/dist/components/text/text.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/text/text.js" was ignored.
+node_modules/@heroui/react/dist/components/field-error/field-error.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/field-error/field-error.js" was ignored.
+node_modules/@heroui/react/dist/components/form/form.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/form/form.js" was ignored.
+node_modules/@heroui/react/dist/components/header/header.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/header/header.js" was ignored.
+node_modules/@heroui/react/dist/components/radio/radio.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/radio/radio.js" was ignored.
+node_modules/@heroui/react/dist/components/radio-group/radio-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/radio-group/radio-group.js" was ignored.
+node_modules/@heroui/react/dist/components/input-otp/input-otp.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/input-otp/input-otp.js" was ignored.
+node_modules/@heroui/react/dist/components/fieldset/fieldset.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/fieldset/fieldset.js" was ignored.
+node_modules/@heroui/react/dist/components/alert/alert.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/alert/alert.js" was ignored.
+node_modules/@heroui/react/dist/components/list-box-item/list-box-item.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/list-box-item/list-box-item.js" was ignored.
+node_modules/@heroui/react/dist/components/list-box/list-box.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/list-box/list-box.js" was ignored.
+node_modules/@heroui/react/dist/components/dropdown/dropdown.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/dropdown/dropdown.js" was ignored.
+node_modules/@heroui/react/dist/components/menu-item/menu-item.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/menu-item/menu-item.js" was ignored.
+node_modules/@heroui/react/dist/components/menu/menu.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/menu/menu.js" was ignored.
+node_modules/@heroui/react/dist/components/menu-section/menu-section.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/menu-section/menu-section.js" was ignored.
+node_modules/@heroui/react/dist/components/list-box-section/list-box-section.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/list-box-section/list-box-section.js" was ignored.
+node_modules/@heroui/react/dist/components/modal/modal.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/modal/modal.js" was ignored.
+node_modules/@heroui/react/dist/components/number-field/number-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/number-field/number-field.js" was ignored.
+node_modules/@heroui/react/dist/components/pagination/pagination.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/pagination/pagination.js" was ignored.
+node_modules/@heroui/react/dist/components/meter/meter.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/meter/meter.js" was ignored.
+node_modules/@heroui/react/dist/components/select/select.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/select/select.js" was ignored.
+node_modules/@heroui/react/dist/components/slider/slider.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/slider/slider.js" was ignored.
+node_modules/@heroui/react/dist/components/table/table.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/table/table.js" was ignored.
+node_modules/@heroui/react/dist/components/calendar-year-picker/calendar-year-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/calendar-year-picker/calendar-year-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/calendar/calendar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/calendar/calendar.js" was ignored.
+node_modules/@heroui/react/dist/components/icons.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/icons.js" was ignored.
+node_modules/@heroui/react/dist/components/range-calendar/range-calendar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/range-calendar/range-calendar.js" was ignored.
+node_modules/@radix-ui/react-avatar/dist/index.mjs (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@radix-ui/react-avatar/dist/index.mjs" was ignored.
+node_modules/@heroui/react/dist/components/color-input-group/color-input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-input-group/color-input-group.js" was ignored.
+node_modules/@heroui/react/dist/components/date-input-group/date-input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-input-group/date-input-group.js" was ignored.
+node_modules/@xyflow/react/dist/esm/index.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@xyflow/react/dist/esm/index.js" was ignored.
+✓ 3028 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     0.63 kB │ gzip:   0.39 kB
+dist/assets/index-DxHp8iE-.css    475.06 kB │ gzip:  51.07 kB
+dist/assets/index-e3NbQmMG.js   1,332.38 kB │ gzip: 404.57 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 4.44s
++/tmp/claude-501/618/scripts/r2.sh:21> tail -15
++/tmp/claude-501/618/scripts/r2.sh:21> node --test tests/activity-reader.test.cjs tests/activity-reading.test.cjs tests/activity.test.cjs tests/monitor-convergence.test.cjs tests/monitor-graph.test.cjs tests/monitor-routing.test.cjs tests/project-index.test.cjs tests/projects.test.cjs tests/settings-draft.test.cjs tests/settings-errors.test.cjs tests/settings-keyboard.test.cjs tests/settings-view.test.cjs tests/settings.test.cjs tests/task-minimap.test.cjs tests/usage-history.test.cjs tests/usage-view.test.cjs tests/usage.test.cjs
+  Error: {"failed":true,"error":"Agent Runner must be invoked from the Harness Project Root or this Session's Worktree."}
+      at operate (/private/tmp/claude-501/618/graphtraj/desktop/tests/fixtures.cjs:11:27)
+      at makeProject (/private/tmp/claude-501/618/graphtraj/desktop/tests/fixtures.cjs:31:3)
+      at async TestContext.<anonymous> (/private/tmp/claude-501/618/graphtraj/desktop/tests/projects.test.cjs:51:17)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+
+test at tests/settings.test.cjs:26:1
+✖ desktop main-process settings pipe saves directly, detects conflict and restores through native entry (822.226875ms)
+  Error: {"failed":true,"error":"Agent Runner must be invoked from the Harness Project Root or this Session's Worktree."}
+      at operate (/private/tmp/claude-501/618/graphtraj/desktop/tests/fixtures.cjs:11:27)
+      at Object.makeProject (/private/tmp/claude-501/618/graphtraj/desktop/tests/fixtures.cjs:31:3)
+      at async TestContext.<anonymous> (/private/tmp/claude-501/618/graphtraj/desktop/tests/settings.test.cjs:36:19)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
++/tmp/claude-501/618/scripts/r2.sh:21> echo 'unit-exit=1'
+unit-exit=1
++/tmp/claude-501/618/scripts/r2.sh:22> npm run package:mac
+npm notice run graphtraj-desktop@0.1.0 package:mac
+npm notice run npm run build && node --preserve-symlinks --preserve-symlinks-main scripts/package-mac.mjs
+npm notice run graphtraj-desktop@0.1.0 build
+npm notice run node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js -p tsconfig.electron.json && node --preserve-symlinks --preserve-symlinks-main node_modules/typescript/lib/tsc.js --noEmit && node --preserve-symlinks --preserve-symlinks-main node_modules/vite/bin/vite.js build --configLoader native
+vite v7.3.6 building client environment for production...
+(node:89306) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+transforming...
+node_modules/@heroui/react/dist/components/accordion/accordion.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/accordion/accordion.js" was ignored.
+node_modules/@heroui/react/dist/components/alert-dialog/alert-dialog.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/alert-dialog/alert-dialog.js" was ignored.
+node_modules/@heroui/react/dist/components/avatar/avatar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/avatar/avatar.js" was ignored.
+node_modules/@heroui/react/dist/components/autocomplete/autocomplete.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/autocomplete/autocomplete.js" was ignored.
+node_modules/@heroui/react/dist/components/badge/badge.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/badge/badge.js" was ignored.
+node_modules/@heroui/react/dist/components/button/button.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/button/button.js" was ignored.
+node_modules/@heroui/react/dist/components/breadcrumbs/breadcrumbs.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/breadcrumbs/breadcrumbs.js" was ignored.
+node_modules/@heroui/react/dist/components/button-group/button-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/button-group/button-group.js" was ignored.
+node_modules/@heroui/react/dist/components/card/card.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/card/card.js" was ignored.
+node_modules/@heroui/react/dist/components/checkbox/checkbox.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/checkbox/checkbox.js" was ignored.
+node_modules/@heroui/react/dist/components/chip/chip.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/chip/chip.js" was ignored.
+node_modules/@heroui/react/dist/components/color-field/color-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-field/color-field.js" was ignored.
+node_modules/@heroui/react/dist/components/color-area/color-area.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-area/color-area.js" was ignored.
+node_modules/@heroui/react/dist/components/checkbox-group/checkbox-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/checkbox-group/checkbox-group.js" was ignored.
+node_modules/@heroui/react/dist/components/color-picker/color-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-picker/color-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/color-swatch/color-swatch.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-swatch/color-swatch.js" was ignored.
+node_modules/@heroui/react/dist/components/color-slider/color-slider.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-slider/color-slider.js" was ignored.
+node_modules/@heroui/react/dist/components/color-swatch-picker/color-swatch-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-swatch-picker/color-swatch-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/combo-box/combo-box.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/combo-box/combo-box.js" was ignored.
+node_modules/@heroui/react/dist/components/close-button/close-button.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/close-button/close-button.js" was ignored.
+node_modules/@heroui/react/dist/components/date-field/date-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-field/date-field.js" was ignored.
+node_modules/@heroui/react/dist/components/date-picker/date-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-picker/date-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/date-range-picker/date-range-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-range-picker/date-range-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/drawer/drawer.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/drawer/drawer.js" was ignored.
+node_modules/@heroui/react/dist/components/progress-bar/progress-bar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/progress-bar/progress-bar.js" was ignored.
+node_modules/@heroui/react/dist/components/progress-circle/progress-circle.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/progress-circle/progress-circle.js" was ignored.
+node_modules/@heroui/react/dist/components/time-field/time-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/time-field/time-field.js" was ignored.
+node_modules/@heroui/react/dist/components/disclosure/disclosure.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/disclosure/disclosure.js" was ignored.
+node_modules/@heroui/react/dist/components/disclosure-group/disclosure-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/disclosure-group/disclosure-group.js" was ignored.
+node_modules/@heroui/react/dist/components/error-message/error-message.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/error-message/error-message.js" was ignored.
+node_modules/@heroui/react/dist/components/kbd/kbd.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/kbd/kbd.js" was ignored.
+node_modules/@heroui/react/dist/components/link/link.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/link/link.js" was ignored.
+node_modules/@heroui/react/dist/components/popover/popover.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/popover/popover.js" was ignored.
+node_modules/@heroui/react/dist/components/scroll-shadow/scroll-shadow.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/scroll-shadow/scroll-shadow.js" was ignored.
+node_modules/@heroui/react/dist/components/separator/separator.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/separator/separator.js" was ignored.
+node_modules/@heroui/react/dist/components/skeleton/skeleton.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/skeleton/skeleton.js" was ignored.
+node_modules/@heroui/react/dist/components/spinner/spinner.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/spinner/spinner.js" was ignored.
+node_modules/@heroui/react/dist/components/surface/surface.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/surface/surface.js" was ignored.
+node_modules/@heroui/react/dist/components/toast/toast.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toast/toast.js" was ignored.
+node_modules/@heroui/react/dist/components/toggle-button/toggle-button.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toggle-button/toggle-button.js" was ignored.
+node_modules/@heroui/react/dist/components/switch/switch.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/switch/switch.js" was ignored.
+node_modules/@heroui/react/dist/components/switch-group/switch-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/switch-group/switch-group.js" was ignored.
+node_modules/@heroui/react/dist/components/tabs/tabs.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tabs/tabs.js" was ignored.
+node_modules/@heroui/react/dist/components/tag/tag.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tag/tag.js" was ignored.
+node_modules/@heroui/react/dist/components/toggle-button-group/toggle-button-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toggle-button-group/toggle-button-group.js" was ignored.
+node_modules/@heroui/react/dist/components/tag-group/tag-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tag-group/tag-group.js" was ignored.
+node_modules/@heroui/react/dist/components/toolbar/toolbar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/toolbar/toolbar.js" was ignored.
+node_modules/@heroui/react/dist/components/tooltip/tooltip.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/tooltip/tooltip.js" was ignored.
+node_modules/@heroui/react/dist/components/input/input.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/input/input.js" was ignored.
+node_modules/@heroui/react/dist/components/input-group/input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/input-group/input-group.js" was ignored.
+node_modules/@heroui/react/dist/components/textarea/textarea.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/textarea/textarea.js" was ignored.
+node_modules/@heroui/react/dist/components/textfield/textfield.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/textfield/textfield.js" was ignored.
+node_modules/@heroui/react/dist/components/search-field/search-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/search-field/search-field.js" was ignored.
+node_modules/@heroui/react/dist/components/text/text.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/text/text.js" was ignored.
+node_modules/@heroui/react/dist/components/description/description.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/description/description.js" was ignored.
+node_modules/@heroui/react/dist/components/label/label.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/label/label.js" was ignored.
+node_modules/@heroui/react/dist/components/empty-state/empty-state.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/empty-state/empty-state.js" was ignored.
+node_modules/@heroui/react/dist/components/field-error/field-error.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/field-error/field-error.js" was ignored.
+node_modules/@heroui/react/dist/components/fieldset/fieldset.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/fieldset/fieldset.js" was ignored.
+node_modules/@heroui/react/dist/components/form/form.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/form/form.js" was ignored.
+node_modules/@heroui/react/dist/components/header/header.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/header/header.js" was ignored.
+node_modules/@heroui/react/dist/components/radio/radio.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/radio/radio.js" was ignored.
+node_modules/@heroui/react/dist/components/radio-group/radio-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/radio-group/radio-group.js" was ignored.
+node_modules/@heroui/react/dist/components/input-otp/input-otp.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/input-otp/input-otp.js" was ignored.
+node_modules/@heroui/react/dist/components/alert/alert.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/alert/alert.js" was ignored.
+node_modules/@heroui/react/dist/components/list-box/list-box.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/list-box/list-box.js" was ignored.
+node_modules/@heroui/react/dist/components/list-box-item/list-box-item.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/list-box-item/list-box-item.js" was ignored.
+node_modules/@heroui/react/dist/components/list-box-section/list-box-section.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/list-box-section/list-box-section.js" was ignored.
+node_modules/@heroui/react/dist/components/menu/menu.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/menu/menu.js" was ignored.
+node_modules/@heroui/react/dist/components/menu-item/menu-item.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/menu-item/menu-item.js" was ignored.
+node_modules/@heroui/react/dist/components/dropdown/dropdown.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/dropdown/dropdown.js" was ignored.
+node_modules/@heroui/react/dist/components/menu-section/menu-section.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/menu-section/menu-section.js" was ignored.
+node_modules/@heroui/react/dist/components/modal/modal.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/modal/modal.js" was ignored.
+node_modules/@heroui/react/dist/components/number-field/number-field.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/number-field/number-field.js" was ignored.
+node_modules/@heroui/react/dist/components/pagination/pagination.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/pagination/pagination.js" was ignored.
+node_modules/@heroui/react/dist/components/select/select.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/select/select.js" was ignored.
+node_modules/@heroui/react/dist/components/meter/meter.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/meter/meter.js" was ignored.
+node_modules/@heroui/react/dist/components/slider/slider.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/slider/slider.js" was ignored.
+node_modules/@heroui/react/dist/components/table/table.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/table/table.js" was ignored.
+node_modules/@heroui/react/dist/components/calendar-year-picker/calendar-year-picker.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/calendar-year-picker/calendar-year-picker.js" was ignored.
+node_modules/@heroui/react/dist/components/icons.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/icons.js" was ignored.
+node_modules/@heroui/react/dist/components/range-calendar/range-calendar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/range-calendar/range-calendar.js" was ignored.
+node_modules/@heroui/react/dist/components/calendar/calendar.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/calendar/calendar.js" was ignored.
+node_modules/@radix-ui/react-avatar/dist/index.mjs (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@radix-ui/react-avatar/dist/index.mjs" was ignored.
+node_modules/@heroui/react/dist/components/color-input-group/color-input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-input-group/color-input-group.js" was ignored.
+node_modules/@heroui/react/dist/components/date-input-group/date-input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-input-group/date-input-group.js" was ignored.
+node_modules/@xyflow/react/dist/esm/index.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@xyflow/react/dist/esm/index.js" was ignored.
+✓ 3028 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     0.63 kB │ gzip:   0.39 kB
+dist/assets/index-DxHp8iE-.css    475.06 kB │ gzip:  51.07 kB
+dist/assets/index-e3NbQmMG.js   1,332.38 kB │ gzip: 404.57 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 4.00s
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+[TypeError: fetch failed] {
+  [cause]: Error: getaddrinfo ENOTFOUND github.com
+      at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:121:26) {
+    errno: -3008,
+    code: 'ENOTFOUND',
+    syscall: 'getaddrinfo',
+    hostname: 'github.com'
+  }
+}
+
+Node.js v26.5.0
++/tmp/claude-501/618/scripts/r2.sh:22> exit 5
+R2-EXIT=5

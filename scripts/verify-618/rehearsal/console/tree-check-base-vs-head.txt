@@ -1,0 +1,8 @@
+8e77432b .github/workflows/desktop-linux-adoption.yml FAIL
+8e77432b .github/workflows/desktop-macos-adoption.yml FAIL
+8e77432b .github/workflows/desktop-repair-package.yml FAIL
+8e77432b .github/workflows/desktop-win-adoption.yml FAIL
+HEAD .github/workflows/desktop-linux-adoption.yml PASS
+HEAD .github/workflows/desktop-macos-adoption.yml PASS
+HEAD .github/workflows/desktop-repair-package.yml PASS
+HEAD .github/workflows/desktop-win-adoption.yml PASS

@@ -1,0 +1,33 @@
+$ VERIFY618_REMOTE=/tmp/claude-501/618/steps/failure/remote.git VERIFY618_GH=/tmp/claude-501/618/steps/failure/gh/gh VERIFY618_POLL_S=1 VERIFY618_APPEAR_S=10 VERIFY618_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/618/steps/failure/remote.git agent/618-desktop-workflows-graftling-ref (fast-forward only, never force). Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: .github/workflows/desktop-linux-adoption.yml pins v0.10.1, root layout, 618 trigger
+PASS: .github/workflows/desktop-macos-adoption.yml pins v0.10.1, root layout, 618 trigger
+PASS: .github/workflows/desktop-repair-package.yml pins v0.10.1, root layout, 618 trigger
+PASS: .github/workflows/desktop-win-adoption.yml pins v0.10.1, root layout, 618 trigger
+$ git push /tmp/claude-501/618/steps/failure/remote.git refs/heads/agent/618-desktop-workflows-graftling-ref:refs/heads/agent/618-desktop-workflows-graftling-ref   (HEAD 8eff9315a8b505dd26be7a261c80e152b7de0542)
+  To /tmp/claude-501/618/steps/failure/remote.git
+   * [new branch]        agent/618-desktop-workflows-graftling-ref -> agent/618-desktop-workflows-graftling-ref
+PASS: /tmp/claude-501/618/steps/failure/remote.git agent/618-desktop-workflows-graftling-ref = 8eff9315a8b505dd26be7a261c80e152b7de0542
+observing runs for 8eff9315a8b505dd26be7a261c80e152b7de0542 on LUOXIAO92/graphtraj (appearance bound 10s, completion bound 30s, poll 1s)
+all four workflow runs present after 1s
+  [13:17:57] .github/workflows/desktop-linux-adoption.yml queued -;.github/workflows/desktop-macos-adoption.yml queued -;.github/workflows/desktop-repair-package.yml queued -;.github/workflows/desktop-win-adoption.yml queued -;
+  [13:17:58] .github/workflows/desktop-linux-adoption.yml completed success;.github/workflows/desktop-macos-adoption.yml completed success;.github/workflows/desktop-repair-package.yml completed success;.github/workflows/desktop-win-adoption.yml completed failure;
+--- results for 8eff9315a8b505dd26be7a261c80e152b7de0542
+RUN .github/workflows/desktop-linux-adoption.yml | id 46000000000 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000000
+    job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000000/job/47000000000
+RUN .github/workflows/desktop-macos-adoption.yml | id 46000000001 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000001
+    job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000001/job/47000000010
+RUN .github/workflows/desktop-repair-package.yml | id 46000000002 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000002
+    job: windows-package | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000002/job/47000000020
+    job: linux-package | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000002/job/47000000021
+RUN .github/workflows/desktop-win-adoption.yml | id 46000000003 | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000003
+    job: windows-adoption | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000003/job/47000000030
+OTHER workflows triggered for this SHA:
+  OTHER	.github/workflows/other.yml	46000000009	push	completed	success	https://github.com/LUOXIAO92/graphtraj/actions/runs/46000000009
+--- tail of: gh run view 46000000003 --repo LUOXIAO92/graphtraj --log-failed
+windows-adoption	Build desktop and check Windows native settings	2026-11-25T00:00:00Z ERROR: stand-in failed log for run 46000000003
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/618-desktop-workflows-graftling-ref/scripts/verify-618/steps.zsh W 8eff9315a8b505dd26be7a261c80e152b7de0542    (re-observe; no push)
+next: /tmp/claude-501/618/steps/failure/gh/gh run rerun 46000000003 --repo LUOXIAO92/graphtraj --failed    (only if the failure is transient; not run by this step)
+VERDICT 618 P: FAIL (3/4 success)
+[exit 1]

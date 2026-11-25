@@ -1,0 +1,18 @@
+$ pip wheel --no-deps --no-build-isolation <graftling root (archive v0.10.1)> <graphtraj clone e96adbb2>
+graftling-0.10.1-py3-none-any.whl
+graphtraj-0.1.0-py3-none-any.whl
+   197767  graftling/PUBLIC_API.md
+    15939  graftling/install/claude-code.md
+    10047  graftling/install/codex.md
+    17230  graftling/install/dsh.md
+    11940  graftling/install/pi.md
+$ git -c core.symlinks=false clone --branch v0.10.1 <graftling repo> graftling-stub
+warning: refs/tags/v0.10.1 9ccfa01a1658cbdb991a81a2e61e34eaedf335f4 is not a commit!
+-rw-r--r--  1 luoxiao  wheel  18 Nov 25 13:14 /tmp/claude-501/618/graftling-stub/src/graftling/install
+-rw-r--r--  1 luoxiao  wheel  19 Nov 25 13:14 /tmp/claude-501/618/graftling-stub/src/graftling/PUBLIC_API.md
+stub content: ../../PUBLIC_API.md
+stub wheel exit=0
+graftling-0.10.1-py3-none-any.whl
+       19  graftling/PUBLIC_API.md
+  install/*.md entries: 0
+R3-EXIT=0

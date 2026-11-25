@@ -1,0 +1,20 @@
+node_modules/@radix-ui/react-avatar/dist/index.mjs (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@radix-ui/react-avatar/dist/index.mjs" was ignored.
+node_modules/@heroui/react/dist/components/color-input-group/color-input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/color-input-group/color-input-group.js" was ignored.
+node_modules/@heroui/react/dist/components/date-input-group/date-input-group.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@heroui/react/dist/components/date-input-group/date-input-group.js" was ignored.
+node_modules/@xyflow/react/dist/esm/index.js (1:0): Module level directives cause errors when bundled, "use client" in "node_modules/@xyflow/react/dist/esm/index.js" was ignored.
+✓ 3028 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     0.63 kB │ gzip:   0.39 kB
+dist/assets/index-DxHp8iE-.css    475.06 kB │ gzip:  51.07 kB
+dist/assets/index-e3NbQmMG.js   1,332.38 kB │ gzip: 404.57 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.96s
+Packaging app for platform darwin arm64 using electron v44.5.1
+packaged app: /private/tmp/claude-501/618/graphtraj/desktop/dist-package/GraphTraj-darwin-arm64/GraphTraj.app
+artifact: /private/tmp/claude-501/618/graphtraj/desktop/dist-package/GraphTraj-darwin-arm64.zip
+artifact sha256: 92531165c60d11169307e3d8ea97a3b2b0065b59da16e99eaa33a5e7586a663a

@@ -1,0 +1,18 @@
+$ VERIFY618_REMOTE=/tmp/claude-501/618/steps/success/remote.git VERIFY618_GH=/tmp/claude-501/618/steps/success/gh/gh VERIFY618_POLL_S=1 VERIFY618_APPEAR_S=10 VERIFY618_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: your gh login (account shown, no token) and ssh key (git ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify618-stand-in | gh path: /tmp/claude-501/618/steps/success/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-618 fake)
+    - Active account: true
+PASS: origin is git@github.com:LUOXIAO92/graphtraj.git
+NOTE: rehearsal remote /tmp/claude-501/618/steps/success/remote.git is used instead of origin for ls-remote/push
+PASS: .github/workflows/desktop-linux-adoption.yml pins v0.10.1, root layout, 618 trigger
+PASS: .github/workflows/desktop-macos-adoption.yml pins v0.10.1, root layout, 618 trigger
+PASS: .github/workflows/desktop-repair-package.yml pins v0.10.1, root layout, 618 trigger
+PASS: .github/workflows/desktop-win-adoption.yml pins v0.10.1, root layout, 618 trigger
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/618-desktop-workflows-graftling-ref/scripts/verify-618/steps.zsh W 8eff9315a8b505dd26be7a261c80e152b7de0542
+STOP: /tmp/claude-501/618/steps/success/remote.git already has agent/618-desktop-workflows-graftling-ref at HEAD 8eff9315a8b505dd26be7a261c80e152b7de0542; nothing to push. Observe instead with the next command.
+[exit 1]

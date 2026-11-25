@@ -1,0 +1,14 @@
+$ yamlcheck.py (PyYAML SafeLoader + duplicate-key rejection) base 8e77432b
+OK   /tmp/claude-501/618/base/desktop-linux-adoption.yml: branches=['agent/267-desktop-linux-adoption', 'agent/288-desktop-d-integrated-adoption-linux', 'agent/290-desktop-d-direct-port-linux', 'agent/291-desktop-global-model-role-flow']
+OK   /tmp/claude-501/618/base/desktop-macos-adoption.yml: branches=['agent/265-desktop-mac-adoption', 'agent/285-desktop-d-monitor-projects', 'agent/286-desktop-usage-history-range', 'agent/287-desktop-agents-models-teams', 'agent/288-desktop-d-integrated-adoption-macos', 'agent/290-desktop-d-direct-port-macos', 'agent/292-desktop-readable-runtime-events', 'agent/295-desktop-direct-settings-save-macos']
+FAIL /tmp/claude-501/618/base/desktop-repair-package.yml: duplicate key 'persist-credentials'   in "/tmp/claude-501/618/base/desktop-repair-package.yml", line 37, column 11
+OK   /tmp/claude-501/618/base/desktop-win-adoption.yml: branches=['agent/266-desktop-win-adoption', 'agent/288-desktop-d-integrated-adoption-win', 'agent/290-desktop-d-direct-port-win']
+exit=1
+$ yamlcheck.py candidate e96adbb2
+OK   .github/workflows/desktop-linux-adoption.yml: branches=['agent/267-desktop-linux-adoption', 'agent/288-desktop-d-integrated-adoption-linux', 'agent/290-desktop-d-direct-port-linux', 'agent/291-desktop-global-model-role-flow', 'agent/618-desktop-workflows-graftling-ref']
+OK   .github/workflows/desktop-macos-adoption.yml: branches=['agent/265-desktop-mac-adoption', 'agent/285-desktop-d-monitor-projects', 'agent/286-desktop-usage-history-range', 'agent/287-desktop-agents-models-teams', 'agent/288-desktop-d-integrated-adoption-macos', 'agent/290-desktop-d-direct-port-macos', 'agent/292-desktop-readable-runtime-events', 'agent/295-desktop-direct-settings-save-macos', 'agent/618-desktop-workflows-graftling-ref']
+OK   .github/workflows/desktop-repair-package.yml: branches=['agent/295-desktop-direct-settings-save', 'agent/300-desktop-ux-platform-packages', 'agent/306-task-hierarchy-desktop-adoption', 'agent/618-desktop-workflows-graftling-ref']
+OK   .github/workflows/desktop-win-adoption.yml: branches=['agent/266-desktop-win-adoption', 'agent/288-desktop-d-integrated-adoption-win', 'agent/290-desktop-d-direct-port-win', 'agent/618-desktop-workflows-graftling-ref']
+exit=0
+$ which actionlint
+actionlint not found

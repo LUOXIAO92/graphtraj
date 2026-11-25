@@ -1,0 +1,42 @@
+$ VERIFY621_REMOTE=/tmp/claude-501/r621s/success/remote.git VERIFY621_GH=/tmp/claude-501/r621s/success/gh/gh VERIFY621_HTMP=/tmp/claude-501/r621s/success/htmp VERIFY621_PTMP=/tmp/claude-501/r621s/success/ptmp VERIFY621_POLL_S=1 VERIFY621_APPEAR_S=10 VERIFY621_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push, dispatch and wait. OUTWARD-FACING: git push /tmp/claude-501/r621s/success/remote.git agent/621-macos-adoption-script-d-ui (fast-forward only, never force) and gh workflow run desktop-macos-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: on agent/621-macos-adoption-script-d-ui
+PASS: tracked tree clean
+PASS: base 4b71012c is an ancestor of HEAD
+PASS: desktop/tests/adoption.mjs changed since base
+PASS: nothing changed since base under .github/workflows desktop/src desktop/electron src
+$ git push /tmp/claude-501/r621s/success/remote.git refs/heads/agent/621-macos-adoption-script-d-ui:refs/heads/agent/621-macos-adoption-script-d-ui   (HEAD 0edc23a0d072e164f68cd48afb5d5a5fb3e062be)
+  To /tmp/claude-501/r621s/success/remote.git
+   * [new branch]        agent/621-macos-adoption-script-d-ui -> agent/621-macos-adoption-script-d-ui
+PASS: /tmp/claude-501/r621s/success/remote.git agent/621-macos-adoption-script-d-ui = 0edc23a0d072e164f68cd48afb5d5a5fb3e062be
+existing dispatch runs of desktop-macos-adoption.yml on agent/621-macos-adoption-script-d-ui: 1
+$ gh workflow run desktop-macos-adoption.yml --repo LUOXIAO92/graphtraj --ref agent/621-macos-adoption-script-d-ui -f mode=standard
+  ✓ Created workflow_dispatch event for desktop-macos-adoption.yml at agent/621-macos-adoption-script-d-ui
+waiting for the new run of 0edc23a0d072e164f68cd48afb5d5a5fb3e062be to appear (bound 10s, poll 1s)
+new run 46100000002 appeared after 1s: 46100000002 | queued | - | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000002
+waiting for run 46100000002 (completion bound 30s, poll 1s)
+  [16:12:37] run 46100000002: in_progress -
+  [16:12:38] run 46100000002: completed success
+--- run 46100000002 | completed | success | head 0edc23a0d072e164f68cd48afb5d5a5fb3e062be | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000002
+  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000002/job/1
+--- evidence of run 46100000002
+$ gh run download 46100000002 --repo LUOXIAO92/graphtraj -n graphtraj-macos-adoption-evidence -D /tmp/claude-501/r621s/success/htmp/mac-evidence-46100000002
+copied to: /tmp/claude-501/r621s/success/ptmp/mac-evidence-46100000002
+--- files (bytes, path under /tmp/claude-501/r621s/success/htmp/mac-evidence-46100000002)
+          21  environment.txt
+         273  evidence.json
+          13  screens/00-start.png
+--- evidence.json
+  passed: True
+  steps: 8 recorded; last 6:
+    - stand-in step 3
+    - stand-in step 4
+    - stand-in step 5
+    - stand-in step 6
+    - stand-in step 7
+    - stand-in step 8
+  screenshots: screens/00-start.png
+next: zsh /private/tmp/claude-501/r621s/repo/scripts/verify-621/steps.zsh W 46100000002    (observe again; no push, no dispatch)
+VERDICT 621 P: PASS (run 46100000002 success; evidence download ok; https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000002)
+[exit 0]

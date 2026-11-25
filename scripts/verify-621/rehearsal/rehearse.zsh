@@ -33,6 +33,11 @@ step() {  # step <scenario> <file> <step> [args]: run one step with the knobs, k
   env $(knobs $sc ${APPEAR:-10}) zsh $STEPS "$@" >> $OUT/$file 2>&1; print -r -- "[exit $?]" >> $OUT/$file
   print -r -- "--- $file"; tail -3 $OUT/$file
 }
+# `rehearse.zsh <dir> early`: HEAD already holds the port; only 00 and P success (macOS dispatch).
+if [[ ${2:-} == early ]]; then
+  fresh success; step success early-00.txt 00; step success early-P-success.txt P
+  exit 0
+fi
 # At the A commit adoption.mjs is unchanged: 00 reports E ready and P not ready; E downloads; P refuses.
 fresh evidence; step evidence a-00.txt 00; step evidence a-E.txt E; step evidence a-E-again.txt E
 step evidence a-00-after-E.txt 00; step evidence a-P-refused.txt P

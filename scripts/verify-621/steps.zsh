@@ -53,8 +53,9 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/621-macos-adoption-script-d-ui
-# dev 4b71012c (618, 620, 622, 619) merged into the Task branch; it changed only Linux/Windows trigger lines.
-BASE=4b71012cc36b15063576c86038cf36c383d5989b
+# dev 5c7c7874 (618, 620, 622, 619, 626) merged into the Task branch; since 4b71012c it changed desktop/src
+# styling (626) and no workflow.
+BASE=5c7c7874dcc23038b9f938213f8a6b90affe9889
 REPO=LUOXIAO92/graphtraj
 WF=desktop-macos-adoption.yml
 FAILED_RUN=45546698537

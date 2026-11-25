@@ -1,0 +1,15 @@
+# The tests Task 633 (W1) adds (graftling tests/test_process_windows_633.py). On the Windows runner each must PASS:
+# the real Win32 path for the first six and the last two, the parent rule with fakes for the rest.
+tests/test_process_windows_633.py::test_executable_and_arguments_of_a_real_child
+tests/test_process_windows_633.py::test_the_parent_of_a_real_child_is_this_process
+tests/test_process_windows_633.py::test_process_alive_for_a_live_an_exited_and_an_invalid_pid
+tests/test_process_windows_633.py::test_process_alive_never_terminates_its_target
+tests/test_process_windows_633.py::test_process_alive_refuses_a_process_created_after_started
+tests/test_process_windows_633.py::test_control_alive_tells_an_ended_process_from_a_live_one
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[earlier]
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[same-time]
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[later]
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[unreadable]
+tests/test_process_windows_633.py::test_a_windows_walk_ends_where_the_parent_is_not_older
+tests/test_process_windows_633.py::test_windows_command_lines_split_as_subprocess_quotes_them
+tests/test_process_windows_633.py::test_windows_records_this_process_as_the_older_parent

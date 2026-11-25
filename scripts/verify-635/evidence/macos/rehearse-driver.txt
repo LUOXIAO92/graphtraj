@@ -1,0 +1,61 @@
+--- matched-00.txt
+VERDICT 635 00: PASS (P ready: yes; remote branch absent; candidate graftling 01557f6f8bacd44a45ea08b44088f584a05e0275)
+[exit 0]
+--- matched-P.txt
+VERDICT 635 P: PASS (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 976 tests: 536 passed, 188 failed as listed, 0 hangs as listed, 231 POSIX-only skips, 21 environment skips; W3 tests: 15 of 15 W3 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- matched-00-again.txt
+VERDICT 635 00: PASS (P ready: yes; remote branch equal; candidate graftling 01557f6f8bacd44a45ea08b44088f584a05e0275)
+[exit 0]
+--- matched-W-sha.txt
+VERDICT 635 W: PASS (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 976 tests: 536 passed, 188 failed as listed, 0 hangs as listed, 231 POSIX-only skips, 21 environment skips; W3 tests: 15 of 15 W3 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- matched-W-run.txt
+VERDICT 635 W: PASS (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 976 tests: 536 passed, 188 failed as listed, 0 hangs as listed, 231 POSIX-only skips, 21 environment skips; W3 tests: 15 of 15 W3 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- w3-passes-P.txt
+VERDICT 635 P: FAIL (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W3 tests: PASS 15 of 15 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]
+--- newtest-fails-P.txt
+VERDICT 635 P: FAIL (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; W3 tests: FAIL 14 of 15 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]
+--- newtest-skipped-P.txt
+VERDICT 635 P: FAIL (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 7 skips without the POSIX-only prefix; W3 tests: FAIL 10 of 15 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]
+--- setup-fail-P.txt
+VERDICT 635 P: FAIL (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: FAIL step 'Install graftling and pinned test tools' is failure; step 'Show runner, Python and pytest versions' is skipped; step 'Run the graftling test suite' is skipped (did not run the suite to its end); run_test_files exit code missing: the driver did not finish (0 or 1 expected); no per-file records (files.json): [Errno 2] No such file or directory: '/tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/junit/files.json'; results: FAIL JUnit holds no test; 188 listed failures skipped or absent; W3 tests: FAIL 0 of 15 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]
+--- rerun-P.txt
+VERDICT 635 P: FAIL (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W3 tests: PASS 15 of 15 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]
+--- rerun-X.txt
+VERDICT 635 X: PASS (run 51000000000 attempt 2 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 976 tests: 536 passed, 188 failed as listed, 0 hangs as listed, 231 POSIX-only skips, 21 environment skips; W3 tests: 15 of 15 W3 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- timeout-P.txt
+VERDICT 635 P: FAIL (the .github/workflows/windows.yml run never appeared within 4s)
+[exit 1]
+--- guard-local-00.txt
+VERDICT 635 00: STOP
+[exit 1]
+--- diverged-P.txt
+VERDICT 635 P: STOP
+[exit 1]
+--- ff-local-00.txt
+VERDICT 635 00: PASS (P ready: yes; remote branch absent; candidate graftling 01557f6f8bacd44a45ea08b44088f584a05e0275)
+[exit 0]
+--- ff-local-P.txt
+VERDICT 635 P: PASS (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 976 tests: 536 passed, 188 failed as listed, 0 hangs as listed, 231 POSIX-only skips, 21 environment skips; W3 tests: 15 of 15 W3 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- disallowed-00.txt
+VERDICT 635 00: PASS (P ready: no; remote branch absent; candidate graftling 04542f2ad0ee37214b8003b2898bf74d064a5cd3)
+[exit 0]
+--- disallowed-P.txt
+VERDICT 635 P: STOP
+[exit 1]
+--- bad-owner-00.txt
+VERDICT 635 00: PASS (P ready: no; remote branch absent; candidate graftling 01557f6f8bacd44a45ea08b44088f584a05e0275)
+[exit 0]
+--- bad-owner-P.txt
+VERDICT 635 P: STOP
+[exit 1]
+UNCHANGED (the rehearsal wrote only scratch clones)

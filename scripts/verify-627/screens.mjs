@@ -72,12 +72,16 @@ async function closeDetails() {
   await page.waitForTimeout(500);
 }
 /**
- * Overlap machine check (Task 627): bounding boxes of the visible task cards, clipped to the main canvas, against the
- * canvas overlays. A card under the minimap, or the 'Search results' panel over the canvas or a card, is a problem
- * (626 leftover at 1000 px; 621 interim 23). Legend and zoom intersections are recorded as notes. `inspector` asks
- * for the U2 position of Task details: 'right' (wide) or 'bottom' (below ~1100 px).
+ * Overlap machine check (Task 627; criteria revised by the Leader after the fd156541 host run). Bounding boxes of the
+ * visible task cards (clipped to the main canvas) against the canvas overlays. Problems (failing):
+ * - `fitView`: any card under the minimap (626 leftover at 1000 px);
+ * - `focus` (the selected or located card): not fully inside the visible canvas (e.g. clipped by the inspector), or
+ *   intersecting the search panel, minimap, legend or zoom;
+ * - always: legend x minimap, legend x zoom; the 'Search results' panel x the canvas or any card (621 interim 23).
+ * Other card/overlay contacts (e.g. dimmed cards passing under overlays when zoomed in) are notes.
+ * `inspector` asks for the U2 position of Task details: 'right' (wide) or 'bottom' (below ~1100 px).
  */
-async function layout(name, { inspector = null, search = false } = {}) {
+async function layout(name, { inspector = null, search = false, fitView = false, focus = null } = {}) {
   const boxes = await page.evaluate(() => {
     const scope = document.querySelector('.monitor-page:not(.concealed)');
     const box = element => {
@@ -91,7 +95,7 @@ async function layout(name, { inspector = null, search = false } = {}) {
     const clip = r => canvas && r ? { x: Math.max(r.x, canvas.x), y: Math.max(r.y, canvas.y),
       right: Math.min(r.right, canvas.right), bottom: Math.min(r.bottom, canvas.bottom) } : null;
     const cards = [...scope.querySelectorAll('[aria-label="Native task canvas"] .native-task-card')]
-      .map(card => ({ id: card.dataset.taskId, box: clip(box(card)) }))
+      .map(card => ({ id: card.dataset.taskId, raw: box(card), box: clip(box(card)) }))
       .filter(card => card.box && card.box.right > card.box.x && card.box.bottom > card.box.y);
     return { canvas, cards, minimap: box(scope.querySelector('.native-minimap')),
       legend: box(scope.querySelector('.native-relation-legend')), zoom: box(scope.querySelector('.native-task-zoom')),
@@ -104,12 +108,24 @@ async function layout(name, { inspector = null, search = false } = {}) {
   if (!boxes.canvas) problem(`${label}: no visible task canvas`);
   if (!boxes.cards.length) problem(`${label}: no task card visible in the canvas`);
   for (const card of boxes.cards) {
-    for (const [overlay, failing] of [['minimap', true], ['search', true], ['legend', false], ['zoom', false]]) {
+    for (const overlay of ['minimap', 'search', 'legend', 'zoom']) {
       if (!hit(card.box, boxes[overlay])) continue;
       record.intersections.push(`#${card.id} x ${overlay}`);
-      if (failing) problem(`${label}: card #${card.id} intersects the ${overlay} overlay`);
-      else facts.overlapNotes.push(`${label}: card #${card.id} intersects the ${overlay} (not a failing criterion)`);
+      const failing = overlay === 'search' || card.id === focus || (fitView && overlay === 'minimap');
+      if (failing) problem(`${label}: card #${card.id}${card.id === focus ? ' (selected/located)' : ''} intersects the ${overlay} overlay`);
+      else facts.overlapNotes.push(`${label}: card #${card.id} intersects the ${overlay} (not a failing criterion here)`);
     }
+  }
+  if (focus) {
+    const card = boxes.cards.find(item => item.id === focus);
+    const inside = card && boxes.canvas && card.raw.x >= boxes.canvas.x - .5 && card.raw.y >= boxes.canvas.y - .5
+      && card.raw.right <= boxes.canvas.right + .5 && card.raw.bottom <= boxes.canvas.bottom + .5;
+    record.focus = { id: focus, raw: card?.raw ?? null, inside: !!inside };
+    if (!inside) problem(`${label}: the selected/located card #${focus} is not fully inside the visible canvas: ${JSON.stringify({ card: card?.raw ?? null, canvas: boxes.canvas })}`);
+  }
+  for (const other of ['minimap', 'zoom']) if (hit(boxes.legend, boxes[other])) {
+    record.intersections.push(`legend x ${other}`);
+    problem(`${label}: the legend intersects the ${other}`);
   }
   if (search) {
     if (!boxes.search) problem(`${label}: 'Search results' panel not visible`);
@@ -306,12 +322,13 @@ role_tree:
     });
     await colours('minimap', [['.native-minimap .x6-widget-minimap', 'backgroundColor', '--surface'],
       ['.native-minimap .x6-widget-minimap-viewport', 'borderTopColor', '--accent-ui']]);
-    await layout('task-graph-unselected');
+    await layout('task-graph-unselected', { fitView: true });
     stage = `${theme}: task graph`;
     await selectTaskOne();
     facts.themes[theme].machine = await machine();
     facts.themes[theme].structure = await structure();
-    await layout('task-graph', { inspector: 'right' });
+    // Fit view: selecting opens the inspector, and the graph re-fits into the narrower canvas (U2).
+    await layout('task-graph', { inspector: 'right', fitView: true, focus: '1' });
     await shot('task-graph');
     stage = `${theme}: search`;
     // 621 interim 23: with a query the 'Search results' panel and the zoomed-in top-left cards are both visible.
@@ -321,7 +338,8 @@ role_tree:
     await search.press('Enter');
     for (let index = 0; index < 2; index++) await monitor().getByRole('button', { name: 'Zoom in', exact: true }).click();
     await page.waitForTimeout(600);
-    await layout('search', { search: true });
+    // Zoomed in after locate(): #1 must be whole and clear of every overlay; dimmed cards under overlays are notes.
+    await layout('search', { search: true, focus: '1' });
     await shot('search');
     // Selecting through the panel (as adoption.mjs:931 does) opens Task details for that task.
     await monitor().getByLabel('Search results', { exact: true }).getByRole('button', { name: '#1 ui fixture', exact: true }).click();
@@ -359,9 +377,11 @@ role_tree:
     await page.waitForTimeout(400);
     await shot('teams-roles');
     stage = `${theme}: agents and models`;
-    const settings = page.getByRole('button', { name: 'Settings', exact: true });
+    // Sidebar-scoped: Teams & roles has its own 'Agents & models' shortcut (Settings.tsx, unchanged since base 4fa79a8d).
+    const sidebar = page.getByRole('complementary', { name: 'Projects', exact: true });
+    const settings = sidebar.getByRole('button', { name: 'Settings', exact: true });
     if (await settings.getAttribute('aria-expanded') !== 'true') await settings.click();
-    await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
+    await sidebar.getByRole('button', { name: 'Agents & models', exact: true }).click();
     await page.getByRole('heading', { name: 'Agents & models', exact: true }).waitFor();
     await shot('agents-models');
     stage = `${theme}: project usage`;
@@ -376,11 +396,11 @@ role_tree:
     await closeDetails();
     await monitor().getByRole('button', { name: 'Fit graph', exact: true }).click();
     await page.waitForTimeout(600);
-    await layout('narrow-task-graph');
+    await layout('narrow-task-graph', { fitView: true });
     await shot('narrow-task-graph');
     stage = `${theme}: narrow task graph selected (1000x760)`;
     await selectTaskOne();
-    await layout('narrow-task-graph-selected', { inspector: 'bottom' });
+    await layout('narrow-task-graph-selected', { inspector: 'bottom', fitView: true, focus: '1' });
     await shot('narrow-task-graph-selected');
     await resize(1440, 900);
   }

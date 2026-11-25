@@ -1,0 +1,4 @@
+scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== Task 627 step T: desktop window tests from /tmp/claude-501/graphtraj-627-48a9e3c746f8f09503e60d9ef249a65a0290b1d3/desktop. Login: none. Dialog: none. Network: Playwright Chromium download (cdn.playwright.dev, storage.googleapis.com). Electron windows open and close themselves.
+NEXT: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/627-desktop-ui-structure-redesign/scripts/verify-627/steps.zsh B
+VERDICT 627 T: FAIL (run B for 48a9e3c746f8f09503e60d9ef249a65a0290b1d3 first)

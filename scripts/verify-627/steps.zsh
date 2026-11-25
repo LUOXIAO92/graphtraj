@@ -429,7 +429,14 @@ T)
   print -r -- "--- TAP summary"
   grep -E "^# (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms) " $EVIDENCE/t-run.log
   print -r -- "--- failing tests (name, location, first error line)"
-  awk '/^not ok /{show=1; print; next} show && /^  location:/{print} show && /^  error:/{print; show=0}' $EVIDENCE/t-run.log
+  # Per failing test: its line, its location, the first error line (the next line for `error: |-`) and the first
+  # stack frame in a test file.
+  awk '/^not ok /{show=1; err=0; frame=0; print; next}
+    show && /^  location:/{print}
+    show && err==1 {print; err=2}
+    show && /^  error:/{print; err=($0 ~ /\|-$/) ? 1 : 2}
+    show && !frame && /\.test\.mjs:[0-9]+/ && !/location:/ {print; frame=1}
+    /^  \.\.\.$/{show=0}' $EVIDENCE/t-run.log
   print -r -- "log: $EVIDENCE/t-run.log (exit $trc)"
   local tfail=$(grep -E '^# fail ' $EVIDENCE/t-run.log | awk '{print $3}') tpass=$(grep -E '^# pass ' $EVIDENCE/t-run.log | awk '{print $3}')
   (( trc == 124 )) && verdict FAIL "window tests killed at the ${T_LIMIT_S}s bound (no TAP summary expected); see the log" 1

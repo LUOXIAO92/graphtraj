@@ -20,6 +20,6 @@ skip-allowed	Installed DSH and Node are required for native endpoint evidence.	t
 skip-allowed	Installed DSH is required for its own preset.	test_pi_dsh_*_551.py: no DSH on the runner
 skip-allowed	This DSH has no readable web-app preset.	test_pi_dsh_child_tools_551.py: depends on the installed DSH
 skip-allowed	Node and an installed Pi are required	test_pi_notice_display_536.py: no Pi on the runner
-fail	tests/test_connection_serve.py::test_removed_control_directory_stops_the_service	src/graftling/connection.py:68	W4	rehearsal stand-in
-fail	tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination	src/graftling/connection.py:68	W4	rehearsal stand-in
+fail	tests/test_connection_serve.py::test_removed_control_directory_stops_the_service	src/graftling/connection.py:68	W4	rehearsal stand-in | observed: graftling.tool.AgentsError: Windows does not support the authenticated local control pipe. (at src/graftling/connection.py:68, from junit)
+fail	tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination	src/graftling/connection.py:68	W4	rehearsal stand-in | observed: graftling.tool.AgentsError: Windows does not support the authenticated local control pipe. (at src/graftling/connection.py:68, from junit)
 hang	tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice	src/graftling/control.py:2140	W1?	NEW: file stopped after 360.2 s

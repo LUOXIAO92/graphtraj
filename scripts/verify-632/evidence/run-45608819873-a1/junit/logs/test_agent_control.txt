@@ -1,0 +1,67 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 23 items
+
+tests/test_agent_control.py::test_lifecycle_create_send_wait_interrupt_resume_retire PASSED [  4%]
+tests/test_agent_control.py::test_hierarchy_uses_true_parents_and_caller_scope PASSED [  8%]
+tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice FAILED [ 13%]
+tests/test_agent_control.py::test_unknown_delivery_is_recorded_and_not_resent PASSED [ 17%]
+tests/test_agent_control.py::test_send_while_the_execution_finishes_goes_to_the_next_execution PASSED [ 21%]
+tests/test_agent_control.py::test_a_refusal_without_a_finishing_fact_goes_to_the_next_execution PASSED [ 26%]
+tests/test_agent_control.py::test_send_refused_by_an_execution_that_never_ends_stays_refused PASSED [ 30%]
+tests/test_agent_control.py::test_a_refusal_of_an_execution_that_is_not_finishing_returns_at_once_rejected[request-pending] PASSED [ 34%]
+tests/test_agent_control.py::test_a_refusal_of_an_execution_that_is_not_finishing_returns_at_once_rejected[not-finishing] PASSED [ 39%]
+tests/test_agent_control.py::test_native_requests_reply_once_and_reject_stale_executions PASSED [ 43%]
+tests/test_agent_control.py::test_failed_start_keeps_the_native_reason PASSED [ 47%]
+tests/test_agent_control.py::test_lost_owner_keeps_process_facts_and_blocks_duplicates FAILED [ 52%]
+tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone FAILED [ 56%]
+tests/test_agent_control.py::test_config_is_owned_by_the_data_root PASSED [ 60%]
+tests/test_agent_control.py::test_archive_is_bound_only_when_enabled PASSED [ 65%]
+tests/test_agent_control.py::test_core_imports_and_runs_without_graphtraj[None] PASSED [ 69%]
+tests/test_agent_control.py::test_core_imports_and_runs_without_graphtraj[existing-user-connection] PASSED [ 73%]
+tests/test_agent_control.py::test_public_creator_preserves_external_root_scope PASSED [ 78%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[None] PASSED [ 82%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[prompt_started] PASSED [ 86%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[native_session_bound] PASSED [ 91%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[wrapper_exited] PASSED [ 95%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[owned_process_group_exited] PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=34b1961a92e046caa40bb8675dc3a20f: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+_____________ test_repeated_controls_never_run_one_session_twice ______________
+tests\test_agent_control.py:226: in test_repeated_controls_never_run_one_session_twice
+    pytest.fail(f'the background send recorded no second execution within 10 s: {outcome!r}')
+E   Failed: the background send recorded no second execution within 10 s: PermissionError(13, 'Access is denied')
+__________ test_lost_owner_keeps_process_facts_and_blocks_duplicates __________
+tests\test_agent_control.py:458: in test_lost_owner_keeps_process_facts_and_blocks_duplicates
+    assert status['result']['state'] == 'active' and 'owner-exited' in status['result']['diagnostic']
+E   KeyError: 'diagnostic'
+___ test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone ___
+tests\test_agent_control.py:498: in test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone
+    assert ended['result']['state'] == 'standby'
+E   AssertionError: assert 'active' == 'standby'
+E     
+E     - standby
+E     + active
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_agent_control.xml -
+============================ slowest 10 durations =============================
+3.21s call     tests/test_agent_control.py::test_lifecycle_create_send_wait_interrupt_resume_retire
+1.35s call     tests/test_agent_control.py::test_send_while_the_execution_finishes_goes_to_the_next_execution
+1.05s call     tests/test_agent_control.py::test_hierarchy_uses_true_parents_and_caller_scope
+1.04s call     tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[None]
+1.04s call     tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice
+1.04s call     tests/test_agent_control.py::test_public_creator_preserves_external_root_scope
+0.33s call     tests/test_agent_control.py::test_a_refusal_without_a_finishing_fact_goes_to_the_next_execution
+0.22s call     tests/test_agent_control.py::test_native_requests_reply_once_and_reject_stale_executions
+0.22s call     tests/test_agent_control.py::test_send_refused_by_an_execution_that_never_ends_stays_refused
+0.18s call     tests/test_agent_control.py::test_core_imports_and_runs_without_graphtraj[existing-user-connection]
+=========================== short test summary info ===========================
+FAILED tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice - Failed: the background send recorded no second execution within 10 s: PermissionError(13, 'Access is denied')
+FAILED tests/test_agent_control.py::test_lost_owner_keeps_process_facts_and_blocks_duplicates - KeyError: 'diagnostic'
+FAILED tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone - AssertionError: assert 'active' == 'standby'
+  
+  - standby
+  + active
+======================== 3 failed, 20 passed in 10.35s ========================

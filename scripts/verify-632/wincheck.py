@@ -237,19 +237,74 @@ def nodeid(case):
     return "::".join(part for part in (file or classname, *inner.split(".")) if part) + "::" + case.get("name", "")
 
 
-FRAME = re.compile(r"((?:src|tests)[\\/][\w\\/.-]+\.py):(\d+)")
+# A frame as pytest prints it (`src\graftling\x.py:68: in f`) or as Python does (`File "D:\...\src\graftling\x.py",
+# line 68`); Windows writes backslashes (run 45608819873). In order of appearance: outermost first, deepest last.
+FRAME = re.compile(r'File "(?P<a>[^"]*?(?:src|tests)[\\/][^"]+?\.py)", line (?P<al>\d+)'
+                   r'|(?P<b>(?:src|tests)[\\/][\w\\/.-]+\.py):(?P<bl>\d+)')
 
 
-def origin(text, case):
-    """The deepest graftling frame of a failure, else the deepest test frame, else the test's own line."""
-    frames = [(path.replace("\\", "/"), line) for path, line in FRAME.findall(text or "")]
-    product = [frame for frame in frames if frame[0].startswith("src/graftling/")]
+def posix_path(path):
+    """A path as the expected list writes it: '/' separators, from 'src/graftling/' or 'tests/' on."""
+    path = (path or "").replace("\\", "/")
+    for root in ("src/graftling/", "tests/"):
+        if path.startswith(root):
+            return path
+        if "/" + root in path:
+            return root + path.split("/" + root, 1)[1]
+    return path
+
+
+def frames(text):
+    return [(posix_path(m.group("a") or m.group("b")), m.group("al") or m.group("bl")) for m in FRAME.finditer(text or "")]
+
+
+def origin(text, case, log_section=""):
+    """Where a failure comes from, and how that was found.
+
+    The deepest graftling frame of the JUnit text; else the deepest graftling frame of the test's section in the
+    file's log (captured output can hold a background thread's traceback); else the deepest test frame, which is a
+    test assertion with no graftling frame; else the test's own line."""
+    found = frames(text)
+    product = [frame for frame in found if frame[0].startswith("src/graftling/")]
     if product:
-        return "%s:%s" % product[-1]
-    if frames:
-        return "%s:%s" % frames[-1]
+        return "%s:%s" % product[-1], "junit"
+    logged = [frame for frame in frames(log_section) if frame[0].startswith("src/graftling/")]
+    if logged:
+        return "%s:%s" % logged[-1], "log"
+    tests = [frame for frame in found if frame[0].startswith("tests/")]
+    if tests:
+        return "%s:%s" % tests[-1], "test assertion, no graftling frame"
     line = case.get("line")
-    return f"{case.get('file', '?')}:{int(line) + 1 if line and line.isdigit() else '?'}"
+    return (f"{posix_path(case.get('file')) or '?'}:{int(line) + 1 if line and line.isdigit() else '?'}",
+            "test line, no frame")
+
+
+HEADER = re.compile(r"^_{3,} (.+?) _{3,}\s*$")
+
+
+def log_sections(text):
+    """{title: text} of the failure and error sections of a pytest log (titles as pytest prints them)."""
+    sections, title, lines = {}, None, []
+    for line in (text or "").splitlines():
+        header = HEADER.match(line)
+        if header or line.startswith("====="):
+            if title is not None:
+                sections.setdefault(title, "\n".join(lines))
+            title, lines = (header.group(1) if header else None), []
+        elif title is not None:
+            lines.append(line)
+    if title is not None:
+        sections.setdefault(title, "\n".join(lines))
+    return sections
+
+
+def section_for(sections, case):
+    """The log section of this testcase: pytest titles it 'name', 'Class.name' or 'ERROR at setup of name'."""
+    name = case.get("name", "")
+    for title, text in sections.items():
+        if title == name or title.endswith("." + name) or title.endswith(" of " + name):
+            return text
+    return ""
 
 
 def suggest(where):
@@ -284,8 +339,9 @@ def dump_origin(log_text, test_file):
 def files_check(directory, test_files):
     """Per-file records: every listed test file ended, or was stopped and recorded as hung.
 
-    Returns (problems, observed hangs {nodeid: (origin, record)}, junit paths, files that hung)."""
-    problems, hangs, paths, hung_files = [], {}, [], set()
+    Returns (problems, observed hangs {nodeid: (origin, record)}, junit paths, files that hung, {file: log path}).
+    Paths in files.json are relative to DIR; a Windows runner writes them with backslashes (run 45608819873)."""
+    problems, hangs, paths, hung_files, logs = [], {}, [], set(), {}
     try:
         code = open(os.path.join(directory, "run-exit-code.txt"), encoding="utf-8-sig").read().strip()
     except OSError:
@@ -296,7 +352,13 @@ def files_check(directory, test_files):
     try:
         records = load(os.path.join(directory, "files.json"))["files"]
     except (OSError, ValueError, KeyError) as error:
-        return problems + [f"no per-file records (files.json): {error}"], hangs, paths, hung_files
+        return problems + [f"no per-file records (files.json): {error}"], hangs, paths, hung_files, logs
+    for record in records:
+        for key in ("file", "junit", "log"):
+            if record.get(key):
+                record[key] = record[key].replace("\\", "/")
+        if record.get("log"):
+            logs[record["file"]] = os.path.join(directory, record["log"])
     seen = {record["file"] for record in records}
     if test_files is not None:
         missing = sorted(set(test_files) - seen)
@@ -314,8 +376,10 @@ def files_check(directory, test_files):
             if record.get("exit_code") not in (0, 1):
                 problems.append(f"{name} ended with pytest exit {record.get('exit_code')} (collection or internal error)")
                 print(f"  ENDED exit {record.get('exit_code')} {record['elapsed_s']:7.1f} s  {name}")
-            if record.get("junit"):
+            if record.get("junit") and os.path.isfile(os.path.join(directory, record["junit"])):
                 paths.append(os.path.join(directory, record["junit"]))
+            elif record.get("junit"):
+                problems.append(f"{name}: its JUnit file {record['junit']} is not in the artifact")
             else:
                 problems.append(f"{name} ended without its JUnit file")
             if not record.get("pipe_closed", True):
@@ -335,7 +399,7 @@ def files_check(directory, test_files):
             print(f"  NOT RUN {name} | {record.get('reason')}")
     slowest = sorted((r for r in records if r["outcome"] == "ended"), key=lambda r: -r["elapsed_s"])[:5]
     print("  slowest ended files: " + ", ".join(f"{r['file']} {r['elapsed_s']} s" for r in slowest))
-    return problems, hangs, paths, hung_files
+    return problems, hangs, paths, hung_files, logs
 
 
 def junit(directory, expected_file, candidate, test_files_list=None):
@@ -349,7 +413,17 @@ def junit(directory, expected_file, candidate, test_files_list=None):
     test_files = None
     if test_files_list:
         test_files = [line.strip() for line in open(test_files_list, encoding="utf-8") if line.strip()]
-    mechanics, hangs, paths, hung_files = files_check(directory, test_files)
+    mechanics, hangs, paths, hung_files, logs = files_check(directory, test_files)
+    sections = {}   # test file -> its log's failure sections, read when first needed
+
+    def log_section(case):
+        file = posix_path(case.get("file"))
+        if file not in sections:
+            try:
+                sections[file] = log_sections(open(logs[file], encoding="utf-8", errors="replace").read())
+            except (KeyError, OSError):
+                sections[file] = {}
+        return section_for(sections[file], case)
     print("FILES", "FAIL" if mechanics else "PASS", "; ".join(mechanics) or
           "every test file ended or was stopped and recorded as hung")
     try:
@@ -374,10 +448,14 @@ def junit(directory, expected_file, candidate, test_files_list=None):
         if failure is not None or error is not None:
             item = failure if failure is not None else error
             outcome[node] = "fail" if failure is not None else "error"
-            detail[node] = ((item.get("message") or "").splitlines() or [""])[0][:200], origin(item.text, case)
+            where, how = origin(item.text, case)
+            if how != "junit":
+                found = origin(item.text, case, log_section(case))
+                where, how = found if found[1] == "log" else (where, how)
+            detail[node] = (((item.get("message") or "").splitlines() or [""])[0][:200], where, how)
         elif skipped is not None:
             outcome[node] = "skip"
-            detail[node] = (skipped.get("message") or "", "")
+            detail[node] = (skipped.get("message") or "", "", "")
         else:
             outcome[node] = "pass"
     counts = Counter(outcome.values())
@@ -405,7 +483,10 @@ def junit(directory, expected_file, candidate, test_files_list=None):
     print(f"--- allowed environment skips (not Windows-specific): {len(environment_skips)}")
     for reason, count in Counter(environment_skips.values()).most_common():
         print(f"  x{count}: {reason}")
-    print(f"--- skips without the {PREFIX!r} prefix and not allowed: {len(other_skips)}")
+    print(f"--- skips without the {PREFIX!r} prefix and not allowed: {len(other_skips)}, by reason:")
+    for reason, count in Counter(other_skips.values()).most_common():
+        print(f"  x{count}: {reason}")
+    print("  by test:")
     for node, reason in sorted(other_skips.items()):
         print(f"  {node} | {reason}")
 
@@ -435,7 +516,10 @@ def junit(directory, expected_file, candidate, test_files_list=None):
           f"({len(failing & set(fails_expected))} as expected)")
     print(f"--- unexpected failures: {len(unexpected)}")
     for node in unexpected:
-        print(f"  {outcome[node].upper()} {node} | origin {detail[node][1]} ({suggest(detail[node][1])}) | {detail[node][0]}")
+        print(f"  {outcome[node].upper()} {node} | origin {detail[node][1]} ({suggest(detail[node][1])}; from "
+              f"{detail[node][2]}) | {detail[node][0]}")
+    print("    origins of the unexpected failures: " + ", ".join(
+        f"{how} {count}" for how, count in Counter(detail[node][2] for node in unexpected).most_common()))
     print(f"--- unexpected passes (listed as failing, passed): {len(passed_now)}")
     for node in passed_now:
         print(f"  PASS {node} | listed origin {fails_expected[node][0]} {fails_expected[node][1]}")
@@ -471,8 +555,10 @@ def junit(directory, expected_file, candidate, test_files_list=None):
         for node in sorted(failing):
             if node in fails_expected:
                 where, task, note = fails_expected[node]
+                note += f" | observed: {detail[node][0][:150]} (at {detail[node][1]}, from {detail[node][2]})"
             else:
-                where, task, note = detail[node][1], suggest(detail[node][1]), "NEW: " + detail[node][0][:150]
+                tag = "" if detail[node][2] == "junit" else f" [origin from {detail[node][2]}]"
+                where, task, note = detail[node][1], suggest(detail[node][1]), "NEW: " + detail[node][0][:150] + tag
             out.write(f"fail\t{node}\t{where}\t{task}\t{note}\n")
         for node in unjudged:
             where, task, note = fails_expected[node]

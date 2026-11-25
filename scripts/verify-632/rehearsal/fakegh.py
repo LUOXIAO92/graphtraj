@@ -20,6 +20,8 @@ Scenarios:
   hang-unexpected  the same hang without a `hang` entry: FAIL, naming it with origin control.py:2140.
   missing-record   files.json lacks the first test file: FAIL (mechanics).
   not-run     the last test file is recorded not-run (total limit spent): FAIL (mechanics).
+  winpaths    as matched, but written as the Windows runner writes it (run 45608819873): files.json `junit`/`log`
+              with backslashes and xunit1 `file` attributes `tests\test_x.py`. PASS (node ids tests/test_x.py::name).
   rerun       attempt 1 as mismatch; after `run rerun --failed` attempt 2 appears on the next poll and is as matched.
   dispatch    as matched; `workflow run` adds a workflow_dispatch run (another id) on the next poll.
   timeout     only another workflow ever runs for the SHA.
@@ -193,11 +195,16 @@ def artifact(run_id: int, directory: Path) -> None:
             broken = ET.SubElement(suite, "testcase", {"classname": "", "name": "tests.test_agent_completion",
                                                         "file": test_file})
             ET.SubElement(broken, "error", {"message": "collection failure"}).text = "ImportError: No module named 'fcntl'"
+        if shown == "winpaths":   # as the Windows runner writes them (run 45608819873): tests\test_x.py
+            for case in members:
+                case.set("file", case.get("file").replace("/", "\\"))
         tree_out = ET.ElementTree(ET.Element("testsuites"))
         tree_out.getroot().append(suite)
         tree_out.write(directory / record["junit"], encoding="utf-8", xml_declaration=True)
         (directory / record["log"]).write_text("\n".join(lines) + "\n", encoding="utf-8")
         record["exit_code"] = code
+        if shown == "winpaths":   # files.json paths from Path.relative_to on Windows: junit\test_x.xml, logs\test_x.txt
+            record.update(junit=record["junit"].replace("/", "\\"), log=record["log"].replace("/", "\\"))
         records.append(record)
     (directory / "files.json").write_text(json.dumps({"file_limit_s": 360.0, "total_limit_s": 4200.0, "files": records}))
     (directory / "run-exit-code.txt").write_text("1\n")

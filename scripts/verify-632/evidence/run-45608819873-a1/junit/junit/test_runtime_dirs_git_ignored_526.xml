@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="0.320" timestamp="2026-11-25T12:00:43.289856+00:00" hostname="runnervmbpeip"><testcase classname="tests.test_runtime_dirs_git_ignored_526" name="test_archive_write_leaves_a_self_ignoring_sessions_directory" file="tests\test_runtime_dirs_git_ignored_526.py" line="19" time="0.015"><failure message="PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_archive_write_leaves_a_se0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'">tests\test_runtime_dirs_git_ignored_526.py:24: in test_archive_write_leaves_a_self_ignoring_sessions_directory
+    JsonlSessionStore.create(path, HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_archive_write_leaves_a_se0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'</failure></testcase><testcase classname="tests.test_runtime_dirs_git_ignored_526" name="test_an_existing_gitignore_is_kept" file="tests\test_runtime_dirs_git_ignored_526.py" line="29" time="0.011"><failure message="PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_an_existing_gitignore_is_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'">tests\test_runtime_dirs_git_ignored_526.py:34: in test_an_existing_gitignore_is_kept
+    JsonlSessionStore.create(archive_path(root, HEADER['id']), HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_an_existing_gitignore_is_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'</failure></testcase><testcase classname="tests.test_runtime_dirs_git_ignored_526" name="test_failed_ignore_write_does_not_fail_the_archive" file="tests\test_runtime_dirs_git_ignored_526.py" line="37" time="0.009"><failure message="PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_failed_ignore_write_does_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'">tests\test_runtime_dirs_git_ignored_526.py:43: in test_failed_ignore_write_does_not_fail_the_archive
+    JsonlSessionStore.create(path, HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_failed_ignore_write_does_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'</failure></testcase><testcase classname="tests.test_runtime_dirs_git_ignored_526" name="test_git_lists_user_files_but_no_graftling_runtime_files" file="tests\test_runtime_dirs_git_ignored_526.py" line="51" time="0.067"><failure message="PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_git_lists_user_files_but_0\\project\\.graphtraj\\swarm\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'">tests\test_runtime_dirs_git_ignored_526.py:57: in test_git_lists_user_files_but_no_graftling_runtime_files
+    JsonlSessionStore.create(archive_path(root, HEADER['id']), HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_git_lists_user_files_but_0\\project\\.graphtraj\\swarm\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'</failure></testcase></testsuite></testsuites>

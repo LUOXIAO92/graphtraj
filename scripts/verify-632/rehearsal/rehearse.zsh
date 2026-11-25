@@ -22,6 +22,8 @@ EXPECTED_HANG=$S/windows-expected-rehearsal-hang.txt
 fresh() {  # fresh <scenario>: a new bare remote, scratch graftling clone and fake gh state
   rm -rf $S/$1; mkdir -p $S/$1/gh
   git clone -q --bare --no-hardlinks $REAL $S/$1/gremote.git
+  # The remote holds the previous candidate, whatever <Harness>/graftling holds now (P fast-forwards it).
+  git -C $S/$1/gremote.git update-ref refs/heads/agent/632-graftling-windows-ci 0034097e031168c9b5076f6eea743997626c0572
   git clone -q --no-hardlinks --no-checkout $REAL $S/$1/graftling
   git -C $S/$1/graftling remote set-url origin https://github.com/LUOXIAO92/graftling.git
   print -r -- $1 > $S/$1/gh/scenario; cp $JUNIT $S/$1/gh/junit; print -lr -- $FAILS > $S/$1/gh/fails
@@ -58,6 +60,8 @@ fresh hang-unexpected; step hang-unexpected hang-unexpected-P.txt P
 cp $S/hang-unexpected/evidence/run-51000000000-a1/observed-expected.txt $OUT/hang-unexpected-observed-expected.txt
 fresh missing-record; step missing-record missing-record-P.txt P
 fresh not-run; step not-run not-run-P.txt P
+# Round 2: the artifact as the Windows runner wrote it in run 45608819873 (backslash paths).
+fresh winpaths; step winpaths winpaths-P.txt P
 # Guards: a local branch in the graftling clone that differs from the bundle head stops 00 (never overwritten); a
 # remote branch that is not an ancestor of the bundle head stops P before any push (never forced).
 fresh guard; git -C $S/guard/graftling branch -q agent/632-graftling-windows-ci \

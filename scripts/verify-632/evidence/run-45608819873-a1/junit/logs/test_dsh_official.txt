@@ -1,0 +1,26 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 6 items
+
+tests/test_dsh_official.py::test_installed_dsh_model_mcp_and_same_session SKIPPED [ 16%]
+tests/test_dsh_official.py::test_retained_official_trace_messages SKIPPED [ 33%]
+tests/test_dsh_official.py::test_actual_client_interrupt_and_memory SKIPPED [ 50%]
+tests/test_dsh_official.py::test_continue_actual_interrupted_session SKIPPED [ 66%]
+tests/test_dsh_official.py::test_actual_initial_tool_catalog SKIPPED     [ 83%]
+tests/test_dsh_official.py::test_actual_pi_reply_resumes_standby_dsh SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=45a06f9072e6455da1a61b990b2c4f47: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_official.xml -
+============================ slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests\test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests\test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests\test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests\test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests\test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+============================= 6 skipped in 0.10s ==============================

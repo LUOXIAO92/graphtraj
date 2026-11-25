@@ -22,4 +22,4 @@ skip-allowed	This DSH has no readable web-app preset.	test_pi_dsh_child_tools_55
 skip-allowed	Node and an installed Pi are required	test_pi_notice_display_536.py: no Pi on the runner
 skip-allowed	Node is required	NEW: decide (environment skip, or a missing POSIX-only mark)
 fail	tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True]	src/graftling/connection.py:68	W4?	NEW: graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
-fail	tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination	src/graftling/connection.py:68	W4	rehearsal stand-in
+fail	tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination	src/graftling/connection.py:68	W4	rehearsal stand-in | observed: graftling.tool.AgentsError: Windows does not support the authenticated local control pipe. (at src/graftling/connection.py:68, from junit)

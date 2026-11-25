@@ -5,7 +5,7 @@ PASS: bundle verifies against /tmp/claude-501/rh632/matched/graftling; head defa
 looking for the .github/workflows/windows.yml run (event any) of defad1db083e911900cbea1cb0ef165e6a66d322 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
 run 51000000000 present after 0s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [20:47:13] run 51000000000: completed failure
+  [21:05:41] run 51000000000: completed failure
 --- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head defad1db083e911900cbea1cb0ef165e6a66d322 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped
@@ -77,12 +77,14 @@ collected in JUnit: 947 | passed 694 | failed 2 | errors 0 | skipped 251
   x1: Requires retained interrupted official Session.
   x1: Requires fixed Pi combination and final host slot.
   x1: Requires assigned native startup diagnosis.
---- skips without the 'POSIX-only: ' prefix and not allowed: 0
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
 --- expected hangs: 0; observed hangs: 0 (0 as expected)
 --- unexpected hangs: 0
 --- listed hangs that did not hang: 0
 --- expected Windows failures: 2; observed failures and errors: 2 (2 as expected)
 --- unexpected failures: 0
+    origins of the unexpected failures: 
 --- unexpected passes (listed as failing, passed): 0
 --- listed failures that were skipped or not collected: 0
 observed list written: /tmp/claude-501/rh632/matched/evidence/run-51000000000-a1/observed-expected.txt

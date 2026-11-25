@@ -1,0 +1,26 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 1 item
+
+tests/test_connection_serve.py::test_removed_control_directory_stops_the_service FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=5a4b88368d1c4191bbd1be6df4dafc07: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+______________ test_removed_control_directory_stops_the_service _______________
+tests\test_connection_serve.py:17: in test_removed_control_directory_stops_the_service
+    with worker_connection(tmp_path, lambda request: {}) as address:
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+src\graftling\connection.py:68: in worker_connection
+    raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E   graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_connection_serve.xml -
+============================ slowest 10 durations =============================
+0.01s setup    tests/test_connection_serve.py::test_removed_control_directory_stops_the_service
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_connection_serve.py::test_removed_control_directory_stops_the_service - graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+============================== 1 failed in 0.11s ==============================

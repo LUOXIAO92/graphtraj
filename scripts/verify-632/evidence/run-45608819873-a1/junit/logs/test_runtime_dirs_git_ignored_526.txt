@@ -1,0 +1,60 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 4 items
+
+tests/test_runtime_dirs_git_ignored_526.py::test_archive_write_leaves_a_self_ignoring_sessions_directory FAILED [ 25%]
+tests/test_runtime_dirs_git_ignored_526.py::test_an_existing_gitignore_is_kept FAILED [ 50%]
+tests/test_runtime_dirs_git_ignored_526.py::test_failed_ignore_write_does_not_fail_the_archive FAILED [ 75%]
+tests/test_runtime_dirs_git_ignored_526.py::test_git_lists_user_files_but_no_graftling_runtime_files FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=beffd1c2be9e447ba86abf6ad00d9312: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+________ test_archive_write_leaves_a_self_ignoring_sessions_directory _________
+tests\test_runtime_dirs_git_ignored_526.py:24: in test_archive_write_leaves_a_self_ignoring_sessions_directory
+    JsonlSessionStore.create(path, HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_archive_write_leaves_a_se0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+_____________________ test_an_existing_gitignore_is_kept ______________________
+tests\test_runtime_dirs_git_ignored_526.py:34: in test_an_existing_gitignore_is_kept
+    JsonlSessionStore.create(archive_path(root, HEADER['id']), HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_an_existing_gitignore_is_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+_____________ test_failed_ignore_write_does_not_fail_the_archive ______________
+tests\test_runtime_dirs_git_ignored_526.py:43: in test_failed_ignore_write_does_not_fail_the_archive
+    JsonlSessionStore.create(path, HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_failed_ignore_write_does_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+__________ test_git_lists_user_files_but_no_graftling_runtime_files ___________
+tests\test_runtime_dirs_git_ignored_526.py:57: in test_git_lists_user_files_but_no_graftling_runtime_files
+    JsonlSessionStore.create(archive_path(root, HEADER['id']), HEADER)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_git_lists_user_files_but_0\\project\\.graphtraj\\swarm\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_runtime_dirs_git_ignored_526.xml -
+============================ slowest 10 durations =============================
+0.06s call     tests/test_runtime_dirs_git_ignored_526.py::test_git_lists_user_files_but_no_graftling_runtime_files
+0.01s call     tests/test_runtime_dirs_git_ignored_526.py::test_an_existing_gitignore_is_kept
+0.01s call     tests/test_runtime_dirs_git_ignored_526.py::test_archive_write_leaves_a_self_ignoring_sessions_directory
+0.01s call     tests/test_runtime_dirs_git_ignored_526.py::test_failed_ignore_write_does_not_fail_the_archive
+0.01s setup    tests/test_runtime_dirs_git_ignored_526.py::test_archive_write_leaves_a_self_ignoring_sessions_directory
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_runtime_dirs_git_ignored_526.py::test_archive_write_leaves_a_self_ignoring_sessions_directory - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_archive_write_leaves_a_se0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+FAILED tests/test_runtime_dirs_git_ignored_526.py::test_an_existing_gitignore_is_kept - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_an_existing_gitignore_is_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+FAILED tests/test_runtime_dirs_git_ignored_526.py::test_failed_ignore_write_does_not_fail_the_archive - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_failed_ignore_write_does_0\\root\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+FAILED tests/test_runtime_dirs_git_ignored_526.py::test_git_lists_user_files_but_no_graftling_runtime_files - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-43\\test_git_lists_user_files_but_0\\project\\.graphtraj\\swarm\\sessions\\d6f9c9118848c5e650e42530201cacddde4f96b02da5b7e6f006873194f723ca'
+============================== 4 failed in 0.29s ==============================

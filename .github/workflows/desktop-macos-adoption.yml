@@ -104,13 +104,15 @@ jobs:
         id: window627
         if: github.ref_name == 'agent/627-desktop-ui-structure-redesign'
         continue-on-error: true
+        # A hang fails this step (packaging and adoption still run) instead of cancelling the job (run 45588541238).
+        timeout-minutes: 15
         env:
           GRAPHTRAJ_SETTINGS_EVIDENCE: dist-package/adoption-evidence/window-tests/settings
         run: |
           set -o pipefail
           mkdir -p dist-package/adoption-evidence/window-tests
           npx playwright install chromium
-          node --preserve-symlinks --preserve-symlinks-main --test --test-concurrency=1 tests/window.test.mjs tests/monitor-ui.test.mjs tests/team-graph.test.mjs tests/settings-window.test.mjs tests/usage-live.test.mjs tests/activity-live.test.mjs 2>&1 | tee dist-package/adoption-evidence/window-tests/window-tests.log
+          node --preserve-symlinks --preserve-symlinks-main --test --test-concurrency=1 --test-timeout=300000 tests/window.test.mjs tests/monitor-ui.test.mjs tests/team-graph.test.mjs tests/settings-window.test.mjs tests/usage-live.test.mjs tests/activity-live.test.mjs 2>&1 | tee dist-package/adoption-evidence/window-tests/window-tests.log
 
       - name: Package the macOS artifact
         run: npm run package:mac

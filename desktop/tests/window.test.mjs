@@ -17,19 +17,37 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   const canonicalFirst = await fs.realpath(first);
   const desktop = fileURLToPath(new URL('..', import.meta.url));
   const args = [desktop, `--user-data-dir=${path.join(root, 'userData')}`];
-  let app = await electron.launch({ args });
-  let page = await app.firstWindow();
-  const originalSelection = (await page.evaluate(() => window.graphtraj.projects())).selected;
+  // Bounded close: a hung app.close() must not keep `node --test` waiting (CI run 45588541238 hung here).
+  const bounded = (promise, ms) => Promise.race([promise.then(() => true, () => false),
+    new Promise(resolve => setTimeout(() => resolve(false), ms))]);
+  async function close(handle) {
+    if (!handle) return;
+    if (!await bounded(handle.close(), 10000)) { try { handle.process().kill('SIGKILL'); } catch {} }
+  }
+  // Wait until the renderer has loaded and exposed the bridge: the first evaluate right after firstWindow()
+  // raced the page load ('Execution context was destroyed', CI run 45588541238).
+  async function launch() {
+    app = await electron.launch({ args });
+    page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(() => !!window.graphtraj && !!document.querySelector('.desktop-d'));
+  }
+  let app = null;
+  let page = null;
+  let originalSelection = null;
+  // Registered before the first launch, so a failure anywhere below still closes the window.
   t.after(async () => {
     if (!app) return;
-    await page.evaluate(async ({ roots, originalSelection }) => {
+    if (page && !page.isClosed()) await bounded(page.evaluate(async ({ roots, originalSelection }) => {
       for (const project of (await window.graphtraj.projects()).projects) {
         if (roots.includes(project.root)) await window.graphtraj.removeProject(project.id);
       }
       if (originalSelection) await window.graphtraj.selectProject(originalSelection);
-    }, { roots: [canonicalFirst, canonicalSecond], originalSelection }).catch(() => {});
-    await app.close();
+    }, { roots: [canonicalFirst, canonicalSecond], originalSelection }), 10000);
+    await close(app);
   });
+  await launch();
+  originalSelection = (await page.evaluate(() => window.graphtraj.projects())).selected;
 
   // The native dialog's selection is controlled here; real OS-picker interaction
   // is a separate manual acceptance check, never claimed by this test.
@@ -55,7 +73,9 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   }));
   assert.equal(boundary.require, 'undefined');
   assert.equal(boundary.process, 'undefined');
-  assert.deepEqual(boundary.methods, ['activity', 'addProject', 'copyText', 'graph', 'projects', 'relocateProject', 'removeProject', 'saveSettings', 'selectProject', 'settings']);
+  // Exactly the preload bridge (electron/preload.ts, unchanged since base 4fa79a8d); no other method.
+  assert.deepEqual(boundary.methods, ['activity', 'addProject', 'connections', 'copyText', 'graph', 'members', 'projects',
+    'relocateProject', 'removeProject', 'saveArchive', 'saveSettings', 'selectProject', 'settings', 'usage']);
   assert.match(await page.evaluate(async () => {
     try { await window.graphtraj.graph('/'); return 'unexpected'; }
     catch (error) { return String(error); }
@@ -80,9 +100,9 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   await details.waitFor();
   await search.fill('');
   const nativeBeforeClose = fixtures.operate(second, 'task_graph');
-  await app.close();
-  app = await electron.launch({ args });
-  page = await app.firstWindow();
+  await close(app);
+  app = null;
+  await launch();
   await taskTitle(monitor(), 'second project').waitFor();
   assert.deepEqual(fixtures.operate(second, 'task_graph'), nativeBeforeClose);
   fixtures.operate(second, 'task_register', fixtures.task('3', 'newly-observed', ['2']));

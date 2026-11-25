@@ -103,10 +103,12 @@ test('D navigation preserves separate project graphs and independent column read
     assert.equal(await tool.evaluate(element => element.open), open);
   }
   await monitor.getByRole('button', { name: 'Collapse chat', exact: true }).click();
-  const viewport = await monitor.locator('.x6-graph-svg-viewport').getAttribute('transform');
+  // The main canvas only: the minimap ('Task map navigator') is a second X6 graph with its own viewport.
+  const mainViewport = () => monitor.getByLabel('Native task canvas', { exact: true }).locator('.x6-graph-svg-viewport');
+  const viewport = await mainViewport().getAttribute('transform');
   await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
   await page.getByRole('button', { name: 'Monitor', exact: true }).click();
-  assert.equal(await monitor.locator('.x6-graph-svg-viewport').getAttribute('transform'), viewport);
+  assert.equal(await mainViewport().getAttribute('transform'), viewport);
   await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
   assert.equal(await page.locator('#d-project-sidebar').isVisible(), false);
   await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();

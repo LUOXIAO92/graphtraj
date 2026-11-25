@@ -11,20 +11,22 @@ S=${1:?scratch dir}; JUNIT=${2:?junit file}; HERE=${0:A:h}; STEPS=$HERE/../steps
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 REAL=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
 BRANCH=agent/635-graftling-windows-process-tree
-BASE=bc4298b611afce70dd876c5fe79f764c9f966d8a
+# graftling dev with W2 (634) integrated; the candidate merges it (635 correction 1).
+BASE=478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
 BUNDLE=$HERE/../graftling-635.bundle
 LIST=$HERE/../../verify-632/windows-expected.txt
 NOREPLY=(-c user.name=LUOXIAO92 -c user.email=89069722+LUOXIAO92@users.noreply.github.com)
 OUT=$HERE/console; mkdir -p $OUT; rm -f $OUT/*.txt(N)
 rm -rf $S; mkdir -p $S
 # On macOS the five Windows-only W3 tests skip ("Windows only: ..."); on the runner they must pass. The stand-in's
-# artifact starts from the macOS run with those made passed; newtest-skipped keeps them skipped.
+# artifact starts from the macOS run with those made passed; newtest-skipped keeps them skipped. W2's (634) Windows-only
+# tests ("Windows-only: ...") run on the runner too, so they are made passed the same way (correction 1).
 $PY -I -c '
 import sys, xml.etree.ElementTree as ET
 tree = ET.parse(sys.argv[1])
 for case in tree.getroot().iter("testcase"):
     for child in list(case):
-        if child.tag == "skipped" and child.get("message", "").startswith("Windows only"):
+        if child.tag == "skipped" and child.get("message", "").startswith(("Windows only", "Windows-only")):
             case.remove(child)
 tree.write(sys.argv[2], encoding="utf-8", xml_declaration=True)' $JUNIT $S/junit-w3-passed.xml
 # Failing in the stand-in run: every `fail` entry of the edited list, a W3 line this Task kept first (mismatch makes

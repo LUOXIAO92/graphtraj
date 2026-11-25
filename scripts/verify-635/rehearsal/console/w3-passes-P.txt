@@ -1,17 +1,19 @@
 $ VERIFY635_GRAFTLING=/tmp/claude-501/rh635/w3-passes/graftling VERIFY635_GREMOTE=/tmp/claude-501/rh635/w3-passes/gremote.git VERIFY635_GH=/tmp/claude-501/rh635/w3-passes/gh/gh VERIFY635_EVIDENCE=/tmp/claude-501/rh635/w3-passes/evidence VERIFY635_POLL_S=1 VERIFY635_APPEAR_S=10 VERIFY635_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/635-graftling-windows-process-tree to graftling /tmp/claude-501/rh635/w3-passes/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh635/w3-passes/graftling; head 01557f6f8bacd44a45ea08b44088f584a05e0275 on base bc4298b611afce70dd876c5fe79f764c9f966d8a
---- bundle commits on bc4298b611afce70dd876c5fe79f764c9f966d8a:
+PASS: bundle verifies against /tmp/claude-501/rh635/w3-passes/graftling; head e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b contains graftling dev 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced bc4298b611afce70dd876c5fe79f764c9f966d8a; others are ancestors of the base)
+--- bundle commits on 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
+  e0e6da9 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 478dfd7f (634, W2) into agent/635-graftling-windows-process-tree
+  6f520df LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Confirm-ended tree check on every platform; kill Codex service on adopt failure (635 correction 1)
   01557f6 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Owned process trees: process group on POSIX, named Job Object on Windows (635, W3)
 PASS: author and committer are the noreply identity
---- files changed since bc4298b611afce70dd876c5fe79f764c9f966d8a:
+--- files changed since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
    .github/workflows/windows.yml     |   2 +-
-   src/graftling/_win32.py           | 223 ++++++++++++++++
+   src/graftling/_win32.py           | 227 +++++++++++++++-
    src/graftling/calls.py            |  27 +-
    src/graftling/claude/driver.py    |   3 +-
-   src/graftling/claude/execution.py | 114 +++++----
-   src/graftling/codex/app_server.py |  25 +-
+   src/graftling/claude/execution.py | 114 ++++----
+   src/graftling/codex/app_server.py |  30 ++-
    src/graftling/codex/driver.py     |   3 +-
    src/graftling/control.py          |  60 ++++-
    src/graftling/dsh/driver.py       |   3 +-
@@ -19,16 +21,17 @@ PASS: author and committer are the noreply identity
    src/graftling/dsh/watcher.py      |   5 +
    src/graftling/pi/driver.py        |   5 +-
    src/graftling/pi/execution.py     |  21 +-
-   src/graftling/process_tree.py     | 230 +++++++++++++++++
+   src/graftling/process_tree.py     | 230 ++++++++++++++++
    src/graftling/review.py           |  27 +-
-   tests/test_process_tree_635.py    | 521 ++++++++++++++++++++++++++++++++++++++
-   16 files changed, 1187 insertions(+), 113 deletions(-)
-PASS: changed paths are within the allowed set: src/graftling/process_tree.py, src/graftling/_win32.py, src/graftling/control.py, src/graftling/calls.py, src/graftling/review.py, src/graftling/claude/execution.py, src/graftling/claude/driver.py, src/graftling/pi/execution.py, src/graftling/pi/driver.py, src/graftling/codex/app_server.py, src/graftling/codex/driver.py, src/graftling/dsh/service.py, src/graftling/dsh/watcher.py, src/graftling/dsh/driver.py, tests/test_process_tree_635.py, .github/workflows/windows.yml
---- .github/workflows/windows.yml at 01557f6f8bacd44a45ea08b44088f584a05e0275 against bc4298b611afce70dd876c5fe79f764c9f966d8a
-PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/635-graftling-windows-process-tree', 'dev']
+   tests/test_agent_control.py       |  49 ++--
+   tests/test_process_tree_635.py    | 542 ++++++++++++++++++++++++++++++++++++++
+   17 files changed, 1241 insertions(+), 138 deletions(-)
+PASS: changed paths are within the allowed set: src/graftling/process_tree.py, src/graftling/_win32.py, src/graftling/control.py, src/graftling/calls.py, src/graftling/review.py, src/graftling/claude/execution.py, src/graftling/claude/driver.py, src/graftling/pi/execution.py, src/graftling/pi/driver.py, src/graftling/codex/app_server.py, src/graftling/codex/driver.py, src/graftling/dsh/service.py, src/graftling/dsh/watcher.py, src/graftling/dsh/driver.py, tests/test_process_tree_635.py, tests/test_agent_control.py, .github/workflows/windows.yml
+--- .github/workflows/windows.yml at e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b against 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'dev']
 PASS: the workflow is the base one with only its push branches line changed
---- .github/workflows/windows.yml at bc4298b611afce70dd876c5fe79f764c9f966d8a (632's accepted workflow with 633's branch; every other property by 632's wfcheck)
-PASS: the base workflow's push branches line is 633's; judged below with it set back to 632's
+--- .github/workflows/windows.yml at 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced (632's accepted workflow with 633's and 634's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'dev']; judged below with it set back to 632's
 PASS: push branches are exactly agent/632-graftling-windows-ci and dev
 PASS: triggers: push and workflow_dispatch only
 PASS: permissions: contents: read
@@ -55,9 +58,9 @@ PASS: the suite step runs every test file through .github/run_test_files.py with
 PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
-PASS: .github/run_test_files.py and tests/posix_only.py unchanged since bc4298b611afce70dd876c5fe79f764c9f966d8a
-PASS: the 15 W3 tests of new-tests.txt are defined in tests/test_process_tree_635.py at 01557f6f8bacd44a45ea08b44088f584a05e0275
-PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt parses: 188 expected Windows failures and 0 expected hangs (W2 (634) 107, W3 (635) 6, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+PASS: the 17 W3 tests of new-tests.txt are defined at e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b (tests/test_process_tree_635.py, tests/test_agent_control.py)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt parses: 81 expected Windows failures and 0 expected hangs (W3 (635) 6, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
 expected list: 7 W3 (635) entries at the base: 1 to delete, 6 kept with an 'after W3:' note (suggested W4 (636) 5, W5 (637) 1)
 PASS: the W3 (635) lines are deleted or kept with an 'after W3:' note as tabled; every other line is byte-identical and in order
 PASS: agent/635-graftling-windows-process-tree is absent on graftling /tmp/claude-501/rh635/w3-passes/gremote.git
@@ -65,16 +68,16 @@ PASS: /tmp/claude-501/rh635/w3-passes/graftling has no local agent/635-graftling
 $ git -C /tmp/claude-501/rh635/w3-passes/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/graftling-635.bundle refs/heads/agent/635-graftling-windows-process-tree:refs/heads/agent/635-graftling-windows-process-tree
   From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/graftling-635.bundle
    * [new branch]      agent/635-graftling-windows-process-tree -> agent/635-graftling-windows-process-tree
-PASS: /tmp/claude-501/rh635/w3-passes/graftling local agent/635-graftling-windows-process-tree = 01557f6f8bacd44a45ea08b44088f584a05e0275
-$ git -C /tmp/claude-501/rh635/w3-passes/graftling push /tmp/claude-501/rh635/w3-passes/gremote.git refs/heads/agent/635-graftling-windows-process-tree:refs/heads/agent/635-graftling-windows-process-tree   (01557f6f8bacd44a45ea08b44088f584a05e0275)
+PASS: /tmp/claude-501/rh635/w3-passes/graftling local agent/635-graftling-windows-process-tree = e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b
+$ git -C /tmp/claude-501/rh635/w3-passes/graftling push /tmp/claude-501/rh635/w3-passes/gremote.git refs/heads/agent/635-graftling-windows-process-tree:refs/heads/agent/635-graftling-windows-process-tree   (e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b)
   To /tmp/claude-501/rh635/w3-passes/gremote.git
    * [new branch]      agent/635-graftling-windows-process-tree -> agent/635-graftling-windows-process-tree
-PASS: graftling /tmp/claude-501/rh635/w3-passes/gremote.git agent/635-graftling-windows-process-tree = 01557f6f8bacd44a45ea08b44088f584a05e0275
-looking for the .github/workflows/windows.yml run (event push) of 01557f6f8bacd44a45ea08b44088f584a05e0275 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
-run 51000000000 present after 2s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+PASS: graftling /tmp/claude-501/rh635/w3-passes/gremote.git agent/635-graftling-windows-process-tree = e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b
+looking for the .github/workflows/windows.yml run (event push) of e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+run 51000000000 present after 1s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [22:51:43] run 51000000000: completed failure
---- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head 01557f6f8bacd44a45ea08b44088f584a05e0275 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+  [23:19:06] run 51000000000: completed failure
+--- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed
@@ -92,17 +95,16 @@ JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling
   step 15 | success   | Complete job | other: success or skipped
 --- job log saved: /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
   per-file pytest summaries: 1
-$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-01557f6f8bacd44a45ea08b44088f584a05e0275-1 -D /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-a1/junit
-test files in 01557f6f8bacd44a45ea08b44088f584a05e0275: 60
+$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b-1 -D /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-a1/junit
+test files in e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b: 61
 --- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt
 runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
 run_test_files exit code: 1
---- test files: 60 recorded | ended 60 | hung 0 | not run 0 | in the commit: 60
+--- test files: 61 recorded | ended 61 | hung 0 | not run 0 | in the commit: 61
   slowest ended files: tests/test_agent_completion.py 2.5 s, tests/test_agent_control.py 2.5 s, tests/test_agents_connections_presets.py 2.5 s, tests/test_agents_request_notices.py 2.5 s, tests/test_agents_server_name.py 2.5 s
-merged JUnit files: 60
-collected in JUnit: 976 | passed 535 | failed 188 | errors 0 | skipped 253
---- POSIX-only skips: 231 in 27 modules
-     1  tests/test_agent_control.py
+merged JUnit files: 61
+collected in JUnit: 987 | passed 654 | failed 81 | errors 0 | skipped 252
+--- POSIX-only skips: 230 in 26 modules
      8  tests/test_agents_connections_presets.py
      1  tests/test_approval_integration.py
      4  tests/test_child_server_name_551.py
@@ -135,7 +137,6 @@ collected in JUnit: 976 | passed 535 | failed 188 | errors 0 | skipped 253
   reason x22: the stand-in executable is a '#!/bin/sh' script
   reason x4: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
   reason x3: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
-  reason x1: from here the test uses a process group (start_new_session, os.killpg, SIGKILL)
   reason x1: a read-only directory made with chmod 0o555 and checked with os.geteuid
   reason x1: checks the process group (os.getpgid) and its POSIX signals
 --- allowed environment skips (not Windows-specific): 21
@@ -154,7 +155,7 @@ collected in JUnit: 976 | passed 535 | failed 188 | errors 0 | skipped 253
 --- expected hangs: 0; observed hangs: 0 (0 as expected)
 --- unexpected hangs: 0
 --- listed hangs that did not hang: 0
---- expected Windows failures: 188; observed failures and errors: 188 (187 as expected)
+--- expected Windows failures: 81; observed failures and errors: 81 (80 as expected)
 --- unexpected failures: 1
   FAIL tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True] | origin src/graftling/connection.py:68 (W4?; from junit) | graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
     origins of the unexpected failures: junit 1
@@ -162,7 +163,7 @@ collected in JUnit: 976 | passed 535 | failed 188 | errors 0 | skipped 253
   PASS tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd | listed origin tests/test_envelope_validation_555.py:205 W3 (635)
 --- listed failures that were skipped or not collected: 0
 observed list written: /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-a1/observed-expected.txt
---- the W3 tests (635) in this run: 15 expected to pass
+--- the W3 tests (635) in this run: 17 expected to pass
   PASSED tests/test_process_tree_635.py::test_a_tree_holds_its_descendants_and_stops_with_them
   PASSED tests/test_process_tree_635.py::test_start_options_are_a_new_session_or_a_suspended_windowless_process
   PASSED tests/test_process_tree_635.py::test_utf8_text_crosses_a_tree_pipe_whatever_the_code_page
@@ -178,9 +179,11 @@ observed list written: /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-
   PASSED tests/test_process_tree_635.py::test_windows_the_kill_on_close_tree_ends_when_its_owner_exits
   PASSED tests/test_process_tree_635.py::test_windows_job_names_are_not_shared_and_a_missing_job_is_an_error
   PASSED tests/test_process_tree_635.py::test_the_windows_branch_with_a_stand_in_job_api
+  PASSED tests/test_process_tree_635.py::test_the_codex_service_is_killed_when_its_tree_cannot_adopt_it
+  PASSED tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone
 evidence: /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-a1 (git-ignored unless a rehearsal root was given; copy it into tracked files in a new commit)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh W 51000000000    (observe again; no push, no re-run)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
 next: correction round: compare /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-a1/observed-expected.txt with /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt and read /tmp/claude-501/rh635/w3-passes/evidence/run-51000000000-a1/w3-tests.txt; after a new bundle: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh 00 then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh P
-VERDICT 635 P: FAIL (run 51000000000 attempt 1 on 01557f6f8bacd44a45ea08b44088f584a05e0275; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W3 tests: PASS 15 of 15 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 635 P: FAIL (run 51000000000 attempt 1 on e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W3 tests: PASS 17 of 17 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]

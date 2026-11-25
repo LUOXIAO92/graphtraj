@@ -9,19 +9,21 @@ $ gh auth status --hostname github.com   (token lines removed)
     - Active account: true
 PASS: /tmp/claude-501/rh635/disallowed/graftling origin is https://github.com/LUOXIAO92/graftling.git
 NOTE: rehearsal remote /tmp/claude-501/rh635/disallowed/gremote.git is used instead of graftling origin
-PASS: bundle verifies against /tmp/claude-501/rh635/disallowed/graftling; head 04542f2ad0ee37214b8003b2898bf74d064a5cd3 on base bc4298b611afce70dd876c5fe79f764c9f966d8a
---- bundle commits on bc4298b611afce70dd876c5fe79f764c9f966d8a:
-  04542f2 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: changes outside W3
+PASS: bundle verifies against /tmp/claude-501/rh635/disallowed/graftling; head 0b49b9cb4531b9a56a1c1fa7ad861ce0f0b68249 contains graftling dev 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced bc4298b611afce70dd876c5fe79f764c9f966d8a; others are ancestors of the base)
+--- bundle commits on 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
+  0b49b9c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: changes outside W3
+  e0e6da9 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 478dfd7f (634, W2) into agent/635-graftling-windows-process-tree
+  6f520df LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Confirm-ended tree check on every platform; kill Codex service on adopt failure (635 correction 1)
   01557f6 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Owned process trees: process group on POSIX, named Job Object on Windows (635, W3)
 PASS: author and committer are the noreply identity
---- files changed since bc4298b611afce70dd876c5fe79f764c9f966d8a:
+--- files changed since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
    .github/workflows/windows.yml     |   4 +-
    README.md                         |   2 +
-   src/graftling/_win32.py           | 223 ++++++++++++++++
+   src/graftling/_win32.py           | 227 +++++++++++++++-
    src/graftling/calls.py            |  27 +-
    src/graftling/claude/driver.py    |   3 +-
-   src/graftling/claude/execution.py | 114 +++++----
-   src/graftling/codex/app_server.py |  25 +-
+   src/graftling/claude/execution.py | 114 ++++----
+   src/graftling/codex/app_server.py |  30 ++-
    src/graftling/codex/driver.py     |   3 +-
    src/graftling/control.py          |  60 ++++-
    src/graftling/dsh/driver.py       |   3 +-
@@ -29,16 +31,17 @@ PASS: author and committer are the noreply identity
    src/graftling/dsh/watcher.py      |   5 +
    src/graftling/pi/driver.py        |   5 +-
    src/graftling/pi/execution.py     |  21 +-
-   src/graftling/process_tree.py     | 230 +++++++++++++++++
+   src/graftling/process_tree.py     | 230 ++++++++++++++++
    src/graftling/review.py           |  27 +-
-   tests/test_process_tree_635.py    | 521 ++++++++++++++++++++++++++++++++++++++
-   17 files changed, 1190 insertions(+), 114 deletions(-)
+   tests/test_agent_control.py       |  49 ++--
+   tests/test_process_tree_635.py    | 542 ++++++++++++++++++++++++++++++++++++++
+   18 files changed, 1244 insertions(+), 139 deletions(-)
 FAIL: paths changed outside the allowed set: README.md
---- .github/workflows/windows.yml at 04542f2ad0ee37214b8003b2898bf74d064a5cd3 against bc4298b611afce70dd876c5fe79f764c9f966d8a
-PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/635-graftling-windows-process-tree', 'dev']
+--- .github/workflows/windows.yml at 0b49b9cb4531b9a56a1c1fa7ad861ce0f0b68249 against 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'dev']
 FAIL: the workflow differs from the base beyond the push branches line (101 -> 101 lines; first differences: ["16: '    timeout-minutes: 90' -> '    timeout-minutes: 91'"])
---- .github/workflows/windows.yml at bc4298b611afce70dd876c5fe79f764c9f966d8a (632's accepted workflow with 633's branch; every other property by 632's wfcheck)
-PASS: the base workflow's push branches line is 633's; judged below with it set back to 632's
+--- .github/workflows/windows.yml at 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced (632's accepted workflow with 633's and 634's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'dev']; judged below with it set back to 632's
 PASS: push branches are exactly agent/632-graftling-windows-ci and dev
 PASS: triggers: push and workflow_dispatch only
 PASS: permissions: contents: read
@@ -65,13 +68,13 @@ PASS: the suite step runs every test file through .github/run_test_files.py with
 PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
-PASS: .github/run_test_files.py and tests/posix_only.py unchanged since bc4298b611afce70dd876c5fe79f764c9f966d8a
-PASS: the 15 W3 tests of new-tests.txt are defined in tests/test_process_tree_635.py at 04542f2ad0ee37214b8003b2898bf74d064a5cd3
-PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt parses: 188 expected Windows failures and 0 expected hangs (W2 (634) 107, W3 (635) 6, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+PASS: the 17 W3 tests of new-tests.txt are defined at 0b49b9cb4531b9a56a1c1fa7ad861ce0f0b68249 (tests/test_process_tree_635.py, tests/test_agent_control.py)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt parses: 81 expected Windows failures and 0 expected hangs (W3 (635) 6, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
 expected list: 7 W3 (635) entries at the base: 1 to delete, 6 kept with an 'after W3:' note (suggested W4 (636) 5, W5 (637) 1)
 PASS: the W3 (635) lines are deleted or kept with an 'after W3:' note as tabled; every other line is byte-identical and in order
 PASS: /tmp/claude-501/rh635/disallowed/graftling has no local agent/635-graftling-windows-process-tree (P creates it from the bundle)
 PASS: agent/635-graftling-windows-process-tree is absent on graftling /tmp/claude-501/rh635/disallowed/gremote.git
 next: fix the FAIL lines above (new bundle or list from the Engineer), then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh 00
-VERDICT 635 00: PASS (P ready: no; remote branch absent; candidate graftling 04542f2ad0ee37214b8003b2898bf74d064a5cd3)
+VERDICT 635 00: PASS (P ready: no; remote branch absent; candidate graftling 0b49b9cb4531b9a56a1c1fa7ad861ce0f0b68249)
 [exit 0]

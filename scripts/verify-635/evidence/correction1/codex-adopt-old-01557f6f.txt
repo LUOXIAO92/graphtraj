@@ -1,0 +1,5 @@
+E       asyncio.exceptions.CancelledError
+        """codex/app_server.py: a failed adopt kills the started service before waiting for it, so the
+        with pytest.raises(CodexAdapterError) as failed:
+E                   TimeoutError
+1 failed in 30.74s

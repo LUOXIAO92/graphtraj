@@ -44,7 +44,7 @@ print -r -- "# rehearsal-only extra edit" >> $S/repo/.github/workflows/desktop-r
 git -C $S/repo commit -q -am "rehearsal stand-in: repair workflow edit"
 fresh push-extra; step push-extra P0-repair-workflow-edit.txt P0; step push-extra P-repair-workflow-edit.txt P
 # Contrast 2: an edit to the Windows workflow beyond its push branches line is refused.
-git -C $S/repo revert -q --no-edit HEAD
+git -C $S/repo revert --no-edit HEAD > /dev/null
 print -r -- "# rehearsal-only extra edit" >> $S/repo/.github/workflows/desktop-win-adoption.yml
 git -C $S/repo commit -q -am "rehearsal stand-in: extra Windows workflow edit"
 fresh push-extra-win; step push-extra-win P0-windows-extra-edit.txt P0

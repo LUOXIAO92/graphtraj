@@ -1,0 +1,13 @@
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+warning: failed to load config: open /Users/luoxiao/.config/gh/config.yml: operation not permitted
+failed to create root command: failed to read configuration: open /Users/luoxiao/.config/gh/config.yml: operation not permitted
+
+git: git version 2.50.1 (Apple Git-155) | gh:  | gh path: /opt/homebrew/bin/gh | TMPDIR for started processes: /tmp/claude-501
+$ gh auth status --hostname github.com   (token lines removed)
+  warning: failed to load config: open /Users/luoxiao/.config/gh/config.yml: operation not permitted
+  failed to create root command: failed to read configuration: open /Users/luoxiao/.config/gh/config.yml: operation not permitted
+  
+STOP: gh is not logged in to github.com; run: gh auth login --hostname github.com  then  zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-633/steps.zsh 00
+VERDICT 633 00: STOP

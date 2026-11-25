@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 1 item
+
+tests/test_claude_send_closing_546.py::test_a_send_while_claude_closes_goes_to_the_next_execution SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=43465863d7384e6887f744dea40b7076: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_claude_send_closing_546.xml -
+============================ slowest 10 durations =============================
+0.01s setup    tests/test_claude_send_closing_546.py::test_a_send_while_claude_closes_goes_to_the_next_execution
+
+(1 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_claude_send_closing_546.py:18: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+============================= 1 skipped in 0.11s ==============================

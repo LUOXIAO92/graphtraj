@@ -145,7 +145,7 @@ product_guard() {  # HEAD's product == TARGET (production's graphtraj); HEAD dif
   head=$(gg -C $WT rev-parse HEAD)
   names=$(gg -C $WT diff --name-only $TARGET HEAD -- $GUARDED 2>&1); other=$(gg -C $WT diff --name-only $TARGET HEAD 2>&1 | grep -v '^scripts/')
   dirty=$(gg -C $WT status --porcelain -- . ':!scripts/adopt-617/rehearsal' 2>&1)
-  range=$(gg -C $WT show $TARGET:pyproject.toml 2>/dev/null | grep -m1 '"graftling')
+  range=$(gg -C $WT show ${TARGET}:pyproject.toml 2>/dev/null | grep -m1 '"graftling')
   print -r -- "product guard: HEAD $head | git diff ${TARGET[1,8]} HEAD -- ${GUARDED[*]}: ${${names//$'\n'/ }:-empty} | other changes since ${TARGET[1,8]} outside scripts/: ${${other//$'\n'/ }:-none} | uncommitted (rehearsal outputs excepted): ${${dirty//$'\n'/ }:-none} | graftling range at ${TARGET[1,8]}: ${range//[[:space:]]/}"
   gg -C $WT merge-base --is-ancestor $TARGET HEAD && [[ -z $names && -z $other && -z $dirty && ${range//[[:space:]]/} == '"graftling>=0.10.0,<0.11",' ]]
 }

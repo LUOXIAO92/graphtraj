@@ -1,15 +1,15 @@
 """Task 635 (W3) step helper, beside verify-632/wincheck.py (which steps.zsh also runs, by reference).
 
 Run as: python -I wincheck635.py <command> <args...>. Standard library only except `wfdiff`, which needs PyYAML.
-  wfdiff BASE_WF HEAD_WF               the workflow at the bundle head is the one at BASE (graftling bc4298b6) with only
+  wfdiff BASE_WF HEAD_WF               the workflow at the bundle head is the one at BASE (graftling dev 478dfd7f) with only
                                        its push branches line changed, and its push branches are exactly BRANCHES
-  w3edit OLD NEW                       the expected list NEW differs from OLD (GraphTraj 8b37c970) only in its 7 W3
+  w3edit OLD NEW                       the expected list NEW differs from OLD (GraphTraj dev 45fcc3f3) only in its 7 W3
                                        (635) lines: the one of DELETED removed, the 6 of KEPT kept in place with node
                                        id, origin and owner unchanged and their note extended by ' | after W3: ...'
                                        naming the suggested owner; every other line byte-identical and in order
-  as632 BASE_WF OUT                    write to OUT the base workflow with its push branches line (633's) set back
+  as632 BASE_WF OUT                    write to OUT the base workflow with its push branches line (633's and 634's) set back
                                        to 632's, so 632's wfcheck judges every other property of it unchanged;
-                                       fails unless 633's line is there exactly once
+                                       fails unless that line is there exactly once
   newtests DIR LIST                    every node id in LIST passed in the merged per-file JUnit files of the artifact
                                        DIR (not failed, errored, skipped or absent); last line NEWTESTS PASS|FAIL
 Writes nothing, except as632's OUT.
@@ -22,16 +22,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "verify-632"))
 from wincheck import load, nodeid  # noqa: E402
 
-BASE_BRANCHES = ["agent/632-graftling-windows-ci", "agent/633-graftling-windows-process", "dev"]
+BASE_BRANCHES = ["agent/632-graftling-windows-ci", "agent/633-graftling-windows-process",
+                 "agent/634-graftling-windows-durable-writes", "dev"]
 BRANCHES = ["agent/632-graftling-windows-ci", "agent/633-graftling-windows-process",
-            "agent/635-graftling-windows-process-tree", "dev"]
+            "agent/634-graftling-windows-durable-writes", "agent/635-graftling-windows-process-tree", "dev"]
 BASE_LINE = "    branches: [" + ", ".join(BASE_BRANCHES) + "]"
 HEAD_LINE = "    branches: [" + ", ".join(BRANCHES) + "]"
 LINE_632 = "    branches: [agent/632-graftling-windows-ci, dev]"
 W3 = "W3 (635)"
-# The 7 W3 (635) lines of scripts/verify-632/windows-expected.txt at GraphTraj 8b37c970.
-# After W3 _group_alive answers on Windows, so the test goes on to its require_posix part: a POSIX-only skip,
-# which needs no entry. Deleted:
+# The 7 W3 (635) lines of scripts/verify-632/windows-expected.txt at GraphTraj 8b37c970 and dev 45fcc3f3 (unchanged by 634).
+# After W3 the test's whole confirmation, its outliving tree member included, runs through OwnedTree on Windows
+# (635 correction 1) and passes; it is in new-tests.txt. Deleted:
 DELETED = [
     "tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone",
 ]
@@ -85,7 +86,7 @@ def as632(base_file, out_file):
         sys.exit(1)
     with open(out_file, "w", encoding="utf-8") as out:
         out.write(base.replace(BASE_LINE + "\n", LINE_632 + "\n"))
-    print(f"PASS: the base workflow's push branches line is 633's; judged below with it set back to 632's")
+    print(f"PASS: the base workflow's push branches line is {BASE_BRANCHES}; judged below with it set back to 632's")
 
 
 def _owner(line):
@@ -94,7 +95,7 @@ def _owner(line):
 
 
 def w3edit(old_file, new_file):
-    """Against the list at 8b37c970: each of the 7 W3 (635) lines is deleted (DELETED) or kept in place (KEPT) with
+    """Against the list at dev 45fcc3f3: each of the 7 W3 (635) lines is deleted (DELETED) or kept in place (KEPT) with
     fields 1-4 unchanged and the note extended by ' | after W3: ...' naming the suggested owner; every other line
     byte-identical and in order."""
     old = open(old_file, encoding="utf-8").read().split("\n")

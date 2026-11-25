@@ -20,13 +20,14 @@
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
 #       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its only
-#       prerequisite is graftling bc4298b6 (dev with W0 and W1) and its head is shown; read through a temporary
+#       prerequisites are graftling dev 478dfd7f (W0, W1, W2) and ancestors of it, the head contains 478dfd7f
+#       and is shown; read through a temporary
 #       repository that borrows <Harness>/graftling's objects (nothing is written there): noreply identity; the paths
 #       changed since the base are within ALLOWED (below); the workflow is the base one with only its push branches
 #       line changed, to exactly [agent/632-graftling-windows-ci, agent/633-graftling-windows-process,
-#       agent/635-graftling-windows-process-tree, dev], and the base workflow passes 632's wfcheck;
-#       .github/run_test_files.py and tests/posix_only.py are unchanged; the W3 tests (new-tests.txt) are defined at
-#       the head; windows-expected.txt parses, and differs from GraphTraj 8b37c970's only in its 7 W3 (635) lines: 1
+#       agent/634-graftling-windows-durable-writes, agent/635-graftling-windows-process-tree, dev], and the base workflow passes 632's wfcheck;
+#       .github/run_test_files.py and tests/posix_only.py are unchanged; the W3 tests (new-tests.txt, in
+#       tests/test_process_tree_635.py and tests/test_agent_control.py) are defined at the head; windows-expected.txt parses, and differs from GraphTraj dev 45fcc3f3's only in its 7 W3 (635) lines: 1
 #       deleted, 6 kept in place with an 'after W3:' note naming the suggested owner (the node-id table in
 #       wincheck635.py); the local branch in <Harness>/graftling and the remote branch are each absent, the bundle
 #       head, or an ancestor of it (else STOP). Login: gh login, git credential helper (ls-remote). Dialog: none. ~10 s.
@@ -69,10 +70,11 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/635-graftling-windows-process-tree
-# graftling bc4298b6: dev with W0 (632) and W1 (633) integrated, the bundle's only prerequisite.
-BASE=bc4298b611afce70dd876c5fe79f764c9f966d8a
-# GraphTraj with 633's accepted expected list (this Worktree's base); this Task changes only its W3 (635) lines.
-LIST_BASE=8b37c970
+# graftling dev 478dfd7f: W0 (632), W1 (633) and W2 (634) integrated. The candidate merges it, so the bundle also
+# lists bc4298b6 (the parent of 635's first commit) as a prerequisite; check_bundle accepts it only as an ancestor of BASE.
+BASE=478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+# GraphTraj dev with 634's integrated expected list; this Task changes only its W3 (635) lines.
+LIST_BASE=45fcc3f3
 REPO=LUOXIAO92/graftling
 GURL=https://github.com/LUOXIAO92/graftling.git
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
@@ -101,7 +103,7 @@ ALLOWED=(src/graftling/process_tree.py src/graftling/_win32.py src/graftling/con
          src/graftling/pi/execution.py src/graftling/pi/driver.py
          src/graftling/codex/app_server.py src/graftling/codex/driver.py
          src/graftling/dsh/service.py src/graftling/dsh/watcher.py src/graftling/dsh/driver.py
-         tests/test_process_tree_635.py .github/workflows/windows.yml)
+         tests/test_process_tree_635.py tests/test_agent_control.py .github/workflows/windows.yml)
 # The job's steps by their exact `name:` in $WORKFLOW (unchanged from 632).
 SETUP=("Keep symbolic links on this runner"
        "Check out the commit under test"
@@ -155,14 +157,23 @@ api() {
 
 GSHA=
 bundle_head() { allow $GIT bundle list-heads $BUNDLE refs/heads/$BRANCH | cut -d' ' -f1; }
-bundle_prereq() { gg bundle verify $BUNDLE 2>&1 | awk '/requires this ref/ {getline; print $1}'; }
-check_bundle() {  # the bundle verifies against $GRAFT, needs only BASE; sets GSHA
+# Every prerequisite the bundle lists, one per line (as verify-634).
+bundle_prereqs() { gg bundle verify $BUNDLE 2>&1 | awk '/^The bundle requires/ {on = 1; next} /^The bundle (uses|contains)/ {on = 0} on && NF {print $1}'; }
+check_bundle() {  # the bundle verifies against $GRAFT; BASE is a prerequisite and any other is an ancestor of it; sets GSHA
   [[ -f $BUNDLE ]] || stop "no bundle at $BUNDLE"
   gg bundle verify $BUNDLE > /dev/null 2>&1 || { gg bundle verify $BUNDLE 2>&1 | sed 's/^/  /'; stop "the bundle does not verify against $GRAFT"; }
   GSHA=$(bundle_head)
   [[ $GSHA == [0-9a-f](#c40) ]] || stop "the bundle has no refs/heads/$BRANCH"
-  [[ $(bundle_prereq) == $BASE ]] || stop "the bundle's prerequisite is $(bundle_prereq), not graftling $BASE"
-  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA on base $BASE"
+  local -a prereqs=(${(f)"$(bundle_prereqs)"})
+  local prereq
+  (( ${prereqs[(Ie)$BASE]} )) || stop "the bundle's prerequisites are ${prereqs:-none}, without graftling dev $BASE"
+  for prereq in $prereqs; do
+    [[ $prereq == $BASE ]] && continue
+    gg merge-base --is-ancestor $prereq $BASE 2> /dev/null \
+      || stop "the bundle's prerequisite $prereq is not an ancestor of graftling dev $BASE"
+  done
+  ancestor_of_head $BASE || stop "graftling dev $BASE is not an ancestor of the bundle head $GSHA"
+  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA contains graftling dev $BASE (prerequisites: ${prereqs}; others are ancestors of the base)"
 }
 # check_head: read the bundle head through a temporary repository borrowing $GRAFT's objects (read only there);
 # returns the number of FAILs.
@@ -200,7 +211,7 @@ check_head() {
     || { print -r -- "FAIL: no $WORKFLOW at $GSHA"; return $(( bad + 1 )); }
   print -r -- "--- $WORKFLOW at $GSHA against $BASE"
   w3_ wfdiff $WORK/windows-base.yml $WORK/windows.yml || (( bad++ ))
-  print -r -- "--- $WORKFLOW at $BASE (632's accepted workflow with 633's branch; every other property by 632's wfcheck)"
+  print -r -- "--- $WORKFLOW at $BASE (632's accepted workflow with 633's and 634's branches; every other property by 632's wfcheck)"
   if w3_ as632 $WORK/windows-base.yml $WORK/windows-base-632.yml; then
     wc_ wfcheck $WORK/windows-base-632.yml agent/632-graftling-windows-ci $JOB $SETUP $SUITE $UPLOAD || (( bad++ ))
   else
@@ -209,13 +220,13 @@ check_head() {
   allow $GIT -C $peek diff --quiet $BASE peek -- .github/run_test_files.py tests/posix_only.py \
     && print -r -- "PASS: .github/run_test_files.py and tests/posix_only.py unchanged since $BASE" \
     || { print -r -- "FAIL: .github/run_test_files.py or tests/posix_only.py changed"; (( bad++ )); }
-  allow $GIT -C $peek show peek:tests/test_process_tree_635.py > $WORK/w3tests.py 2> /dev/null || : > $WORK/w3tests.py
   missing=0
   for node in ${(f)"$(grep -v '^#' $NEWTESTS)"}; do
     fn=${${node#*::}%%\[*}
+    allow $GIT -C $peek show "peek:${node%%::*}" > $WORK/w3tests.py 2> /dev/null || : > $WORK/w3tests.py
     grep -q "^def $fn(" $WORK/w3tests.py || { print -r -- "FAIL: $node is not defined at $GSHA"; (( missing++ )); }
   done
-  (( missing == 0 )) && print -r -- "PASS: the $(grep -vc '^#' $NEWTESTS) W3 tests of new-tests.txt are defined in tests/test_process_tree_635.py at $GSHA"
+  (( missing == 0 )) && print -r -- "PASS: the $(grep -vc '^#' $NEWTESTS) W3 tests of new-tests.txt are defined at $GSHA (tests/test_process_tree_635.py, tests/test_agent_control.py)"
   return $(( bad + missing ))
 }
 check_list() {  # the expected list parses; it differs from LIST_BASE only in the W3 (635) lines, as tabled

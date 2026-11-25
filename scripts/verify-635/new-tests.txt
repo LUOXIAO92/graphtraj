@@ -1,4 +1,6 @@
-# The tests Task 635 (W3) adds (graftling tests/test_process_tree_635.py). On the Windows runner each must PASS.
+# The tests Task 635 (W3) adds or opens to Windows (graftling tests/test_process_tree_635.py, and the W3 entry of
+# tests/test_agent_control.py that line 48 of windows-expected.txt listed, correction 1). On the Windows runner each
+# must PASS.
 # Real Job Objects for all but the last; fake Runtimes are Python scripts started through sys.executable.
 # test_posix_steps_are_the_group_signals is POSIX-only (skipped on Windows with the POSIX-only prefix), so not listed.
 tests/test_process_tree_635.py::test_a_tree_holds_its_descendants_and_stops_with_them
@@ -16,3 +18,5 @@ tests/test_process_tree_635.py::test_windows_a_breakaway_attempt_stays_in_the_jo
 tests/test_process_tree_635.py::test_windows_the_kill_on_close_tree_ends_when_its_owner_exits
 tests/test_process_tree_635.py::test_windows_job_names_are_not_shared_and_a_missing_job_is_an_error
 tests/test_process_tree_635.py::test_the_windows_branch_with_a_stand_in_job_api
+tests/test_process_tree_635.py::test_the_codex_service_is_killed_when_its_tree_cannot_adopt_it
+tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone

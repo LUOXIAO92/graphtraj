@@ -343,9 +343,10 @@ try {
     assert.equal(usage.tokens.cache_read, 600);
     assert.equal(usage.tokens.output, 80); // Reasoning 20 is already a subset of output 80.
     await reader.locator('.activity-event').filter({ hasText: message.text }).first().waitFor();
-    // D titles tool records 'Tool · <name>'; the result is its own record (Activity.tsx EventCard).
+    // D names tool records 'Tool · <name>' (prefix visually hidden since Task 627); the result is its own
+    // record whose single-line summary ends in the phase '.tool-result' (Activity.tsx EventCard).
     await reader.locator('.activity-event').filter({ hasText: `Tool · ${tool.name}` }).first().waitFor();
-    await reader.locator('details.tool-card > summary').filter({ hasText: /result · / }).first().click();
+    await reader.locator('details.tool-card > summary').filter({ has: page.locator('.tool-result', { hasText: /^result/ }) }).first().click();
     await reader.getByText(facts.controlledInput.tool, { exact: true }).filter({ visible: true }).first().waitFor();
     facts.steps.push('Nonempty native Chat message/tool rendered');
   }

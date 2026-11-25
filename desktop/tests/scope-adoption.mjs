@@ -143,16 +143,17 @@ const choose = async (locator, value, prefix) => {
 };
 // Visible member view only (Activity.tsx:126); concealed views of other projects are hidden.
 const tree = () => page.locator('section.member-tree:visible');
-// Each row button (Activity.tsx:132) has title = alias, an indentation of depth * 24px and
-// the text '<avatar letter> <alias> Active|Standby|Retired · history · #<task> · <role> · <runtime>'.
-const rows = () => tree().locator('.member-tree-rows > button').evaluateAll(buttons => buttons.map(button => ({
-  alias: button.title, indent: button.style.marginLeft, text: button.innerText })));
-const row = name => tree().locator(`.member-tree-rows > button[title="${name}"]`);
-// The scope notice is the section's direct <p class="native-notice"> (Activity.tsx:129).
+// Members are a tree table since Task 627 (V7, Activity.tsx MemberTree): each body row has
+// data-alias, data-depth (tree position) and cells Agent (button title = alias) / Task / State
+// ('Active|Standby[ · history]' or 'Retired · history') / Runtime / Parent; the text keeps those words.
+const rows = () => tree().locator('table.member-tree-table > tbody > tr').evaluateAll(items => items.map(item => ({
+  alias: item.dataset.alias, indent: item.dataset.depth, text: item.innerText })));
+const row = name => tree().locator(`table.member-tree-table > tbody > tr[data-alias="${name}"] button[title="${name}"]`);
+// The scope notice is the section's direct <p class="native-notice"> (Activity.tsx MemberTree).
 const notice = () => tree().locator(':scope > p.native-notice');
 const waitNotice = text => notice().filter({ hasText: text }).waitFor();
-// Loaded: a row, or the 'No members in this scope.' status (Activity.tsx:131), never 'Loading members…'.
-const listed = () => tree().locator('.member-tree-rows > button, :scope > p[role="status"]:text-is("No members in this scope.")').first().waitFor();
+// Loaded: a row, or the 'No members in this scope.' status (shared V10 state, Activity.tsx MemberTree), never 'Loading members…'.
+const listed = () => tree().locator('table.member-tree-table > tbody > tr, :scope > [role="status"]:text-is("No members in this scope.")').first().waitFor();
 const select = () => tree().getByLabel('Member scope', { exact: true });
 // The scope change re-queries on its next render; wait past that render so old rows are not read.
 const settle = () => page.waitForTimeout(3500);
@@ -242,21 +243,22 @@ async function lifecycle() {
   await waitNotice('Members of current summaries');
   await listed();
   await click(row(alias));
-  // AgentColumn (Activity.tsx:283-285): <article data-agent-id=alias><header class=agent-column-heading>
-  // <Avatar span/><div><h2 title=alias/><span>Current|Historical · <state></span></div><Status span/></header>
-  // <div class=agent-column-parent><Icon svg/><span>Parent: <alias></span></div>.
+  // AgentColumn (Activity.tsx, Task 627 V6): <article data-agent-id=alias><header class=agent-column-heading>
+  // <avatar span/><div><h2 title=alias>role</h2><span>Current|Historical · <Status chip></span></div></header>
+  // <div class=agent-column-meta>…<span class=agent-column-parent><svg/><span title=parent alias>Parent: <role></span></span></div>.
   const column = page.locator(`article[data-agent-id="${alias}"]:visible`);
   const heading = column.locator(':scope > header.agent-column-heading');
   await heading.waitFor();
   const read = async () => {
     const shown = await heading.locator('h2').getAttribute('title');
-    const label = (await heading.locator('h2 + span').innerText()).trim();
-    const parentText = (await column.locator(':scope > .agent-column-parent > span').innerText()).trim();
+    const label = (await heading.locator('h2 + span').innerText()).replace(/\s+/g, ' ').trim();
+    const parentSpan = column.locator(':scope > .agent-column-meta > .agent-column-parent > span');
+    const parentText = (await parentSpan.innerText()).trim();
     const match = label.match(/^(Current|Historical) · (.+)$/);
     assert.equal(shown, alias, `Column shows ${JSON.stringify(shown)}, not the selected member`);
     assert.ok(match && ['active', 'standby'].includes(match[2]), `Displayed state must be active or standby, got ${JSON.stringify(label)}`);
     assert.ok(parentText.startsWith('Parent: '), `Unexpected parent text ${JSON.stringify(parentText)}`);
-    return { alias: shown, state: match[2], label, parent: parentText.slice('Parent: '.length) };
+    return { alias: shown, state: match[2], label, parent: await parentSpan.getAttribute('title') ?? parentText.slice('Parent: '.length) };
   };
   const first = await read();
   const ready = { at: new Date().toISOString(), alias: first.alias, state: first.state, label: first.label, parent: first.parent };

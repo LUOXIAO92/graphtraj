@@ -253,7 +253,9 @@ test('tool names resolve across pages and result-first records without guessing 
   let tree;
   await act(async () => { tree = create(React.createElement(ActivityRecords, { events: records.slice(0, 100), pageStart: 0, agent: 'worker' })); });
   t.after(async () => { await act(async () => tree.unmount()); });
-  const summaries = () => tree.root.findAllByType('summary').map(node => node.findAllByType('strong').map(child => child.children.join('')).join('')).join('\n');
+  // The tool name's 'Tool · ' prefix is a visually hidden span inside the strong (Task 627, V6.4); read its full text.
+  const deep = node => typeof node === 'string' ? node : node.children.map(deep).join('');
+  const summaries = () => tree.root.findAllByType('summary').map(node => node.findAllByType('strong').map(deep).join('')).join('\n');
   assert.match(summaries(), /Tool · Name not recorded/);
   assert.doesNotMatch(summaries(), /private-call-id/);
   await act(async () => { tree.update(React.createElement(ActivityRecords, { events: records, pageStart: 0, agent: 'worker' })); });

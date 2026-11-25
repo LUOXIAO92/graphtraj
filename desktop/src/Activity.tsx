@@ -3,7 +3,8 @@ import { Button } from '@heroui/react';
 import Markdown from 'react-markdown';
 import type { Activity, ActivityEvent, Agent, Member, Members } from '../electron/activity';
 import { ToolContent } from './ToolContent';
-import { Avatar, Icon, Status } from './ui';
+import { aliasRole, compactNumber, middle } from './usage.ts';
+import { Icon, StateMessage, Status } from './ui';
 
 const readable = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 
@@ -11,9 +12,26 @@ const readable = (value: unknown) => typeof value === 'string' ? value : JSON.st
 export const visibleState = (state?: string | null) => state === 'retired' ? 'retired'
   : state === 'running' || state === 'unreachable' || state === 'active' ? 'active' : 'standby';
 
-/** Name the direction of a recorded message by the Agent whose Session holds it. */
+
+/** Two-letter initials for a role: 'team_leader' → 'TL', 'engineer' → 'EN'. */
+const initials = (name: string) => {
+  const words = name.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase();
+};
+function RoleAvatar({ name, small = false, historical = false }: { name: string; small?: boolean; historical?: boolean }) {
+  return <span className={`avatar role-avatar ${small ? 'small' : ''} ${historical ? 'historical' : ''}`} aria-hidden="true">{initials(name)}</span>;
+}
+
+/** Name the direction of a recorded message by the role of the Agent whose Session holds it. */
 const messageTitle = (event: ActivityEvent) => event.kind !== 'message' || !event.agent ? event.role || event.kind
-  : event.role === 'user' ? `Message to ${event.agent}` : event.role === 'assistant' ? `Message from ${event.agent}` : event.role || event.kind;
+  : event.role === 'user' ? `Message to ${aliasRole(event.agent)}` : event.role === 'assistant' ? `Message from ${aliasRole(event.agent)}` : event.role || event.kind;
+
+/** First non-empty line of the recorded arguments, or of the text; never a generated summary. */
+const argumentLine = (event: ActivityEvent) => {
+  const value = event.arguments !== undefined ? typeof event.arguments === 'string' ? event.arguments : JSON.stringify(event.arguments) : event.text ?? '';
+  return (value.split('\n').map(line => line.trim()).find(Boolean) ?? '').slice(0, 240);
+};
+const clock = (time: ActivityEvent['time']) => time === null ? 'Time not recorded' : new Date(time).toLocaleTimeString();
 
 export function EventCard({ event }: { event: ActivityEvent }) {
   const [copied, setCopied] = useState('');
@@ -30,10 +48,14 @@ export function EventCard({ event }: { event: ActivityEvent }) {
     void window.graphtraj.copyText(copyContent).then(() => setCopied('Copied'), () => setCopied('Copy unavailable'));
   }}><Icon name={copied === 'Copied' ? 'check' : 'copy'} size={14}/>{copied || 'Copy'}</button>;
   if (event.kind === 'usage') return null;
-  if (event.kind === 'tool' || event.details) return <div className="tool-message activity-event"><time>{time}</time>
-    <details className={`tool-card ${event.error ? 'tool-error' : ''}`}><summary><span className="tool-icon"><Icon name="terminal" size={16}/></span><span><strong>{title}</strong><small>{event.phase || event.kind} · {event.source.runtime}</small></span><span className="tool-result">{event.error ? 'Error' : event.phase || 'Recorded'}<Icon name={event.error ? 'info' : 'check'} size={13}/></span><Icon name="down" size={14}/></summary>
+  // V6.4: one line per tool record: icon, name, the argument's first line, phase or result, time.
+  // The visible terminal icon stands for 'Tool'; the words stay in the name for assistive technology.
+  const argument = event.kind === 'tool' ? argumentLine(event) : '';
+  if (event.kind === 'tool' || event.details) return <div className="tool-message activity-event">
+    <details className={`tool-card ${event.error ? 'tool-error' : ''}`}><summary><span className="tool-icon"><Icon name="terminal" size={15}/></span><strong>{event.kind === 'tool' ? <><span className="sr-only">Tool · </span>{event.name || 'Name not recorded'}</> : title}</strong>{argument && <small className="tool-argument" title={argument}>{argument}</small>}<span className={event.error ? 'tool-result error' : event.phase === 'call' ? 'tool-result call' : 'tool-result'}>{event.error ? 'Error' : event.phase || 'Recorded'}<Icon name={event.error ? 'info' : event.phase === 'call' ? 'right' : 'check'} size={13}/></span><time title={time}>{clock(event.time)}</time><Icon name="down" size={14}/></summary>
       <div className="tool-details">{parts.length ? <ToolContent parts={parts}/> : <pre>{content}</pre>}<details className="tool-technical"><summary>Technical details<Icon name="down" size={12}/></summary><dl><dt>Source</dt><dd title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</dd>{event.call_id && <><dt>Call ID</dt><dd>{event.call_id}</dd></>}{event.tool_type && <><dt>Record type</dt><dd>{event.tool_type}</dd></>}{rawResult && <><dt>Raw result</dt><dd><pre>{rawResult}</pre></dd></>}{details && <><dt>Record details</dt><dd><pre>{details}</pre></dd></>}{error && <><dt>Error flag</dt><dd><pre>{error}</pre></dd></>}</dl>{copy}</details></div></details></div>;
-  return <article className="message activity-event"><div className="message-heading"><Avatar name={title}/><strong>{title}</strong><time>{time}</time></div><div className="message-body"><Markdown skipHtml components={{ a: ({ children }) => <span>{children}</span>, img: () => <span>[External image omitted]</span> }}>{content || 'No readable text in this record.'}</Markdown></div><div className="record-source">{copy}<span title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</span></div></article>;
+  const tone = event.role === 'reasoning' ? 'message-reasoning' : event.kind === 'message' && event.role === 'user' ? 'message-in' : '';
+  return <article className={`message activity-event ${tone}`.trim()}><div className="message-heading"><strong title={event.agent}>{title}</strong>{tone === 'message-in' && <span>received</span>}<time title={time}>{time}</time></div><div className="message-body"><Markdown skipHtml components={{ a: ({ children }) => <span>{children}</span>, img: () => <span>[External image omitted]</span> }}>{content || 'No readable text in this record.'}</Markdown></div><div className="record-source">{copy}<span title={event.source.trace}>{event.source.runtime} · byte {event.source.offset}</span></div></article>;
 }
 
 /** Use recorded turn identity, or the exact native record for per-message usage. */
@@ -48,8 +70,10 @@ function UsageSupplement({ events, agent, attached }: { events: ActivityEvent[];
   const tokens = latest.usage?.tokens;
   const scope = latest.turn_id != null ? `Recorded turn${attached ? '' : ' (content outside this page)'}`
     : attached ? 'Recorded response' : 'Response / turn association unavailable';
+  const count = (value?: number) => value === undefined ? 'Unknown' : compactNumber(value);
+  // V6.5: one compact line; the alias stays in aria-label, exact values in the details.
   return <footer className="usage-supplement" aria-label={`Usage for ${agent}`}>
-    <details><summary>Usage · {agent} · {scope} · {latest.source.runtime} · {latest.usage?.scope === 'latest-response' ? 'Latest response observation' : 'Native usage observation'} · Input {tokens?.input ?? 'Unknown'} · Output {tokens?.output ?? 'Unknown'}</summary>
+    <details><summary><Icon name="usage" size={13}/><b>Usage</b> in {count(tokens?.input)} · out {count(tokens?.output)} · {scope} · {latest.source.runtime} · {latest.usage?.scope === 'latest-response' ? 'Latest response observation' : 'Native usage observation'}<Icon name="right" size={13}/></summary>
       {events.map(event => <div key={event.id} className="usage-observation">
         <p>{event.time == null ? 'Time not recorded' : new Date(event.time).toLocaleString()} · {event.source.runtime} · {event.usage?.phase} · {event.turn_id == null ? 'Turn ID not recorded' : `Turn ${event.turn_id}`}</p>
         <dl><dt>{event.usage?.scope === 'latest-response' ? 'Latest response (last_token_usage)' : 'Native reported usage'}</dt><dd><pre>{readable(event.usage?.provider_usage)}</pre></dd>
@@ -93,7 +117,7 @@ export function ActivityRecords({ events, pageStart, agent }: { events: Activity
 
 /** Show only members returned by the native activity projection. */
 export function MemberPills({ agents, onRead, focus }: { agents: Agent[]; onRead: (alias: string) => void; focus?: string | null }) {
-  return <div className="member-pills">{agents.map(agent => <button key={agent.alias} title={agent.alias} className={`${agent.historical ? 'history' : ''} ${focus === agent.alias ? 'selected' : ''}`} onClick={() => onRead(agent.alias)}><Avatar name={agent.alias} small/><span><strong>{agent.alias}</strong><small>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.runtime || 'Runtime unknown'}</small></span><Icon name="right" size={13}/></button>)}</div>;
+  return <div className="member-pills">{agents.map(agent => <button key={agent.alias} title={agent.alias} className={`${agent.historical ? 'history' : ''} ${focus === agent.alias ? 'selected' : ''}`} onClick={() => onRead(agent.alias)}><RoleAvatar name={agent.kind === 'main' ? 'Main' : aliasRole(agent.alias)} small historical={agent.historical}/><span><strong>{agent.kind === 'main' ? middle(agent.alias) : aliasRole(agent.alias)}</strong><small>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.runtime || 'Runtime unknown'}</small></span><Icon name="right" size={13}/></button>)}</div>;
 }
 
 /** Current summary members by default, or one chosen summary's history, as the real parent tree.
@@ -127,10 +151,20 @@ export function MemberTree({ projectId, summaries, active, onRead }: {
     <label className="native-field"><span>Member scope</span><select aria-label="Member scope" value={scope} onChange={event => setScope(event.target.value)}>
       <option value="">Current summaries</option>{summaries.map(task => <option key={task.task_id} value={task.task_id}>History · #{task.task_id} {task.title}</option>)}</select></label>
     <p className="native-notice">{scope ? 'History of one summary, including completed and retired members.' : `Members of current summaries ${result?.scope.map(id => `#${id}`).join(', ') || ''} and their child tasks.`} Changing scope does not stop, retire or reparent any Agent.</p>
-    {error && <div className="native-notice error" role="alert">{error}</div>}
-    {!members.length && !error && <p role="status">{result ? 'No members in this scope.' : 'Loading members…'}</p>}
-    <div className="member-pills member-tree-rows">{rows.map(([member, depth]) => <button key={member.alias} title={member.alias} className={member.historical ? 'history' : ''} style={{ marginLeft: depth * 24 }} onClick={() => onRead(member)}>
-      <Avatar name={member.alias} small/><span><strong>{member.alias}</strong><small>{member.retired ? 'Retired · history' : `${member.state === 'active' ? 'Active' : 'Standby'}${member.historical ? ' · history' : ''}`} · #{member.task_id} · {member.role} · {member.runtime}{depth === 0 && member.parent ? ` · Parent: ${member.parent}` : ''}{member.diagnostic ? ` · ${member.diagnostic}` : ''}</small></span><Icon name="right" size={13}/></button>)}</div>
+    {error && <StateMessage kind="error">{error}</StateMessage>}
+    {!members.length && !error && <StateMessage kind={result ? 'empty' : 'loading'}>{result ? 'No members in this scope.' : 'Loading members…'}</StateMessage>}
+    {/* V7: a tree table over the existing Member fields; guide lines show depth, the full alias stays in title. */}
+    {rows.length > 0 && <table className="member-tree-table">
+      <thead><tr><th scope="col">Agent</th><th scope="col">Task</th><th scope="col">State</th><th scope="col">Runtime</th><th scope="col">Parent</th></tr></thead>
+      <tbody>{rows.map(([member, depth]) => <tr key={member.alias} data-alias={member.alias} data-depth={depth} className={member.historical ? 'history' : ''}>
+        <td className="member-agent"><span className="member-guides" style={{ width: depth * 20 }} aria-hidden="true">{Array.from({ length: depth }, (_, level) => <i key={level}/>)}</span>
+          <button title={member.alias} onClick={() => onRead(member)}><RoleAvatar name={member.role || aliasRole(member.alias)} small historical={member.historical}/><span><strong>{member.role || aliasRole(member.alias)}</strong><small>{middle(member.alias, 18)}</small></span></button></td>
+        <td className="member-task">#{member.task_id}</td>
+        <td className="member-state"><span className={`status status-${member.retired ? 'retired' : member.state === 'active' ? 'active' : 'standby'}`}><span className="status-dot"/>{member.retired ? 'Retired · history' : `${member.state === 'active' ? 'Active' : 'Standby'}${member.historical ? ' · history' : ''}`}</span>{member.diagnostic && <small>{member.diagnostic}</small>}</td>
+        <td className="member-runtime">{member.runtime}</td>
+        <td className="member-parent" title={member.parent ?? undefined}>{member.parent ? aliasRole(member.parent) : 'Not recorded / root'}</td>
+      </tr>)}</tbody>
+    </table>}
   </section>;
 }
 
@@ -181,19 +215,23 @@ export function ActivityView({ projectId, taskId, active = true, expanded = true
     if (target) element.scrollLeft = target.offsetLeft - element.offsetLeft;
     updateEdges();
   }, [focusAgent]);
-  const move = (direction: number) => columns.current?.scrollBy({ left: direction * 440, behavior: 'instant' });
+  // Step by one column: columns stretch between 400 and 760 px (V6.6).
+  const move = (direction: number) => columns.current?.scrollBy({ left: direction * (columns.current.querySelector<HTMLElement>('.agent-column')?.offsetWidth || 440), behavior: 'instant' });
   return <section className="activity" aria-label="Agent activity">
     {activity?.scope === 'self' && <p className="native-notice">This Agent connection shows only its own Session.</p>}
-    {error && <div className="native-notice error" role="alert">{error} <Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button></div>}
+    {error && <StateMessage kind="error" action={<Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button>}>{error}</StateMessage>}
     {activity?.notices?.map(notice => <p className="native-notice" key={notice}>{notice}</p>)}
-    {!activity?.agents.length && !error && <p className="native-notice" role="status">{activity ? taskId ? 'No participating Agents recorded.' : 'No associated Main sessions recorded for this project.' : loading ? taskId ? 'Loading Agent sessions…' : 'Loading Main sessions…' : 'Session list unavailable.'}</p>}
+    {!activity?.agents.length && !error && <StateMessage kind={activity ? 'empty' : loading ? 'loading' : 'error'} role="status">{activity ? taskId ? 'No participating Agents recorded.' : 'No associated Main sessions recorded for this project.' : loading ? taskId ? 'Loading Agent sessions…' : 'Loading Main sessions…' : 'Session list unavailable.'}</StateMessage>}
     <div className="agent-columns" ref={columns} tabIndex={0} aria-label="Agent columns" role="region"
       onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); move(event.key === 'ArrowLeft' ? -1 : 1); } }}
       onScroll={event => { if (active && expanded) horizontal.current = event.currentTarget.scrollLeft; updateEdges(); }}>
       {activity?.agents.map(agent => <AgentColumn key={agent.alias} projectId={projectId} taskId={taskId} agent={agent} active={active && expanded}/>)}
     </div>
-    <input className="agent-horizontal-scrollbar" type="range" min={0} max={Math.max(1, scroll.max)} step={1} value={Math.min(scroll.left, Math.max(1, scroll.max))} disabled={scroll.max < 1} aria-label="Agent columns horizontal scrollbar" style={{ '--scroll-thumb-width': `${scroll.thumb}px` } as React.CSSProperties} onChange={event => { if (columns.current) columns.current.scrollLeft = Number(event.target.value); updateEdges(); }}/>
-    <footer className="columns-footer"><span><Icon name="left" size={13}/><Icon name="right" size={13}/>{activity ? `Drag the bottom scrollbar to see all ${activity.agents.length} agents · ${new Date(activity.updated_at).toLocaleTimeString()}` : error ? 'Session list unavailable' : 'Loading Session list…'}</span><div><Button isIconOnly variant="ghost" aria-label="Previous agent columns" isDisabled={scroll.left < 2} onPress={() => move(-1)}><Icon name="left" size={16}/></Button><Button isIconOnly variant="ghost" aria-label="Next agent columns" isDisabled={scroll.left >= scroll.max - 2} onPress={() => move(1)}><Icon name="right" size={16}/></Button></div></footer>
+    {/* V6.7: one footer row: previous, the draggable slider (disabled when every column fits), next, count and update time. */}
+    <footer className="columns-footer"><Button isIconOnly variant="ghost" aria-label="Previous agent columns" isDisabled={scroll.left < 2} onPress={() => move(-1)}><Icon name="left" size={16}/></Button>
+      <input className="agent-horizontal-scrollbar" type="range" min={0} max={Math.max(1, scroll.max)} step={1} value={Math.min(scroll.left, Math.max(1, scroll.max))} disabled={scroll.max < 1} aria-label="Agent columns horizontal scrollbar" style={{ '--scroll-thumb-width': `${scroll.thumb}px` } as React.CSSProperties} onChange={event => { if (columns.current) columns.current.scrollLeft = Number(event.target.value); updateEdges(); }}/>
+      <Button isIconOnly variant="ghost" aria-label="Next agent columns" isDisabled={scroll.left >= scroll.max - 2} onPress={() => move(1)}><Icon name="right" size={16}/></Button>
+      <span>{activity ? `${activity.agents.length} ${activity.agents.length === 1 ? 'agent' : 'agents'} · updated ${new Date(activity.updated_at).toLocaleTimeString()}` : error ? 'Session list unavailable' : 'Loading Session list…'}</span></footer>
   </section>;
 }
 
@@ -280,11 +318,16 @@ function AgentColumn({ projectId, taskId, agent, active }: {
     if (value) { setPageStart(Math.max(0, events.length - 100)); setPending(0); }
   }
 
+  const role = agent.kind === 'main' ? 'Main' : aliasRole(agent.alias);
+  const state = agent.kind === 'main' ? agent.state : visibleState(agent.state);
+  const shown = events.length ? `${pageStart + 1}–${Math.min(pageStart + 100, events.length)} of ${events.length}` : '0 of 0';
+  // V6.1–2: the role as the heading (full alias in title and the article's name); one state chip,
+  // kept inside the 'Current|Historical · <state>' text; Runtime, model and parent on one meta line.
   return <article className={`agent-chat-column agent-column ${agent.historical ? 'historical-column' : ''}`} data-agent-id={agent.alias} aria-label={agent.alias}>
-    <header className="agent-column-heading"><Avatar name={agent.alias}/><div><h2 title={agent.alias}>{agent.kind === 'main' ? 'Main' : agent.alias}</h2><span title={agent.state}>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · {agent.kind === 'main' ? agent.state : visibleState(agent.state)}</span></div><Status value={agent.kind === 'main' ? agent.state : visibleState(agent.state)}/></header>
-    <div className="agent-column-parent"><Icon name="branch" size={13}/><span title={agent.parent ?? undefined}>{agent.kind === 'main' ? `Session: ${agent.session}` : `Parent: ${agent.parent ?? 'Not recorded / root'}`}</span></div>
-    <div className="conversation-panel"><div className="agent-metadata"><span><Icon name="terminal" size={14}/>{agent.runtime || 'Runtime unknown'}</span><span>{agent.model || 'Model not recorded'}</span></div>
-      {error && <div className="native-notice error" role="alert">{error} <Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button></div>}
+    <header className="agent-column-heading"><RoleAvatar name={role} historical={agent.historical}/><div><h2 title={agent.alias}>{role}</h2><span className="agent-column-state" title={agent.state}>{agent.kind === 'main' ? 'Associated Main' : agent.historical ? 'Historical' : 'Current'} · <Status value={state}/></span></div></header>
+    <div className="agent-column-meta"><span className="agent-runtime" title={agent.model ?? undefined}><Icon name="terminal" size={13}/>{agent.runtime || 'Runtime unknown'} · {agent.model || 'Model not recorded'}</span><span className="agent-column-parent"><Icon name="branch" size={13}/><span title={agent.kind === 'main' ? agent.session : agent.parent ?? undefined}>{agent.kind === 'main' ? `Session: ${agent.session}` : `Parent: ${agent.parent ? aliasRole(agent.parent) : 'Not recorded / root'}`}</span></span></div>
+    <div className="conversation-panel">
+      {error && <StateMessage kind="error" action={<Button variant="ghost" onPress={() => setRetry(value => value + 1)}>Retry now</Button>}>{error}</StateMessage>}
       {agent.reason && <p className="native-notice">{agent.reason}</p>}
       <div className="transcript activity-history" ref={history} tabIndex={0} aria-label={`${agent.alias} messages`} role="region" style={{ overflowAnchor: following ? 'none' : 'auto' }}
         onWheel={event => { if (active && event.deltaY < 0) follow(false); }}
@@ -303,9 +346,10 @@ function AgentColumn({ projectId, taskId, agent, active }: {
           if (active) vertical.current = element.scrollTop;
         }}><div ref={content}><div className="day-divider"><span>Recorded Runtime output</span></div>
         <ActivityRecords events={events} pageStart={pageStart} agent={agent.alias}/>
-        {!events.length && !error && <p>{!activity ? 'Loading Session messages…' : activity.availability === 'available' ? 'No readable activity recorded yet.' : activity.reason || 'Session messages unavailable.'}</p>}
+        {!events.length && !error && <StateMessage kind={!activity ? 'loading' : activity.availability === 'available' ? 'empty' : 'error'} role={null}>{!activity ? 'Loading Session messages…' : activity.availability === 'available' ? 'No readable activity recorded yet.' : activity.reason || 'Session messages unavailable.'}</StateMessage>}
         <div className="transcript-end">{events.length} events loaded · Missing usage stays unknown.</div>
       </div></div>
-      <div className="reading-toolbar"><button className={following ? 'following' : ''} onClick={() => follow(!following)}><Icon name={following ? 'pause' : 'play'} size={14}/>{following ? 'Pause following' : `Follow new messages${pending ? ` (${pending})` : ''}`}</button><button disabled={pageStart === 0} onClick={() => { follow(false); setPageStart(value => Math.max(0, value - 100)); }}>Earlier</button><button disabled={pageStart + 100 >= events.length} onClick={() => { follow(false); setPageStart(value => value + 100); }}>Later</button>{activity?.has_more && !activity.waiting_for_record && <button onClick={() => { loadRequested.current = true; }}>Load next recorded page</button>}</div>
+      {/* V6.8: the follow switch on the left; the shown range with Earlier / Later on the right. */}
+      <div className="reading-toolbar"><button className={following ? 'following' : 'paused'} onClick={() => follow(!following)}><Icon name={following ? 'pause' : 'play'} size={13}/>{following ? 'Pause following' : `Follow new messages${pending ? ` (${pending})` : ''}`}</button><span className="reading-pager"><span className="reading-position">{shown}</span><button disabled={pageStart === 0} onClick={() => { follow(false); setPageStart(value => Math.max(0, value - 100)); }}>Earlier</button><button disabled={pageStart + 100 >= events.length} onClick={() => { follow(false); setPageStart(value => value + 100); }}>Later</button>{activity?.has_more && !activity.waiting_for_record && <button onClick={() => { loadRequested.current = true; }}>Load next recorded page</button>}</span></div>
     </div></article>;
 }

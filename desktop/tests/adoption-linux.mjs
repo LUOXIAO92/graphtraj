@@ -336,12 +336,13 @@ try {
     // D's copy control is named 'Copy record' (Activity.tsx EventCard).
     await messageCard.getByRole('button', { name: 'Copy record', exact: true }).click();
     assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), message.text);
-    // D titles tool records 'Tool · <name>'; call and result are separate records (Activity.tsx).
+    // D names tool records 'Tool · <name>' (the prefix is visually hidden since Task 627); call and result
+    // are separate records whose single-line summary ends in the phase '.tool-result' (Activity.tsx EventCard).
     const toolCard = reader.locator('.activity-event').filter({ hasText: `Tool · ${tool.name}` }).first().locator('details.tool-card');
     await toolCard.locator(':scope > summary').click();
     assert.match(await toolCard.locator('.tool-details').first().innerText(), /echo controlled tool output/);
     const resultCard = reader.locator('.activity-event').filter({ hasText: 'controlled tool output' })
-      .filter({ has: page.locator('summary small', { hasText: /^result · / }) }).locator('details.tool-card');
+      .filter({ has: page.locator('summary > .tool-result', { hasText: /^result/ }) }).locator('details.tool-card');
     await resultCard.locator(':scope > summary').click();
     const readable = resultCard.locator('.tool-details > pre, .tool-details > .tool-content').first();
     assert.equal((await readable.textContent()).replace(/\s+/g, ' ').trim(), 'controlled tool output');

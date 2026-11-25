@@ -3,6 +3,21 @@ import { localDate, metrics, type Call, type Tokens } from '../electron/usage.ts
 export { collect, records, metrics, localDate, defaultDates } from '../electron/usage.ts';
 export type { Call, Tokens, Filters } from '../electron/usage.ts';
 
+/** Keep both ends of a long identifier, where aliases differ. */
+export const middle = (value: string, keep = 14) => value.length <= keep * 2 + 1 ? value : `${value.slice(0, keep)}…${value.slice(-keep)}`;
+/** Display role of an Agent alias such as '336-…-engineer@engineer': the part after '@', otherwise the
+ * alias shortened in the middle. Callers keep the full alias in title / aria-label; no back-end field is assumed. */
+export const aliasRole = (alias: string) => {
+  const at = alias.lastIndexOf('@');
+  return at >= 0 && at < alias.length - 1 ? alias.slice(at + 1) : middle(alias);
+};
+/** Compact token count for totals and the reader's usage line (1.72M, 6.7k, 950). */
+export const compactNumber = (value: number) => value >= 1000000 ? `${(value / 1000000).toFixed(2)}M` : value >= 1000 ? `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}k` : value.toLocaleString();
+/** Full-precision USD, used in titles, model rows, records and the Call arithmetic. */
+export const money = (value: number) => '$' + value.toFixed(6);
+/** U3 head cost: two decimals; a positive amount below one cent is never shown as $0.00. */
+export const headMoney = (value: number) => value > 0 && value < .005 ? '<$0.01' : '$' + value.toFixed(2);
+
 export type Cost = { amount: number | null; price?: Price; basis: string; reason?: string; parts: Partial<Record<keyof Tokens, number>> };
 
 /** Apply a versioned original-vendor rate; absent operands never become zero. */

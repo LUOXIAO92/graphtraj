@@ -1,2 +1,114 @@
 /* Reader surface (Task 627, advice 5.1): expanded agent conversations, Main sessions and the Members tree table.
  * Owner in Task 627: E2. Imported in main.tsx after the legacy files and before tokens.css. */
+
+/* Visually hidden text that stays in the accessible name (the tool rows' 'Tool · ' prefix). */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* Role avatars: initials of the role (TL, EN), not the task number's first digit. */
+.role-avatar { width: 28px; height: 28px; border-radius: var(--r-md); font-size: var(--fs-xs); font-weight: var(--fw-strong); letter-spacing: .02em; }
+.role-avatar.small { width: 20px; height: 20px; border-radius: 50%; font-size: 10px; }
+.role-avatar.historical { background: var(--neutral-soft); color: var(--muted); }
+
+/* V6.6: columns fill the width when few, scroll horizontally when many. */
+.agent-columns { gap: 0; padding: 0; background: var(--bg); }
+.agent-chat-column, .d-reader .agent-chat-column, .new-reader .agent-chat-column { flex: 1 0 400px; min-width: 400px; max-width: 760px; border: 0; border-right: 1px solid var(--border-ui); border-radius: 0; background: var(--surface); }
+.historical-column { border-style: solid; background: var(--bg); }
+.historical-column .agent-column-heading { background: transparent; }
+
+/* V6.1–2: heading with role, one state chip inside the 'Current · <state>' line, then one meta line. */
+.agent-column-heading, .d-reader .agent-column-heading { gap: var(--sp-3); padding: var(--sp-3) var(--sp-4) 6px; }
+.agent-column-heading h2 { font-size: var(--fs-lg); font-weight: var(--fw-strong); letter-spacing: 0; line-height: 1.35; }
+.agent-column-state { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: var(--fs-xs); margin-top: 2px; }
+.agent-column-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; padding: 0 var(--sp-4) 10px; border-bottom: 1px solid var(--border-ui); color: var(--muted); font-size: var(--fs-xs); flex-shrink: 0; min-width: 0; }
+.agent-column-meta > span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; }
+.agent-column-meta .agent-runtime { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-column-meta .agent-column-parent { padding: 0; }
+.agent-column-meta .agent-column-parent > span { margin-left: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Transcript: body line height 1.65 (V6.9), tighter tool runs, tinted incoming messages (V6.3). */
+.agent-chat-column .transcript, .d-reader .agent-chat-column .transcript { padding: var(--sp-3) var(--sp-4) 18px; }
+.agent-chat-column .day-divider { margin: 4px 0 14px; }
+.agent-chat-column .message { margin-bottom: 14px; }
+.agent-chat-column .message-heading { align-items: baseline; gap: var(--sp-2); margin-bottom: 4px; }
+.agent-chat-column .message-heading strong { font-size: var(--fs-sm); font-weight: var(--fw-strong); }
+.agent-chat-column .message-heading > span { color: var(--faint); font-size: var(--fs-xs); }
+.agent-chat-column .message-body { padding-left: 0; line-height: 1.65; color: var(--ink); }
+.agent-chat-column .message-body p:first-child { margin-top: 0; }
+.agent-chat-column .message-body p { margin-top: 6px; }
+.agent-chat-column .message-body code { font-size: var(--fs-sm); color: inherit; background: var(--surface-alt); border-radius: var(--r-sm); padding: 1px 5px; }
+.message-in { padding: 10px 12px; border-radius: var(--r-lg); background: var(--surface-alt); }
+.message-in .message-body code { background: var(--surface); }
+.message-reasoning { padding-left: 10px; border-left: 2px solid var(--border-strong); }
+.message-reasoning .message-body { color: var(--muted); }
+.agent-chat-column .record-source { margin-top: 6px; }
+
+/* V6.4: one line per tool record; details, Technical details and the result body are unchanged. */
+.agent-chat-column .tool-message { margin: 0 0 4px; }
+.agent-chat-column .tool-message + :not(.tool-message) { margin-top: 10px; }
+.agent-chat-column .tool-card { border-radius: var(--r-md); background: var(--surface); }
+.agent-chat-column .tool-card summary { gap: var(--sp-2); padding: 6px 10px; font-size: var(--fs-sm); min-width: 0; }
+.agent-chat-column .tool-card summary > .tool-icon { color: var(--faint); display: inline-flex; }
+.agent-chat-column .tool-card summary > strong { font-size: var(--fs-sm); font-weight: var(--fw-strong); white-space: nowrap; }
+.tool-card summary > .tool-argument { flex: 1; min-width: 0; margin: 0; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-card summary > strong + .tool-result { margin-left: auto; }
+.tool-card summary > .tool-result { gap: 4px; font-size: var(--fs-xs); font-weight: var(--fw-strong); white-space: nowrap; }
+.tool-card summary > .tool-result.call { color: var(--faint); font-weight: var(--fw-medium); }
+.tool-card summary > .tool-result.error { color: var(--red); }
+.tool-card summary > time { font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tool-card summary > svg:last-child { color: var(--faint); }
+.tool-card.tool-error { border-color: var(--red-border); }
+.agent-chat-column .tool-details { padding: 10px; background: var(--surface-alt); border-radius: 0 0 var(--r-md) var(--r-md); }
+
+/* V6.5: usage as one quiet line; the observation details open below. */
+.agent-chat-column .usage-supplement { margin: 0 0 14px; padding: 0; border: 0; color: var(--faint); }
+.usage-supplement summary { display: flex; align-items: center; gap: 6px; list-style: none; font-variant-numeric: tabular-nums; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.usage-supplement summary::-webkit-details-marker { display: none; }
+.usage-supplement summary > b { font-weight: var(--fw-strong); color: var(--muted); }
+.usage-supplement summary > svg:last-child { margin-left: auto; transition: transform 140ms; }
+.usage-supplement details[open] > summary > svg:last-child { transform: rotate(90deg); }
+.usage-supplement .usage-observation { padding: var(--sp-2) 10px; border-radius: var(--r-md); background: var(--surface-alt); color: var(--muted); line-height: 1.6; }
+.agent-chat-column .transcript-end { margin-top: var(--sp-4); }
+
+/* V6.8: per-column footer: follow switch left, range with Earlier / Later right. */
+.agent-chat-column .reading-toolbar { min-height: 0; padding: var(--sp-2) var(--sp-3); gap: var(--sp-2); flex-wrap: nowrap; }
+.reading-toolbar > button { height: var(--control-h-sm); padding: 0 10px; border-radius: var(--r-pill); font-size: var(--fs-sm); font-weight: var(--fw-strong); color: var(--accent-ink); background: var(--accent-soft); }
+.reading-toolbar > button.following { color: var(--accent-ink); }
+.reading-toolbar > button.paused { color: var(--on-accent); background: var(--accent-ui); }
+.reading-pager { display: flex; align-items: center; gap: 4px; margin-left: auto; color: var(--faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reading-pager > .reading-position { margin-right: 4px; }
+.reading-pager > button { height: var(--control-h-sm); padding: 0 var(--sp-2); border-radius: var(--r-md); font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--muted); }
+.reading-pager > button:hover:not(:disabled) { background: var(--surface-alt); color: var(--ink); }
+
+/* V6.7: one footer row: previous, slider, next, count. */
+.columns-footer, .new-reader .columns-footer { justify-content: flex-start; gap: 10px; min-height: 34px; height: 34px; padding: 0 var(--sp-3); background: var(--surface); border-top: 1px solid var(--border-ui); }
+.columns-footer > .agent-horizontal-scrollbar, .new-reader .agent-horizontal-scrollbar { flex: 1; width: auto; min-width: 0; height: 20px; padding: 0; }
+.columns-footer > span { flex-shrink: 0; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Tabs above the columns (MemberPills): pills with role initials; historical members keep a dashed edge. */
+.d-reading-index .member-pills > button, .d-task-shelf .member-pills > button { height: 30px; padding: 0 12px 0 5px; border-radius: var(--r-pill); }
+.d-reading-index .member-pills > button > span:nth-child(2), .d-task-shelf .member-pills > button > span:nth-child(2) { flex-direction: row; align-items: baseline; gap: var(--sp-2); }
+.d-reading-index .member-pills small, .d-task-shelf .member-pills small { margin-top: 0; color: var(--faint); }
+.member-pills > button.selected { color: var(--accent-ink); font-weight: var(--fw-strong); }
+
+/* V7: Members tree table, full width; guide lines show depth. */
+.member-tree { padding: var(--sp-4) var(--sp-6); gap: var(--sp-3); }
+.member-tree > .native-notice { padding: 0; }
+.member-tree-table { width: 100%; border: 1px solid var(--border-ui); border-radius: var(--r-lg); border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--surface); font-size: var(--fs-sm); }
+.member-tree-table th { padding: var(--sp-2) 14px; text-align: left; font-size: var(--fs-xs); font-weight: var(--fw-strong); color: var(--faint); background: var(--surface-alt); border-bottom: 1px solid var(--border-ui); white-space: nowrap; }
+.member-tree-table td { padding: 0 14px; height: 44px; border-bottom: 1px solid var(--border-ui); vertical-align: middle; color: var(--muted); }
+.member-tree-table tbody tr:last-child td { border-bottom: 0; }
+.member-tree-table tbody tr:hover td { background: var(--surface-alt); }
+.member-tree-table tr.history td { background: color-mix(in srgb, var(--bg) 60%, var(--surface)); }
+.member-agent { min-width: 260px; white-space: nowrap; }
+.member-guides { display: inline-flex; height: 44px; vertical-align: middle; }
+.member-guides > i { width: 20px; flex-shrink: 0; position: relative; }
+.member-guides > i::before { content: ''; position: absolute; left: 9px; top: 0; bottom: 0; border-left: 1px solid var(--border-strong); }
+.member-guides > i:last-child::after { content: ''; position: absolute; left: 9px; right: 2px; top: 50%; border-top: 1px solid var(--border-strong); }
+.member-agent > button { display: inline-flex; vertical-align: middle; max-width: calc(100% - 4px); align-items: center; gap: var(--sp-2); min-width: 0; padding: 6px 0; text-align: left; color: var(--ink); }
+.member-agent > button > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.member-agent strong { font-weight: var(--fw-strong); font-size: var(--fs-sm); }
+.member-agent small { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-agent > button:hover strong { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+.member-task, .member-runtime { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.member-state small { display: block; margin-top: 2px; font-size: var(--fs-xs); color: var(--faint); }
+.member-parent { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

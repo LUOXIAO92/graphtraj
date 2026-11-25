@@ -1,0 +1,194 @@
+(node:38347) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/claude-501/r621b/graphtraj/desktop/electron/native.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /private/tmp/claude-501/r621b/graphtraj/desktop/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ observer preserves safe rejection details, redacts credentials, and continues normal reads (11.094416ms)
+✔ queued polls retain FIFO replies without spending the active request timeout (3.713792ms)
+✔ a genuinely stalled active poll still times out and rejects queued callers (2.831458ms)
+✔ member scope queries share the observer and request only task_members (2.736167ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ following survives programmatic scroll and content resize; upward reading pauses only its own column (388.578125ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ codex work diagnostics are visible and copied with their label (155.034667ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ dsh work diagnostics are visible and copied with their label (108.468375ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ Follow drains long pages and reconnect replay; pause preserves the older view (393.871ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ result selection requires the real expansion control, not quoted phase text (42.347167ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ parallel current/history columns retain independent pause and cursor state while hidden (82.443792ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ Main conversations use project associations without inventing Task membership (60.443875ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ Main first failure, disconnect, retry and genuine empty results stay distinct (72.3405ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ Agent first failure, disconnect, retry and genuine empty results stay distinct (128.276417ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ tool names resolve across pages and result-first records without guessing or changing output (127.835583ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ usage supplements the actual turn, keeps observation scopes, and never attaches unknown usage to a reply (60.892917ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ reasoning and lifecycle events use different human labels (50.510417ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ per-response usage uses the native source record; a usage-only page retains its known turn (46.684666ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ tool results render readable text, image previews and fallback notes without dumping encodings (36.295375ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ plain tool text keeps its recorded newlines instead of collapsing into one paragraph (34.089333ms)
+✔ multiple receipts truly converge once and every source has a path to the one arrow (44.024208ms)
+✔ receiving structures isolate different targets, relation kinds and reverse approaches (0.788459ms)
+✔ source selection follows its branch and shared receipt without selecting sibling branches (0.600041ms)
+✔ collapsed visible pairs retain all relations before common-target drawing (6.572625ms)
+✔ native hierarchy is lossless across nested expansion, contraction and projected return edges (54.345ms)
+✔ measured long titles and nested frames have separate sibling space (1.727125ms)
+✔ selection traces real dependencies and selected summary internals, excluding unrelated branches (0.651708ms)
+✔ legacy unknown parents remain standalone; old display groups cannot create parents (0.57275ms)
+✔ dependency ranks retain inactive historical tasks (3.175125ms)
+✔ parallel collapsed dependencies retain every native edge with finite routes (5.457625ms)
+✔ collapsed visible pairs aggregate only matching directions and restore real endpoints on expansion (4.915083ms)
+✔ ports follow opposite card position and leave horizontal clear terminal segments (47.474ms)
+✔ cancelled and superseded tasks never appear under their old execution status (9.386833ms)
+✔ expanded summary exits leave from the delivery side of its frame (26.242125ms)
+✔ replacement chains preserve direction, kinds and native endpoints across summaries (6.8065ms)
+✔ a common project boundary contains independent tasks and native nested summary frames (2.435709ms)
+✔ accepted delivery is an evidenced relation, distinct from membership and execution ordering (1.805917ms)
+✔ a collapsed dependency and accepted receipt share an arrow while preserving both facts (1.588667ms)
+✔ nested and cross-summary accepted results flow toward their real delivery cards (2.771958ms)
+✔ dense delivery terminals remain in the gap before their summary (18.265875ms)
+✔ metro enters normal terminal segments without circling the last waypoint (233.878125ms)
+✔ distinct sources retain separate routed passages before entering one target (39.6015ms)
+✔ X6 routes converging source branches and the sole entry without extra terminal arrows (917.377375ms)
+(node:38353) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/claude-501/r621b/graphtraj/desktop/electron/projects.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /private/tmp/claude-501/r621b/graphtraj/desktop/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ global index merges legacy aliases once, retains invalid paths and safely relocates/removes (214.033125ms)
+✔ first migration preserves selection and malformed legacy/global files are never overwritten (36.753083ms)
+✔ reopening a saved index does not wait for an offline native availability check (17.310875ms)
+(node:38360) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/claude-501/r621b/graphtraj/desktop/electron/projects.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /private/tmp/claude-501/r621b/graphtraj/desktop/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ explicit project paths retain directory and native validation before saving (180.05725ms)
+✖ native desktop bridge isolates projects, persists preferences and reconnects without project writes (2226.070125ms)
+(node:38361) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/claude-501/r621b/graphtraj/desktop/src/settings-draft.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /private/tmp/claude-501/r621b/graphtraj/desktop/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ prototype-named roles keep serialized edits and literal or explicitly renamed labels (45.341417ms)
+✔ tree editing moves complete branches and explicitly reconnects or deletes children (0.713125ms)
+✔ team forest preserves individual native occurrences, cross-team edges and unattached roles (0.245208ms)
+✔ connecting one occurrence preserves historical cross-team paths and refuses cycles (0.389584ms)
+✔ graph connections preserve literal prototype-named roles (0.257042ms)
+✔ settings pipe gives validation-specific recovery (387.9425ms)
+✔ settings pipe gives conflict-specific recovery (985.972ms)
+✔ settings pipe gives write-specific recovery (744.328375ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ hidden graph releases Space default action and restores panning on return (9.433667ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ team draft creates, reparents, renames and references a model while preserving other roles (218.334ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ native Runtime and Provider API selects keep explicit names as options change (34.501375ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ global form preserves ordinary catalog keys and sends only native save fields (32.779834ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ global form preserves __proto__ catalog keys and sends only native save fields (37.475333ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ rename team then add child saves and reloads one renamed group (38.160792ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ native model provenance in the D add dialog: same destination (21.952875ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ native model provenance in the D add dialog: existing override (29.019083ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ native model provenance in the D add dialog: edit identifier (56.666292ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ changing Runtime Home clears retained discovery before it can be reused (25.0085ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ D root deletion explicitly promotes one child and reconnects the others (32.654708ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ catalog empty blocks creation and opens global models (22.629208ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ catalog unavailable blocks creation and opens global models (29.689083ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ legacy role edits retain its model route until an explicit global selection (22.237125ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ independent roots and cross-team branches retain the actual nested organization (38.888625ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ missing connection and unknown capabilities are retained without choosing another model (28.157542ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ creation selects the requested Runtime, provider and model without inline fields (31.533333ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ global Cancel never writes and failed Save retains edits on the page (23.030667ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ native Runtime effort choices work for referenced roles without model metadata (24.050584ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ native Runtime effort choices work for inline roles without model metadata (22.681417ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ model-declared effort restrictions override Runtime choices and report a reset (19.800792ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ manual efforts are editable, saved and preserved after native discovery (48.642917ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ leaf deletion omits descendant choices and a new operation clears its error (41.278125ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+✔ approval chooses a global route and keeps it separate from the work model (21.797833ms)
+✖ desktop main-process settings pipe saves directly, detects conflict and restores through native entry (2154.909834ms)
+✔ fitted minimap click and drag use the displayed coordinate scale (141.03225ms)
+(node:38438) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/claude-501/r621b/graphtraj/desktop/electron/history.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /private/tmp/claude-501/r621b/graphtraj/desktop/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ controlled Projects boundary persists monitor/backfill usage across refresh, replay, reopen and offline sources (192.406375ms)
+✔ legacy facts reconcile from native baselines while original history and source remain retained (16.064709ms)
+{"dataset":"600 facts, 200 per page, 2 aliases for same Session","cold":{"ms":35.94154100000003,"reads":4},"hot":{"ms":0.009041000000024724,"reads":0},"reopen":{"ms":7.209083000000021,"saved_ms":1.532083,"reads":2}}
+✔ same representative dataset cold/hot/reopen avoids history pages and multi-reference charging (115.337166ms)
+✔ removing an indexed project stops the remainder of its active native read batch (31.687167ms)
+react-test-renderer is deprecated. See https://react.dev/warnings/react-test-renderer
+(node:38441) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/claude-501/r621b/graphtraj/desktop/src/prices.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /private/tmp/claude-501/r621b/graphtraj/desktop/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ Dashboard filters persisted usage by local dates and keeps global comparison at project scope (132.219708ms)
+(node:38444) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/claude-501/r621b/graphtraj/desktop/src/prices.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /private/tmp/claude-501/r621b/graphtraj/desktop/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ stream totals replace, final wins, replay and parent display count the actual child once (2.958291ms)
+✔ weighted cache rate includes writes in denominator, and missing operands stay unknown (0.945875ms)
+✔ known official arithmetic reproduces breakdowns, trends, missing prices and historical selection (8.611459ms)
+✔ Astra charges disjoint cache writes and includes reasoning once; long context uses documented multipliers (0.136834ms)
+✔ DeepSeek off-peak and unknown peak holiday applicability stay distinct (0.145459ms)
+✔ cumulative updates difference before model/time filtering and replay do not sum snapshots (0.280583ms)
+✔ project, ownership, model and time filters preserve unknown/unattributable coverage (0.152333ms)
+✔ partial cumulative stream fields retain previously reported operands (0.088541ms)
+✔ streamed Codex output retains the original long-context price tier (0.306667ms)
+✔ per-call cache reads survive sparse lifetime totals and streamed replay (0.242125ms)
+✔ local date ranges include whole days across DST and filter after counter differences (1.974125ms)
+ℹ tests 97
+ℹ suites 0
+ℹ pass 95
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2637.472083
+
+✖ failing tests:
+
+test at tests/projects.test.cjs:47:1
+✖ native desktop bridge isolates projects, persists preferences and reconnects without project writes (2226.070125ms)
+  Error: {"failed":true,"error":"Agent Runner must be invoked from the Harness Project Root or this Session's Worktree."}
+      at operate (/private/tmp/claude-501/r621b/graphtraj/desktop/tests/fixtures.cjs:11:27)
+      at makeProject (/private/tmp/claude-501/r621b/graphtraj/desktop/tests/fixtures.cjs:31:3)
+      at async TestContext.<anonymous> (/private/tmp/claude-501/r621b/graphtraj/desktop/tests/projects.test.cjs:51:17)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+
+test at tests/settings.test.cjs:26:1
+✖ desktop main-process settings pipe saves directly, detects conflict and restores through native entry (2154.909834ms)
+  Error: {"failed":true,"error":"Agent Runner must be invoked from the Harness Project Root or this Session's Worktree."}
+      at operate (/private/tmp/claude-501/r621b/graphtraj/desktop/tests/fixtures.cjs:11:27)
+      at Object.makeProject (/private/tmp/claude-501/r621b/graphtraj/desktop/tests/fixtures.cjs:31:3)
+      at async TestContext.<anonymous> (/private/tmp/claude-501/r621b/graphtraj/desktop/tests/settings.test.cjs:36:19)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

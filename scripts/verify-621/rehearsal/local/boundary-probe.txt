@@ -1,0 +1,5 @@
+$ mkdir $R/bnd2; PATH=$R/venv/bin:$PATH node tests/probe-boundary.mjs $R/bnd2   (GRAPHTRAJ_CLI_CONNECTION, GRAPHTRAJ_PARENT_ALIAS unset)
+scope project usage tokens {"input":4321,"output":567,"cache_read":1234}
+task 1 status implementing active true disposition active
+task 2 status pending active false disposition superseded
+task 3 status pending active true disposition active

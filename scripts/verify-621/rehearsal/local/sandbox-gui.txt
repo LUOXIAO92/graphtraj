@@ -1,0 +1,14 @@
+$ HOME=$R/probe/home <app>/Contents/MacOS/GraphTraj --user-data-dir=$R/probe/ud --remote-debugging-port=0   (killed after 8 s; exit 133)
+[39666:1125/155202.779143:ERROR:chrome/browser/process_singleton_posix.cc:1192] Failed to create socket directory.
+[39666:1125/155202.789860:FATAL:base/apple/mach_port_rendezvous_mac.cc:159] Check failed: kr == KERN_SUCCESS. bootstrap_check_in dev.graphtraj.desktop.MachPortRendezvousServer.39666: Permission denied (1100)
+
+$ node tests/probe-electron.mjs <app> $R/probe   (Playwright electron.launch)
+Error: Process failed to launch!  (playwright-core/lib/server/electron/electron.js:247 waitForLine)
+
+$ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" node tests/probe-chrome.mjs   (headless, system Chrome)
+CHROMIUM-FAILED Error: browserType.launch: Failed to create a ProcessSingleton for your profile directory. This usually means that the profile is already in use by another instance of Chromium.
+
+$ npx playwright install chromium-headless-shell   (background job; its network requests are outside the per-command allowlist)
+Error: Download failed: server returned code 403 body 'Connection blocked by network allowlist'. URL: https://cdn.playwright.dev/builds/cft/145.0.7632.6/mac-arm64/chrome-headless-shell-mac-arm64.zip
+
+Inference: the Engineer Seatbelt sandbox denies Mach service registration (bootstrap_check_in, Chromium base/apple/mach_port_rendezvous_mac.cc:159) and the Chromium ProcessSingleton socket, so neither the packaged app nor a headless renderer can start here. No workaround attempted (leader instruction).

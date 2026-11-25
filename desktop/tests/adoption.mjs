@@ -29,6 +29,8 @@ import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import fixtures from './fixtures.cjs';
 import { settingsAdoption } from './settings-adoption.mjs';
+import { approvalDialogs, guardApprovals, openTask, projectsView, removeIndexEntry, selectedTask, taskCard,
+  visibleState } from './adoption-shared.mjs';
 
 const desktop = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const require = createRequire(import.meta.url);
@@ -186,17 +188,43 @@ function projectEntry(page, name) {
   return page.locator('.project-button').filter({ hasText: name });
 }
 
-/** Read only the selected project's visible monitor, including paused offsets. */
+/**
+ * Read only the selected project's visible monitor, including paused offsets.
+ * D: X6 canvas viewport transform, the pressed task title, and the task's
+ * "Expanded agent conversations" reader (main.tsx GraphView, Activity.tsx).
+ */
 async function monitorPosition(page) {
-  return page.locator('.monitor-page:visible').evaluate(element => ({
-    query: element.querySelector('input[type="search"]').value,
-    filter: element.querySelector('select').value,
-    selected: element.querySelector('.react-flow__node.selected')?.getAttribute('data-id'),
-    viewport: element.querySelector('.react-flow__viewport').getAttribute('style'),
-    horizontal: element.querySelector('.agent-columns').scrollLeft,
-    vertical: [...element.querySelectorAll('.activity-history')].map(column => column.scrollTop),
-    following: [...element.querySelectorAll('.activity-controls')].map(controls => controls.querySelector('button').textContent),
-  }));
+  return page.locator('.monitor-page:visible').evaluate(element => {
+    const reader = element.querySelector('section[aria-label="Expanded agent conversations"]');
+    return {
+      query: element.querySelector('input[aria-label="Search tasks"]').value,
+      filter: element.querySelector('select[aria-label="Task status"]').value,
+      selected: element.querySelector('.native-task-card .native-task-title[aria-pressed="true"]')
+        ?.closest('.native-task-card').getAttribute('data-task-id'),
+      viewport: element.querySelector('.x6-graph-svg-viewport').getAttribute('transform'),
+      horizontal: reader?.querySelector('.agent-columns')?.scrollLeft ?? null,
+      vertical: [...(reader?.querySelectorAll('.activity-history') ?? [])].map(column => column.scrollTop),
+      following: [...(reader?.querySelectorAll('.reading-toolbar') ?? [])].map(controls => controls.querySelector('button').textContent),
+    };
+  });
+}
+
+/**
+ * D usage totals format, restated from desktop/src/UsageDashboard.tsx:78 compactNumber
+ * (used for the totals through `display`, UsageDashboard.tsx:64). Below 1000 it is the
+ * renderer's toLocaleString, so callers format those values in the page.
+ */
+const compactNumber = value => value >= 1000000 ? `${(value / 1000000).toFixed(2)}M`
+  : value >= 1000 ? `${(value / 1000).toFixed(value < 10000 ? 1 : 0)}k` : value.toLocaleString();
+/** The card status of a task, restated from desktop/src/monitor-graph.ts taskStatus. */
+const cardStatus = task => task.disposition && task.disposition !== 'active' ? task.disposition
+  : !task.active ? 'inactive' : task.status;
+
+/** Show a legacy role's saved Model field (Settings.tsx 'Saved project model settings'). */
+async function openSavedModel(page) {
+  const summary = page.locator('summary').filter({ hasText: /^Saved project model settings$/ }).filter({ visible: true });
+  if (await summary.locator('..').getAttribute('open') === null) await summary.click();
+  await page.getByLabel('Model', { exact: true }).filter({ visible: true }).waitFor();
 }
 
 /** Generate long, visibly controlled native message records without model calls. */
@@ -212,13 +240,15 @@ function longRecords(member) {
  *
  * The main flow substitutes Electron's dialog API so the surrounding checks stay
  * deterministic. This phase instead asks the operating system (System Events) to
- * operate the real folder open panel and the real approval sheet, and records the
+ * operate the real folder open panels (Add project and Relocate), and records the
  * exact command and output of every attempt. When a host blocks assistive control,
- * the recorded failure is the evidence rather than a silent fallback.
+ * the recorded failure is the evidence rather than a silent fallback. D saves
+ * settings directly (no approval sheet since 045ef3a4), so this real window also
+ * checks direct Save/Cancel with a stub that counts any approval dialog.
  */
 async function nativeDialogAttempt(first) {
   const attempts = [];
-  // `required` marks the three adoption operations the result depends on;
+  // `required` marks the adoption operations the result depends on;
   // diagnostic attempts only explain a blocker and never gate the result.
   const attempt = (name, lines, required = false) => {
     const outcome = uiAutomation(lines);
@@ -233,6 +263,10 @@ async function nativeDialogAttempt(first) {
   // actually returns it; a substituted answer could not add it.
   const added = path.join(work, 'native-project');
   await fixtures.makeProject(added, 'native-project');
+  const addedRoot = await fs.realpath(added);
+  // Likewise only the real Relocate panel can point the entry at this directory.
+  const relocatedTarget = path.join(work, 'native-relocated');
+  await fixtures.makeProject(relocatedTarget, 'native-relocated');
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
   const original = await fs.readFile(rolesFile, 'utf8');
   let native = null;
@@ -241,9 +275,11 @@ async function nativeDialogAttempt(first) {
       [`--project=${first}`, `--user-data-dir=${path.join(work, 'native-user-data')}`]);
     const page = await native.firstWindow();
     page.setDefaultTimeout(20000);
+    await guardApprovals(native);
     await projectEntry(page, 'first-project').waitFor();
 
-    // The real open panel raised by the native "Add project" entry.
+    // The real open panel raised by the native "Add project" entry (D: Projects view).
+    await projectsView(page);
     await page.getByRole('button', { name: 'Add project', exact: true }).click();
     await page.waitForTimeout(3000);
     attempt('open panel: go to folder, type the path, open it', [
@@ -266,70 +302,84 @@ async function nativeDialogAttempt(first) {
       command: "page.locator('.project-button') text match count",
       output: `${picked} entry matching native-project` });
 
-    // The real approval sheet raised by the native "Save changes" entry.
+    // The real open panel raised by the native "Relocate <root>" entry. D removed the
+    // approval sheet (045ef3a4), so the second real OS dialog is this panel.
+    const pickedEntry = (await page.evaluate(() => window.graphtraj.projects())).projects
+      .find(project => project.root === addedRoot);
+    if (pickedEntry) {
+      await page.getByRole('button', { name: `Relocate ${pickedEntry.root}`, exact: true }).click();
+      await page.waitForTimeout(3000);
+      attempt('relocate panel: go to folder, type the path, open it', [
+        'tell application "System Events"',
+        'tell process "GraphTraj"',
+        'set frontmost to true',
+        'keystroke "g" using {command down, shift down}',
+        'delay 1',
+        `keystroke "${relocatedTarget}"`,
+        'delay 1',
+        'key code 36',
+        'delay 1',
+        'key code 36',
+        'end tell',
+        'end tell',
+      ]);
+      await page.waitForTimeout(2000);
+    }
+    const relocatedRoot = await fs.realpath(relocatedTarget);
+    const afterRelocate = (await page.evaluate(() => window.graphtraj.projects())).projects;
+    const moved = afterRelocate.find(project => project.id === pickedEntry?.id);
+    attempts.push({ name: 'relocate panel: the typed directory became the indexed path', required: true,
+      ok: !!moved && moved.root === relocatedRoot,
+      command: 'window.graphtraj.projects() root of the entry added through the open panel',
+      output: pickedEntry ? `${pickedEntry.root} -> ${moved?.root ?? 'entry missing'}` : 'no open-panel entry to relocate' });
+
+    // Direct Save and Cancel in this same real window: no approval dialog may appear.
     await projectEntry(page, 'first-project').click();
     await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
-    await page.getByLabel('Model', { exact: true }).waitFor();
+    await openSavedModel(page);
     await page.getByLabel('Model', { exact: true }).fill('native-approved-model');
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-    await page.waitForTimeout(3000);
-    attempt('approval sheet: click Save settings', [
-      'tell application "System Events"',
-      'tell process "GraphTraj"',
-      'click button "Save settings" of sheet 1 of window 1',
-      'end tell',
-      'end tell',
-    ]);
-    await page.waitForTimeout(2000);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
     const approved = await fs.readFile(rolesFile, 'utf8');
-    attempts.push({ name: 'approval sheet: the approved change was written',
+    attempts.push({ name: 'direct Save: the saved change was written without an approval dialog',
       required: true,
-      ok: approved.includes('model: native-approved-model'),
-      command: `read ${path.relative(work, rolesFile)}`,
-      output: approved.split('\n').filter(line => line.includes('model:')).join('; ') });
+      ok: approved.includes('model: native-approved-model') && await approvalDialogs(native) === 0,
+      command: `read ${path.relative(work, rolesFile)}; count dialog.showMessageBox`,
+      output: `${approved.split('\n').filter(line => line.includes('model:')).join('; ')}; approval dialogs ${await approvalDialogs(native)}` });
 
     await page.getByLabel('Model', { exact: true }).fill('native-cancelled-model');
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-    await page.waitForTimeout(3000);
-    attempt('approval sheet: click Cancel', [
-      'tell application "System Events"',
-      'tell process "GraphTraj"',
-      'click button "Cancel" of sheet 1 of window 1',
-      'end tell',
-      'end tell',
-    ]);
-    await page.waitForTimeout(2000);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     const cancelled = await fs.readFile(rolesFile, 'utf8');
-    attempts.push({ name: 'approval sheet: the cancelled change was not written',
+    attempts.push({ name: 'Cancel: the discarded change was not written',
       required: true,
-      ok: !cancelled.includes('model: native-cancelled-model'),
+      ok: cancelled === approved && await page.getByLabel('Model', { exact: true }).inputValue() === 'native-approved-model',
       command: `read ${path.relative(work, rolesFile)}`,
       output: cancelled.split('\n').filter(line => line.includes('model:')).join('; ') });
 
-    // Cover the new global write boundary in this same real OS window too.
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    // Cover the global write boundary in this same real OS window too.
+    if (!await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible()) {
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    }
     await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
-    await page.getByRole('button', { name: 'Reload connections', exact: true }).waitFor();
+    await page.getByRole('navigation', { name: 'Runtime provider model hierarchy', exact: true }).waitFor();
     const { selected } = await page.evaluate(() => window.graphtraj.projects());
-    for (const [provider, answer] of [['native-approved', 'Save settings'], ['native-declined', 'Cancel']]) {
+    for (const [provider, answer] of [['native-approved', 'Save'], ['native-declined', 'Cancel']]) {
       const before = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected);
-      await page.getByLabel('Provider name', { exact: true }).fill(provider);
-      await page.getByRole('button', { name: 'Add Provider', exact: true }).click();
-      await page.getByRole('button', { name: 'Preview connections', exact: true }).click();
-      await page.getByRole('button', { name: 'Save connections', exact: true }).click();
-      await page.waitForTimeout(2500);
-      assert.ok(attempt(`global approval sheet: ${answer}`, [
-        'tell application "System Events"', 'tell process "GraphTraj"',
-        `click button "${answer}" of sheet 1 of window 1`, 'end tell', 'end tell',
-      ]), 'The real global approval sheet must be operable');
-      if (answer === 'Save settings') {
-        await page.getByRole('status').getByText('Connections saved.', { exact: true }).waitFor();
+      await page.locator('.library-select').filter({ hasText: 'shared' }).first().click();
+      await page.locator('.d-library-detail-heading').getByRole('button', { name: 'Add provider', exact: true }).click();
+      await page.getByRole('dialog').getByLabel('Provider name', { exact: true }).fill(provider);
+      await page.getByRole('dialog').getByRole('button', { name: 'Add provider', exact: true }).click();
+      await page.getByRole('button', { name: answer, exact: true }).click();
+      if (answer === 'Save') {
+        await page.getByRole('status').filter({ hasText: 'Connections saved.' }).waitFor();
         const saved = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected);
         assert.ok(Object.hasOwn(saved.catalog.runtimes.shared.providers, provider));
       } else {
-        await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
+        await page.getByText('All changes saved', { exact: true }).waitFor();
         assert.equal((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected)).revision, before.revision);
       }
+      assert.equal(await approvalDialogs(native), 0, 'D saves directly; no approval dialog may appear');
+      assert.ok(!(await page.evaluate(() => document.body.innerText)).includes(secret));
       attempts.push({ name: `global native ${answer}: readback verified`, required: true, ok: true });
     }
     facts.screenshots.push(await shot(page, '12-native-global-refusal.png'));
@@ -703,8 +753,10 @@ async function main() {
   try {
     // The packaged window navigates to the renderer just after it is created.
     // Wait for the real application markup before the first evaluate, or the
-    // evaluate can run against the replaced, destroyed context.
-    await page.getByRole('button', { name: 'Add project', exact: true }).waitFor();
+    // evaluate can run against the replaced, destroyed context. D's sidebar entry
+    // to the Projects view is always rendered (main.tsx sidebar).
+    await page.getByRole('button', { name: 'Add or manage projects', exact: true }).waitFor();
+    await guardApprovals(appHandle);
     const boundary = await bounded('read renderer boundary', page.evaluate(() => ({
       require: typeof window.require, process: typeof window.process, bridge: typeof window.graphtraj,
     })));
@@ -718,9 +770,13 @@ async function main() {
       await appHandle.evaluate(({ dialog }, selected) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] });
       }, folder);
+      await projectsView(page);
       await page.getByRole('button', { name: 'Add project', exact: true }).click();
-      await page.getByRole('button', { name: 'Add project', exact: true }).waitFor({ state: 'visible' });
+      await page.getByRole('button', { name: 'Add project', exact: true, disabled: false }).waitFor({ state: 'visible' });
+      // The Projects view does not navigate; return to the selected project's monitor.
+      await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     }
+    const monitorTitle = title => page.locator('.monitor-page:visible').getByRole('button', { name: title, exact: true });
     await projectEntry(page, 'first-project').waitFor();
     const migrated = await page.evaluate(() => window.graphtraj.projects());
     assert.equal(migrated.selected, 'first');
@@ -731,31 +787,41 @@ async function main() {
     await pick(firstAlias);
     assert.equal((await page.evaluate(() => window.graphtraj.projects())).projects.length, 2);
     step('global index imported the legacy list, selected its canonical project, deduplicated alias and marked missing path');
-    await page.getByText('first project', { exact: true }).waitFor();
+    await monitorTitle('first project').waitFor();
     await pick(second);
-    await page.getByText('second project', { exact: true }).waitFor();
+    await monitorTitle('second project').waitFor();
     facts.screenshots.push(await shot(page, '01-two-projects-added.png'));
     step('added two isolated fixture projects and selected the second one');
 
-    await page.locator('.monitor-page:visible .react-flow__node[data-id="2"]').click();
+    await openTask(page.locator('.monitor-page:visible'), '2');
     await page.getByRole('complementary', { name: 'Task details' }).waitFor();
     await page.getByText('No participating Agents recorded.').waitFor();
     facts.screenshots.push(await shot(page, '02-node-detail-chat-empty.png'));
     step('opened a node without records: the Chat surface rendered its empty state (not adoption evidence)');
 
     await projectEntry(page, 'first-project').click();
-    await page.getByText('first project', { exact: true }).waitFor();
-    assert.equal(await page.locator('.monitor-page:visible').getByText('second project', { exact: true }).count(), 0);
+    await monitorTitle('first project').waitFor();
+    assert.equal(await monitorTitle('second project').count(), 0);
     facts.screenshots.push(await shot(page, '03-project-switched.png'));
     step('switched the selected project: the graph shows only the selected project');
 
     const monitor = page.locator('.monitor-page:visible');
     const nativeGraph = fixtures.operate(first, 'task_graph');
     for (const task of nativeGraph.tasks) {
-      const node = monitor.locator(`.react-flow__node[data-id="${task.task_id}"]`);
+      // D cards show '#id · status' (TaskCanvas.tsx card); a replaced task shows its
+      // disposition there and keeps execution status and 'Replaced / inactive' in Task facts.
+      const node = taskCard(monitor, task.task_id);
       await node.waitFor();
-      assert.equal(await node.locator('.status').innerText(), task.status);
-      if (!task.active) assert.match(await node.innerText(), /Replaced \/ inactive/);
+      assert.match(await node.locator('.native-task-meta').first().innerText(),
+        new RegExp(`^#${task.task_id} · ${cardStatus(task)}\\b`));
+      if (!task.active) {
+        await openTask(monitor, task.task_id);
+        const taskFacts = page.getByRole('complementary', { name: 'Task details' }).locator('details').filter({ hasText: 'Task facts' });
+        await taskFacts.locator('summary').click();
+        assert.match(await taskFacts.innerText(), /Replaced \/ inactive/);
+        assert.match(await taskFacts.innerText(), new RegExp(`Historical execution: ${task.status}\\.`));
+        await page.getByRole('button', { name: 'Close details', exact: true }).click();
+      }
     }
     facts.graph = nativeGraph;
     const globalToggle = page.getByRole('button', { name: /^GLOBAL/ });
@@ -769,8 +835,8 @@ async function main() {
     await projectsToggle.click();
     assert.equal(await projectEntry(page, 'first-project').isVisible(), false);
     assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), true);
-    const projectNavigation = page.getByRole('navigation', { name: 'Project views', exact: true });
-    assert.equal(await projectNavigation.locator('h2').innerText(), 'first-project');
+    const projectNavigation = page.getByRole('navigation', { name: 'Current project', exact: true });
+    assert.equal(await projectNavigation.locator('.section-label').innerText(), 'first-project');
     assert.deepEqual(await projectNavigation.getByRole('button').allTextContents(), ['Monitor', 'Teams & roles', 'Project usage']);
     facts.screenshots.push(await shot(page, '03c-project-list-collapsed.png'));
     await projectsToggle.click();
@@ -783,12 +849,12 @@ async function main() {
     step('GLOBAL and PROJECTS independently toggle; selected project/navigation remain outside list; Settings submenu toggles itself');
 
     // Retain a deliberately changed viewport and filter, not merely defaults.
-    const initialViewport = await monitor.locator('.react-flow__viewport').getAttribute('style');
-    await monitor.locator('.react-flow__controls-zoomin').click();
-    await page.waitForFunction(before => document.querySelector('.monitor-page:not([hidden]) .react-flow__viewport')?.getAttribute('style') !== before, initialViewport);
-    const status = nativeGraph.tasks.find(task => task.task_id === '1').status;
-    await monitor.getByRole('combobox').selectOption(status);
-    await monitor.getByRole('searchbox').fill('first project');
+    const initialViewport = await monitor.locator('.x6-graph-svg-viewport').getAttribute('transform');
+    await monitor.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    await page.waitForFunction(before => document.querySelector('.monitor-page[aria-hidden="false"] .x6-graph-svg-viewport')?.getAttribute('transform') !== before, initialViewport);
+    const status = cardStatus(nativeGraph.tasks.find(task => task.task_id === '1'));
+    await monitor.getByLabel('Task status', { exact: true }).selectOption(status);
+    await monitor.getByLabel('Search tasks', { exact: true }).fill('first project');
 
     // Chat adoption evidence: the controlled records must render as message and
     // tool content through the same public boundary the desktop reads. Expected
@@ -799,18 +865,20 @@ async function main() {
     const toolCall = chatEvents.find(event => event.kind === 'tool' && event.phase === 'call');
     assert.ok(message && message.text && toolCall && toolCall.name,
       'the public boundary must return the controlled message and tool call');
-    await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').click();
+    await openTask(page.locator('.monitor-page:visible'), '1');
     await page.getByRole('complementary', { name: 'Task details' }).waitFor();
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     await page.getByText(message.text).first().waitFor();
-    await page.getByText(toolCall.name, { exact: true }).first().waitFor();
+    // D titles a tool record 'Tool · <name>' (Activity.tsx EventCard).
+    await page.getByText(`Tool · ${toolCall.name}`, { exact: true }).first().waitFor();
     const primaryColumn = page.locator('.monitor-page:visible').getByRole('article', { name: 'research@x1', exact: true });
-    const toolCard = primaryColumn.locator('.activity-event').filter({ hasText: toolCall.name }).first();
+    const toolCard = primaryColumn.locator('.activity-event').filter({ hasText: `Tool · ${toolCall.name}` }).first()
+      .locator('details.tool-card');
     for (const open of [true, false, true]) {
-      await toolCard.locator('summary').click();
-      assert.equal(await toolCard.locator('details').evaluate(element => element.open), open);
+      await toolCard.locator(':scope > summary').click();
+      assert.equal(await toolCard.evaluate(element => element.open), open);
     }
-    assert.equal(await toolCard.locator('pre').first().innerText(), typeof toolCall.arguments === 'string'
+    assert.equal(await toolCard.locator('.tool-details > pre').first().innerText(), typeof toolCall.arguments === 'string'
       ? toolCall.arguments : JSON.stringify(toolCall.arguments, null, 2));
     facts.screenshots.push(await shot(page, '03b-node-chat-records.png'));
     step('the controlled records rendered in Chat: the recorded message and tool call are visible');
@@ -822,7 +890,7 @@ async function main() {
     assert.equal(await columns.count(), members.length);
     for (const member of members) {
       const column = monitor.getByRole('article', { name: member.alias, exact: true });
-      await column.getByText(`${member.historical ? 'Historical' : 'Current'} · ${member.state}`, { exact: true }).waitFor();
+      await column.getByText(`${member.historical ? 'Historical' : 'Current'} · ${visibleState(member.state)}`, { exact: true }).waitFor();
       const native = queryActivity(first, '1', member.alias);
       const lastMessage = native.events.filter(event => event.kind === 'message').at(-1);
       assert.ok(lastMessage?.text);
@@ -835,7 +903,7 @@ async function main() {
       const pause = column.getByRole('button', { name: 'Pause following', exact: true });
       if (await pause.count()) await pause.click();
     }
-    await monitor.evaluate(element => {
+    await monitor.getByRole('region', { name: 'Expanded agent conversations', exact: true }).evaluate(element => {
       element.querySelector('.agent-columns').scrollLeft = 155;
       element.querySelectorAll('.activity-history').forEach((column, index) => { column.scrollTop = 200 + index * 170; });
     });
@@ -863,7 +931,7 @@ async function main() {
     }
     await projectEntry(page, 'second-project').click();
     await page.getByRole('button', { name: 'Close details', exact: true }).click();
-    await monitor.locator('.react-flow__node[data-id="1"]').click();
+    await openTask(monitor, '1');
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const secondNative = queryActivity(second, '1', 'research@x1');
     const secondMessage = secondNative.events.find(event => event.kind === 'message').text;
@@ -877,7 +945,7 @@ async function main() {
     await page.getByRole('button', { name: 'Collapse chat', exact: true }).click();
     const graphFields = ({ query, filter, selected, viewport }) => ({ query, filter, selected, viewport });
     const graphReading = graphFields(await monitorPosition(page));
-    await monitor.locator('.graph').waitFor({ state: 'visible' });
+    await monitor.getByLabel('Native task canvas', { exact: true }).waitFor({ state: 'visible' });
     await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
     await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     assert.deepEqual(graphFields(await monitorPosition(page)), graphReading);
@@ -885,12 +953,13 @@ async function main() {
     facts.screenshots.push(await shot(page, '03h-restored-graph-filter-node.png'));
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     assert.deepEqual(await monitorPosition(page), updated, 'collapse/expand must also restore paused column positions');
-    await monitor.locator('.agent-columns').evaluate(element => { element.scrollLeft = element.scrollWidth; });
+    await monitor.getByRole('region', { name: 'Agent columns', exact: true }).evaluate(element => { element.scrollLeft = element.scrollWidth; });
     await page.waitForTimeout(100);
     assert.ok((await monitorPosition(page)).horizontal > updated.horizontal, 'bottom horizontal scroll reaches offscreen columns');
     facts.screenshots.push(await shot(page, '03f-rightmost-agent-column.png'));
     await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
-    assert.equal(await page.getByRole('navigation', { name: 'Projects', exact: true }).count(), 0);
+    // D's sidebar is the complementary landmark 'Projects', hidden and inert when collapsed (main.tsx).
+    assert.equal(await page.getByRole('complementary', { name: 'Projects', exact: true }).count(), 0);
     facts.screenshots.push(await shot(page, '03g-sidebar-hidden-chat.png'));
     await page.getByRole('button', { name: 'Show sidebar', exact: true }).click();
     await primaryColumn.getByRole('button', { name: /Follow new messages/ }).click();
@@ -898,20 +967,30 @@ async function main() {
     step('parallel current/history columns, independent pause/native append, page/project reading retention and bottom horizontal access passed');
 
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();
-    await page.locator('section.usage-dashboard').waitFor();
-    await page.locator('section.usage-dashboard').getByRole('status').waitFor();
-    // The hidden `<option>` in the Model filter carries the same model name, so
-    // wait on the visible Model breakdown row instead of the first text match.
-    const modelRow = page.getByRole('table', { name: 'Model breakdown', exact: true })
-      .getByRole('row').filter({ hasText: 'actual-model' });
+    const usageDashboard = page.getByRole('region', { name: 'Usage dashboard', exact: true });
+    await usageDashboard.waitFor();
+    // The observation status sits in the closed history disclosure (UsageDashboard.tsx footer).
+    await usageDashboard.locator('[role="status"]').filter({ hasText: 'Observation active' }).waitFor({ state: 'attached' });
+    // D lists the project's models as buttons (d-model-list); there is no breakdown table.
+    const modelRow = usageDashboard.getByRole('button', { name: /^actual-model\b/ });
     await modelRow.waitFor();
     const usage = (chatEvents.find(event => event.kind === 'usage') ?? {}).usage;
     assert.ok(usage && usage.tokens, 'the public boundary must return the controlled usage record');
-    const dashboard = (await page.locator('section.usage-dashboard').innerText()).replaceAll(/[.,\s]/g, '');
+    // D totals show compact counts (compactNumber); the dated chart keeps the exact input.
+    const totals = Object.fromEntries(await usageDashboard.locator('.new-usage-totals > span').evaluateAll(cells =>
+      cells.map(cell => [cell.querySelector('small').textContent, cell.querySelector('strong').textContent])));
+    const totalLabels = { input: 'INPUT · INCLUDES CACHE', output: 'OUTPUT', cache_read: 'CACHE READ' };
+    const chartTitles = await usageDashboard.getByRole('img', { name: /^Reported input by date/ }).locator('title')
+      .evaluateAll(titles => titles.map(title => title.textContent));
     for (const [metric, value] of Object.entries(usage.tokens)) {
-      assert.ok(dashboard.includes(String(value)),
-        `usage dashboard must show the boundary value ${metric}=${value}`);
+      assert.ok(totalLabels[metric], `usage dashboard has no D total for the boundary metric ${metric} (absent?)`);
+      const expected = value >= 1000 ? compactNumber(value) : await page.evaluate(count => count.toLocaleString(), value);
+      assert.equal(totals[totalLabels[metric]], expected,
+        `usage dashboard must show the boundary value ${metric}=${value} as ${expected}`);
     }
+    const exactInput = await page.evaluate(value => value.toLocaleString(), usage.tokens.input);
+    assert.ok(chartTitles.some(title => title.endsWith(`: ${exactInput} input tokens`)),
+      `usage chart must show the exact boundary input ${usage.tokens.input}`);
     facts.screenshots.push(await shot(page, '04-usage-dashboard.png'));
     facts.controlledRecords = {
       origin: 'Hand-written native rollout records retained in the fixture project; no model invoked, no cost.',
@@ -922,68 +1001,66 @@ async function main() {
     step(`opened the Usage dashboard: rendered counts match the public boundary (${JSON.stringify(usage.tokens)})`);
 
     await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
-    await page.getByLabel('Model', { exact: true }).waitFor();
+    await openSavedModel(page);
     facts.screenshots.push(await shot(page, '05-settings-form.png'));
     step('opened the Settings form for the selected project');
 
-    // The approval text is produced by the native save entry; capture it to
-    // check both the human-review wording and that no credential value appears.
-    await appHandle.evaluate(({ dialog }) => {
-      globalThis.__gtAdoption = { response: 0, message: '', detail: '' };
-      dialog.showMessageBox = async (win, options) => {
-        const chosen = options && options.detail !== undefined ? options : win;
-        globalThis.__gtAdoption.message = String(chosen?.message ?? '');
-        globalThis.__gtAdoption.detail = String(chosen?.detail ?? '');
-        return { response: globalThis.__gtAdoption.response, checkboxChecked: false };
-      };
-    });
-    const approval = async () => appHandle.evaluate(() => ({
-      message: globalThis.__gtAdoption.message, detail: globalThis.__gtAdoption.detail,
-    }));
-    const decide = async response => appHandle.evaluate((_electron, value) => {
-      globalThis.__gtAdoption.response = value;
-    }, response);
+    // D saves directly (no approval dialog since 045ef3a4; user decision in
+    // docs/specs/optional-desktop-gui-mvp.md). Every Save is checked for zero
+    // approval dialogs and for no credential value in the window or its logs.
+    const checkSave = async label => {
+      assert.equal(await approvalDialogs(appHandle), 0, `${label}: D saves directly; no approval dialog may appear`);
+      const text = await bounded('read window text', page.evaluate(() => document.body.innerText));
+      assert.ok(!text.includes(secret) && !consoleMessages.some(entry => entry.includes(secret)),
+        `${label}: the credential value must not appear in the window or its logs`);
+    };
+    // Concealed pages stay mounted (visibility: hidden), so text and label lookups keep only visible matches.
+    const footer = name => page.getByText(name, { exact: true }).filter({ visible: true });
 
     const before = await snapshot(second);
     const firstBefore = await snapshot(first);
 
-    await decide(0);
+    // Declining is Cancel: the draft is shown as a pending change, then discarded.
     await page.getByLabel('Model', { exact: true }).fill('denied-model');
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-    await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
+    await footer('1 unsaved changes').waitFor();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await footer('All changes saved').waitFor();
     assert.match(await fs.readFile(rolesFile, 'utf8'), /model: original-model/);
-    const deniedReview = await approval();
-    assert.ok(deniedReview.detail.includes('denied-model'), 'approval text must show the proposed change');
-    assert.ok(!deniedReview.detail.includes(secret) && !deniedReview.message.includes(secret),
-      'approval text must not contain the credential value');
-    step('native save requires approval: a declined change reported the refusal and wrote nothing');
+    assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'original-model');
+    await checkSave('cancelled change');
+    step('direct save has no approval dialog: a cancelled change was discarded and wrote nothing');
 
-    await decide(1);
     await page.getByLabel('Model', { exact: true }).fill('approved-model');
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-    await page.getByRole('status').getByText('Settings saved.', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
     assert.match(await fs.readFile(rolesFile, 'utf8'), /model: approved-model/);
+    assert.equal((await page.evaluate(id => window.graphtraj.settings(id), (await page.evaluate(() => window.graphtraj.projects())).selected))
+      .roles['custom_group.observer'].model, 'approved-model');
+    await checkSave('saved change');
     facts.screenshots.push(await shot(page, '06-settings-saved.png'));
-    step('approved change was written by the native entry into the selected project only');
+    step('saved change was written by the native entry into the selected project only');
 
     // A real native failure: the project's configuration directory is not
-    // writable, so an approved save must report the error and keep the file.
+    // writable, so a save must report the error and keep the file.
     const state = path.join(first, '.graphtraj');
     const saved = await fs.readFile(rolesFile, 'utf8');
     await fs.chmod(state, 0o500);
     try {
       await page.getByLabel('Model', { exact: true }).fill('unwritable-model');
-      await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
       await page.getByRole('alert').waitFor();
       facts.screenshots.push(await shot(page, '07-settings-save-error.png'));
       assert.equal(await fs.readFile(rolesFile, 'utf8'), saved, 'failed save must not change the file');
-      step('an approved save that failed in the native entry reported an error and left the file unchanged');
+      step('a save that failed in the native entry reported an error and left the file unchanged');
     } finally { await fs.chmod(state, 0o700); }
+    // D retains the failed draft ('Your unsaved changes are retained'); discard it.
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await footer('All changes saved').waitFor();
 
     const settingsProjects = await page.evaluate(() => window.graphtraj.projects());
     const firstId = settingsProjects.projects.find(project => project.root === first).id;
     const secondId = settingsProjects.projects.find(project => project.root === second).id;
-    facts.settings = await settingsAdoption({ page, decide, firstId, secondId,
+    facts.settings = await settingsAdoption({ page, firstId, secondId, checkSave,
       runtimeHome: path.join(isolatedHome, 'codex'), step,
       shot: async name => { facts.screenshots.push(await shot(page, name)); },
     });
@@ -1005,20 +1082,25 @@ async function main() {
     const relocationBefore = await snapshot(relocated);
     await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     await projectEntry(page, 'missing-project').click();
+    // D: Check paths, Relocate and Remove live in the Projects view (main.tsx ProjectIndexEditor).
+    await projectsView(page);
     await page.getByRole('button', { name: 'Check paths', exact: true }).click();
-    await page.getByText('Path unavailable', { exact: true }).waitFor();
+    await page.getByRole('row').filter({ hasText: missing }).getByText('Path unavailable', { exact: true }).waitFor();
     await appHandle.evaluate(({ dialog }, folder) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] });
     }, relocated);
     await page.getByRole('button', { name: `Relocate ${missing}`, exact: true }).click();
-    await page.locator('.monitor-page:visible').getByText('relocated project', { exact: true }).waitFor();
+    const relocatedRoot = await fs.realpath(relocated);
+    // Relocation keeps the Projects view; open the relocated entry's monitor from its row.
+    await page.getByRole('row').filter({ hasText: relocatedRoot }).getByRole('button', { name: 'Open', exact: true }).click();
+    await monitorTitle('relocated project').waitFor();
     const relocatedIndex = await page.evaluate(() => window.graphtraj.projects());
     const relocatedEntry = relocatedIndex.projects.find(project => project.id === 'missing');
-    assert.equal(relocatedEntry.root, await fs.realpath(relocated));
+    assert.equal(relocatedEntry.root, relocatedRoot);
     assert.equal(relocatedEntry.unavailable, undefined);
     assert.equal(relocatedIndex.selected, 'missing');
     facts.screenshots.push(await shot(page, '07b-relocated-index.png'));
-    await page.getByRole('button', { name: `Remove ${relocatedEntry.root}`, exact: true }).click();
+    await removeIndexEntry(page, relocatedEntry.root);
     await projectEntry(page, 'relocated-project').waitFor({ state: 'detached' });
     assert.deepEqual(changed(relocationBefore, await snapshot(relocated)), [], 'relocate/remove must not modify project files');
     assert.equal(fixtures.operate(relocated, 'task_graph').tasks.length, 2);
@@ -1035,6 +1117,7 @@ async function main() {
     appHandle.on('console', message => consoleMessages.push(message.text()));
     await projectEntry(page, 'first-project').waitFor();
     await projectEntry(page, 'second-project').waitFor();
+    await guardApprovals(appHandle);
     const reopened = await page.evaluate(() => window.graphtraj.projects());
     assert.equal(reopened.projects.length, 2);
     assert.equal(reopened.selected, 'first');
@@ -1055,7 +1138,7 @@ async function main() {
 
     const removalBefore = await snapshot(second);
     const secondRoot = reopened.projects.find(project => project.root === second).root;
-    await page.getByRole('button', { name: `Remove ${secondRoot}`, exact: true }).click();
+    await removeIndexEntry(page, secondRoot);
     await projectEntry(page, 'second-project').waitFor({ state: 'detached' });
     assert.deepEqual(changed(removalBefore, await snapshot(second)), [], 'removing second-project must only edit the global index');
     assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 2);
@@ -1074,18 +1157,20 @@ async function main() {
     // Evidence split: what the controlled entry covered, and the real native
     // dialog attempts recorded with their exact commands and outcomes.
     facts.controlledEntry = [
-      'folder open panel: Electron dialog.showOpenDialog substituted',
-      'approval sheet: Electron dialog.showMessageBox substituted (deny, approve, save error)',
+      'folder open panels (Add project, Relocate): Electron dialog.showOpenDialog substituted',
+      'settings saves: direct Save/Cancel with dialog.showMessageBox replaced by a counting stub that throws (zero approval dialogs), plus a save error',
     ];
 
     // The overall marker reflects the required native operations, not the
     // controlled entry. A diagnostic failure only explains a blocker; a
     // required native failure keeps the result failed and the process red.
+    // Six required entries: the Add and Relocate open panels, direct Save and
+    // Cancel for the project, and global Save and Cancel readbacks.
     const native = await nativeDialogAttempt(first);
     facts.nativeDialogs = native;
     const required = native.filter(entry => entry.required);
     const failedNative = required.filter(entry => !entry.ok);
-    facts.requiredNativeOk = required.length === 5 && failedNative.length === 0;
+    facts.requiredNativeOk = required.length === 6 && failedNative.length === 0;
     facts.blockedReason = facts.requiredNativeOk ? null
       : 'required native operations did not complete: '
         + (failedNative.map(entry => `${entry.name} (${entry.output})`).join('; ')

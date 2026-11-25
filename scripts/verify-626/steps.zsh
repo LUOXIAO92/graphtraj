@@ -128,9 +128,11 @@ S)
   rm -rf $run; mkdir -p $run/home
   RUN_HOME=$run/home allow $NODE $WT/scripts/verify-626/screens.mjs $WORK/desktop $run 2>&1 | tee $run/driver.log; local drv=$?
   mkdir -p $EVIDENCE
-  cp $run/*.png $run/facts.json $run/driver.log $EVIDENCE/ 2>/dev/null
+  local -a files=($run/*.png(N) $run/facts.json(N) $run/driver.log(N))
+  (( ${#files} )) && cp $files $EVIDENCE/
   say "evidence (untracked):"
   ls -l $EVIDENCE
+  [[ -f $EVIDENCE/facts.json ]] && print -r -- "facts: $EVIDENCE/facts.json"
   (( drv == 0 )) || verdict FAIL "driver exit $drv; see $EVIDENCE/facts.json and driver.log" 1
   local n=$(ls $EVIDENCE/*.png 2>/dev/null | wc -l | tr -d ' ')
   (( n == 8 )) || verdict FAIL "$n of 8 screenshots" 1

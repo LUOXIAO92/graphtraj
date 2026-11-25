@@ -144,7 +144,7 @@ async function pick(folder, name) {
 /** After every Save: no approval dialog and no credential in the window or its logs. */
 async function checkSave(label) {
   assert.equal(await approvalDialogs(app), 0, `${label}: D saves directly; no approval dialog may appear`);
-  const text = await page.locator('body').innerText();
+  const text = await page.evaluate(() => document.body.innerText);
   assert.ok(!text.includes(secret) && !consoleMessages.some(entry => entry.includes(secret)),
     `${label}: the credential value must not appear in the window or its logs`);
 }
@@ -287,7 +287,7 @@ try {
   await save('original-model', true, 'restored');
   assert.match(await fs.readFile(roles, 'utf8'), /model: original-model/);
   assert.deepEqual(await fs.readFile(path.join(first, '.graphtraj/roles.yml')), firstRoles);
-  assert.ok(!(await page.locator('body').innerText()).includes(secret));
+  assert.ok(!(await page.evaluate(() => document.body.innerText)).includes(secret));
   facts.steps.push('Direct Cancel/Save (no approval dialog), conflict retention, restoration, preserved fields and cross-project isolation');
   const projects = await page.evaluate(() => window.graphtraj.projects());
   const storedIndex = JSON.parse(await fs.readFile(path.join(os.homedir(), '.graphtraj/projects.json'), 'utf8'));

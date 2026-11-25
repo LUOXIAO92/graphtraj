@@ -240,7 +240,7 @@ const allSaved = () => page.getByText('All changes saved', { exact: true }).filt
 /** After every Save: no approval dialog and no credential in the window. */
 async function checkSave(label) {
   assert.equal(await approvalDialogs(app), 0, `${label}: D saves directly; no approval dialog may appear`);
-  assert.ok(!(await page.locator('body').innerText()).includes(secret), `${label}: the credential value must not appear`);
+  assert.ok(!(await page.evaluate(() => document.body.innerText)).includes(secret), `${label}: the credential value must not appear`);
 }
 async function pick(folder, action = 'pick') {
   // D: Add project and Relocate live in the Projects view (main.tsx ProjectIndexEditor).
@@ -262,7 +262,7 @@ async function pick(folder, action = 'pick') {
   await taskCard(page.locator('.monitor-page:visible'), '1').waitFor();
 }
 async function capture(name) {
-  assert.ok(!(await page.locator('body').innerText()).includes('CONTROLLED-SECRET-MUST-NOT-APPEAR'));
+  assert.ok(!(await page.evaluate(() => document.body.innerText)).includes('CONTROLLED-SECRET-MUST-NOT-APPEAR'));
   await page.screenshot({ path: path.join(evidence, name.endsWith('.png') ? name : name + '.png') });
 }
 try {

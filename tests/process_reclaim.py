@@ -12,6 +12,11 @@ scratch. Names and command patterns are never matched (the scanner of
 ``scripts/run_test_shards.py`` gives each shard ``<run id>-<n>``; a plain
 ``pytest`` draws its own value. A value already set is kept, so one shard's
 cleanup never touches another shard's processes.
+
+The reclaim runs only on macOS and Linux (622): the scanner reads other
+processes' environments through ``/proc`` and libproc, which Windows lacks, and
+the Windows CI runner is discarded after its job. Marking the run and ending
+budget timers stay on every platform.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -98,6 +104,11 @@ def await_ended_timers(value: str) -> None:
         time.sleep(0.2)
 
 
+def reclaim_supported() -> bool:
+    """Whether graftling's scanner can read other processes' environments here (622)."""
+    return sys.platform == "darwin" or sys.platform.startswith("linux")
+
+
 def pytest_configure(config: pytest.Config) -> None:
     mark_test_run()
 
@@ -106,6 +117,8 @@ def pytest_configure(config: pytest.Config) -> None:
 def pytest_sessionfinish(session: pytest.Session) -> None:
     if importlib.util.find_spec("graftling") is None:
         return  # pytest_sessionstart stopped this run, naming the missing graftling; no test started anything.
+    if not reclaim_supported():
+        return  # No scanner on this platform (622); the runner's processes go with it.
     value = os.environ.get(TEST_RUN_ENV, "")
     if value:
         await_ended_timers(value)

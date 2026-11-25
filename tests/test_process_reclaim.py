@@ -7,7 +7,11 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
+import pytest
+
+import process_reclaim
 from process_reclaim import TEST_RUN_ENV
 
 TESTS = Path(__file__).resolve().parent
@@ -72,3 +76,50 @@ def test_session_end_stops_only_this_runs_detached_processes(tmp_path: Path) -> 
 
 def test_a_plain_session_draws_its_own_value() -> None:
     assert os.environ.get(TEST_RUN_ENV)
+
+
+class _Reporter:
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def write_line(self, line: str) -> None:
+        self.lines.append(line)
+
+
+def _session(reporter: _Reporter) -> SimpleNamespace:
+    return SimpleNamespace(config=SimpleNamespace(
+        pluginmanager=SimpleNamespace(get_plugin=lambda name: reporter)))
+
+
+def test_windows_session_end_skips_the_reclaim_silently(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    import graftling.member_processes as member_processes
+
+    def scanned(*args, **kwargs):
+        raise AssertionError("the reclaim scanned processes on Windows")
+
+    monkeypatch.setattr(member_processes, "find_marked_processes", scanned)
+    monkeypatch.setattr(member_processes, "stop_marked_processes", scanned)
+    monkeypatch.setattr(sys, "platform", "win32")
+    reporter = _Reporter()
+    process_reclaim.pytest_sessionfinish(_session(reporter))
+    assert reporter.lines == [] and capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_macos_and_linux_session_end_still_reclaims(monkeypatch: pytest.MonkeyPatch, platform: str) -> None:
+    import graftling.member_processes as member_processes
+
+    calls = []
+
+    def stopped(value, **kwargs):
+        calls.append(value)
+        return {"found": [], "stopped": [], "remaining": []}
+
+    # Only the platform decision is under test; the host's real scanner stays untouched.
+    monkeypatch.setattr(member_processes, "ancestor_pids", lambda *args, **kwargs: set())
+    monkeypatch.setattr(member_processes, "find_marked_processes", lambda *args, **kwargs: {})
+    monkeypatch.setattr(member_processes, "stop_marked_processes", stopped)
+    monkeypatch.setattr(sys, "platform", platform)
+    reporter = _Reporter()
+    process_reclaim.pytest_sessionfinish(_session(reporter))
+    assert calls == [os.environ[TEST_RUN_ENV]] and reporter.lines == []

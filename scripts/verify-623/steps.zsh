@@ -259,7 +259,7 @@ wait_run() {
 # artifacts; ends with the VERDICT (PASS only when all four succeeded).
 observe_push() {
   local sha=$1 label=$2 start=$SECONDS line prev= ok=0 rid wf concl evid
-  local -a rows missing others failed notes
+  local -a rows missing others failed rerunnable notes
   local runs_api="repos/$REPO/actions/runs?head_sha=$sha&per_page=100"
   summ() {
     if api $WORK/runs.json $runs_api; then rows=("${(@f)$(hj pushruns $WORK/runs.json $WORKFLOWS)}")
@@ -296,10 +296,11 @@ observe_push() {
     print -r -- "RUN ${wf:t} | id $rid | ${f[4]} | $concl | ${f[6]}"
     api $WORK/jobs.json "repos/$REPO/actions/runs/$rid/jobs?per_page=100" && hj jobs $WORK/jobs.json
     if [[ ${f[4]} == completed && $concl == success ]]; then (( ok++ )); else failed+=$rid; fi
+    [[ ${f[4]} == completed && $concl != success ]] && rerunnable+=$rid
   done
   (( ${#others} )) && { print -r -- "OTHER workflows triggered for this SHA:"; print -lr -- $others | sed 's/^/  /'; } \
     || print -r -- "no other workflow triggered for this SHA"
-  for rid in $failed; do
+  for rid in $rerunnable; do
     print -r -- "--- tail of: gh run view $rid --repo $REPO --log-failed"
     allow $GH run view $rid --repo $REPO --log-failed 2>&1 | tail -n 60
   done
@@ -312,7 +313,7 @@ observe_push() {
     notes+="${wf:t} ${f[5]}, artifacts $evid"
   done
   print -r -- "next: zsh $THIS W $sha    (re-observe; no push)"
-  for rid in $failed; do print -r -- "next: zsh $THIS X $rid    (re-run its failed jobs; only if the failure is transient)"; done
+  for rid in $rerunnable; do print -r -- "next: zsh $THIS X $rid    (re-run its failed jobs; only if the failure is transient)"; done
   (( ok == NWF )) && { print -r -- "VERDICT 623 $label: PASS ($ok/$NWF success; ${(j:; :)notes})"; exit 0; }
   print -r -- "VERDICT 623 $label: FAIL ($ok/$NWF success; ${(j:; :)notes})"; exit 1
 }

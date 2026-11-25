@@ -1,0 +1,7 @@
+$ VERIFY622_GH=/tmp/claude-501/622/rehearsal/none/gh/gh VERIFY622_POLL_S=1 VERIFY622_DONE_S=30 zsh steps.zsh O 45546698610
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [O] Observe, read only, run 45546698610 of desktop-win-adoption.yml on LUOXIAO92/graphtraj. Login: your gh login. Dialog: none. Network: GitHub.
+run 45546698610 head 055669d9fc86fab33cc843fd926cdaed340f3038: tests/process_reclaim.py lacks the 622 guard
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/622-process-reclaim-windows-noise/scripts/verify-622/steps.zsh O    (picks the newest qualifying run)
+VERDICT 622 O: PENDING (run 45546698610 is not of a commit holding the guard)
+[exit 3]

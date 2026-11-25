@@ -1,0 +1,4 @@
+# steps.zsh PYLOG checker applied to the 618 real console (realhost/main-raw/main-console-P.txt, which holds gh --log-failed tails of the 618 runs; 45546698610 is desktop-win-adoption)
+STEPLINES	40
+SUMMARY	windows-adoption	Build desktop and check Windows native settings	2026-11-25T04:27:26.6364141Z 1 error in 0.43s
+OFFENDING	windows-adoption	Build desktop and check Windows native settings	2026-11-25T04:27:26.6338178Z leftover test processes of PYTEST_GRAPHTRAJ_RUN=6c81f68640794b36a9c265b3e6e88184: found=0 stopped=0 remaining=0 error=Could not find module 'D:\usr\lib\libp

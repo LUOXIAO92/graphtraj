@@ -1,0 +1,12 @@
+$ cd <git archive 055669d9 + candidate tests/test_process_reclaim.py> && TMPDIR=${TMPDIR:-/tmp} <venv-base: graftling v0.10.1 + -e base>/bin/python -m pytest -p no:cacheprovider -q tests/test_process_reclaim.py
+tests/test_process_reclaim.py:104: 
+tests/process_reclaim.py:111: in pytest_sessionfinish
+tests/process_reclaim.py:93: in await_ended_timers
+E       AssertionError: the reclaim scanned processes on Windows
+tests/test_process_reclaim.py:98: AssertionError
+PASSED tests/test_process_reclaim.py::test_session_end_stops_only_this_runs_detached_processes
+PASSED tests/test_process_reclaim.py::test_a_plain_session_draws_its_own_value
+PASSED tests/test_process_reclaim.py::test_macos_and_linux_session_end_still_reclaims[darwin]
+PASSED tests/test_process_reclaim.py::test_macos_and_linux_session_end_still_reclaims[linux]
+FAILED tests/test_process_reclaim.py::test_windows_session_end_skips_the_reclaim_silently
+1 failed, 4 passed in 0.60s

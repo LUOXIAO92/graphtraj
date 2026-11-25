@@ -172,7 +172,7 @@ check_tree() {
   else
     print -r -- "PASS: only $WFNAMES changed under .github/workflows (Windows and repair untouched)"
     for wf in $WORKFLOWS; do
-      if g show HEAD:$wf | grep -qE "^    branches: \[.*$BRANCH[],]"; then print -r -- "PASS: $wf push branches name $BRANCH"
+      if g show HEAD:$wf | grep -qE "^    branches: \[.*${BRANCH}[],]"; then print -r -- "PASS: $wf push branches name $BRANCH"
       else print -r -- "FAIL: $wf push branches do not name $BRANCH"; (( bad++ )); fi
     done
     local linux=("${(@f)$(g diff -U0 $BASE HEAD -- .github/workflows/desktop-linux-adoption.yml | grep -E '^[-+]' | grep -vE '^(---|\+\+\+) ')}")

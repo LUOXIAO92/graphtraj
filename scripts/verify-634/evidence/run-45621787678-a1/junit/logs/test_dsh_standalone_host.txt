@@ -1,0 +1,136 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 35 items
+
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document0-must be a JSON object] PASSED [  2%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document1-Unknown DSH host configuration keys] PASSED [  5%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document2-absolute data root] PASSED [  8%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document3-absolute data root] PASSED [ 11%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] FAILED [ 14%]
+tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings FAILED [ 17%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields0] PASSED [ 20%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields1] PASSED [ 22%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields2] PASSED [ 25%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields3] PASSED [ 28%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields4] PASSED [ 31%]
+tests/test_dsh_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults PASSED [ 34%]
+tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models PASSED [ 37%]
+tests/test_dsh_standalone_host.py::test_codex_without_settings_is_refused_at_create PASSED [ 40%]
+tests/test_dsh_standalone_host.py::test_notice_receiver_outcomes PASSED  [ 42%]
+tests/test_dsh_standalone_host.py::test_each_message_request_and_error_reaches_the_main_once PASSED [ 45%]
+tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question PASSED [ 48%]
+tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session FAILED [ 51%]
+tests/test_dsh_standalone_host.py::test_host_start_refusals FAILED       [ 54%]
+tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on FAILED [ 57%]
+tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh FAILED [ 60%]
+tests/test_dsh_standalone_host.py::test_dsh_package_declares_the_host_bundle PASSED [ 62%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_relays_each_notice_to_its_main_session SKIPPED [ 65%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_is_inert_inside_an_agent SKIPPED [ 68%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[None] SKIPPED [ 71%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[] SKIPPED [ 74%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[None] SKIPPED [ 77%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[relative/project] SKIPPED [ 80%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[/nonexistent-570/project] SKIPPED [ 82%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[file] SKIPPED [ 85%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root FAILED [ 88%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_reports_an_unwritable_project SKIPPED [ 91%]
+tests/test_dsh_standalone_host.py::test_default_configuration_is_the_project_root_without_runtime_settings PASSED [ 94%]
+tests/test_dsh_standalone_host.py::test_default_host_records_land_in_the_project PASSED [ 97%]
+tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=c49fdb3472a842dca9cafbdc2bbebd46: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+______ test_configuration_refusals[document4-"claude" must be an object] ______
+tests\test_dsh_standalone_host.py:40: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\dsh\host.py:102: in read_configuration
+    raise ValueError('The DSH host configuration needs an absolute data root "root".')
+E   ValueError: The DSH host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_dsh_standalone_host.py:39: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '"claude" must be an object'
+E    Input: 'The DSH host configuration needs an absolute data root "root".'
+__________ test_configuration_accepts_root_and_per_runtime_settings ___________
+tests\test_dsh_standalone_host.py:45: in test_configuration_accepts_root_and_per_runtime_settings
+    root, settings = host.read_configuration({'root': '/data'})
+src\graftling\dsh\host.py:102: in read_configuration
+    raise ValueError('The DSH host configuration needs an absolute data root "root".')
+E   ValueError: The DSH host configuration needs an absolute data root "root".
+______________ test_host_binds_only_the_supplied_native_session _______________
+tests\test_dsh_standalone_host.py:356: in test_host_binds_only_the_supplied_native_session
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+E     
+E   assert 1 == 0
+__________________________ test_host_start_refusals ___________________________
+tests\test_dsh_standalone_host.py:372: in test_host_start_refusals
+    assert 'native DSH main Session' in refused(
+E   AssertionError: assert 'native DSH main Session' in 'Exact process arguments are unavailable on this platform'
+_____________________ test_host_starts_with_archiving_on ______________________
+tests\test_dsh_standalone_host.py:386: in test_host_starts_with_archiving_on
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+E     
+E   assert 1 == 0
+____________ test_host_refuses_a_parent_that_is_not_the_native_dsh ____________
+tests\test_dsh_standalone_host.py:401: in test_host_refuses_a_parent_that_is_not_the_native_dsh
+    assert 'not owned by the native DSH process' in json.loads(result.stderr)['error']['message']
+E   AssertionError: assert 'not owned by the native DSH process' in 'Exact process arguments are unavailable on this platform'
+________ test_host_without_configuration_serves_the_project_data_root _________
+tests\test_dsh_standalone_host.py:583: in test_host_without_configuration_serves_the_project_data_root
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+E     
+E   assert 1 == 0
+____________ test_default_root_is_shared_with_the_claude_code_host ____________
+D:\a\graftling\graftling\tests\test_dsh_standalone_host.py:690: in test_default_root_is_shared_with_the_claude_code_host
+    claude_host.require_free_channel(root / 'live' / 'channel.json')   # the DSH host is not "another host"
+D:\a\graftling\graftling\src\graftling\claude\host.py:135: in require_free_channel
+    owner = live_channel(channel_file)
+D:\a\graftling\graftling\src\graftling\claude\host.py:120: in live_channel
+    return endpoint if host_alive(endpoint['address']) else None
+D:\a\graftling\graftling\src\graftling\connection.py:163: in host_alive
+    descriptor = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
+E   AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+---------------------------- Captured stdout call -----------------------------
+{"notice": {"id": "9a29e7cdf7ed4a669c059fd9a94dfd95:completed", "agent": "agent-24abe158c8d9449daf0175b02bd82a12", "session": "native-d82a12", "event": "completed", "message": "answer", "execution": "9a29e7cdf7ed4a669c059fd9a94dfd95", "text": "[Graftling notice from agent-24abe158c8d9449daf0175b02bd82a12 \u00b7 completed \u00b7 execution 9a29e7cdf7ed4a669c059fd9a94dfd95]\n\nanswer"}}
+{"notice": {"id": "e1e5854463804429906f04eff8f486b3:completed", "agent": "agent-bcca0f0d7e2d43ceb963e3de6ffc72ad", "session": "native-fc72ad", "event": "completed", "message": "answer", "execution": "e1e5854463804429906f04eff8f486b3", "text": "[Graftling notice from agent-bcca0f0d7e2d43ceb963e3de6ffc72ad \u00b7 completed \u00b7 execution e1e5854463804429906f04eff8f486b3]\n\nanswer"}}
+{"notice": {"id": "81dc89a5dff44244acb25ffdfe5e522d:completed", "agent": "agent-827a57f6e3ef4ababcb82eaf298307a3", "session": "native-8307a3", "event": "completed", "message": "answer", "execution": "81dc89a5dff44244acb25ffdfe5e522d", "text": "[Graftling notice from agent-827a57f6e3ef4ababcb82eaf298307a3 \u00b7 completed \u00b7 execution 81dc89a5dff44244acb25ffdfe5e522d]\n\nanswer"}}
+{"notice": {"id": "ef65bb84bb85463cb14c61d7d056fe42:completed", "agent": "agent-1a01abb760d443c98ff63757b492caac", "session": "native-92caac", "event": "completed", "message": "answer", "execution": "ef65bb84bb85463cb14c61d7d056fe42", "text": "[Graftling notice from agent-1a01abb760d443c98ff63757b492caac \u00b7 completed \u00b7 execution ef65bb84bb85463cb14c61d7d056fe42]\n\nanswer"}}
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_standalone_host.xml -
+============================ slowest 10 durations =============================
+0.53s call     tests/test_dsh_standalone_host.py::test_host_start_refusals
+0.28s call     tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host
+0.28s call     tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question
+0.27s call     tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root
+0.27s call     tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session
+0.26s call     tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on
+0.22s call     tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh
+0.15s call     tests/test_dsh_standalone_host.py::test_each_message_request_and_error_reaches_the_main_once
+0.11s call     tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models
+0.05s call     tests/test_dsh_standalone_host.py::test_notice_receiver_outcomes
+=========================== short test summary info ===========================
+FAILED tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] - AssertionError: Regex pattern did not match.
+ Regex: '"claude" must be an object'
+ Input: 'The DSH host configuration needs an absolute data root "root".'
+FAILED tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings - ValueError: The DSH host configuration needs an absolute data root "root".
+FAILED tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session - AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+  
+assert 1 == 0
+FAILED tests/test_dsh_standalone_host.py::test_host_start_refusals - AssertionError: assert 'native DSH main Session' in 'Exact process arguments are unavailable on this platform'
+FAILED tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on - AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+  
+assert 1 == 0
+FAILED tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh - AssertionError: assert 'not owned by the native DSH process' in 'Exact process arguments are unavailable on this platform'
+FAILED tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root - AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+  
+assert 1 == 0
+FAILED tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host - AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+SKIPPED [8] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_dsh_standalone_host.py:593: POSIX-only: a read-only directory made with chmod 0o555 and checked with os.geteuid
+=================== 8 failed, 18 passed, 9 skipped in 2.94s ===================

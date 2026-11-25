@@ -1,0 +1,176 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 27 items
+
+tests/test_pi_standalone_host.py::test_configuration_refusals[document0-must be a JSON object] PASSED [  3%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document1-adapter_request is no longer accepted] PASSED [  7%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document2-Unknown Pi host configuration keys] PASSED [ 11%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document3-absolute data root] PASSED [ 14%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document4-absolute data root] PASSED [ 18%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document5-"claude" must be an object] FAILED [ 22%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document6-worktree_path is always the cwd] FAILED [ 25%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document7-Unknown or fixed Pi settings] FAILED [ 29%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document8-non-empty string] FAILED [ 33%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document9-absolute paths] FAILED [ 37%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document10-'read' or 'write'] FAILED [ 40%]
+tests/test_pi_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings FAILED [ 44%]
+tests/test_pi_standalone_host.py::test_default_request_comes_from_the_native_parent PASSED [ 48%]
+tests/test_pi_standalone_host.py::test_default_request_refusals_and_write_access PASSED [ 51%]
+tests/test_pi_standalone_host.py::test_child_model_is_not_bound_to_the_parent_model PASSED [ 55%]
+tests/test_pi_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults PASSED [ 59%]
+tests/test_pi_standalone_host.py::test_codex_without_settings_is_refused_at_create PASSED [ 62%]
+tests/test_pi_standalone_host.py::test_pi_host_routes_creates_to_every_runtime PASSED [ 66%]
+tests/test_pi_standalone_host.py::test_notice_receiver_outcomes PASSED   [ 70%]
+tests/test_pi_standalone_host.py::test_notice_waiting_at_shutdown_is_held_and_later_ones_are_not_written PASSED [ 74%]
+tests/test_pi_standalone_host.py::test_a_body_being_pushed_is_shown_queueing_with_its_body PASSED [ 77%]
+tests/test_pi_standalone_host.py::test_each_end_is_pushed_once_and_shutdown_ends_are_held PASSED [ 81%]
+tests/test_pi_standalone_host.py::test_pi_package_manifest_loads_the_extension PASSED [ 85%]
+tests/test_pi_standalone_host.py::test_host_starts_from_root_only_and_closes_at_shutdown FAILED [ 88%]
+tests/test_pi_standalone_host.py::test_host_start_refusals FAILED        [ 92%]
+tests/test_pi_standalone_host.py::test_extension_injects_each_notice_natively_and_acknowledges_it SKIPPED [ 96%]
+tests/test_pi_standalone_host.py::test_extension_reports_a_notice_it_could_not_inject SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=da2a31f49c6d482891d25a97cd986862: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+______ test_configuration_refusals[document5-"claude" must be an object] ______
+tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '"claude" must be an object'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'
+___ test_configuration_refusals[document6-worktree_path is always the cwd] ____
+tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'worktree_path is always the cwd'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'
+_____ test_configuration_refusals[document7-Unknown or fixed Pi settings] _____
+tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'Unknown or fixed Pi settings'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'
+___________ test_configuration_refusals[document8-non-empty string] ___________
+tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'non-empty string'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'
+____________ test_configuration_refusals[document9-absolute paths] ____________
+tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'absolute paths'
+E    Input: 'The Pi host configuration needs an absolute data root "root".'
+__________ test_configuration_refusals[document10-'read' or 'write'] __________
+tests\test_pi_standalone_host.py:45: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_pi_standalone_host.py:44: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: "'read' or 'write'"
+E    Input: 'The Pi host configuration needs an absolute data root "root".'
+__________ test_configuration_accepts_root_and_per_runtime_settings ___________
+tests\test_pi_standalone_host.py:50: in test_configuration_accepts_root_and_per_runtime_settings
+    root, settings = host.read_configuration({'root': '/data'})
+src\graftling\pi\host.py:125: in read_configuration
+    raise ValueError('The Pi host configuration needs an absolute data root "root".')
+E   ValueError: The Pi host configuration needs an absolute data root "root".
+___________ test_host_starts_from_root_only_and_closes_at_shutdown ____________
+tests\test_pi_standalone_host.py:395: in test_host_starts_from_root_only_and_closes_at_shutdown
+    assert process.returncode == 0, process.stderr.read()
+E   AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+E     
+E   assert 1 == 0
+E    +  where 1 = <Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...>.returncode
+__________________________ test_host_start_refusals ___________________________
+tests\test_pi_standalone_host.py:411: in test_host_start_refusals
+    assert refused({'root': str(data)})['code'] == 'runtime-unavailable'
+E   AssertionError: assert 'invalid-config' == 'runtime-unavailable'
+E     
+E     - runtime-unavailable
+E     + invalid-config
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_standalone_host.xml -
+============================ slowest 10 durations =============================
+0.36s call     tests/test_pi_standalone_host.py::test_host_start_refusals
+0.19s call     tests/test_pi_standalone_host.py::test_host_starts_from_root_only_and_closes_at_shutdown
+0.17s call     tests/test_pi_standalone_host.py::test_each_end_is_pushed_once_and_shutdown_ends_are_held
+0.15s call     tests/test_pi_standalone_host.py::test_pi_host_routes_creates_to_every_runtime
+0.13s call     tests/test_pi_standalone_host.py::test_default_request_refusals_and_write_access
+0.06s call     tests/test_pi_standalone_host.py::test_notice_receiver_outcomes
+0.06s setup    tests/test_pi_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults
+0.01s setup    tests/test_pi_standalone_host.py::test_default_request_comes_from_the_native_parent
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_pi_standalone_host.py::test_configuration_refusals[document5-"claude" must be an object] - AssertionError: Regex pattern did not match.
+ Regex: '"claude" must be an object'
+ Input: 'The Pi host configuration needs an absolute data root "root".'
+FAILED tests/test_pi_standalone_host.py::test_configuration_refusals[document6-worktree_path is always the cwd] - AssertionError: Regex pattern did not match.
+ Regex: 'worktree_path is always the cwd'
+ Input: 'The Pi host configuration needs an absolute data root "root".'
+FAILED tests/test_pi_standalone_host.py::test_configuration_refusals[document7-Unknown or fixed Pi settings] - AssertionError: Regex pattern did not match.
+ Regex: 'Unknown or fixed Pi settings'
+ Input: 'The Pi host configuration needs an absolute data root "root".'
+FAILED tests/test_pi_standalone_host.py::test_configuration_refusals[document8-non-empty string] - AssertionError: Regex pattern did not match.
+ Regex: 'non-empty string'
+ Input: 'The Pi host configuration needs an absolute data root "root".'
+FAILED tests/test_pi_standalone_host.py::test_configuration_refusals[document9-absolute paths] - AssertionError: Regex pattern did not match.
+ Regex: 'absolute paths'
+ Input: 'The Pi host configuration needs an absolute data root "root".'
+FAILED tests/test_pi_standalone_host.py::test_configuration_refusals[document10-'read' or 'write'] - AssertionError: Regex pattern did not match.
+ Regex: "'read' or 'write'"
+ Input: 'The Pi host configuration needs an absolute data root "root".'
+FAILED tests/test_pi_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings - ValueError: The Pi host configuration needs an absolute data root "root".
+FAILED tests/test_pi_standalone_host.py::test_host_starts_from_root_only_and_closes_at_shutdown - AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+  
+assert 1 == 0
+ +  where 1 = <Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...>.returncode
+FAILED tests/test_pi_standalone_host.py::test_host_start_refusals - AssertionError: assert 'invalid-config' == 'runtime-unavailable'
+  
+  - runtime-unavailable
+  + invalid-config
+SKIPPED [2] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+=================== 9 failed, 16 passed, 2 skipped in 1.48s ===================

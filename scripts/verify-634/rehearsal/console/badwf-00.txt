@@ -9,9 +9,10 @@ $ gh auth status --hostname github.com   (token lines removed)
     - Active account: true
 PASS: /tmp/claude-501/rh634/badwf/graftling origin is https://github.com/LUOXIAO92/graftling.git
 NOTE: rehearsal remote /tmp/claude-501/rh634/badwf/gremote.git is used instead of graftling origin
-PASS: bundle verifies against /tmp/claude-501/rh634/badwf/graftling; head ae0c8716d732b729f9f1e8f746e5961a7d68f8a7 on base defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: bundle verifies against /tmp/claude-501/rh634/badwf/graftling; head 8887c85069841eba29e00e70ee1586a4fb3f1705 on base defad1db083e911900cbea1cb0ef165e6a66d322
 --- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
-  ae0c871 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+  8887c85 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+  0dd20cf LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: archive header lookup and test polls of published files retry a transient open refusal (634 correction 2)
   f64509d LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: lock-free readers of published files retry a transient open refusal (634 correction 1)
   2fadc6c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: locks without the 10 s limit, try_exclusive, durable replacement (634)
 PASS: author and committer are the noreply identity
@@ -25,12 +26,15 @@ PASS: author and committer are the noreply identity
    src/graftling/durable.py               | 169 ++++++++++++++++++++++
    src/graftling/locks.py                 |  73 ++++++++--
    src/graftling/pi/execution.py          |  14 +-
-   src/graftling/sessions/archive.py      |  46 +++---
+   src/graftling/sessions/archive.py      |  48 +++----
    src/graftling/tool_descendants.py      |  14 +-
    tests/test_agent_control.py            |   8 +-
+   tests/test_dsh_standalone_host.py      |   3 +-
+   tests/test_host_shutdown_stop.py       |   5 +-
    tests/test_locks_durable_634.py        | 255 +++++++++++++++++++++++++++++++++
+   tests/test_pi_dsh_notice_holding.py    |   3 +-
    tests/test_windows_emulation_619.py    |  24 ++--
-   14 files changed, 697 insertions(+), 122 deletions(-)
+   17 files changed, 705 insertions(+), 127 deletions(-)
 PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml
 FAIL: .github/workflows/windows.yml differs from defad1db083e911900cbea1cb0ef165e6a66d322 otherwise than the one push branches line:
   -    branches: [agent/632-graftling-windows-ci, dev]
@@ -43,5 +47,5 @@ W2 (634) entries left in the list: 0
 PASS: /tmp/claude-501/rh634/badwf/graftling has no local agent/634-graftling-windows-durable-writes (P creates it from the bundle)
 PASS: agent/634-graftling-windows-durable-writes is absent on graftling /tmp/claude-501/rh634/badwf/gremote.git
 next: fix the FAIL lines above (new bundle from the Engineer), then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/steps.zsh 00
-VERDICT 634 00: PASS (P ready: no; remote branch absent; candidate graftling ae0c8716d732b729f9f1e8f746e5961a7d68f8a7)
+VERDICT 634 00: PASS (P ready: no; remote branch absent; candidate graftling 8887c85069841eba29e00e70ee1586a4fb3f1705)
 [exit 0]

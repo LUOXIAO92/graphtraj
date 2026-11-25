@@ -29,6 +29,9 @@ step() {  # step <scenario> <file> <step> [args]: run one step with the knobs, k
   env $(knobs $sc ${APPEAR:-10}) zsh $STEPS "$@" >> $OUT/$file 2>&1; print -r -- "[exit $?]" >> $OUT/$file
   print -r -- "--- $file"; tail -2 $OUT/$file
 }
+# Main's real P already fetched the bundle into <Harness>/graftling (agent/619 at the bundle head, 15:12 +0900).
+real_state() { git -C $REAL for-each-ref --format='%(refname) %(objectname)' refs/heads; git -C $REAL reflog show --date=iso agent/619-graftling-windows-import 2>&1; }
+BEFORE=$(real_state)
 fresh success; step success success-00.txt 00; step success success-P.txt P; step success success-00-again.txt 00
 rm -f $S/success/gh/polls; step success success-W.txt W
 fresh counted-fail; step counted-fail counted-fail-P.txt P
@@ -42,5 +45,7 @@ tail -1 $OUT/escape-log-P.txt
 APPEAR=4; fresh timeout; step timeout timeout-P.txt P; APPEAR=10
 # Guard: a local 619 branch in the graftling clone that differs from the bundle head stops 00 (never overwritten).
 fresh guard; git -C $S/guard/graftling branch -q agent/619-graftling-windows-import 82e9d12; step guard guard-local-00.txt 00
-# The real <Harness>/graftling was only read: no 619 branch there.
-print -r -- "real graftling 619 branch after rehearsal: '$(git -C $REAL branch --list 'agent/619*')' (expected empty)" | tee $OUT/real-graftling-untouched.txt
+# The real <Harness>/graftling was only read: its branches and the 619 reflog are the same before and after.
+AFTER=$(real_state)
+{ print -r -- "real graftling before rehearsal:"; print -r -- $BEFORE; print -r -- "after:"; print -r -- $AFTER
+  [[ $BEFORE == $AFTER ]] && print -r -- "UNCHANGED (the rehearsal wrote only scratch clones)" || print -r -- "CHANGED"; } | tee $OUT/real-graftling-untouched.txt

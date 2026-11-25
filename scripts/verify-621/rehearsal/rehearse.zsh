@@ -33,6 +33,11 @@ step() {  # step <scenario> <file> <step> [args]: run one step with the knobs, k
   env $(knobs $sc ${APPEAR:-10}) zsh $STEPS "$@" >> $OUT/$file 2>&1; print -r -- "[exit $?]" >> $OUT/$file
   print -r -- "--- $file"; tail -3 $OUT/$file
 }
+# `rehearse.zsh <dir> push-ok <tag>`: only 00 and P success of the push mode, consoles named <tag>-00/<tag>-P-success.
+if [[ ${2:-} == push-ok ]]; then
+  fresh push-success; step push-success ${3:?tag}-00.txt 00; step push-success $3-P-success.txt P
+  exit 0
+fi
 # `rehearse.zsh <dir> push`: HEAD holds the port and the two trigger lines; P pushes and observes both push runs.
 if [[ ${2:-} == push ]]; then
   fresh push-success; step push-success push-00.txt 00; step push-success push-P-success.txt P

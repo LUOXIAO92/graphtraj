@@ -1,0 +1,2139 @@
+
+### tests/test_agent_completion.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 3 items
+
+tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True] PASSED [ 33%]
+tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[False] PASSED [ 66%]
+tests/test_agent_completion.py::test_standby_parent_continues_once_with_real_child_notice PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_agent_completion.xml -
+============================= slowest 10 durations =============================
+0.01s call     tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True]
+0.01s call     tests/test_agent_completion.py::test_standby_parent_continues_once_with_real_child_notice
+0.01s call     tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[False]
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 3 passed in 0.11s ===============================
+
+### tests/test_agent_control.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 23 items
+
+tests/test_agent_control.py::test_lifecycle_create_send_wait_interrupt_resume_retire PASSED [  4%]
+tests/test_agent_control.py::test_hierarchy_uses_true_parents_and_caller_scope PASSED [  8%]
+tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice PASSED [ 13%]
+tests/test_agent_control.py::test_unknown_delivery_is_recorded_and_not_resent PASSED [ 17%]
+tests/test_agent_control.py::test_send_while_the_execution_finishes_goes_to_the_next_execution PASSED [ 21%]
+tests/test_agent_control.py::test_a_refusal_without_a_finishing_fact_goes_to_the_next_execution PASSED [ 26%]
+tests/test_agent_control.py::test_send_refused_by_an_execution_that_never_ends_stays_refused PASSED [ 30%]
+tests/test_agent_control.py::test_a_refusal_of_an_execution_that_is_not_finishing_returns_at_once_rejected[request-pending] PASSED [ 34%]
+tests/test_agent_control.py::test_a_refusal_of_an_execution_that_is_not_finishing_returns_at_once_rejected[not-finishing] PASSED [ 39%]
+tests/test_agent_control.py::test_native_requests_reply_once_and_reject_stale_executions PASSED [ 43%]
+tests/test_agent_control.py::test_failed_start_keeps_the_native_reason PASSED [ 47%]
+tests/test_agent_control.py::test_lost_owner_keeps_process_facts_and_blocks_duplicates PASSED [ 52%]
+tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone PASSED [ 56%]
+tests/test_agent_control.py::test_config_is_owned_by_the_data_root PASSED [ 60%]
+tests/test_agent_control.py::test_archive_is_bound_only_when_enabled PASSED [ 65%]
+tests/test_agent_control.py::test_core_imports_and_runs_without_graphtraj[None] PASSED [ 69%]
+tests/test_agent_control.py::test_core_imports_and_runs_without_graphtraj[existing-user-connection] PASSED [ 73%]
+tests/test_agent_control.py::test_public_creator_preserves_external_root_scope PASSED [ 78%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[None] PASSED [ 82%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[prompt_started] PASSED [ 86%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[native_session_bound] PASSED [ 91%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[wrapper_exited] PASSED [ 95%]
+tests/test_agent_control.py::test_same_agent_retries_only_proven_unbound_start[owned_process_group_exited] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_agent_control.xml -
+============================= slowest 10 durations =============================
+0.34s call     tests/test_agent_control.py::test_send_while_the_execution_finishes_goes_to_the_next_execution
+0.33s call     tests/test_agent_control.py::test_a_refusal_without_a_finishing_fact_goes_to_the_next_execution
+0.22s call     tests/test_agent_control.py::test_send_refused_by_an_execution_that_never_ends_stays_refused
+0.21s call     tests/test_agent_control.py::test_native_requests_reply_once_and_reject_stale_executions
+0.12s call     tests/test_agent_control.py::test_lifecycle_create_send_wait_interrupt_resume_retire
+0.11s call     tests/test_agent_control.py::test_core_imports_and_runs_without_graphtraj[existing-user-connection]
+0.11s call     tests/test_agent_control.py::test_core_imports_and_runs_without_graphtraj[None]
+0.10s call     tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone
+0.07s call     tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice
+0.06s call     tests/test_agent_control.py::test_hierarchy_uses_true_parents_and_caller_scope
+============================== 23 passed in 1.93s ==============================
+
+### tests/test_agents_connections_presets.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 59 items
+
+tests/test_agents_connections_presets.py::test_connections_and_presets_are_read_with_their_names PASSED [  1%]
+tests/test_agents_connections_presets.py::test_no_file_and_boolean_only_files_read_as_before PASSED [  3%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    token: x\n-4-connections.a.token: unknown field] PASSED [  5%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n  a:\n    runtime: codex\n-4-a is repeated] PASSED [  6%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    runtime: codex\n-4-runtime is repeated] PASSED [  8%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: gemini\n-3-connections.a.runtime: expected one of] PASSED [ 10%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    home: /x\n-2-connections.a.runtime: required] PASSED [ 11%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    models: claude\n-4-expected a non-empty list] PASSED [ 13%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    models: [x, x]\n-4-a model id is repeated] PASSED [ 15%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    models: [{alias: y}]\n-4-models.id: required] PASSED [ 16%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    home: relative\n-4-expected an absolute path] PASSED [ 18%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    api_key_env: sk-123\n-4-never a key] PASSED [ 20%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    base_url: https://u:p@h/\n-4-credential-free] PASSED [ 22%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: 3\n-3-expected a non-empty string] PASSED [ 23%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[presets:\n  p:\n    connection: missing\n-3-no connection 'missing' is declared] PASSED [ 25%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[presets:\n  p:\n    model: m\n-2-give either connection or runtime] PASSED [ 27%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\npresets:\n  p:\n    connection: a\n    runtime: claude\n-5-give either connection or runtime] PASSED [ 28%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[presets:\n  p:\n    runtime: pi\n    effort: high\n-4-presets.p.effort: unknown field] PASSED [ 30%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[save_normalized_sessions: "true"\n-1-true or false] PASSED [ 32%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[save_normalized_sessions: yes\n-1-true or false] PASSED [ 33%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[backfill_history: true\nbackfill_history: false\n-2-backfill_history is repeated] PASSED [ 35%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[roles: {}\n-1-roles: unknown field] PASSED [ 37%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections: [a]\n-1-connections must be a mapping] PASSED [ 38%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a: {runtime: claude\n-3-not valid YAML] PASSED [ 40%]
+tests/test_agents_connections_presets.py::test_writing_a_choice_keeps_connections_presets_and_comments PASSED [ 42%]
+tests/test_agents_connections_presets.py::test_no_connections_keeps_the_original_prepare_call PASSED [ 44%]
+tests/test_agents_connections_presets.py::test_preset_fills_model_and_effort_and_the_document_reports_them PASSED [ 45%]
+tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted PASSED [ 47%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments0-invalid-preset-Preset 'missing' is not declared] PASSED [ 49%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments1-invalid-preset-uses Runtime 'claude'] PASSED [ 50%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments2-invalid-model-contradicts preset 'reviewer'] PASSED [ 52%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments3-invalid-reasoning-effort-contradicts preset 'reviewer'] PASSED [ 54%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments4-invalid-model-is not a candidate] PASSED [ 55%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments5-invalid-reasoning-effort-supports reasoning_effort ['low', 'high']] PASSED [ 57%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments6-unsupported-runtime-Runtime 'pi'] PASSED [ 59%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments7-invalid-input-request.preset: must not be empty] PASSED [ 61%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments8-invalid-input-request.effort] PASSED [ 62%]
+tests/test_agents_connections_presets.py::test_a_model_discovery_cannot_verify_is_refused PASSED [ 64%]
+tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts PASSED [ 66%]
+tests/test_agents_connections_presets.py::test_without_a_connection_a_model_is_checked_against_the_native_login PASSED [ 67%]
+tests/test_agents_connections_presets.py::test_several_connections_for_one_runtime_need_a_preset PASSED [ 69%]
+tests/test_agents_connections_presets.py::test_an_invalid_config_fails_create_with_its_line PASSED [ 71%]
+tests/test_agents_connections_presets.py::test_a_driver_without_selection_support_refuses_a_choice PASSED [ 72%]
+tests/test_agents_connections_presets.py::test_create_schema_lists_the_new_optional_arguments PASSED [ 74%]
+tests/test_agents_connections_presets.py::test_one_host_registers_drivers_for_several_runtimes PASSED [ 76%]
+tests/test_agents_connections_presets.py::test_a_declared_runtime_without_a_driver_is_refused_at_host_start PASSED [ 77%]
+tests/test_agents_connections_presets.py::test_an_unavailable_runtime_fails_create_without_an_agent PASSED [ 79%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[claude] PASSED [ 81%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[codex] PASSED [ 83%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[pi] PASSED [ 84%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[dsh] PASSED [ 86%]
+tests/test_agents_connections_presets.py::test_claude_driver_applies_connection_model_and_effort PASSED [ 88%]
+tests/test_agents_connections_presets.py::test_codex_driver_applies_connection_model_and_effort PASSED [ 89%]
+tests/test_agents_connections_presets.py::test_pi_driver_applies_model_and_effort_and_resolves_another_provider PASSED [ 91%]
+tests/test_agents_connections_presets.py::test_dsh_driver_applies_connection_model_and_effort PASSED [ 93%]
+tests/test_agents_connections_presets.py::test_boolean_only_files_keep_the_previous_grammar[backfill_history:true\n-expected0] PASSED [ 94%]
+tests/test_agents_connections_presets.py::test_boolean_only_files_keep_the_previous_grammar[  save_normalized_sessions: false\nbackfill_history: true  # note\n-expected1] PASSED [ 96%]
+tests/test_agents_connections_presets.py::test_a_non_boolean_choice_beside_connections_is_refused PASSED [ 98%]
+tests/test_agents_connections_presets.py::test_a_third_party_named_claude_connection_keeps_its_models PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_agents_connections_presets.xml -
+============================= slowest 10 durations =============================
+0.17s call     tests/test_agents_connections_presets.py::test_claude_driver_applies_connection_model_and_effort
+0.14s call     tests/test_agents_connections_presets.py::test_a_third_party_named_claude_connection_keeps_its_models
+0.06s call     tests/test_agents_connections_presets.py::test_dsh_driver_applies_connection_model_and_effort
+0.02s call     tests/test_agents_connections_presets.py::test_one_host_registers_drivers_for_several_runtimes
+0.01s call     tests/test_agents_connections_presets.py::test_several_connections_for_one_runtime_need_a_preset
+0.01s call     tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts
+0.01s call     tests/test_agents_connections_presets.py::test_preset_fills_model_and_effort_and_the_document_reports_them
+0.01s setup    tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    api_key_env: sk-123\n-4-never a key]
+0.01s call     tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted
+
+(1 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 59 passed in 2.10s ==============================
+
+### tests/test_agents_request_notices.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 4 items
+
+tests/test_agents_request_notices.py::test_root_request_notifies_the_host_once_per_request PASSED [ 25%]
+tests/test_agents_request_notices.py::test_without_request_notices_only_ends_reach_the_host PASSED [ 50%]
+tests/test_agents_request_notices.py::test_a_failing_receiver_leaves_the_request_readable PASSED [ 75%]
+tests/test_agents_request_notices.py::test_a_parent_agents_native_receiver_gets_the_request PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_agents_request_notices.xml -
+============================= slowest 10 durations =============================
+0.01s call     tests/test_agents_request_notices.py::test_a_parent_agents_native_receiver_gets_the_request
+0.01s call     tests/test_agents_request_notices.py::test_root_request_notifies_the_host_once_per_request
+
+(8 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 4 passed in 0.10s ===============================
+
+### tests/test_agents_server_name.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 7 items
+
+tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[None] PASSED [ 14%]
+tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[graphtraj] PASSED [ 28%]
+tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graftling] PASSED [ 42%]
+tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graphtraj] PASSED [ 57%]
+tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[None] PASSED [ 71%]
+tests/test_agents_server_name.py::test_dsh_review_row_names_the_server_the_plugin_row_registers[True] PASSED [ 85%]
+tests/test_agents_server_name.py::test_dsh_review_row_names_the_server_the_plugin_row_registers[False] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_agents_server_name.xml -
+============================= slowest 10 durations =============================
+0.05s call     tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[None]
+0.05s call     tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[graphtraj]
+0.05s call     tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[None]
+0.04s call     tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graftling]
+0.04s call     tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graphtraj]
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 7 passed in 0.40s ===============================
+
+### tests/test_approval_integration.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 3 items
+
+tests/test_approval_integration.py::test_ask_parent_notifies_the_parent_once_when_the_host_enables_request_notices PASSED [ 33%]
+tests/test_approval_integration.py::test_create_keeps_both_workspace_and_extra_fields PASSED [ 66%]
+tests/test_approval_integration.py::test_relayed_review_notifies_the_parent_once_under_request_notices PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_approval_integration.xml -
+============================= slowest 10 durations =============================
+0.23s call     tests/test_approval_integration.py::test_relayed_review_notifies_the_parent_once_under_request_notices
+0.21s call     tests/test_approval_integration.py::test_ask_parent_notifies_the_parent_once_when_the_host_enables_request_notices
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 3 passed in 0.64s ===============================
+
+### tests/test_approval_layers.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 36 items
+
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[claude] PASSED [  2%]
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[codex] PASSED [  5%]
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[dsh] PASSED [  8%]
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[pi] PASSED [ 11%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[claude] PASSED [ 13%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[codex] PASSED [ 16%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[dsh] PASSED [ 19%]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[pi] PASSED [ 22%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[claude] PASSED [ 25%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[codex] PASSED [ 27%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[dsh] PASSED [ 30%]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[pi] PASSED [ 33%]
+tests/test_approval_layers.py::test_parent_cannot_grant_more_than_the_request_asked PASSED [ 36%]
+tests/test_approval_layers.py::test_review_decision_is_read_strictly[{"decision": "allow", "reason": "Reads a file."}-expected0] PASSED [ 38%]
+tests/test_approval_layers.py::test_review_decision_is_read_strictly[answer1-expected1] PASSED [ 41%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[] PASSED [ 44%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[allow] PASSED [ 47%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[[]] PASSED [ 50%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow"}] PASSED [ 52%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": ""}] PASSED [ 55%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "yes", "reason": "x"}] PASSED [ 58%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x", "extra": 1}] PASSED [ 61%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x", "category": "low"}] PASSED [ 63%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x", "decision": "deny"}] PASSED [ 66%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[{"decision": "allow", "reason": "x"} trailing] PASSED [ 69%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[None] PASSED [ 72%]
+tests/test_approval_layers.py::test_a_failed_review_refuses_and_goes_to_the_parent[3] PASSED [ 75%]
+tests/test_approval_layers.py::test_child_asks_parent_for_resources_and_waits_for_the_answer PASSED [ 77%]
+tests/test_approval_layers.py::test_unanswered_ask_returns_no_answer_and_root_callers_cannot_ask PASSED [ 80%]
+tests/test_approval_layers.py::test_ask_parent_is_a_discoverable_feature PASSED [ 83%]
+tests/test_approval_layers.py::test_workspace_narrows_inside_the_parent_and_is_refused_outside PASSED [ 86%]
+tests/test_approval_layers.py::test_a_driver_that_cannot_assign_a_workspace_refuses_instead_of_widening PASSED [ 88%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[claude] PASSED [ 91%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[codex] PASSED [ 94%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[dsh] PASSED [ 97%]
+tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[pi] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_approval_layers.xml -
+============================= slowest 10 durations =============================
+0.21s call     tests/test_approval_layers.py::test_unanswered_ask_returns_no_answer_and_root_callers_cannot_ask
+0.16s call     tests/test_approval_layers.py::test_child_asks_parent_for_resources_and_waits_for_the_answer
+0.01s call     tests/test_approval_layers.py::test_workspace_narrows_inside_the_parent_and_is_refused_outside
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 36 passed in 0.57s ==============================
+
+### tests/test_archive_header_lookup.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 2 items
+
+tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened PASSED [ 50%]
+tests/test_archive_header_lookup.py::test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_archive_header_lookup.xml -
+============================= slowest 10 durations =============================
+0.01s call     tests/test_archive_header_lookup.py::test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 2 passed in 0.09s ===============================
+
+### tests/test_child_server_name_551.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 8 items
+
+tests/test_child_server_name_551.py::test_default_server_name_is_unchanged PASSED [ 12%]
+tests/test_child_server_name_551.py::test_pi_names_its_server_only_when_the_owner_chose_one PASSED [ 25%]
+tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server PASSED [ 37%]
+tests/test_child_server_name_551.py::test_codex_child_server_replaces_a_captured_entry_of_that_name PASSED [ 50%]
+tests/test_child_server_name_551.py::test_codex_child_host_tools_need_no_approval PASSED [ 62%]
+tests/test_child_server_name_551.py::test_codex_disallowed_owner_tool_is_dropped_not_refused PASSED [ 75%]
+tests/test_child_server_name_551.py::test_codex_tool_choice_keeps_the_owner_server PASSED [ 87%]
+tests/test_child_server_name_551.py::test_codex_unknown_server_is_still_refused PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_child_server_name_551.xml -
+============================= slowest 10 durations =============================
+0.32s call     tests/test_child_server_name_551.py::test_codex_child_host_tools_need_no_approval
+0.30s call     tests/test_child_server_name_551.py::test_codex_disallowed_owner_tool_is_dropped_not_refused
+0.29s call     tests/test_child_server_name_551.py::test_codex_child_server_replaces_a_captured_entry_of_that_name
+0.27s call     tests/test_child_server_name_551.py::test_codex_tool_choice_keeps_the_owner_server
+0.05s call     tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 8 passed in 1.37s ===============================
+
+### tests/test_child_tools_551.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 10 items
+
+tests/test_child_tools_551.py::test_selection_keeps_the_host_when_nothing_is_chosen PASSED [ 10%]
+tests/test_child_tools_551.py::test_selection_create_tools_replace_and_denies_add PASSED [ 20%]
+tests/test_child_tools_551.py::test_claude_inherits_host_tools_without_a_choice PASSED [ 30%]
+tests/test_child_tools_551.py::test_codex_narrows_what_it_can_express PASSED [ 40%]
+tests/test_child_tools_551.py::test_codex_refuses_tools_of_a_server_it_does_not_define PASSED [ 50%]
+tests/test_child_tools_551.py::test_codex_refuses_what_it_cannot_express_or_authorize PASSED [ 60%]
+tests/test_child_tools_551.py::test_presets_declare_tools PASSED         [ 70%]
+tests/test_child_tools_551.py::test_create_passes_tools_or_refuses_a_driver_without_them PASSED [ 80%]
+tests/test_child_tools_551.py::test_claude_reports_tool_entries_it_did_not_apply PASSED [ 90%]
+tests/test_child_tools_551.py::test_tool_check_reaches_the_parent_status PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_child_tools_551.xml -
+============================= slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 10 passed in 0.14s ==============================
+
+### tests/test_claude_archive_batches_468.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 5 items
+
+tests/test_claude_archive_batches_468.py::test_a_batch_commits_once_not_once_per_record PASSED [ 20%]
+tests/test_claude_archive_batches_468.py::test_batch_cost_does_not_grow_with_the_archived_history PASSED [ 40%]
+tests/test_claude_archive_batches_468.py::test_another_writer_between_batches_is_kept PASSED [ 60%]
+tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open PASSED [ 80%]
+tests/test_claude_archive_batches_468.py::test_a_rewritten_transcript_is_read_again PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_archive_batches_468.xml -
+============================= slowest 10 durations =============================
+0.30s call     tests/test_claude_archive_batches_468.py::test_batch_cost_does_not_grow_with_the_archived_history
+0.11s call     tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open
+0.01s call     tests/test_claude_archive_batches_468.py::test_a_batch_commits_once_not_once_per_record
+0.01s call     tests/test_claude_archive_batches_468.py::test_another_writer_between_batches_is_kept
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 5 passed in 0.51s ===============================
+
+### tests/test_claude_default_tools_576.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 12 items
+
+tests/test_claude_default_tools_576.py::test_omitted_tools_name_the_probed_set PASSED [  8%]
+tests/test_claude_default_tools_576.py::test_probe_runs_unrestricted_without_settings_credentials_or_mcp PASSED [ 16%]
+tests/test_claude_default_tools_576.py::test_probe_reads_built_in_names_and_caches_them_in_graftling_state PASSED [ 25%]
+tests/test_claude_default_tools_576.py::test_cache_key_follows_executable_version_model_and_claude_settings PASSED [ 33%]
+tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print("not json"); sys.exit(3)-no system/init (exit 3] PASSED [ 41%]
+tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print(json.dumps({"type": "system", "subtype": "init", "tools": []}), flush=True)-the default set is empty] PASSED [ 50%]
+tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print(json.dumps({"type": "system", "subtype": "init", "tools": ["mcp__a__b"]}), flush=True)-the default set is empty] PASSED [ 58%]
+tests/test_claude_default_tools_576.py::test_probe_timeout_and_missing_executable PASSED [ 66%]
+tests/test_claude_default_tools_576.py::test_prepare_keeps_restricted_and_passes_the_probed_set PASSED [ 75%]
+tests/test_claude_default_tools_576.py::test_tool_check_reports_probed_tools_the_child_lacks PASSED [ 83%]
+tests/test_claude_default_tools_576.py::test_a_subclass_with_fixed_member_tools_never_probes PASSED [ 91%]
+tests/test_claude_default_tools_576.py::test_a_subclass_independent_child_gets_the_probed_set_or_its_choice PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_default_tools_576.xml -
+============================= slowest 10 durations =============================
+1.04s call     tests/test_claude_default_tools_576.py::test_probe_timeout_and_missing_executable
+0.35s call     tests/test_claude_default_tools_576.py::test_prepare_keeps_restricted_and_passes_the_probed_set
+0.34s call     tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print(json.dumps({"type": "system", "subtype": "init", "tools": ["mcp__a__b"]}), flush=True)-the default set is empty]
+0.33s call     tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print(json.dumps({"type": "system", "subtype": "init", "tools": []}), flush=True)-the default set is empty]
+0.33s call     tests/test_claude_default_tools_576.py::test_a_subclass_independent_child_gets_the_probed_set_or_its_choice
+0.33s call     tests/test_claude_default_tools_576.py::test_probe_reads_built_in_names_and_caches_them_in_graftling_state
+0.32s call     tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print("not json"); sys.exit(3)-no system/init (exit 3]
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 12 passed in 3.15s ==============================
+
+### tests/test_claude_display.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 4 items
+
+tests/test_claude_display.py::test_bidirectional_readable_content_is_only_native_display_output PASSED [ 25%]
+tests/test_claude_display.py::test_only_the_registered_servers_agents_tool_is_drawn PASSED [ 50%]
+tests/test_claude_display.py::test_noop_resume_does_not_claim_to_have_sent_text PASSED [ 75%]
+tests/test_claude_display.py::test_command_hook_uses_the_same_native_output_and_bounds_display PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_display.xml -
+============================= slowest 10 durations =============================
+0.13s call     tests/test_claude_display.py::test_command_hook_uses_the_same_native_output_and_bounds_display
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 4 passed in 0.22s ===============================
+
+### tests/test_claude_gateway_login_613.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 7 items
+
+tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[] PASSED [ 14%]
+tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[    models: [claude-haiku-5-5]\n] PASSED [ 28%]
+tests/test_claude_gateway_login_613.py::test_a_host_claude_endpoint_without_its_key_is_refused_before_any_process PASSED [ 42%]
+tests/test_claude_gateway_login_613.py::test_a_child_reaches_its_endpoint_with_only_the_connection_key PASSED [ 57%]
+tests/test_claude_gateway_login_613.py::test_without_an_endpoint_the_child_keeps_the_native_login_as_before[] PASSED [ 71%]
+tests/test_claude_gateway_login_613.py::test_without_an_endpoint_the_child_keeps_the_native_login_as_before[    provider: anthropic\n] PASSED [ 85%]
+tests/test_claude_gateway_login_613.py::test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_gateway_login_613.xml -
+============================= slowest 10 durations =============================
+0.46s call     tests/test_claude_gateway_login_613.py::test_a_child_reaches_its_endpoint_with_only_the_connection_key
+0.44s call     tests/test_claude_gateway_login_613.py::test_without_an_endpoint_the_child_keeps_the_native_login_as_before[]
+0.43s call     tests/test_claude_gateway_login_613.py::test_without_an_endpoint_the_child_keeps_the_native_login_as_before[    provider: anthropic\n]
+0.39s call     tests/test_claude_gateway_login_613.py::test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 7 passed in 1.83s ===============================
+
+### tests/test_claude_jsonl.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 86 items
+
+tests/test_claude_jsonl.py::test_parent_links_not_notification_or_file_arrival_define_messages PASSED [  1%]
+tests/test_claude_jsonl.py::test_same_api_id_does_not_merge_distinct_sibling_blocks PASSED [  2%]
+tests/test_claude_jsonl.py::test_compaction_kept_uuid_order_and_context_replacement PASSED [  3%]
+tests/test_claude_jsonl.py::test_native_fork_provenance_is_not_agent_parentage PASSED [  4%]
+tests/test_claude_jsonl.py::test_history_switch_only_collects_associated_session PASSED [  5%]
+tests/test_claude_jsonl.py::test_disabled_archive_creates_nothing_and_retains_old_content PASSED [  6%]
+tests/test_claude_jsonl.py::test_live_final_transcript_resolve_once_by_native_identity PASSED [  8%]
+tests/test_claude_jsonl.py::test_interrupted_output_and_missing_parent_are_explicit PASSED [  9%]
+tests/test_claude_jsonl.py::test_incomplete_native_tail_is_retained_until_native_replay_completes PASSED [ 10%]
+tests/test_claude_jsonl.py::test_jsonl_retains_native_ciphertext_attachments_and_completion PASSED [ 11%]
+tests/test_claude_jsonl.py::test_unknown_live_fields_and_tool_input_blocks_are_retained PASSED [ 12%]
+tests/test_claude_jsonl.py::test_prebind_input_and_resume_cut_use_native_input_uuid PASSED [ 13%]
+tests/test_claude_jsonl.py::test_history_size_is_measured_only_when_a_cut_is_needed PASSED [ 15%]
+tests/test_claude_jsonl.py::test_bind_at_a_size_keeps_later_records_out_of_history PASSED [ 16%]
+tests/test_claude_jsonl.py::test_bind_at_a_size_sees_a_current_input_on_either_side PASSED [ 17%]
+tests/test_claude_jsonl.py::test_bind_at_a_size_ignores_a_write_still_arriving_after_it PASSED [ 18%]
+tests/test_claude_jsonl.py::test_bind_at_a_size_treats_a_torn_prefix_as_unreadable PASSED [ 19%]
+tests/test_claude_jsonl.py::test_bind_with_no_size_measured_keeps_the_cut_unknown PASSED [ 20%]
+tests/test_claude_jsonl.py::test_bind_without_a_size_still_reads_history_at_the_bind PASSED [ 22%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_collects_a_torn_line_once_it_completes PASSED [ 23%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_collects_a_line_torn_inside_a_character PASSED [ 24%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_recovers_from_a_transcript_briefly_unreadable PASSED [ 25%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_after_a_torn_line_completes PASSED [ 26%]
+tests/test_claude_jsonl.py::test_a_gap_from_an_earlier_activation_survives_a_later_torn_read PASSED [ 27%]
+tests/test_claude_jsonl.py::test_a_second_torn_read_is_reported_and_clears_in_turn[False] PASSED [ 29%]
+tests/test_claude_jsonl.py::test_a_second_torn_read_is_reported_and_clears_in_turn[True] PASSED [ 30%]
+tests/test_claude_jsonl.py::test_repeated_torn_reads_of_one_tail_are_one_observation PASSED [ 31%]
+tests/test_claude_jsonl.py::test_a_resolved_torn_read_does_not_hide_a_later_real_gap PASSED [ 32%]
+tests/test_claude_jsonl.py::test_retained_torn_read_gap_resolves_on_a_resume_with_a_full_archive[raw0] PASSED [ 33%]
+tests/test_claude_jsonl.py::test_retained_torn_read_gap_resolves_on_a_resume_with_a_full_archive[raw1] PASSED [ 34%]
+tests/test_claude_jsonl.py::test_a_resolved_retained_torn_read_does_not_hide_a_later_real_gap PASSED [ 36%]
+tests/test_claude_jsonl.py::test_retained_design_gap_stays_on_a_resume_with_a_full_archive PASSED [ 37%]
+tests/test_claude_jsonl.py::test_retained_torn_read_gap_stays_while_history_is_really_missing PASSED [ 38%]
+tests/test_claude_jsonl.py::test_a_tail_never_completed_keeps_messages_refusing PASSED [ 39%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[attachment-off-chain] PASSED [ 40%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[attachment-on-chain] PASSED [ 41%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[attachment-parent-of-next] PASSED [ 43%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[system-on-chain] PASSED [ 44%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[summary-real-shape] PASSED [ 45%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[snapshot-real-shape] PASSED [ 46%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[summary-with-uuid] PASSED [ 47%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[snapshot-with-uuid] PASSED [ 48%]
+tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[measured-turn] PASSED [ 50%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[attachment-off-chain] PASSED [ 51%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[attachment-on-chain] PASSED [ 52%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[attachment-parent-of-next] PASSED [ 53%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[system-on-chain] PASSED [ 54%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[summary-real-shape] PASSED [ 55%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[snapshot-real-shape] PASSED [ 56%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[summary-with-uuid] PASSED [ 58%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[snapshot-with-uuid] PASSED [ 59%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_keeps_its_gap_beside_non_conversation_records[measured-turn] PASSED [ 60%]
+tests/test_claude_jsonl.py::test_a_compaction_after_a_resume_without_an_archive_keeps_its_gap[False] PASSED [ 61%]
+tests/test_claude_jsonl.py::test_a_compaction_after_a_resume_without_an_archive_keeps_its_gap[True] PASSED [ 62%]
+tests/test_claude_jsonl.py::test_an_archive_missing_one_message_beside_non_conversation_records_still_reports PASSED [ 63%]
+tests/test_claude_jsonl.py::test_a_current_input_in_the_prefix_is_not_missing_history PASSED [ 65%]
+tests/test_claude_jsonl.py::test_queued_copies_sharing_a_source_compare_by_message_id PASSED [ 66%]
+tests/test_claude_jsonl.py::test_first_start_on_a_torn_tail_archives_everything_once_the_line_completes PASSED [ 67%]
+tests/test_claude_jsonl.py::test_first_start_on_an_unreadable_transcript_keeps_its_cut PASSED [ 68%]
+tests/test_claude_jsonl.py::test_a_torn_tail_at_bind_does_not_hide_fork_ancestry PASSED [ 69%]
+tests/test_claude_jsonl.py::test_resume_without_an_archive_after_a_torn_bind_keeps_its_gap PASSED [ 70%]
+tests/test_claude_jsonl.py::test_a_torn_current_input_at_bind_is_collected_once_it_completes PASSED [ 72%]
+tests/test_claude_jsonl.py::test_a_torn_tail_that_never_completes_keeps_messages_refusing_after_a_first_start PASSED [ 73%]
+tests/test_claude_jsonl.py::test_a_bad_line_before_the_last_stays_reported[False] PASSED [ 74%]
+tests/test_claude_jsonl.py::test_a_bad_line_before_the_last_stays_reported[True] PASSED [ 75%]
+tests/test_claude_jsonl.py::test_a_final_line_of_another_session_is_not_a_torn_write PASSED [ 76%]
+tests/test_claude_jsonl.py::test_hook_first_start_on_a_torn_tail_archives_everything PASSED [ 77%]
+tests/test_claude_jsonl.py::test_hook_resume_on_a_torn_tail_collects_only_new_messages PASSED [ 79%]
+tests/test_claude_jsonl.py::test_hook_resume_with_a_full_archive_on_a_torn_attachment_is_complete PASSED [ 80%]
+tests/test_claude_jsonl.py::test_hook_child_transcript_with_backfill_off_stays_reported PASSED [ 81%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[chain] SKIPPED [ 82%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[siblings] SKIPPED [ 83%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[preserved-messages] SKIPPED [ 84%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[preserved-segment] SKIPPED [ 86%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[tools] SKIPPED [ 87%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[replay] SKIPPED [ 88%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[queued] SKIPPED [ 89%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[queued-tail] SKIPPED [ 90%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[queued-delivery] SKIPPED [ 91%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[queued-forwarded] SKIPPED [ 93%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[tools-indirect-replay] SKIPPED [ 94%]
+tests/test_claude_jsonl.py::test_order_matches_official_sdk_session_store[assistant-first] SKIPPED [ 95%]
+tests/test_claude_jsonl.py::test_assistant_first_context_change_replaces_surface_preserving_history[False] PASSED [ 96%]
+tests/test_claude_jsonl.py::test_assistant_first_context_change_replaces_surface_preserving_history[True] PASSED [ 97%]
+tests/test_claude_jsonl.py::test_received_batch_preserves_fragments_boundaries_and_policy PASSED [ 98%]
+tests/test_claude_jsonl.py::test_message_batch_reads_native_history_once PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_jsonl.xml -
+============================= slowest 10 durations =============================
+0.04s call     tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[summary-with-uuid]
+0.04s call     tests/test_claude_jsonl.py::test_a_current_input_in_the_prefix_is_not_missing_history
+0.02s call     tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[snapshot-with-uuid]
+0.01s call     tests/test_claude_jsonl.py::test_hook_resume_with_a_full_archive_on_a_torn_attachment_is_complete
+0.01s call     tests/test_claude_jsonl.py::test_resume_with_a_full_archive_is_complete_beside_non_conversation_records[attachment-off-chain]
+0.01s call     tests/test_claude_jsonl.py::test_hook_resume_on_a_torn_tail_collects_only_new_messages
+0.01s call     tests/test_claude_jsonl.py::test_repeated_torn_reads_of_one_tail_are_one_observation
+0.01s call     tests/test_claude_jsonl.py::test_a_gap_from_an_earlier_activation_survives_a_later_torn_read
+0.01s call     tests/test_claude_jsonl.py::test_a_resolved_torn_read_does_not_hide_a_later_real_gap
+0.01s call     tests/test_claude_jsonl.py::test_a_resolved_retained_torn_read_does_not_hide_a_later_real_gap
+=========================== short test summary info ============================
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+======================== 74 passed, 12 skipped in 0.68s ========================
+
+### tests/test_claude_main_display.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 3 items
+
+tests/test_claude_main_display.py::test_sent_and_received_messages_are_placed_rows_with_markdown PASSED [ 33%]
+tests/test_claude_main_display.py::test_mod_reads_no_host_noun_as_a_value PASSED [ 66%]
+tests/test_claude_main_display.py::test_without_placed_rows_the_log_fallback_remains PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_main_display.xml -
+============================= slowest 10 durations =============================
+0.10s call     tests/test_claude_main_display.py::test_without_placed_rows_the_log_fallback_remains
+0.06s call     tests/test_claude_main_display.py::test_sent_and_received_messages_are_placed_rows_with_markdown
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 3 passed in 0.23s ===============================
+
+### tests/test_claude_marketplace_plugin.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 21 items
+
+tests/test_claude_marketplace_plugin.py::test_checked_in_module_is_generated_from_host_context PASSED [  4%]
+tests/test_claude_marketplace_plugin.py::test_manifests_name_graftling_and_bake_in_no_path PASSED [  9%]
+tests/test_claude_marketplace_plugin.py::test_plugin_configuration_is_created_then_keeps_user_keys PASSED [ 14%]
+tests/test_claude_marketplace_plugin.py::test_plugin_host_stands_aside_for_configuration_write_material[graftling] PASSED [ 19%]
+tests/test_claude_marketplace_plugin.py::test_plugin_host_stands_aside_for_configuration_write_material[agents] PASSED [ 23%]
+tests/test_claude_marketplace_plugin.py::test_host_plugin_handles_only_its_servers_tools[None] PASSED [ 28%]
+tests/test_claude_marketplace_plugin.py::test_host_plugin_handles_only_its_servers_tools[graphtraj] PASSED [ 33%]
+tests/test_claude_marketplace_plugin.py::test_configuration_write_registers_graftling_and_drops_its_old_agents_entry PASSED [ 38%]
+tests/test_claude_marketplace_plugin.py::test_plugin_serve_without_prior_configuration_writes_it_and_logs_its_refusal PASSED [ 42%]
+tests/test_claude_marketplace_plugin.py::test_context_finds_the_configuration_above_the_session_cwd PASSED [ 47%]
+tests/test_claude_marketplace_plugin.py::test_launcher_names_what_to_install_when_python_cannot_run_graftling[missing-GRAFTLING_PYTHON=] PASSED [ 52%]
+tests/test_claude_marketplace_plugin.py::test_launcher_names_what_to_install_when_python_cannot_run_graftling[without-GRAFTLING_PYTHON=] PASSED [ 57%]
+tests/test_claude_marketplace_plugin.py::test_launcher_execs_the_found_python_with_the_host PASSED [ 61%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[set] PASSED [ 66%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[default] PASSED [ 71%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[without] PASSED [ 76%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[same] PASSED [ 80%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[ancestor] PASSED [ 85%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[foreign] PASSED [ 90%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[descendant] PASSED [ 95%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[sibling] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_marketplace_plugin.xml -
+============================= slowest 10 durations =============================
+0.32s call     tests/test_claude_marketplace_plugin.py::test_launcher_execs_the_found_python_with_the_host
+0.30s call     tests/test_claude_marketplace_plugin.py::test_configuration_write_registers_graftling_and_drops_its_old_agents_entry
+0.25s call     tests/test_claude_marketplace_plugin.py::test_context_finds_the_configuration_above_the_session_cwd
+0.17s call     tests/test_claude_marketplace_plugin.py::test_launcher_names_what_to_install_when_python_cannot_run_graftling[without-GRAFTLING_PYTHON=]
+0.14s call     tests/test_claude_marketplace_plugin.py::test_plugin_serve_without_prior_configuration_writes_it_and_logs_its_refusal
+0.05s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[set]
+0.05s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[foreign]
+0.05s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[default]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[descendant]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[sibling]
+============================== 21 passed in 1.80s ==============================
+
+### tests/test_claude_model_alias_574.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 11 items
+
+tests/test_claude_model_alias_574.py::test_an_alias_carries_its_catalog_resolution_and_status_shows_both PASSED [  9%]
+tests/test_claude_model_alias_574.py::test_a_full_id_some_entry_resolves_to_is_a_candidate PASSED [ 18%]
+tests/test_claude_model_alias_574.py::test_a_full_id_entry_needs_no_expected_model PASSED [ 27%]
+tests/test_claude_model_alias_574.py::test_ids_no_entry_names_or_resolves_to_are_refused[claude-haiku-9-9] PASSED [ 36%]
+tests/test_claude_model_alias_574.py::test_ids_no_entry_names_or_resolves_to_are_refused[claude-sonnet-5-5] PASSED [ 45%]
+tests/test_claude_model_alias_574.py::test_ids_no_entry_names_or_resolves_to_are_refused[claude-haiku] PASSED [ 54%]
+tests/test_claude_model_alias_574.py::test_an_alias_without_resolved_model_keeps_exact_behaviour PASSED [ 63%]
+tests/test_claude_model_alias_574.py::test_declared_models_are_matched_exactly PASSED [ 72%]
+tests/test_claude_model_alias_574.py::test_the_init_check_accepts_only_the_catalog_resolution PASSED [ 81%]
+tests/test_claude_model_alias_574.py::test_the_claude_driver_passes_the_expected_model_to_its_request PASSED [ 90%]
+tests/test_claude_model_alias_574.py::test_the_native_catalog_keeps_resolved_model PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_model_alias_574.xml -
+============================= slowest 10 durations =============================
+0.15s call     tests/test_claude_model_alias_574.py::test_the_claude_driver_passes_the_expected_model_to_its_request
+0.01s call     tests/test_claude_model_alias_574.py::test_an_alias_carries_its_catalog_resolution_and_status_shows_both
+
+(8 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 11 passed in 0.28s ==============================
+
+### tests/test_claude_permission_mode_578.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 23 items
+
+tests/test_claude_permission_mode_578.py::test_narrower_modes[auto-default] PASSED [  4%]
+tests/test_claude_permission_mode_578.py::test_narrower_modes[auto-manual] PASSED [  8%]
+tests/test_claude_permission_mode_578.py::test_narrower_modes[auto-plan] PASSED [ 13%]
+tests/test_claude_permission_mode_578.py::test_narrower_modes[auto-dontAsk] PASSED [ 17%]
+tests/test_claude_permission_mode_578.py::test_narrower_modes[default-plan] PASSED [ 21%]
+tests/test_claude_permission_mode_578.py::test_narrower_modes[default-dontAsk] PASSED [ 26%]
+tests/test_claude_permission_mode_578.py::test_wider_or_not_comparable_modes[default-auto] PASSED [ 30%]
+tests/test_claude_permission_mode_578.py::test_wider_or_not_comparable_modes[default-acceptEdits] PASSED [ 34%]
+tests/test_claude_permission_mode_578.py::test_wider_or_not_comparable_modes[default-bypassPermissions] PASSED [ 39%]
+tests/test_claude_permission_mode_578.py::test_wider_or_not_comparable_modes[auto-acceptEdits] PASSED [ 43%]
+tests/test_claude_permission_mode_578.py::test_wider_or_not_comparable_modes[auto-bypassPermissions] PASSED [ 47%]
+tests/test_claude_permission_mode_578.py::test_matching_or_unknown_modes_carry_no_narrower[auto-auto-True] PASSED [ 52%]
+tests/test_claude_permission_mode_578.py::test_matching_or_unknown_modes_carry_no_narrower[default-manual-True] PASSED [ 56%]
+tests/test_claude_permission_mode_578.py::test_matching_or_unknown_modes_carry_no_narrower[auto-unexpected-None] PASSED [ 60%]
+tests/test_claude_permission_mode_578.py::test_matching_or_unknown_modes_carry_no_narrower[auto-None-None] PASSED [ 65%]
+tests/test_claude_permission_mode_578.py::test_a_narrower_mode_is_recorded_warned_and_the_run_completes PASSED [ 69%]
+tests/test_claude_permission_mode_578.py::test_status_shows_only_the_latest_executions_mode[default-auto-False] PASSED [ 73%]
+tests/test_claude_permission_mode_578.py::test_status_shows_only_the_latest_executions_mode[auto-default-True] PASSED [ 78%]
+tests/test_claude_permission_mode_578.py::test_a_matching_mode_reports_no_permission_mode PASSED [ 82%]
+tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[default-auto] PASSED [ 86%]
+tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[auto-acceptEdits] PASSED [ 91%]
+tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[auto-bypassPermissions] PASSED [ 95%]
+tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[auto-] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_permission_mode_578.xml -
+============================= slowest 10 durations =============================
+0.60s call     tests/test_claude_permission_mode_578.py::test_status_shows_only_the_latest_executions_mode[default-auto-False]
+0.59s call     tests/test_claude_permission_mode_578.py::test_status_shows_only_the_latest_executions_mode[auto-default-True]
+0.40s call     tests/test_claude_permission_mode_578.py::test_a_narrower_mode_is_recorded_warned_and_the_run_completes
+0.40s call     tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[auto-]
+0.39s call     tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[auto-acceptEdits]
+0.39s call     tests/test_claude_permission_mode_578.py::test_a_matching_mode_reports_no_permission_mode
+0.39s call     tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[auto-bypassPermissions]
+0.39s call     tests/test_claude_permission_mode_578.py::test_a_wider_not_comparable_or_unknown_mode_fails_and_interrupts[default-auto]
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 23 passed in 3.73s ==============================
+
+### tests/test_claude_review.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 40 items
+
+tests/test_claude_review.py::test_hook_covers_every_tool_and_outlasts_the_reviewer[None-600] PASSED [  2%]
+tests/test_claude_review.py::test_hook_covers_every_tool_and_outlasts_the_reviewer[60-600] PASSED [  5%]
+tests/test_claude_review.py::test_hook_covers_every_tool_and_outlasts_the_reviewer[900-960] PASSED [  7%]
+tests/test_claude_review.py::test_configured_reviewer_process_decides PASSED [ 10%]
+tests/test_claude_review.py::test_no_review_keeps_initialize_hooks_and_settings_unchanged PASSED [ 12%]
+tests/test_claude_review.py::test_allow_runs_with_no_decision_and_answers_the_later_prompt PASSED [ 15%]
+tests/test_claude_review.py::test_allowed_call_without_tool_use_id_matches_exact_input PASSED [ 17%]
+tests/test_claude_review.py::test_prompt_widening_or_changing_an_allowed_call_goes_to_the_parent[prompt0] PASSED [ 20%]
+tests/test_claude_review.py::test_prompt_widening_or_changing_an_allowed_call_goes_to_the_parent[prompt1] PASSED [ 22%]
+tests/test_claude_review.py::test_prompt_widening_or_changing_an_allowed_call_goes_to_the_parent[prompt2] PASSED [ 25%]
+tests/test_claude_review.py::test_prompt_for_a_call_never_reviewed_goes_to_the_parent PASSED [ 27%]
+tests/test_claude_review.py::test_refused_review_denies_and_asks_the_parent_once[decision0] PASSED [ 30%]
+tests/test_claude_review.py::test_refused_review_denies_and_asks_the_parent_once[decision1] PASSED [ 32%]
+tests/test_claude_review.py::test_refused_review_denies_and_asks_the_parent_once[decision2] PASSED [ 35%]
+tests/test_claude_review.py::test_any_failure_in_the_review_path_denies[review_call] PASSED [ 37%]
+tests/test_claude_review.py::test_any_failure_in_the_review_path_denies[build_request] PASSED [ 40%]
+tests/test_claude_review.py::test_any_failure_in_the_review_path_denies[record_decision] PASSED [ 42%]
+tests/test_claude_review.py::test_any_failure_in_the_review_path_denies[malformed] PASSED [ 45%]
+tests/test_claude_review.py::test_protocol_loop_answers_an_interrupt_while_a_review_runs PASSED [ 47%]
+tests/test_claude_review.py::test_cancelled_hook_holds_nothing PASSED    [ 50%]
+tests/test_claude_review.py::test_identical_early_retry_does_not_ask_again PASSED [ 52%]
+tests/test_claude_review.py::test_accept_releases_one_exact_retry_only PASSED [ 55%]
+tests/test_claude_review.py::test_changed_input_after_accept_is_reviewed_and_the_release_stays_unused PASSED [ 57%]
+tests/test_claude_review.py::test_decline_after_the_turn_ended_starts_nothing PASSED [ 60%]
+tests/test_claude_review.py::test_execution_stays_open_and_an_accept_after_the_turn_ended_runs_a_follow_up PASSED [ 62%]
+tests/test_claude_review.py::test_answer_while_the_turn_runs_is_input_to_it[accept-you may retry] PASSED [ 65%]
+tests/test_claude_review.py::test_answer_while_the_turn_runs_is_input_to_it[decline-do not retry] PASSED [ 67%]
+tests/test_claude_review.py::test_invalid_reply_is_refused_and_the_request_stays[response0] PASSED [ 70%]
+tests/test_claude_review.py::test_invalid_reply_is_refused_and_the_request_stays[response1] PASSED [ 72%]
+tests/test_claude_review.py::test_invalid_reply_is_refused_and_the_request_stays[response2] PASSED [ 75%]
+tests/test_claude_review.py::test_invalid_reply_is_refused_and_the_request_stays[response3] PASSED [ 77%]
+tests/test_claude_review.py::test_reply_rules_are_consistent PASSED      [ 80%]
+tests/test_claude_review.py::test_interrupt_drops_unanswered_requests PASSED [ 82%]
+tests/test_claude_review.py::test_release_ends_with_its_execution PASSED [ 85%]
+tests/test_claude_review.py::test_agents_tool_is_not_reviewed PASSED     [ 87%]
+tests/test_claude_review.py::test_another_servers_agents_tool_is_reviewed[mcp__other__subagents] PASSED [ 90%]
+tests/test_claude_review.py::test_another_servers_agents_tool_is_reviewed[mcp__agents__subagents] PASSED [ 92%]
+tests/test_claude_review.py::test_another_servers_agents_tool_is_reviewed[mcp__graftling__agents] PASSED [ 95%]
+tests/test_claude_review.py::test_reviewers_key_is_not_passed_to_the_child PASSED [ 97%]
+tests/test_claude_review.py::test_read_only_tools_are_reviewed_too PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_review.xml -
+============================= slowest 10 durations =============================
+0.99s call     tests/test_claude_review.py::test_execution_stays_open_and_an_accept_after_the_turn_ended_runs_a_follow_up
+0.83s call     tests/test_claude_review.py::test_decline_after_the_turn_ended_starts_nothing
+0.67s call     tests/test_claude_review.py::test_answer_while_the_turn_runs_is_input_to_it[decline-do not retry]
+0.66s call     tests/test_claude_review.py::test_answer_while_the_turn_runs_is_input_to_it[accept-you may retry]
+0.66s call     tests/test_claude_review.py::test_release_ends_with_its_execution
+0.61s call     tests/test_claude_review.py::test_protocol_loop_answers_an_interrupt_while_a_review_runs
+0.61s call     tests/test_claude_review.py::test_cancelled_hook_holds_nothing
+0.60s call     tests/test_claude_review.py::test_allowed_call_without_tool_use_id_matches_exact_input
+0.59s call     tests/test_claude_review.py::test_no_review_keeps_initialize_hooks_and_settings_unchanged
+0.53s call     tests/test_claude_review.py::test_accept_releases_one_exact_retry_only
+============================= 40 passed in 19.09s ==============================
+
+### tests/test_claude_send_closing_546.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 1 item
+
+tests/test_claude_send_closing_546.py::test_a_send_while_claude_closes_goes_to_the_next_execution PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_claude_send_closing_546.xml -
+============================= slowest 10 durations =============================
+1.14s call     tests/test_claude_send_closing_546.py::test_a_send_while_claude_closes_goes_to_the_next_execution
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 1 passed in 1.24s ===============================
+
+### tests/test_codex_child_interpreter_shutdown_473.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 1 item
+
+tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_codex_child_interpreter_shutdown_473.xml -
+============================= slowest 10 durations =============================
+3.26s call     tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 1 passed in 3.39s ===============================
+
+### tests/test_codex_host_event_text.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 4 items
+
+tests/test_codex_host_event_text.py::test_text_is_the_tool_output_the_main_reads PASSED [ 25%]
+tests/test_codex_host_event_text.py::test_without_text_the_output_stays_the_event_json PASSED [ 50%]
+tests/test_codex_host_event_text.py::test_delegation_from_draws_codex_delegation_cell PASSED [ 75%]
+tests/test_codex_host_event_text.py::test_delegation_without_text_wraps_the_event_json PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_codex_host_event_text.xml -
+============================= slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 4 passed in 0.08s ===============================
+
+### tests/test_codex_independent_control.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 5 items
+
+tests/test_codex_independent_control.py::test_independent_lifecycle_requests_and_authentication PASSED [ 20%]
+tests/test_codex_independent_control.py::test_packaged_host_owns_parent_mcp_and_resume PASSED [ 40%]
+tests/test_codex_independent_control.py::test_external_root_reply_uses_existing_receiver PASSED [ 60%]
+tests/test_codex_independent_control.py::test_lost_parent_acknowledgement_does_not_repeat_child_body PASSED [ 80%]
+tests/test_codex_independent_control.py::test_host_cli_reports_native_turn_failure PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_codex_independent_control.xml -
+============================= slowest 10 durations =============================
+0.94s call     tests/test_codex_independent_control.py::test_independent_lifecycle_requests_and_authentication
+0.59s call     tests/test_codex_independent_control.py::test_packaged_host_owns_parent_mcp_and_resume
+0.58s call     tests/test_codex_independent_control.py::test_lost_parent_acknowledgement_does_not_repeat_child_body
+0.36s call     tests/test_codex_independent_control.py::test_host_cli_reports_native_turn_failure
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 5 passed in 2.72s ===============================
+
+### tests/test_codex_review_relay.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 8 items
+
+tests/test_codex_review_relay.py::test_denial_is_relayed_and_accept_records_one_native_retry PASSED [ 12%]
+tests/test_codex_review_relay.py::test_denial_declined_after_turn_end_keeps_refusal PASSED [ 25%]
+tests/test_codex_review_relay.py::test_reviewer_failure_is_relayed_and_accept_starts_one_follow_up[timedOut] PASSED [ 37%]
+tests/test_codex_review_relay.py::test_reviewer_failure_is_relayed_and_accept_starts_one_follow_up[aborted] PASSED [ 50%]
+tests/test_codex_review_relay.py::test_parent_answer_must_be_accept_or_decline PASSED [ 62%]
+tests/test_codex_review_relay.py::test_approved_review_is_not_relayed PASSED [ 75%]
+tests/test_codex_review_relay.py::test_escalated_native_request_is_held_for_the_parent PASSED [ 87%]
+tests/test_codex_review_relay.py::test_generated_configuration_keeps_native_limits PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_codex_review_relay.xml -
+============================= slowest 10 durations =============================
+0.45s call     tests/test_codex_review_relay.py::test_escalated_native_request_is_held_for_the_parent
+0.28s call     tests/test_codex_review_relay.py::test_denial_is_relayed_and_accept_records_one_native_retry
+0.26s call     tests/test_codex_review_relay.py::test_denial_declined_after_turn_end_keeps_refusal
+0.26s call     tests/test_codex_review_relay.py::test_parent_answer_must_be_accept_or_decline
+0.26s call     tests/test_codex_review_relay.py::test_reviewer_failure_is_relayed_and_accept_starts_one_follow_up[timedOut]
+0.26s call     tests/test_codex_review_relay.py::test_approved_review_is_not_relayed
+0.25s call     tests/test_codex_review_relay.py::test_reviewer_failure_is_relayed_and_accept_starts_one_follow_up[aborted]
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 8 passed in 2.17s ===============================
+
+### tests/test_codex_tool_reclaim_462.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 5 items
+
+tests/test_codex_tool_reclaim_462.py::test_normal_end_owner_stops_the_tool_the_service_left PASSED [ 20%]
+tests/test_codex_tool_reclaim_462.py::test_owner_killed_then_reconciliation_stops_the_tool PASSED [ 40%]
+tests/test_codex_tool_reclaim_462.py::test_the_service_keeps_only_a_fresh_marker PASSED [ 60%]
+tests/test_codex_tool_reclaim_462.py::test_reclaim_runs_when_the_interpreter_refuses_new_threads PASSED [ 80%]
+tests/test_codex_tool_reclaim_462.py::test_a_slow_reclaim_does_not_delay_the_end PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_codex_tool_reclaim_462.xml -
+============================= slowest 10 durations =============================
+6.00s call     tests/test_codex_tool_reclaim_462.py::test_a_slow_reclaim_does_not_delay_the_end
+3.00s call     tests/test_codex_tool_reclaim_462.py::test_normal_end_owner_stops_the_tool_the_service_left
+2.97s call     tests/test_codex_tool_reclaim_462.py::test_reclaim_runs_when_the_interpreter_refuses_new_threads
+1.65s call     tests/test_codex_tool_reclaim_462.py::test_owner_killed_then_reconciliation_stops_the_tool
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 5 passed in 13.73s ==============================
+
+### tests/test_connection_serve.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 1 item
+
+tests/test_connection_serve.py::test_removed_control_directory_stops_the_service PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_connection_serve.xml -
+============================= slowest 10 durations =============================
+0.01s call     tests/test_connection_serve.py::test_removed_control_directory_stops_the_service
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 1 passed in 0.10s ===============================
+
+### tests/test_discovery_intents_615.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 12 items
+
+tests/test_discovery_intents_615.py::test_create_intents_find_only_create[start an agent] PASSED [  8%]
+tests/test_discovery_intents_615.py::test_create_intents_find_only_create[launch a new agent] PASSED [ 16%]
+tests/test_discovery_intents_615.py::test_create_intents_find_only_create[spawn agent] PASSED [ 25%]
+tests/test_discovery_intents_615.py::test_create_intents_find_only_create[Start a new Agent] PASSED [ 33%]
+tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[models] PASSED [ 41%]
+tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[providers] PASSED [ 50%]
+tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[list models] PASSED [ 58%]
+tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[choose a model] PASSED [ 66%]
+tests/test_discovery_intents_615.py::test_unrelated_queries_find_nothing[bake a cake] PASSED [ 75%]
+tests/test_discovery_intents_615.py::test_unrelated_queries_find_nothing[start a cake] PASSED [ 83%]
+tests/test_discovery_intents_615.py::test_unrelated_queries_find_nothing[deploy kubernetes] PASSED [ 91%]
+tests/test_discovery_intents_615.py::test_empty_and_action_name_queries_unchanged PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_discovery_intents_615.xml -
+============================= slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 12 passed in 0.08s ==============================
+
+### tests/test_dsh_live.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 5 items
+
+tests/test_dsh_live.py::test_interrupted_stream_replay_and_native_final_link PASSED [ 20%]
+tests/test_dsh_live.py::test_reconnect_baseline_and_abandoned_attempt PASSED [ 40%]
+tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content PASSED [ 60%]
+tests/test_dsh_live.py::test_agent_messages_declares_the_services_it_reads PASSED [ 80%]
+tests/test_dsh_live.py::test_standalone_driver_with_only_independent_package PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_live.xml -
+============================= slowest 10 durations =============================
+0.44s call     tests/test_dsh_live.py::test_standalone_driver_with_only_independent_package
+0.27s call     tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
+0.04s call     tests/test_dsh_live.py::test_agent_messages_declares_the_services_it_reads
+0.01s setup    tests/test_dsh_live.py::test_standalone_driver_with_only_independent_package
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 5 passed in 0.85s ===============================
+
+### tests/test_dsh_mcp.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 4 items
+
+tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client PASSED     [ 25%]
+tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes PASSED        [ 50%]
+tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[ready] SKIPPED [ 75%]
+tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[delayed] SKIPPED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_mcp.xml -
+============================= slowest 10 durations =============================
+0.62s call     tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes
+0.42s call     tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client
+0.04s call     tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[ready]
+0.04s call     tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[delayed]
+0.03s setup    tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+========================= 2 passed, 2 skipped in 1.23s =========================
+
+### tests/test_dsh_official.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 6 items
+
+tests/test_dsh_official.py::test_installed_dsh_model_mcp_and_same_session SKIPPED [ 16%]
+tests/test_dsh_official.py::test_retained_official_trace_messages SKIPPED [ 33%]
+tests/test_dsh_official.py::test_actual_client_interrupt_and_memory SKIPPED [ 50%]
+tests/test_dsh_official.py::test_continue_actual_interrupted_session SKIPPED [ 66%]
+tests/test_dsh_official.py::test_actual_initial_tool_catalog SKIPPED     [ 83%]
+tests/test_dsh_official.py::test_actual_pi_reply_resumes_standby_dsh SKIPPED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_official.xml -
+============================= slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+============================== 6 skipped in 0.07s ==============================
+
+### tests/test_dsh_plugin_install_python.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 3 items
+
+tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation PASSED [ 33%]
+tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command PASSED [ 66%]
+tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_plugin_install_python.xml -
+============================= slowest 10 durations =============================
+0.68s call     tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
+0.53s call     tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command
+0.22s call     tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged
+0.18s setup    tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
+0.18s setup    tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged
+0.14s setup    tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 3 passed in 2.02s ===============================
+
+### tests/test_dsh_providers_608.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 8 items
+
+tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key PASSED [ 12%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[openrouter-False-needs api_key_env] PASSED [ 25%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider'] PASSED [ 37%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only'] PASSED [ 50%]
+tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog PASSED [ 62%]
+tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child PASSED [ 75%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers PASSED [ 87%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_providers_608.xml -
+============================= slowest 10 durations =============================
+0.20s call     tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route
+0.15s call     tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers
+0.12s call     tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key
+0.05s call     tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child
+0.05s call     tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog
+0.04s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider']
+0.04s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only']
+0.02s setup    tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 8 passed in 0.84s ===============================
+
+### tests/test_dsh_standalone_child.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 70 items
+
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.0-rc.2] PASSED [  1%]
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.1-alpha.5] PASSED [  2%]
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.2-alpha.2] PASSED [  4%]
+tests/test_dsh_standalone_child.py::test_a_missing_stored_dsh_session_is_not_resumable PASSED [  5%]
+tests/test_dsh_standalone_child.py::test_claude_host_routes_a_dsh_child_with_its_own_choices PASSED [  7%]
+tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once PASSED [  8%]
+tests/test_dsh_standalone_child.py::test_a_wait_while_the_host_queues_the_end_is_its_only_delivery[False] PASSED [ 10%]
+tests/test_dsh_standalone_child.py::test_a_wait_while_the_host_queues_the_end_is_its_only_delivery[True] PASSED [ 11%]
+tests/test_dsh_standalone_child.py::test_codex_host_routes_a_dsh_child_with_its_own_choices PASSED [ 12%]
+tests/test_dsh_standalone_child.py::test_dsh_child_launch_needs_no_graphtraj_setting PASSED [ 14%]
+tests/test_dsh_standalone_child.py::test_claude_host_refuses_missing_or_unsupported_dsh_at_start PASSED [ 15%]
+tests/test_dsh_standalone_child.py::test_codex_host_refuses_missing_or_unsupported_dsh_at_start PASSED [ 17%]
+tests/test_dsh_standalone_child.py::test_codex_host_cli_reports_an_unsupported_dsh PASSED [ 18%]
+tests/test_dsh_standalone_child.py::test_require_connections_covers_a_declared_dsh_connection PASSED [ 20%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.1.9-False] PASSED [ 21%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-beta.4-False] PASSED [ 22%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-rc.1-False] PASSED [ 24%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-rc.2-True] PASSED [ 25%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-rc.10-True] PASSED [ 27%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-True] PASSED [ 28%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.1-alpha.5-True] PASSED [ 30%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.2-alpha.2-True] PASSED [ 31%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[1.0.0-True] PASSED [ 32%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[None-unknown] PASSED [ 34%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[not json-unknown] PASSED [ 35%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[{}-unknown] PASSED [ 37%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[{"version": 2}-2] PASSED [ 38%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[{"version": "latest"}-latest] PASSED [ 40%]
+tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable PASSED [ 41%]
+tests/test_dsh_standalone_child.py::test_the_dsh_mcp_command_serves_without_graphtraj PASSED [ 42%]
+tests/test_dsh_standalone_child.py::test_delivered_plugin_loads_from_dsh_agent_package_alone PASSED [ 44%]
+tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child[None] PASSED [ 45%]
+tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child[https://declared.invalid/anthropic] PASSED [ 47%]
+tests/test_dsh_standalone_child.py::test_a_native_failure_reaches_the_parent_with_its_reason PASSED [ 48%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason0-DSH turn ended with error: HTTP_404.] PASSED [ 50%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason1-DSH turn ended with error: Stream closed.] PASSED [ 51%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason2-DSH turn ended with error: Stream closed.] PASSED [ 52%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason3-DSH turn ended with error: 429.] PASSED [ 54%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason4-DSH turn ended with error.] PASSED [ 55%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason5-DSH turn ended with error.] PASSED [ 57%]
+tests/test_dsh_standalone_child.py::test_an_empty_named_key_redacts_nothing PASSED [ 58%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1] PASSED [ 60%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic-None-https://declared.invalid/anthropic/v1] PASSED [ 61%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic/-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1] PASSED [ 62%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1] PASSED [ 64%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[http://127.0.0.1:1234-None-http://127.0.0.1:1234/v1] PASSED [ 65%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[http://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-http://api.deepseek.com/anthropic/v1] PASSED [ 67%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com:8443/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com:8443/anthropic/v1] PASSED [ 68%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-None] PASSED [ 70%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com/anthropic-None-None] PASSED [ 71%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com:443/anthropic-DEEPSEEK_API_KEY-None] PASSED [ 72%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://API.deepseek.com/anthropic-DEEPSEEK_API_KEY-None] PASSED [ 74%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic-DSH_383_KEY-None] PASSED [ 75%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[None-DEEPSEEK_API_KEY-None] PASSED [ 77%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[None-None-None] PASSED [ 78%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[None-DSH_383_KEY-None] PASSED [ 80%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1/messages] PASSED [ 81%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1/messages] PASSED [ 82%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[http://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-http://api.deepseek.com/anthropic/v1/messages] PASSED [ 84%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com:8443/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com:8443/anthropic/v1/messages] PASSED [ 85%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages] PASSED [ 87%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DSH_383_KEY-https://api.deepseek.com/anthropic/v1/messages] PASSED [ 88%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[None-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages] PASSED [ 90%]
+tests/test_dsh_standalone_child.py::test_installed_dsh_resolves_only_the_connection_endpoint[None-https://api.deepseek.com/anthropic] PASSED [ 91%]
+tests/test_dsh_standalone_child.py::test_installed_dsh_resolves_only_the_connection_endpoint[https://declared.invalid/anthropic-https://declared.invalid/anthropic] PASSED [ 92%]
+tests/test_dsh_standalone_child.py::test_a_dsh_that_cannot_start_tells_the_standalone_parent_why PASSED [ 94%]
+tests/test_dsh_standalone_child.py::test_a_resume_that_cannot_start_tells_the_standalone_parent_why PASSED [ 95%]
+tests/test_dsh_standalone_child.py::test_a_send_after_the_turn_completed_is_input_closed[completed-False-runtime-input-closed] PASSED [ 97%]
+tests/test_dsh_standalone_child.py::test_a_send_after_the_turn_completed_is_input_closed[None-False-operation-unavailable] PASSED [ 98%]
+tests/test_dsh_standalone_child.py::test_a_send_after_the_turn_completed_is_input_closed[interrupted-True-operation-unavailable] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_standalone_child.xml -
+============================= slowest 10 durations =============================
+0.62s call     tests/test_dsh_standalone_child.py::test_delivered_plugin_loads_from_dsh_agent_package_alone
+0.29s call     tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable
+0.29s call     tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1/messages]
+0.28s call     tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1/messages]
+0.26s call     tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com:8443/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com:8443/anthropic/v1/messages]
+0.26s call     tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[None-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages]
+0.26s call     tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages]
+0.26s call     tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[http://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-http://api.deepseek.com/anthropic/v1/messages]
+0.26s call     tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DSH_383_KEY-https://api.deepseek.com/anthropic/v1/messages]
+0.23s call     tests/test_dsh_standalone_child.py::test_codex_host_routes_a_dsh_child_with_its_own_choices
+============================== 70 passed in 5.45s ==============================
+
+### tests/test_dsh_standalone_host.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 35 items
+
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document0-must be a JSON object] PASSED [  2%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document1-Unknown DSH host configuration keys] PASSED [  5%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document2-absolute data root] PASSED [  8%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document3-absolute data root] PASSED [ 11%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] PASSED [ 14%]
+tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings PASSED [ 17%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields0] PASSED [ 20%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields1] PASSED [ 22%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields2] PASSED [ 25%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields3] PASSED [ 28%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields4] PASSED [ 31%]
+tests/test_dsh_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults PASSED [ 34%]
+tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models PASSED [ 37%]
+tests/test_dsh_standalone_host.py::test_codex_without_settings_is_refused_at_create PASSED [ 40%]
+tests/test_dsh_standalone_host.py::test_notice_receiver_outcomes PASSED  [ 42%]
+tests/test_dsh_standalone_host.py::test_each_message_request_and_error_reaches_the_main_once PASSED [ 45%]
+tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question PASSED [ 48%]
+tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session PASSED [ 51%]
+tests/test_dsh_standalone_host.py::test_host_start_refusals PASSED       [ 54%]
+tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on PASSED [ 57%]
+tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh PASSED [ 60%]
+tests/test_dsh_standalone_host.py::test_dsh_package_declares_the_host_bundle PASSED [ 62%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_relays_each_notice_to_its_main_session PASSED [ 65%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_is_inert_inside_an_agent PASSED [ 68%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[None] PASSED [ 71%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[] PASSED [ 74%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[None] PASSED [ 77%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[relative/project] PASSED [ 80%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[/nonexistent-570/project] PASSED [ 82%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[file] PASSED [ 85%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root PASSED [ 88%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_reports_an_unwritable_project PASSED [ 91%]
+tests/test_dsh_standalone_host.py::test_default_configuration_is_the_project_root_without_runtime_settings PASSED [ 94%]
+tests/test_dsh_standalone_host.py::test_default_host_records_land_in_the_project PASSED [ 97%]
+tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_standalone_host.xml -
+============================= slowest 10 durations =============================
+0.62s call     tests/test_dsh_standalone_host.py::test_host_start_refusals
+0.55s call     tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root
+0.44s call     tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on
+0.41s call     tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session
+0.31s call     tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[]
+0.27s call     tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[None]
+0.25s call     tests/test_dsh_standalone_host.py::test_plugin_host_row_relays_each_notice_to_its_main_session
+0.24s call     tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[None]
+0.22s call     tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question
+0.20s call     tests/test_dsh_standalone_host.py::test_plugin_host_row_is_inert_inside_an_agent
+============================== 35 passed in 4.46s ==============================
+
+### tests/test_dsh_startup.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 2 items
+
+tests/test_dsh_startup.py::test_failed_startup_retains_reason_and_redacts_credentials PASSED [ 50%]
+tests/test_dsh_startup.py::test_actual_startup_without_model SKIPPED     [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_dsh_startup.xml -
+============================= slowest 10 durations =============================
+0.16s call     tests/test_dsh_startup.py::test_failed_startup_retains_reason_and_redacts_credentials
+
+(4 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+========================= 1 passed, 1 skipped in 0.26s =========================
+
+### tests/test_envelope_validation_555.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 13 items
+
+tests/test_envelope_validation_555.py::test_envelope_and_argument_errors_return_together PASSED [  7%]
+tests/test_envelope_validation_555.py::test_flat_tool_reports_every_problem PASSED [ 15%]
+tests/test_envelope_validation_555.py::test_validate_schema_lists_all_and_stays_a_value_error PASSED [ 23%]
+tests/test_envelope_validation_555.py::test_any_of_reports_the_meant_alternative PASSED [ 30%]
+tests/test_envelope_validation_555.py::test_arguments_file_supplies_and_inline_overrides PASSED [ 38%]
+tests/test_envelope_validation_555.py::test_arguments_file_content_is_validated_with_the_envelope PASSED [ 46%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[None-does not exist] PASSED [ 53%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[{"runtime": "do-not-echo-7f3a",-is not valid JSON (line 1, column] PASSED [ 61%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[["do-not-echo-7f3a"]-must hold a JSON object] PASSED [ 69%]
+tests/test_envelope_validation_555.py::test_arguments_file_outside_the_boundary_is_refused PASSED [ 76%]
+tests/test_envelope_validation_555.py::test_without_a_host_boundary_a_file_is_refused PASSED [ 84%]
+tests/test_envelope_validation_555.py::test_envelope_schema_describes_the_file_field PASSED [ 92%]
+tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_envelope_validation_555.xml -
+============================= slowest 10 durations =============================
+0.32s call     tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 13 passed in 0.46s ==============================
+
+### tests/test_extra_tools_551.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 13 items
+
+tests/test_extra_tools_551.py::test_table_refuses_agents_and_repeats PASSED [  7%]
+tests/test_extra_tools_551.py::test_call_reports_refusals_as_failed_results PASSED [ 15%]
+tests/test_extra_tools_551.py::test_agents_envelopes_never_look_like_tool_requests PASSED [ 23%]
+tests/test_extra_tools_551.py::test_environment_descriptors_ignore_malformed PASSED [ 30%]
+tests/test_extra_tools_551.py::test_codex_child_lists_and_calls_host_tools PASSED [ 38%]
+tests/test_extra_tools_551.py::test_codex_child_without_host_tools_keeps_agents_only PASSED [ 46%]
+tests/test_extra_tools_551.py::test_claude_child_lists_and_calls_host_tools PASSED [ 53%]
+tests/test_extra_tools_551.py::test_claude_child_without_host_tools_lists_agents_only PASSED [ 61%]
+tests/test_extra_tools_551.py::test_claude_host_tools_are_allowed_without_a_parent_request PASSED [ 69%]
+tests/test_extra_tools_551.py::test_claude_disallowed_host_tool_is_not_offered[tasks] PASSED [ 76%]
+tests/test_extra_tools_551.py::test_claude_disallowed_host_tool_is_not_offered[mcp__host_name__tasks] PASSED [ 84%]
+tests/test_extra_tools_551.py::test_claude_tool_choice_keeps_agents_and_host_tools[chosen0] PASSED [ 92%]
+tests/test_extra_tools_551.py::test_claude_tool_choice_keeps_agents_and_host_tools[chosen1] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_extra_tools_551.xml -
+============================= slowest 10 durations =============================
+1.01s call     tests/test_extra_tools_551.py::test_claude_host_tools_are_allowed_without_a_parent_request
+0.42s call     tests/test_extra_tools_551.py::test_codex_child_lists_and_calls_host_tools
+0.33s call     tests/test_extra_tools_551.py::test_codex_child_without_host_tools_keeps_agents_only
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 13 passed in 1.93s ==============================
+
+### tests/test_host_shutdown_stop.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 61 items
+
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-first-native] PASSED [  1%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-first-ask_parent] PASSED [  3%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-last-native] PASSED [  4%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-last-ask_parent] PASSED [  6%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-first-native] PASSED [  8%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-first-ask_parent] PASSED [  9%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-last-native] PASSED [ 11%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-last-ask_parent] PASSED [ 13%]
+tests/test_host_shutdown_stop.py::test_every_child_is_interrupted_before_any_is_waited_for[pi] PASSED [ 14%]
+tests/test_host_shutdown_stop.py::test_every_child_is_interrupted_before_any_is_waited_for[dsh] PASSED [ 16%]
+tests/test_host_shutdown_stop.py::test_this_shutdowns_ends_stay_held_and_arrive_once[pi] PASSED [ 18%]
+tests/test_host_shutdown_stop.py::test_this_shutdowns_ends_stay_held_and_arrive_once[dsh] PASSED [ 19%]
+tests/test_host_shutdown_stop.py::test_a_child_that_never_stops_is_named_and_the_others_end_within_the_bound[pi] PASSED [ 21%]
+tests/test_host_shutdown_stop.py::test_a_child_that_never_stops_is_named_and_the_others_end_within_the_bound[dsh] PASSED [ 22%]
+tests/test_host_shutdown_stop.py::test_the_deadline_is_ten_seconds PASSED [ 24%]
+tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[pi-raises] PASSED [ 26%]
+tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[pi-failed-result] PASSED [ 27%]
+tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[dsh-raises] PASSED [ 29%]
+tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[dsh-failed-result] PASSED [ 31%]
+tests/test_host_shutdown_stop.py::test_an_agent_that_was_still_starting_is_interrupted_again[pi] PASSED [ 32%]
+tests/test_host_shutdown_stop.py::test_an_agent_that_was_still_starting_is_interrupted_again[dsh] PASSED [ 34%]
+tests/test_host_shutdown_stop.py::test_a_status_that_never_answers_confirms_nothing[pi-failed-result] PASSED [ 36%]
+tests/test_host_shutdown_stop.py::test_a_status_that_never_answers_confirms_nothing[pi-raises] PASSED [ 37%]
+tests/test_host_shutdown_stop.py::test_a_status_that_never_answers_confirms_nothing[dsh-failed-result] PASSED [ 39%]
+tests/test_host_shutdown_stop.py::test_a_status_that_never_answers_confirms_nothing[dsh-raises] PASSED [ 40%]
+tests/test_host_shutdown_stop.py::test_agents_that_cannot_be_listed_confirm_nothing[pi] PASSED [ 42%]
+tests/test_host_shutdown_stop.py::test_agents_that_cannot_be_listed_confirm_nothing[dsh] PASSED [ 44%]
+tests/test_host_shutdown_stop.py::test_a_status_lost_after_the_first_keeps_every_agent_unconfirmed[pi] PASSED [ 45%]
+tests/test_host_shutdown_stop.py::test_a_status_lost_after_the_first_keeps_every_agent_unconfirmed[dsh] PASSED [ 47%]
+tests/test_host_shutdown_stop.py::test_a_status_that_recovers_stops_everything[pi] PASSED [ 49%]
+tests/test_host_shutdown_stop.py::test_a_status_that_recovers_stops_everything[dsh] PASSED [ 50%]
+tests/test_host_shutdown_stop.py::test_a_blocked_call_keeps_one_thread_and_the_stop_within_its_bound PASSED [ 52%]
+tests/test_host_shutdown_stop.py::test_an_agent_seen_stopped_whose_latest_read_is_lost_is_named PASSED [ 54%]
+tests/test_host_shutdown_stop.py::test_a_real_host_process_with_an_unanswered_request_exits_cleanly[pi-first] PASSED [ 55%]
+tests/test_host_shutdown_stop.py::test_a_real_host_process_with_an_unanswered_request_exits_cleanly[pi-last] PASSED [ 57%]
+tests/test_host_shutdown_stop.py::test_a_real_host_process_with_an_unanswered_request_exits_cleanly[dsh-first] PASSED [ 59%]
+tests/test_host_shutdown_stop.py::test_a_real_host_process_with_an_unanswered_request_exits_cleanly[dsh-last] PASSED [ 60%]
+tests/test_host_shutdown_stop.py::test_a_real_host_process_names_a_stuck_child_and_exits_anyway[pi] PASSED [ 62%]
+tests/test_host_shutdown_stop.py::test_a_real_host_process_names_a_stuck_child_and_exits_anyway[dsh] PASSED [ 63%]
+tests/test_host_shutdown_stop.py::test_a_surviving_runtime_does_not_hold_the_hosts_pipes_and_reads_as_active[pi] PASSED [ 65%]
+tests/test_host_shutdown_stop.py::test_a_surviving_runtime_does_not_hold_the_hosts_pipes_and_reads_as_active[dsh] PASSED [ 67%]
+tests/test_host_shutdown_stop.py::test_an_error_already_unwinding_survives_the_forced_exit[pi] PASSED [ 68%]
+tests/test_host_shutdown_stop.py::test_an_error_already_unwinding_survives_the_forced_exit[dsh] PASSED [ 70%]
+tests/test_host_shutdown_stop.py::test_an_error_with_every_child_stopped_exits_as_before[pi] PASSED [ 72%]
+tests/test_host_shutdown_stop.py::test_an_error_with_every_child_stopped_exits_as_before[dsh] PASSED [ 73%]
+tests/test_host_shutdown_stop.py::test_another_process_holding_a_record_lock_does_not_hold_the_host[pi] PASSED [ 75%]
+tests/test_host_shutdown_stop.py::test_another_process_holding_a_record_lock_does_not_hold_the_host[dsh] PASSED [ 77%]
+tests/test_host_shutdown_stop.py::test_a_locked_parent_does_not_hide_or_hold_its_descendants[pi] PASSED [ 78%]
+tests/test_host_shutdown_stop.py::test_a_locked_parent_does_not_hide_or_hold_its_descendants[dsh] PASSED [ 80%]
+tests/test_host_shutdown_stop.py::test_a_driver_interrupt_that_never_returns_stops_nobody_else[pi] PASSED [ 81%]
+tests/test_host_shutdown_stop.py::test_a_driver_interrupt_that_never_returns_stops_nobody_else[dsh] PASSED [ 83%]
+tests/test_host_shutdown_stop.py::test_a_status_lost_after_the_first_claims_no_other_agent_stopped[pi-fails] PASSED [ 85%]
+tests/test_host_shutdown_stop.py::test_a_status_lost_after_the_first_claims_no_other_agent_stopped[pi-blocks] PASSED [ 86%]
+tests/test_host_shutdown_stop.py::test_a_status_lost_after_the_first_claims_no_other_agent_stopped[dsh-fails] PASSED [ 88%]
+tests/test_host_shutdown_stop.py::test_a_status_lost_after_the_first_claims_no_other_agent_stopped[dsh-blocks] PASSED [ 90%]
+tests/test_host_shutdown_stop.py::test_a_request_in_flight_that_finishes_still_gets_its_reply[pi] PASSED [ 91%]
+tests/test_host_shutdown_stop.py::test_a_request_in_flight_that_finishes_still_gets_its_reply[dsh] PASSED [ 93%]
+tests/test_host_shutdown_stop.py::test_a_shown_acknowledgement_on_a_locked_record_does_not_hold_the_pi_host PASSED [ 95%]
+tests/test_host_shutdown_stop.py::test_a_shown_acknowledgement_still_settles_when_the_record_is_free PASSED [ 96%]
+tests/test_host_shutdown_stop.py::test_the_real_extension_rejects_with_the_line_and_the_next_session_still_gets_a_host PASSED [ 98%]
+tests/test_host_shutdown_stop.py::test_the_real_plugin_logs_the_line PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_host_shutdown_stop.xml -
+============================= slowest 10 durations =============================
+16.47s call     tests/test_host_shutdown_stop.py::test_another_process_holding_a_record_lock_does_not_hold_the_host[dsh]
+16.44s call     tests/test_host_shutdown_stop.py::test_another_process_holding_a_record_lock_does_not_hold_the_host[pi]
+10.22s call     tests/test_host_shutdown_stop.py::test_a_real_host_process_names_a_stuck_child_and_exits_anyway[dsh]
+10.19s call     tests/test_host_shutdown_stop.py::test_a_real_host_process_names_a_stuck_child_and_exits_anyway[pi]
+5.22s call     tests/test_host_shutdown_stop.py::test_a_shown_acknowledgement_on_a_locked_record_does_not_hold_the_pi_host
+2.21s call     tests/test_host_shutdown_stop.py::test_a_locked_parent_does_not_hide_or_hold_its_descendants[dsh]
+2.20s call     tests/test_host_shutdown_stop.py::test_a_locked_parent_does_not_hide_or_hold_its_descendants[pi]
+2.18s call     tests/test_host_shutdown_stop.py::test_a_driver_interrupt_that_never_returns_stops_nobody_else[dsh]
+2.16s call     tests/test_host_shutdown_stop.py::test_a_driver_interrupt_that_never_returns_stops_nobody_else[pi]
+1.61s call     tests/test_host_shutdown_stop.py::test_a_request_in_flight_that_finishes_still_gets_its_reply[pi]
+======================== 61 passed in 102.41s (0:01:42) ========================
+
+### tests/test_jsonl_archive.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 23 items
+
+tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination PASSED [  4%]
+tests/test_jsonl_archive.py::test_reject_reordering_dropped_identity_and_changed_final PASSED [  8%]
+tests/test_jsonl_archive.py::test_optional_policy_and_late_backfill_preserve_existing_records PASSED [ 13%]
+tests/test_jsonl_archive.py::test_stream_restart_final_backfill_and_late_notification PASSED [ 17%]
+tests/test_jsonl_archive.py::test_stream_semantic_boundaries_and_stale_writer PASSED [ 21%]
+tests/test_jsonl_archive.py::test_attachments_portable_and_unknown_required_event_refuses_projection PASSED [ 26%]
+tests/test_jsonl_archive.py::test_native_fork_chain_compaction_and_original_times PASSED [ 30%]
+tests/test_jsonl_archive.py::test_score_probability_alignment_survives_jsonl_and_history_prefix PASSED [ 34%]
+tests/test_jsonl_archive.py::test_process_exit_keeps_partial_output_and_requires_resolution PASSED [ 39%]
+tests/test_jsonl_archive.py::test_same_source_finalization_at_last_checkpoint_and_parallel_pending PASSED [ 43%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.content] PASSED [ 47%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[/data/content] PASSED [ 52%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history] PASSED [ 56%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history_base] PASSED [ 60%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[inheritedPrefix] PASSED [ 65%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[messageOrder] PASSED [ 69%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.id] PASSED [ 73%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.toolCallId] PASSED [ 78%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[unknownNativeGap] PASSED [ 82%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[parentSession] PASSED [ 86%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[history] PASSED [ 91%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[/inheritedPrefix] PASSED [ 95%]
+tests/test_jsonl_archive.py::test_missing_optional_metadata_does_not_block_complete_messages PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_jsonl_archive.xml -
+============================= slowest 10 durations =============================
+0.10s call     tests/test_jsonl_archive.py::test_process_exit_keeps_partial_output_and_requires_resolution
+0.01s call     tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination
+0.01s call     tests/test_jsonl_archive.py::test_score_probability_alignment_survives_jsonl_and_history_prefix
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 23 passed in 0.24s ==============================
+
+### tests/test_no_graphtraj_dependency.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 4 items
+
+tests/test_no_graphtraj_dependency.py::test_no_module_or_test_imports_or_runs_graphtraj PASSED [ 25%]
+tests/test_no_graphtraj_dependency.py::test_non_python_package_files_do_not_run_graphtraj PASSED [ 50%]
+tests/test_no_graphtraj_dependency.py::test_packaging_never_declares_or_requires_graphtraj PASSED [ 75%]
+tests/test_no_graphtraj_dependency.py::test_every_module_imports_with_graphtraj_blocked PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_no_graphtraj_dependency.xml -
+============================= slowest 10 durations =============================
+2.44s call     tests/test_no_graphtraj_dependency.py::test_no_module_or_test_imports_or_runs_graphtraj
+0.17s call     tests/test_no_graphtraj_dependency.py::test_every_module_imports_with_graphtraj_blocked
+0.01s call     tests/test_no_graphtraj_dependency.py::test_non_python_package_files_do_not_run_graphtraj
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 4 passed in 2.69s ===============================
+
+### tests/test_notice_text.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 5 items
+
+tests/test_notice_text.py::test_completed_shows_the_reply_as_markdown_and_only_the_facts_the_model_needs PASSED [ 20%]
+tests/test_notice_text.py::test_failed_and_interrupted_keep_the_error_and_the_last_reply PASSED [ 40%]
+tests/test_notice_text.py::test_permission_request_keeps_request_id_token_and_the_tool_input PASSED [ 60%]
+tests/test_notice_text.py::test_plain_messages_pass_through_verbatim PASSED [ 80%]
+tests/test_notice_text.py::test_missing_fields_still_give_one_readable_notice PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_notice_text.xml -
+============================= slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 5 passed in 0.07s ===============================
+
+### tests/test_pi_default_host_572.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 16 items
+
+tests/test_pi_default_host_572.py::test_without_flag_or_variable_the_installed_python_hosts_the_project_default PASSED [  6%]
+tests/test_pi_default_host_572.py::test_without_an_installation_python_the_error_names_the_variable PASSED [ 12%]
+tests/test_pi_default_host_572.py::test_a_python_importing_another_graftling_is_not_used PASSED [ 18%]
+tests/test_pi_default_host_572.py::test_an_editable_checkout_finds_python_on_path PASSED [ 25%]
+tests/test_pi_default_host_572.py::test_the_variable_wins_over_the_installation PASSED [ 31%]
+tests/test_pi_default_host_572.py::test_the_flag_wins_over_the_default_root PASSED [ 37%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[relative/project] PASSED [ 43%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[/no/such/project] PASSED [ 50%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[FILE] PASSED [ 56%]
+tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_SESSION_ID] PASSED [ 62%]
+tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_AGENT_SOURCE] PASSED [ 68%]
+tests/test_pi_default_host_572.py::test_a_child_keeps_its_owner_connection_and_python PASSED [ 75%]
+tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default PASSED [ 81%]
+tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag PASSED [ 87%]
+tests/test_pi_default_host_572.py::test_default_configuration_is_the_root_only_form PASSED [ 93%]
+tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_default_host_572.xml -
+============================= slowest 10 durations =============================
+0.30s call     tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_AGENT_SOURCE]
+0.24s call     tests/test_pi_default_host_572.py::test_without_flag_or_variable_the_installed_python_hosts_the_project_default
+0.21s call     tests/test_pi_default_host_572.py::test_the_flag_wins_over_the_default_root
+0.21s call     tests/test_pi_default_host_572.py::test_an_editable_checkout_finds_python_on_path
+0.19s call     tests/test_pi_default_host_572.py::test_a_python_importing_another_graftling_is_not_used
+0.19s call     tests/test_pi_default_host_572.py::test_the_variable_wins_over_the_installation
+0.15s call     tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default
+0.11s call     tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag
+0.09s call     tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_SESSION_ID]
+0.06s call     tests/test_pi_default_host_572.py::test_a_child_keeps_its_owner_connection_and_python
+============================== 16 passed in 2.11s ==============================
+
+### tests/test_pi_dsh_child_tools_551.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 16 items
+
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[None-expected0] PASSED [  6%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[settings1-expected1] PASSED [ 12%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[settings2-expected2] PASSED [ 18%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[settings3-expected3] PASSED [ 25%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_without_a_choice_passes_no_flag PASSED [ 31%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_choice_maps_to_native_flags_and_names_what_is_beyond_the_host PASSED [ 37%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_driver_keeps_the_choice_only_when_given PASSED [ 43%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_refuses_provably_unknown_entries PASSED [ 50%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_reports_what_only_pi_can_resolve_at_start PASSED [ 56%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_extension_asks_the_parent_before_a_beyond_host_tool PASSED [ 62%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_extension_without_beyond_host_tools_installs_nothing PASSED [ 68%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_without_a_choice_keeps_the_installed_rows PASSED [ 75%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_choice_disables_only_the_other_or_denied_rows PASSED [ 81%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_unknown_row_is_unavailable_and_naming_the_limit PASSED [ 87%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_enabling_a_host_disabled_row_needs_authorization_it_cannot_get PASSED [ 93%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_installed_preset_rows_are_selectable PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_dsh_child_tools_551.xml -
+============================= slowest 10 durations =============================
+0.05s call     tests/test_pi_dsh_child_tools_551.py::test_pi_extension_asks_the_parent_before_a_beyond_host_tool
+0.05s call     tests/test_pi_dsh_child_tools_551.py::test_pi_extension_without_beyond_host_tools_installs_nothing
+0.04s call     tests/test_pi_dsh_child_tools_551.py::test_dsh_installed_preset_rows_are_selectable
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 16 passed in 0.37s ==============================
+
+### tests/test_pi_dsh_extra_tools_551.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 6 items
+
+tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[False] PASSED [ 16%]
+tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[True] PASSED [ 33%]
+tests/test_pi_dsh_extra_tools_551.py::test_pi_connection_environment_differs_only_by_the_descriptors PASSED [ 50%]
+tests/test_pi_dsh_extra_tools_551.py::test_pi_channel_serves_the_extra_tools PASSED [ 66%]
+tests/test_pi_dsh_extra_tools_551.py::test_dsh_plugin_row_and_environment_differ_only_by_the_descriptors PASSED [ 83%]
+tests/test_pi_dsh_extra_tools_551.py::test_dsh_binding_serves_the_extra_tools_on_its_channel PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_dsh_extra_tools_551.xml -
+============================= slowest 10 durations =============================
+0.05s setup    tests/test_pi_dsh_extra_tools_551.py::test_pi_connection_environment_differs_only_by_the_descriptors
+0.05s call     tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[True]
+0.05s call     tests/test_pi_dsh_extra_tools_551.py::test_pi_extension_forwards_only_the_declared_descriptors[False]
+0.01s call     tests/test_pi_dsh_extra_tools_551.py::test_dsh_plugin_row_and_environment_differ_only_by_the_descriptors
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 6 passed in 0.26s ===============================
+
+### tests/test_pi_dsh_notice_holding.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 57 items
+
+tests/test_pi_dsh_notice_holding.py::test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host[pi] PASSED [  1%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host[dsh] PASSED [  3%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_refused_by_the_session_stays_held_for_the_next_host[pi] PASSED [  5%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_refused_by_the_session_stays_held_for_the_next_host[dsh] PASSED [  7%]
+tests/test_pi_dsh_notice_holding.py::test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated[pi] PASSED [  8%]
+tests/test_pi_dsh_notice_holding.py::test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated[dsh] PASSED [ 10%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_shown_by_status_is_not_pushed[pi] PASSED [ 12%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_shown_by_status_is_not_pushed[dsh] PASSED [ 14%]
+tests/test_pi_dsh_notice_holding.py::test_a_hierarchy_status_settles_every_held_end_it_shows[pi] PASSED [ 15%]
+tests/test_pi_dsh_notice_holding.py::test_a_hierarchy_status_settles_every_held_end_it_shows[dsh] PASSED [ 17%]
+tests/test_pi_dsh_notice_holding.py::test_a_body_shown_while_the_flush_runs_is_not_pushed[pi] PASSED [ 19%]
+tests/test_pi_dsh_notice_holding.py::test_a_body_shown_while_the_flush_runs_is_not_pushed[dsh] PASSED [ 21%]
+tests/test_pi_dsh_notice_holding.py::test_a_held_end_being_flushed_is_shown_queueing_and_not_settled_as_read[pi] PASSED [ 22%]
+tests/test_pi_dsh_notice_holding.py::test_a_held_end_being_flushed_is_shown_queueing_and_not_settled_as_read[dsh] PASSED [ 24%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_flush_does_not_lose_a_body_read_during_it[pi] PASSED [ 26%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_flush_does_not_lose_a_body_read_during_it[dsh] PASSED [ 28%]
+tests/test_pi_dsh_notice_holding.py::test_shutdowns_own_wait_does_not_settle_the_ends_it_causes[pi] PASSED [ 29%]
+tests/test_pi_dsh_notice_holding.py::test_shutdowns_own_wait_does_not_settle_the_ends_it_causes[dsh] PASSED [ 31%]
+tests/test_pi_dsh_notice_holding.py::test_a_live_end_is_pushed_once_with_the_host_up[pi] PASSED [ 33%]
+tests/test_pi_dsh_notice_holding.py::test_a_live_end_is_pushed_once_with_the_host_up[dsh] PASSED [ 35%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once[pi] PASSED [ 36%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once[dsh] PASSED [ 38%]
+tests/test_pi_dsh_notice_holding.py::test_each_native_request_notifies_once_with_its_own_identity[pi] PASSED [ 40%]
+tests/test_pi_dsh_notice_holding.py::test_each_native_request_notifies_once_with_its_own_identity[dsh] PASSED [ 42%]
+tests/test_pi_dsh_notice_holding.py::test_ask_parent_notifies_once_without_its_question[pi] PASSED [ 43%]
+tests/test_pi_dsh_notice_holding.py::test_ask_parent_notifies_once_without_its_question[dsh] PASSED [ 45%]
+tests/test_pi_dsh_notice_holding.py::test_dsh_flush_retries_a_refusal_within_its_bound_without_spinning PASSED [ 47%]
+tests/test_pi_dsh_notice_holding.py::test_dsh_flush_retry_stops_at_shutdown PASSED [ 49%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi] PASSED [ 50%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh] PASSED [ 52%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[pi] PASSED [ 54%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[dsh] PASSED [ 56%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_refused_notice_stays_held PASSED [ 57%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed PASSED [ 59%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_pi_took_is_delivered_only_when_it_is_in_the_session PASSED [ 61%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_pi_took_and_never_wrote_is_delivered_by_the_next_host PASSED [ 63%]
+tests/test_pi_dsh_notice_holding.py::test_a_status_while_pi_holds_the_notice_shows_the_body_and_settles_nothing PASSED [ 64%]
+tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it PASSED [ 66%]
+tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[pi] PASSED [ 68%]
+tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[dsh] PASSED [ 70%]
+tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[pi] PASSED [ 71%]
+tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[dsh] PASSED [ 73%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_deliver_once_when_pi_writes_the_notice PASSED [ 75%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it PASSED [ 77%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_waits_for_the_entry_after_message_end PASSED [ 78%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown PASSED [ 80%]
+tests/test_pi_dsh_notice_holding.py::test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it PASSED [ 82%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry0] PASSED [ 84%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry1] PASSED [ 85%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry2] PASSED [ 87%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry3] PASSED [ 89%]
+tests/test_pi_dsh_notice_holding.py::test_extension_says_ready_once_at_the_first_turn_and_not_before PASSED [ 91%]
+tests/test_pi_dsh_notice_holding.py::test_extension_with_a_ui_says_ready_after_its_grace_when_no_turn_starts PASSED [ 92%]
+tests/test_pi_dsh_notice_holding.py::test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inactive_session PASSED [ 94%]
+tests/test_pi_dsh_notice_holding.py::test_a_nested_dsh_parent_gives_each_request_its_own_relay_id PASSED [ 96%]
+tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_when_the_sessions_turn_begins_not_at_attach PASSED [ 98%]
+tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_after_its_grace_in_a_session_with_no_turn PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_dsh_notice_holding.xml -
+============================= slowest 10 durations =============================
+4.92s call     tests/test_pi_dsh_notice_holding.py::test_extension_with_a_ui_says_ready_after_its_grace_when_no_turn_starts
+4.86s call     tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_after_its_grace_in_a_session_with_no_turn
+3.41s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_deliver_once_when_pi_writes_the_notice
+3.38s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it
+3.37s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown
+3.35s call     tests/test_pi_dsh_notice_holding.py::test_extension_says_ready_once_at_the_first_turn_and_not_before
+1.98s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi]
+1.98s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh]
+1.87s call     tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry0]
+1.79s call     tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_when_the_sessions_turn_begins_not_at_attach
+============================= 57 passed in 45.96s ==============================
+
+### tests/test_pi_dsh_owner_tools_no_ask_551.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 11 items
+
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[True-asked0] PASSED [  9%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[False-asked1] PASSED [ 18%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config0-asked0] PASSED [ 27%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config1-asked1] PASSED [ 36%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_names_the_owner_tools_only_when_declared PASSED [ 45%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_disallowed_owner_tool_is_not_offered PASSED [ 54%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding PASSED [ 63%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_disallowed_owner_tool_is_excluded_natively PASSED [ 72%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_available_set_keeps_the_owners_entries PASSED [ 81%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_launch_names_the_owner_entries_in_its_argv PASSED [ 90%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_dsh_owner_tools_no_ask_551.xml -
+============================= slowest 10 durations =============================
+0.06s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[False-asked1]
+0.05s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row
+0.05s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[True-asked0]
+0.05s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config0-asked0]
+0.04s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config1-asked1]
+0.02s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding
+0.01s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_names_the_owner_tools_only_when_declared
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 11 passed in 0.42s ==============================
+
+### tests/test_pi_member_git.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 8 items
+
+tests/test_pi_member_git.py::test_write_member_reads_and_writes_the_git_data_a_commit_needs PASSED [ 12%]
+tests/test_pi_member_git.py::test_write_member_cannot_reach_other_working_files PASSED [ 25%]
+tests/test_pi_member_git.py::test_write_member_commits_with_the_host_identity PASSED [ 37%]
+tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-None-expected0] PASSED [ 50%]
+tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[Host Person-None-expected1] PASSED [ 62%]
+tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-host@example.test-expected2] PASSED [ 75%]
+tests/test_pi_member_git.py::test_write_member_launches_when_host_git_is_missing PASSED [ 87%]
+tests/test_pi_member_git.py::test_read_member_gets_no_git_access_or_variables PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_member_git.xml -
+============================= slowest 10 durations =============================
+0.20s setup    tests/test_pi_member_git.py::test_write_member_reads_and_writes_the_git_data_a_commit_needs
+0.17s call     tests/test_pi_member_git.py::test_write_member_commits_with_the_host_identity
+0.17s setup    tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[Host Person-None-expected1]
+0.16s setup    tests/test_pi_member_git.py::test_write_member_launches_when_host_git_is_missing
+0.16s setup    tests/test_pi_member_git.py::test_read_member_gets_no_git_access_or_variables
+0.16s setup    tests/test_pi_member_git.py::test_write_member_commits_with_the_host_identity
+0.16s setup    tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-None-expected0]
+0.16s setup    tests/test_pi_member_git.py::test_write_member_cannot_reach_other_working_files
+0.15s setup    tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-host@example.test-expected2]
+0.08s call     tests/test_pi_member_git.py::test_write_member_reads_and_writes_the_git_data_a_commit_needs
+============================== 8 passed in 1.86s ===============================
+
+### tests/test_pi_notice_display_536.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 1 item
+
+tests/test_pi_notice_display_536.py::test_notice_is_drawn_as_who_and_markdown_with_the_model_input_unchanged PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_notice_display_536.xml -
+============================= slowest 10 durations =============================
+0.75s call     tests/test_pi_notice_display_536.py::test_notice_is_drawn_as_who_and_markdown_with_the_model_input_unchanged
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 1 passed in 0.81s ===============================
+
+### tests/test_pi_standalone_host.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 27 items
+
+tests/test_pi_standalone_host.py::test_configuration_refusals[document0-must be a JSON object] PASSED [  3%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document1-adapter_request is no longer accepted] PASSED [  7%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document2-Unknown Pi host configuration keys] PASSED [ 11%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document3-absolute data root] PASSED [ 14%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document4-absolute data root] PASSED [ 18%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document5-"claude" must be an object] PASSED [ 22%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document6-worktree_path is always the cwd] PASSED [ 25%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document7-Unknown or fixed Pi settings] PASSED [ 29%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document8-non-empty string] PASSED [ 33%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document9-absolute paths] PASSED [ 37%]
+tests/test_pi_standalone_host.py::test_configuration_refusals[document10-'read' or 'write'] PASSED [ 40%]
+tests/test_pi_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings PASSED [ 44%]
+tests/test_pi_standalone_host.py::test_default_request_comes_from_the_native_parent PASSED [ 48%]
+tests/test_pi_standalone_host.py::test_default_request_refusals_and_write_access PASSED [ 51%]
+tests/test_pi_standalone_host.py::test_child_model_is_not_bound_to_the_parent_model PASSED [ 55%]
+tests/test_pi_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults PASSED [ 59%]
+tests/test_pi_standalone_host.py::test_codex_without_settings_is_refused_at_create PASSED [ 62%]
+tests/test_pi_standalone_host.py::test_pi_host_routes_creates_to_every_runtime PASSED [ 66%]
+tests/test_pi_standalone_host.py::test_notice_receiver_outcomes PASSED   [ 70%]
+tests/test_pi_standalone_host.py::test_notice_waiting_at_shutdown_is_held_and_later_ones_are_not_written PASSED [ 74%]
+tests/test_pi_standalone_host.py::test_a_body_being_pushed_is_shown_queueing_with_its_body PASSED [ 77%]
+tests/test_pi_standalone_host.py::test_each_end_is_pushed_once_and_shutdown_ends_are_held PASSED [ 81%]
+tests/test_pi_standalone_host.py::test_pi_package_manifest_loads_the_extension PASSED [ 85%]
+tests/test_pi_standalone_host.py::test_host_starts_from_root_only_and_closes_at_shutdown PASSED [ 88%]
+tests/test_pi_standalone_host.py::test_host_start_refusals PASSED        [ 92%]
+tests/test_pi_standalone_host.py::test_extension_injects_each_notice_natively_and_acknowledges_it PASSED [ 96%]
+tests/test_pi_standalone_host.py::test_extension_reports_a_notice_it_could_not_inject PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_standalone_host.xml -
+============================= slowest 10 durations =============================
+0.24s call     tests/test_pi_standalone_host.py::test_extension_injects_each_notice_natively_and_acknowledges_it
+0.22s call     tests/test_pi_standalone_host.py::test_extension_reports_a_notice_it_could_not_inject
+0.22s call     tests/test_pi_standalone_host.py::test_host_start_refusals
+0.14s call     tests/test_pi_standalone_host.py::test_host_starts_from_root_only_and_closes_at_shutdown
+0.06s call     tests/test_pi_standalone_host.py::test_each_end_is_pushed_once_and_shutdown_ends_are_held
+0.06s call     tests/test_pi_standalone_host.py::test_default_request_refusals_and_write_access
+0.05s call     tests/test_pi_standalone_host.py::test_notice_receiver_outcomes
+0.03s setup    tests/test_pi_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults
+0.02s call     tests/test_pi_standalone_host.py::test_pi_host_routes_creates_to_every_runtime
+
+(1 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 27 passed in 1.18s ==============================
+
+### tests/test_pi_subagent_child_585.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 32 items
+
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[nicobailon: CHILD=1 with its own Session file-default] PASSED [  3%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[nicobailon: CHILD=1 with its own Session file---agents-config] PASSED [  6%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[nicobailon: CHILD=1 with its own Session file-GRAFTLING_DATA_ROOT] PASSED [  9%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[mjakl: DEPTH=1, no Session file-default] PASSED [ 12%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[mjakl: DEPTH=1, no Session file---agents-config] PASSED [ 15%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[mjakl: DEPTH=1, no Session file-GRAFTLING_DATA_ROOT] PASSED [ 18%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[DEPTH=2 with a Session file-default] PASSED [ 21%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[DEPTH=2 with a Session file---agents-config] PASSED [ 25%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[DEPTH=2 with a Session file-GRAFTLING_DATA_ROOT] PASSED [ 28%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[bundled example: no marker, no Session file-default] PASSED [ 31%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[bundled example: no marker, no Session file---agents-config] PASSED [ 34%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[bundled example: no marker, no Session file-GRAFTLING_DATA_ROOT] PASSED [ 37%]
+tests/test_pi_subagent_child_585.py::test_a_child_is_recognised_before_the_python_and_project_checks PASSED [ 40%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-unset] PASSED [ 43%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-DEPTH=0] PASSED [ 46%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-DEPTH=empty] PASSED [ 50%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-CHILD=empty] PASSED [ 53%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-CHILD=0] PASSED [ 56%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-unset] PASSED [ 59%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-DEPTH=0] PASSED [ 62%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-DEPTH=empty] PASSED [ 65%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-CHILD=empty] PASSED [ 68%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-CHILD=0] PASSED [ 71%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-unset] PASSED [ 75%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-DEPTH=0] PASSED [ 78%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-DEPTH=empty] PASSED [ 81%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-CHILD=empty] PASSED [ 84%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-CHILD=0] PASSED [ 87%]
+tests/test_pi_subagent_child_585.py::test_graftlings_own_child_keeps_its_owner_connection[/sessions/pi-main.jsonl] PASSED [ 90%]
+tests/test_pi_subagent_child_585.py::test_graftlings_own_child_keeps_its_owner_connection[] PASSED [ 93%]
+tests/test_pi_subagent_child_585.py::test_a_managed_dsh_context_is_unchanged[/sessions/pi-main.jsonl] PASSED [ 96%]
+tests/test_pi_subagent_child_585.py::test_a_managed_dsh_context_is_unchanged[] PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_pi_subagent_child_585.xml -
+============================= slowest 10 durations =============================
+0.42s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-unset]
+0.22s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-DEPTH=0]
+0.22s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-unset]
+0.21s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-CHILD=0]
+0.21s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-CHILD=0]
+0.21s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-DEPTH=0]
+0.21s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-CHILD=0]
+0.21s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-unset]
+0.21s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-DEPTH=0]
+0.21s call     tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-CHILD=empty]
+============================== 32 passed in 4.37s ==============================
+
+### tests/test_provider_listing_609.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 18 items
+
+tests/test_provider_listing_609.py::test_pi_catalog_is_grouped_by_provider_and_keeps_the_flat_list PASSED [  5%]
+tests/test_provider_listing_609.py::test_a_pi_connection_is_listed_with_its_provider_and_named_key PASSED [ 11%]
+tests/test_provider_listing_609.py::test_claude_lists_with_the_connection_endpoint_key_and_provider PASSED [ 16%]
+tests/test_provider_listing_609.py::test_a_claude_query_gets_only_the_credentials_its_child_would[connection0-expected0] PASSED [ 22%]
+tests/test_provider_listing_609.py::test_a_claude_query_gets_only_the_credentials_its_child_would[connection1-expected1] PASSED [ 27%]
+tests/test_provider_listing_609.py::test_a_claude_endpoint_without_its_key_is_not_queried PASSED [ 33%]
+tests/test_provider_listing_609.py::test_codex_names_its_models_by_the_connection_provider PASSED [ 38%]
+tests/test_provider_listing_609.py::test_dsh_catalog_groups_follow_its_provider_groups PASSED [ 44%]
+tests/test_provider_listing_609.py::test_declared_models_are_grouped_by_their_providers PASSED [ 50%]
+tests/test_provider_listing_609.py::test_models_lists_each_connection_by_provider_read_only_and_key_free PASSED [ 55%]
+tests/test_provider_listing_609.py::test_models_narrows_to_a_declared_provider_and_refuses_another PASSED [ 61%]
+tests/test_provider_listing_609.py::test_models_without_a_connection_lists_the_native_login PASSED [ 66%]
+tests/test_provider_listing_609.py::test_models_and_create_refuse_a_dsh_provider_discovery_cannot_route_alike PASSED [ 72%]
+tests/test_provider_listing_609.py::test_models_is_a_discoverable_feature_taking_runtime_and_provider PASSED [ 77%]
+tests/test_provider_listing_609.py::test_provider_selects_its_connection_and_tells_a_shared_model_apart PASSED [ 83%]
+tests/test_provider_listing_609.py::test_without_provider_several_connections_stay_ambiguous PASSED [ 88%]
+tests/test_provider_listing_609.py::test_a_provider_no_connection_declares_is_refused_before_anything_starts PASSED [ 94%]
+tests/test_provider_listing_609.py::test_provider_with_a_preset_must_be_the_preset_connection_provider PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_provider_listing_609.xml -
+============================= slowest 10 durations =============================
+0.45s call     tests/test_provider_listing_609.py::test_a_claude_query_gets_only_the_credentials_its_child_would[connection0-expected0]
+0.44s call     tests/test_provider_listing_609.py::test_a_claude_query_gets_only_the_credentials_its_child_would[connection1-expected1]
+0.40s call     tests/test_provider_listing_609.py::test_provider_selects_its_connection_and_tells_a_shared_model_apart
+0.39s call     tests/test_provider_listing_609.py::test_claude_lists_with_the_connection_endpoint_key_and_provider
+0.37s call     tests/test_provider_listing_609.py::test_models_lists_each_connection_by_provider_read_only_and_key_free
+0.37s call     tests/test_provider_listing_609.py::test_models_narrows_to_a_declared_provider_and_refuses_another
+0.36s call     tests/test_provider_listing_609.py::test_pi_catalog_is_grouped_by_provider_and_keeps_the_flat_list
+0.36s call     tests/test_provider_listing_609.py::test_a_pi_connection_is_listed_with_its_provider_and_named_key
+0.36s call     tests/test_provider_listing_609.py::test_models_without_a_connection_lists_the_native_login
+0.36s call     tests/test_provider_listing_609.py::test_provider_with_a_preset_must_be_the_preset_connection_provider
+============================== 18 passed in 4.03s ==============================
+
+### tests/test_published_names_551.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 7 items
+
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling-extra_tool_table] PASSED [ 14%]
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.codex-apply_tools] PASSED [ 28%]
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.pi-apply_tools] PASSED [ 42%]
+tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.dsh-apply_tools] PASSED [ 57%]
+tests/test_published_names_551.py::test_the_pi_extension_export_is_listed PASSED [ 71%]
+tests/test_published_names_551.py::test_extra_tool_table_refuses_the_subagents_name PASSED [ 85%]
+tests/test_published_names_551.py::test_codex_apply_tools_refuses_a_name_codex_cannot_express PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_published_names_551.xml -
+============================= slowest 10 durations =============================
+0.01s call     tests/test_published_names_551.py::test_each_name_is_exported_and_listed[graftling.codex-apply_tools]
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 7 passed in 0.09s ===============================
+
+### tests/test_runtime_dirs_git_ignored_526.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 4 items
+
+tests/test_runtime_dirs_git_ignored_526.py::test_archive_write_leaves_a_self_ignoring_sessions_directory PASSED [ 25%]
+tests/test_runtime_dirs_git_ignored_526.py::test_an_existing_gitignore_is_kept PASSED [ 50%]
+tests/test_runtime_dirs_git_ignored_526.py::test_failed_ignore_write_does_not_fail_the_archive PASSED [ 75%]
+tests/test_runtime_dirs_git_ignored_526.py::test_git_lists_user_files_but_no_graftling_runtime_files PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_runtime_dirs_git_ignored_526.xml -
+============================= slowest 10 durations =============================
+0.09s call     tests/test_runtime_dirs_git_ignored_526.py::test_git_lists_user_files_but_no_graftling_runtime_files
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 4 passed in 0.16s ===============================
+
+### tests/test_session_protocol.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 47 items
+
+tests/test_session_protocol.py::test_runtime_mapping_examples_preserve_native_records[codex] PASSED [  2%]
+tests/test_session_protocol.py::test_runtime_mapping_examples_preserve_native_records[pi] PASSED [  4%]
+tests/test_session_protocol.py::test_runtime_mapping_examples_preserve_native_records[dsh] PASSED [  6%]
+tests/test_session_protocol.py::test_runtime_mapping_examples_preserve_native_records[claude] PASSED [  8%]
+tests/test_session_protocol.py::test_unknown_fields_ciphertext_and_missing_values_survive PASSED [ 10%]
+tests/test_session_protocol.py::test_non_json_values_are_rejected[nan] PASSED [ 12%]
+tests/test_session_protocol.py::test_non_json_values_are_rejected[inf] PASSED [ 14%]
+tests/test_session_protocol.py::test_non_json_values_are_rejected[value2] PASSED [ 17%]
+tests/test_session_protocol.py::test_non_json_values_are_rejected[value3] PASSED [ 19%]
+tests/test_session_protocol.py::test_header_versions_and_safe_integers[version-3] PASSED [ 21%]
+tests/test_session_protocol.py::test_header_versions_and_safe_integers[version-4] PASSED [ 23%]
+tests/test_session_protocol.py::test_header_versions_and_safe_integers[version-6] PASSED [ 25%]
+tests/test_session_protocol.py::test_header_versions_and_safe_integers[createdAt-True] PASSED [ 27%]
+tests/test_session_protocol.py::test_header_versions_and_safe_integers[createdAt--1] PASSED [ 29%]
+tests/test_session_protocol.py::test_header_versions_and_safe_integers[createdAt-9007199254740992] PASSED [ 31%]
+tests/test_session_protocol.py::test_header_versions_and_safe_integers[isSeeded-0] PASSED [ 34%]
+tests/test_session_protocol.py::test_fork_and_compaction_preserve_original_history PASSED [ 36%]
+tests/test_session_protocol.py::test_failed_attempt_retry_and_interrupted_message_are_distinct PASSED [ 38%]
+tests/test_session_protocol.py::test_request_header_and_tool_pair_keep_raw_arguments PASSED [ 40%]
+tests/test_session_protocol.py::test_dsh_stream_timing_and_unknown_extensions_are_preserved PASSED [ 42%]
+tests/test_session_protocol.py::test_append_only_rl_sources_and_alignment[logprobs-native] PASSED [ 44%]
+tests/test_session_protocol.py::test_append_only_rl_sources_and_alignment[logprobs-recomputed] PASSED [ 46%]
+tests/test_session_protocol.py::test_append_only_rl_sources_and_alignment[score-native] PASSED [ 48%]
+tests/test_session_protocol.py::test_append_only_rl_sources_and_alignment[derived-supplemented] PASSED [ 51%]
+tests/test_session_protocol.py::test_sampled_distribution_and_unknown_tokenizer_are_explicit PASSED [ 53%]
+tests/test_session_protocol.py::test_invalid_rl_observations_are_rejected[future-target] PASSED [ 55%]
+tests/test_session_protocol.py::test_invalid_rl_observations_are_rejected[duplicate-position] PASSED [ 57%]
+tests/test_session_protocol.py::test_invalid_rl_observations_are_rejected[positive-logprob] PASSED [ 59%]
+tests/test_session_protocol.py::test_invalid_rl_observations_are_rejected[missing-provenance] PASSED [ 61%]
+tests/test_session_protocol.py::test_semantic_run_is_independent_of_transport_chunk_size PASSED [ 63%]
+tests/test_session_protocol.py::test_unknown_event_payload_can_be_any_lossless_json PASSED [ 65%]
+tests/test_session_protocol.py::test_token_spans_cannot_claim_ciphertext_or_unreceived_output PASSED [ 68%]
+tests/test_session_protocol.py::test_compaction_summary_and_developer_tool_updates PASSED [ 70%]
+tests/test_session_protocol.py::test_retry_preserves_native_numeric_milliseconds[0] PASSED [ 72%]
+tests/test_session_protocol.py::test_retry_preserves_native_numeric_milliseconds[1] PASSED [ 74%]
+tests/test_session_protocol.py::test_retry_preserves_native_numeric_milliseconds[488.02348886860193] PASSED [ 76%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[None] PASSED [ 78%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[append] PASSED [ 80%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[missing] PASSED [ 82%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[empty] PASSED [ 85%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[duplicate] PASSED [ 87%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[future] PASSED [ 89%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[incomplete] PASSED [ 91%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[range] PASSED [ 93%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[non-surface] PASSED [ 95%]
+tests/test_session_protocol.py::test_assistant_replacement_requires_current_surface_coverage[shadowed] PASSED [ 97%]
+tests/test_session_protocol.py::test_jsonl_messages_consume_assistant_replacement PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_session_protocol.xml -
+============================= slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 47 passed in 0.12s ==============================
+
+### tests/test_tool_name_591.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 14 items
+
+tests/test_tool_name_591.py::test_no_production_line_names_the_old_tool PASSED [  7%]
+tests/test_tool_name_591.py::test_every_allowed_look_alike_is_still_there PASSED [ 14%]
+tests/test_tool_name_591.py::test_no_production_line_shows_an_old_label PASSED [ 21%]
+tests/test_tool_name_591.py::test_a_relayed_message_has_the_exact_header PASSED [ 28%]
+tests/test_tool_name_591.py::test_every_relayed_message_header_has_its_spaces PASSED [ 35%]
+tests/test_tool_name_591.py::test_the_label_guard_sees_each_old_label PASSED [ 42%]
+tests/test_tool_name_591.py::test_the_guard_sees_the_forms_a_half_rename_leaves PASSED [ 50%]
+tests/test_tool_name_591.py::test_the_tool_name_is_subagents_and_public PASSED [ 57%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[claude/host_context.mjs-^const TOOL = "([^"]*)";$] PASSED [ 64%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[claude-plugin/hooks/host_context.mjs-^const TOOL = "([^"]*)";$] PASSED [ 71%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[pi/extension.mjs-^export const TOOL = '([^']*)';$] PASSED [ 78%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[dsh/review.mjs-^export const TOOL = '([^']*)';$] PASSED [ 85%]
+tests/test_tool_name_591.py::test_standalone_plugin_server_key_and_cli_names PASSED [ 92%]
+tests/test_tool_name_591.py::test_the_hook_rewrite_refuses_a_template_it_would_not_change PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_tool_name_591.xml -
+============================= slowest 10 durations =============================
+0.05s call     tests/test_tool_name_591.py::test_no_production_line_shows_an_old_label
+0.05s call     tests/test_tool_name_591.py::test_no_production_line_names_the_old_tool
+0.04s call     tests/test_tool_name_591.py::test_every_allowed_look_alike_is_still_there
+0.03s call     tests/test_tool_name_591.py::test_a_relayed_message_has_the_exact_header
+0.01s call     tests/test_tool_name_591.py::test_every_relayed_message_header_has_its_spaces
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 14 passed in 0.25s ==============================
+
+### tests/test_unified_data_root_577.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 23 items
+
+tests/test_unified_data_root_577.py::test_dsh_host_uses_the_variable_instead_of_the_project_root PASSED [  4%]
+tests/test_unified_data_root_577.py::test_dsh_host_refuses_a_relative_variable PASSED [  8%]
+tests/test_unified_data_root_577.py::test_dsh_configuration_wins_over_the_variable PASSED [ 13%]
+tests/test_unified_data_root_577.py::test_dsh_plugin_with_the_variable_starts_the_host_without_configuration PASSED [ 17%]
+tests/test_unified_data_root_577.py::test_dsh_child_with_the_variable_starts_no_host PASSED [ 21%]
+tests/test_unified_data_root_577.py::test_pi_host_uses_the_variable_instead_of_the_project_root PASSED [ 26%]
+tests/test_unified_data_root_577.py::test_pi_host_refuses_an_uncreatable_variable PASSED [ 30%]
+tests/test_unified_data_root_577.py::test_pi_configuration_wins_over_the_variable PASSED [ 34%]
+tests/test_unified_data_root_577.py::test_pi_extension_with_the_variable PASSED [ 39%]
+tests/test_unified_data_root_577.py::test_pi_child_with_the_variable_starts_no_host PASSED [ 43%]
+tests/test_unified_data_root_577.py::test_codex_without_directory_uses_the_project_default_then_the_variable PASSED [ 47%]
+tests/test_unified_data_root_577.py::test_codex_directory_wins_and_resume_uses_the_same_root PASSED [ 52%]
+tests/test_unified_data_root_577.py::test_codex_without_a_usable_session_cwd_names_both_ways[None] PASSED [ 56%]
+tests/test_unified_data_root_577.py::test_codex_without_a_usable_session_cwd_names_both_ways[relative/project] PASSED [ 60%]
+tests/test_unified_data_root_577.py::test_codex_without_a_usable_session_cwd_names_both_ways[/no/such/project-577] PASSED [ 65%]
+tests/test_unified_data_root_577.py::test_claude_plugin_keeps_its_configuration_in_the_variable PASSED [ 69%]
+tests/test_unified_data_root_577.py::test_claude_plugin_refuses_a_relative_variable PASSED [ 73%]
+tests/test_unified_data_root_577.py::test_claude_explicit_configurations_win_over_the_variable PASSED [ 78%]
+tests/test_unified_data_root_577.py::test_claude_bound_child_with_the_variable_writes_no_configuration PASSED [ 82%]
+tests/test_unified_data_root_577.py::test_claude_plugin_mod_passes_the_variable_to_context[environment0-extra0] PASSED [ 86%]
+tests/test_unified_data_root_577.py::test_claude_plugin_mod_passes_the_variable_to_context[environment1-extra1] PASSED [ 91%]
+tests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable PASSED [ 95%]
+tests/test_unified_data_root_577.py::test_claude_default_is_unchanged_without_the_variable PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_unified_data_root_577.xml -
+============================= slowest 10 durations =============================
+0.70s call     tests/test_unified_data_root_577.py::test_dsh_plugin_with_the_variable_starts_the_host_without_configuration
+0.60s call     tests/test_unified_data_root_577.py::test_codex_without_directory_uses_the_project_default_then_the_variable
+0.49s call     tests/test_unified_data_root_577.py::test_codex_directory_wins_and_resume_uses_the_same_root
+0.41s call     tests/test_unified_data_root_577.py::test_pi_extension_with_the_variable
+0.39s call     tests/test_unified_data_root_577.py::test_dsh_configuration_wins_over_the_variable
+0.38s call     tests/test_unified_data_root_577.py::test_dsh_host_uses_the_variable_instead_of_the_project_root
+0.33s call     tests/test_unified_data_root_577.py::test_claude_plugin_keeps_its_configuration_in_the_variable
+0.25s call     tests/test_unified_data_root_577.py::test_claude_explicit_configurations_win_over_the_variable
+0.24s call     tests/test_unified_data_root_577.py::test_codex_without_a_usable_session_cwd_names_both_ways[relative/project]
+0.23s call     tests/test_unified_data_root_577.py::test_codex_without_a_usable_session_cwd_names_both_ways[None]
+============================== 23 passed in 5.63s ==============================
+
+### tests/test_windows_emulation_619.py (limit 360 s)
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 4 items
+
+tests/test_windows_emulation_619.py::test_graftling_imports_under_windows_emulation PASSED [ 25%]
+tests/test_windows_emulation_619.py::test_archive_lock_goes_through_windows_lock_under_emulation PASSED [ 50%]
+tests/test_windows_emulation_619.py::test_process_listing_refuses_clearly_under_windows_emulation PASSED [ 75%]
+tests/test_windows_emulation_619.py::test_codex_parent_host_refuses_clearly_under_windows_emulation PASSED [100%]
+
+- generated xml file: /tmp/claude-501/r1/driver/test-results/windows/junit/test_windows_emulation_619.xml -
+============================= slowest 10 durations =============================
+0.15s call     tests/test_windows_emulation_619.py::test_codex_parent_host_refuses_clearly_under_windows_emulation
+0.11s call     tests/test_windows_emulation_619.py::test_graftling_imports_under_windows_emulation
+0.11s call     tests/test_windows_emulation_619.py::test_archive_lock_goes_through_windows_lock_under_emulation
+0.10s call     tests/test_windows_emulation_619.py::test_process_listing_refuses_clearly_under_windows_emulation
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 4 passed in 0.55s ===============================
+
+### per-file results
+ended    exit 0        0.5 s  tests/test_agent_completion.py
+ended    exit 0       31.3 s  tests/test_agent_control.py
+ended    exit 0        2.6 s  tests/test_agents_connections_presets.py
+ended    exit 0        0.4 s  tests/test_agents_request_notices.py
+ended    exit 0        0.7 s  tests/test_agents_server_name.py
+ended    exit 0        0.9 s  tests/test_approval_integration.py
+ended    exit 0        0.9 s  tests/test_approval_layers.py
+ended    exit 0        0.4 s  tests/test_archive_header_lookup.py
+ended    exit 0        1.7 s  tests/test_child_server_name_551.py
+ended    exit 0        0.5 s  tests/test_child_tools_551.py
+ended    exit 0        0.8 s  tests/test_claude_archive_batches_468.py
+ended    exit 0        3.4 s  tests/test_claude_default_tools_576.py
+ended    exit 0        0.5 s  tests/test_claude_display.py
+ended    exit 0        2.1 s  tests/test_claude_gateway_login_613.py
+ended    exit 0        1.0 s  tests/test_claude_jsonl.py
+ended    exit 0        0.6 s  tests/test_claude_main_display.py
+ended    exit 0        2.1 s  tests/test_claude_marketplace_plugin.py
+ended    exit 0        0.6 s  tests/test_claude_model_alias_574.py
+ended    exit 0        4.0 s  tests/test_claude_permission_mode_578.py
+ended    exit 0       19.5 s  tests/test_claude_review.py
+ended    exit 0        1.6 s  tests/test_claude_send_closing_546.py
+ended    exit 0        3.7 s  tests/test_codex_child_interpreter_shutdown_473.py
+ended    exit 0        0.3 s  tests/test_codex_host_event_text.py
+ended    exit 0        3.0 s  tests/test_codex_independent_control.py
+ended    exit 0        2.4 s  tests/test_codex_review_relay.py
+ended    exit 0       14.0 s  tests/test_codex_tool_reclaim_462.py
+ended    exit 0        0.5 s  tests/test_connection_serve.py
+ended    exit 0        0.4 s  tests/test_discovery_intents_615.py
+ended    exit 0        1.2 s  tests/test_dsh_live.py
+ended    exit 0        1.5 s  tests/test_dsh_mcp.py
+ended    exit 0        0.3 s  tests/test_dsh_official.py
+ended    exit 0        2.3 s  tests/test_dsh_plugin_install_python.py
+ended    exit 0        1.2 s  tests/test_dsh_providers_608.py
+ended    exit 0        5.8 s  tests/test_dsh_standalone_child.py
+ended    exit 0        4.8 s  tests/test_dsh_standalone_host.py
+ended    exit 0        0.6 s  tests/test_dsh_startup.py
+ended    exit 0        0.7 s  tests/test_envelope_validation_555.py
+ended    exit 0        2.2 s  tests/test_extra_tools_551.py
+ended    exit 0      102.7 s  tests/test_host_shutdown_stop.py
+ended    exit 0        0.6 s  tests/test_jsonl_archive.py
+ended    exit 0        3.0 s  tests/test_no_graphtraj_dependency.py
+ended    exit 0        0.3 s  tests/test_notice_text.py
+ended    exit 0        2.4 s  tests/test_pi_default_host_572.py
+ended    exit 0        0.7 s  tests/test_pi_dsh_child_tools_551.py
+ended    exit 0        0.6 s  tests/test_pi_dsh_extra_tools_551.py
+ended    exit 0       46.3 s  tests/test_pi_dsh_notice_holding.py
+ended    exit 0        0.8 s  tests/test_pi_dsh_owner_tools_no_ask_551.py
+ended    exit 0        2.1 s  tests/test_pi_member_git.py
+ended    exit 0        1.1 s  tests/test_pi_notice_display_536.py
+ended    exit 0        1.5 s  tests/test_pi_standalone_host.py
+ended    exit 0        4.6 s  tests/test_pi_subagent_child_585.py
+ended    exit 0        4.3 s  tests/test_provider_listing_609.py
+ended    exit 0        0.4 s  tests/test_published_names_551.py
+ended    exit 0        0.5 s  tests/test_runtime_dirs_git_ignored_526.py
+ended    exit 0        0.4 s  tests/test_session_protocol.py
+ended    exit 0        0.5 s  tests/test_tool_name_591.py
+ended    exit 0        5.9 s  tests/test_unified_data_root_577.py
+ended    exit 0        0.8 s  tests/test_windows_emulation_619.py

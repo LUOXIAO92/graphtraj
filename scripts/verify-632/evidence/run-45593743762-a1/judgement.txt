@@ -1,0 +1,12 @@
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25-vs2026 | image_version=20261116.315.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+pytest exit code: missing
+collected in JUnit: 6 | passed 6 | failed 0 | errors 0 | skipped 0
+--- POSIX-only skips: 0 in 0 modules
+--- allowed environment skips (not Windows-specific): 0
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0
+--- expected Windows failures: 0; observed failures and errors: 0 (0 as expected)
+--- unexpected failures: 0
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 0
+observed list written: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/scripts/verify-632/evidence/run-45593743762-a1/observed-expected.txt
+JUDGE FAIL pytest exit code missing: the suite did not run to its end (0 or 1 expected)

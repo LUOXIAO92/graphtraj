@@ -1,0 +1,76 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 16 items
+
+tests/test_pi_default_host_572.py::test_without_flag_or_variable_the_installed_python_hosts_the_project_default SKIPPED [  6%]
+tests/test_pi_default_host_572.py::test_without_an_installation_python_the_error_names_the_variable PASSED [ 12%]
+tests/test_pi_default_host_572.py::test_a_python_importing_another_graftling_is_not_used SKIPPED [ 18%]
+tests/test_pi_default_host_572.py::test_an_editable_checkout_finds_python_on_path SKIPPED [ 25%]
+tests/test_pi_default_host_572.py::test_the_variable_wins_over_the_installation SKIPPED [ 31%]
+tests/test_pi_default_host_572.py::test_the_flag_wins_over_the_default_root SKIPPED [ 37%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[relative/project] SKIPPED [ 43%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[/no/such/project] SKIPPED [ 50%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[FILE] SKIPPED [ 56%]
+tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_SESSION_ID] SKIPPED [ 62%]
+tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_AGENT_SOURCE] SKIPPED [ 68%]
+tests/test_pi_default_host_572.py::test_a_child_keeps_its_owner_connection_and_python SKIPPED [ 75%]
+tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default FAILED [ 81%]
+tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag FAILED [ 87%]
+tests/test_pi_default_host_572.py::test_default_configuration_is_the_root_only_form PASSED [ 93%]
+tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=3565f6927f0d44a4863e76bb21b35a2e: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+___________ test_the_host_without_config_serves_the_project_default ___________
+tests\test_pi_default_host_572.py:197: in test_the_host_without_config_serves_the_project_default
+    assert process.returncode == 0, process.stderr.read()
+E   AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+E     
+E   assert 1 == 0
+E    +  where 1 = <Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...>.returncode
+_________ test_an_uncreatable_default_root_is_refused_naming_the_flag _________
+tests\test_pi_default_host_572.py:208: in test_an_uncreatable_default_root_is_refused_naming_the_flag
+    assert error['code'] == 'invalid-config' and '--agents-config' in error['message']
+E   AssertionError: assert ('invalid-config' == 'invalid-config'
+E     
+E       invalid-config and '--agents-config' in 'Exact process arguments are unavailable on this platform')
+____________ test_default_root_is_shared_with_the_claude_code_host ____________
+D:\a\graftling\graftling\tests\test_pi_default_host_572.py:272: in test_default_root_is_shared_with_the_claude_code_host
+    claude_host.require_free_channel(root / 'live' / 'channel.json')   # the Pi host is not "another host"
+D:\a\graftling\graftling\src\graftling\claude\host.py:135: in require_free_channel
+    owner = live_channel(channel_file)
+D:\a\graftling\graftling\src\graftling\claude\host.py:120: in live_channel
+    return endpoint if host_alive(endpoint['address']) else None
+D:\a\graftling\graftling\src\graftling\connection.py:163: in host_alive
+    descriptor = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
+E   AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+---------------------------- Captured stdout call -----------------------------
+{"notice": {"id": "a04736ecd0e5410dbaa1a31c82a811a7:completed", "alias": "agent-e1768802922f4ee9b3fa8e672e8c0bee", "agent": "agent-e1768802922f4ee9b3fa8e672e8c0bee", "event": "completed", "message": "answer", "execution": "a04736ecd0e5410dbaa1a31c82a811a7"}}
+{"notice": {"id": "46e7e47ef5a7465798e582dd6a32090a:completed", "alias": "agent-1eeb5e86386e4e56a5b5f077e48f1a67", "agent": "agent-1eeb5e86386e4e56a5b5f077e48f1a67", "event": "completed", "message": "answer", "execution": "46e7e47ef5a7465798e582dd6a32090a"}}
+{"notice": {"id": "5adb0817e3e94dc48a757effc6d5e199:completed", "alias": "agent-08f23a1eea1c4952a73f116c10627dc7", "agent": "agent-08f23a1eea1c4952a73f116c10627dc7", "event": "completed", "message": "answer", "execution": "5adb0817e3e94dc48a757effc6d5e199"}}
+{"notice": {"id": "2686327d9a0a424a9a1f7191096745da:completed", "alias": "agent-b9ec323f3ac04b219ded0819467aae19", "agent": "agent-b9ec323f3ac04b219ded0819467aae19", "event": "completed", "message": "answer", "execution": "2686327d9a0a424a9a1f7191096745da"}}
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_default_host_572.xml -
+============================ slowest 10 durations =============================
+4.31s call     tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host
+0.26s call     tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag
+0.22s call     tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default
+0.09s call     tests/test_pi_default_host_572.py::test_without_an_installation_python_the_error_names_the_variable
+0.08s setup    tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host
+0.03s setup    tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag
+0.02s setup    tests/test_pi_default_host_572.py::test_without_flag_or_variable_the_installed_python_hosts_the_project_default
+0.01s setup    tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[/no/such/project]
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default - AssertionError: {"error": {"code": "invalid-config", "message": "Exact process arguments are unavailable on this platform"}}
+  
+assert 1 == 0
+ +  where 1 = <Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...>.returncode
+FAILED tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag - AssertionError: assert ('invalid-config' == 'invalid-config'
+  
+    invalid-config and '--agents-config' in 'Exact process arguments are unavailable on this platform')
+FAILED tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host - AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+SKIPPED [11] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+=================== 3 failed, 2 passed, 11 skipped in 5.38s ===================

@@ -1,0 +1,87 @@
+$ VERIFY632_GRAFTLING=/tmp/claude-501/rh632/matched/graftling VERIFY632_GREMOTE=/tmp/claude-501/rh632/matched/gremote.git VERIFY632_GH=/tmp/claude-501/rh632/matched/gh/gh VERIFY632_EXPECTED=/tmp/claude-501/rh632/windows-expected-rehearsal.txt VERIFY632_EVIDENCE=/tmp/claude-501/rh632/matched/evidence VERIFY632_POLL_S=1 VERIFY632_APPEAR_S=10 VERIFY632_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/rh632/matched/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-632 fake)
+    - Active account: true
+PASS: /tmp/claude-501/rh632/matched/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/rh632/matched/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/rh632/matched/graftling; head defad1db083e911900cbea1cb0ef165e6a66d322 on base 57bca73657d3135a4504904fcc3f1898c2419766
+--- bundle commits on 57bca73657d3135a4504904fcc3f1898c2419766:
+  defad1d LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows tests: one pytest process per test file with a hang limit; bound one spin (632)
+  0034097 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows tests workflow; POSIX-only tests marked (632)
+PASS: author and committer are the noreply identity
+PASS: src/ and pyproject.toml unchanged since 57bca73657d3135a4504904fcc3f1898c2419766 (no product change)
+--- files changed since 57bca73657d3135a4504904fcc3f1898c2419766:
+   .github/run_test_files.py                | 137 +++++++++++++++++++++++++++++++
+   .github/workflows/windows.yml            | 101 +++++++++++++++++++++++
+   tests/conftest.py                        |   7 +-
+   tests/posix_only.py                      |  42 ++++++++++
+   tests/test_agent_control.py              |  13 ++-
+   tests/test_agents_connections_presets.py |   2 +
+   tests/test_claude_default_tools_576.py   |   2 +
+   tests/test_claude_gateway_login_613.py   |   3 +
+   tests/test_claude_marketplace_plugin.py  |   7 ++
+   tests/test_claude_model_alias_574.py     |   2 +
+   tests/test_claude_review.py              |   2 +
+   tests/test_codex_independent_control.py  |   2 +
+   tests/test_codex_review_relay.py         |   2 +
+   tests/test_codex_tool_reclaim_462.py     |   4 +-
+   tests/test_dsh_plugin_install_python.py  |   3 +
+   tests/test_dsh_standalone_child.py       |   2 +
+   tests/test_dsh_standalone_host.py        |   3 +
+   tests/test_dsh_startup.py                |   2 +
+   tests/test_host_shutdown_stop.py         |   3 +
+   tests/test_pi_default_host_572.py        |   2 +
+   tests/test_pi_dsh_notice_holding.py      |   3 +
+   tests/test_pi_standalone_host.py         |   2 +
+   tests/test_provider_listing_609.py       |   2 +
+   tests/test_unified_data_root_577.py      |   3 +
+   tests/test_windows_emulation_619.py      |   5 ++
+   25 files changed, 353 insertions(+), 3 deletions(-)
+--- .github/workflows/windows.yml at defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: tests/posix_only.py PREFIX is 'POSIX-only: '
+PASS: .github/run_test_files.py has '-p', 'no:cacheprovider'
+PASS: .github/run_test_files.py has '-o', 'faulthandler_timeout=120'
+PASS: .github/run_test_files.py has '-o', 'junit_family=xunit1'
+PASS: .github/run_test_files.py has '-v', '-rfEsxX'
+PASS: .github/run_test_files.py has [sys.executable, '-u', '-m', 'pytest'
+PASS: .github/run_test_files.py has ['taskkill', '/T', '/F', '/PID'
+PASS: .github/run_test_files.py has 'files.json'
+PASS: .github/run_test_files.py has last_started
+PASS: .github/run_test_files.py imports only the standard library (no yaml/psutil/pytest_timeout/requests)
+PASS: /tmp/claude-501/rh632/windows-expected-rehearsal.txt parses: 2 expected Windows failures and 0 expected hangs (W4 2), 19 allowed environment skips
+PASS: /tmp/claude-501/rh632/matched/graftling has no local agent/632-graftling-windows-ci (P creates it from the bundle)
+PASS: graftling /tmp/claude-501/rh632/matched/gremote.git has agent/632-graftling-windows-ci at 0034097e031168c9b5076f6eea743997626c0572, an ancestor of the bundle head (fast-forward)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/scripts/verify-632/steps.zsh P    (publishes graftling defad1db083e911900cbea1cb0ef165e6a66d322 to LUOXIAO92/graftling agent/632-graftling-windows-ci, then waits for the Windows tests run)
+VERDICT 632 00: PASS (P ready: yes; remote branch ancestor; candidate graftling defad1db083e911900cbea1cb0ef165e6a66d322)
+[exit 0]

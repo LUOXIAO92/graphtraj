@@ -1,0 +1,27 @@
+runner: os=macOS 26.6.2 (local, not the runner) | image=None | image_version=None | arch=arm64 | python=Python 3.13.11 | pytest=pytest 9.1.1 | node=None | codepage=None
+run_test_files exit code: 0
+--- test files: 58 recorded | ended 58 | hung 0 | not run 0 | in the commit: 58
+  slowest ended files: tests/test_host_shutdown_stop.py 102.7 s, tests/test_pi_dsh_notice_holding.py 46.3 s, tests/test_agent_control.py 31.3 s, tests/test_claude_review.py 19.5 s, tests/test_codex_tool_reclaim_462.py 14.0 s
+FILES PASS every test file ended or was stopped and recorded as hung
+merged JUnit files: 58
+collected in JUnit: 947 | passed 926 | failed 0 | errors 0 | skipped 21
+--- POSIX-only skips: 0 in 0 modules
+--- allowed environment skips (not Windows-specific): 21
+  x12: Explicit pinned official SDK comparison
+  x2: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+  x2: Requires one explicitly retained native trace.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Requires assigned native startup diagnosis.
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 0; observed failures and errors: 0 (0 as expected)
+--- unexpected failures: 0
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 0
+observed list written: /tmp/claude-501/r1/observed.txt
+JUDGE PASS 947 tests: 926 passed, 0 failed as listed, 0 hangs as listed, 0 POSIX-only skips, 21 environment skips

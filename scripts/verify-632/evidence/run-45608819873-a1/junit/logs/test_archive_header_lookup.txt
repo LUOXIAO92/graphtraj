@@ -1,0 +1,42 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 2 items
+
+tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened FAILED [ 50%]
+tests/test_archive_header_lookup.py::test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=7620a003afbc4a41aaabf89444168b63: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+_ test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened _
+tests\test_archive_header_lookup.py:39: in test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened
+    wanted = archive(tmp_path, header('n-a'))
+tests\test_archive_header_lookup.py:26: in archive
+    JsonlSessionStore.create(path, value)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-7\\test_lookup_reads_headers_only0\\sessions\\9002641a672996c818973df1da0e5673cba862e735bc8c42d99f265cbc3863d4'
+__ test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes ___
+tests\test_archive_header_lookup.py:57: in test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes
+    archive(tmp_path, header('n-big', note='x' * 200_000))
+tests\test_archive_header_lookup.py:26: in archive
+    JsonlSessionStore.create(path, value)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-7\\test_lookup_keeps_conflicts_ve0\\sessions\\8398906963178379e501145aa4effaf9ae5aa43860c0e85621bbbe7f63ab669f'
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_archive_header_lookup.xml -
+============================ slowest 10 durations =============================
+0.01s call     tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened
+0.01s call     tests/test_archive_header_lookup.py::test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes
+0.01s setup    tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-7\\test_lookup_reads_headers_only0\\sessions\\9002641a672996c818973df1da0e5673cba862e735bc8c42d99f265cbc3863d4'
+FAILED tests/test_archive_header_lookup.py::test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-7\\test_lookup_keeps_conflicts_ve0\\sessions\\8398906963178379e501145aa4effaf9ae5aa43860c0e85621bbbe7f63ab669f'
+============================== 2 failed in 0.17s ==============================

@@ -39,11 +39,12 @@
 #       Isolated under $WORK/t-run: HOME (window.test.mjs adds projects to HOME/.graphtraj; the user's ~/.graphtraj is
 #       never touched), TMPDIR, PLAYWRIGHT_BROWSERS_PATH and the settings evidence. Installs Playwright Chromium there
 #       (bounded 300 s), then runs `node --test --test-concurrency=1 --test-timeout=300000` with the whole run bounded
-#       at 720 s; on the bound the process group and every process naming $WORK/t-run are killed (exit 124). Prints the
+#       at 720 s; on the bound its process tree and every process naming $WORK/t-run are killed (exit 124). Prints the
 #       TAP summary and each failing test's name, location and first error line; copies the log to
 #       <Worktree>/scripts/verify-627/evidence/<sha>/t-run.log (untracked). Electron windows appear and close
 #       themselves; do not interact with them. Nothing is saved outside $WORK/t-run.
-#       Login: none. Dialog: none. Network: Playwright CDN (Chromium download). ~3-8 min.
+#       Login: none. Dialog: none. Network: Playwright's Chromium download (cdn.playwright.dev and
+#       storage.googleapis.com). ~3-8 min.
 #       Observable: "# pass N" and "# fail 0", VERDICT PASS.
 #   P0  Push preflight, read only on GitHub: gh/git versions; gh auth status (account only); origin is LUOXIAO92/graphtraj;
 #       remote branch absent, equal to or an ancestor of HEAD (else STOP, never force); the P preconditions: since BASE
@@ -166,20 +167,28 @@ allow() {
 }
 # T only: extra allowlisted variables (the isolated Playwright cache and settings evidence), empty otherwise.
 RUN_ENV=()
-# bounded <seconds> <log> <command...>: run the command through allow() in its own process group, wait for it in this
-# process, and kill the group (and any process whose command line names $TRUN) if it outlives the bound.
-# Prints nothing; the exit status is the command's, or 124 when it was killed.
+# killtree <pid> <signal>: signal a process and all its descendants (children first). A script cannot use job
+# control (zsh refuses `setopt monitor` without a terminal), and Playwright starts Electron/Chromium in their own
+# process groups, so the tree is walked with pgrep -P instead of killing a process group.
+killtree() {
+  local child
+  for child in $(pgrep -P $1 2> /dev/null); do killtree $child $2; done
+  kill -$2 $1 2> /dev/null
+}
+# bounded <seconds> <log> <command...>: run the command through allow() in the background, wait for it in this
+# process, and if it outlives the bound kill its process tree and any process whose command line names $TRUN
+# (Electron's --user-data-dir and Chromium live under it). Prints nothing; the exit status is the command's, or 124.
 TRUN=
 bounded() {
   local limit=$1 log=$2 waited=0 pid rc; shift 2
-  setopt local_options monitor
+  setopt local_options no_bg_nice no_notify
   allow "$@" > $log 2>&1 &
   pid=$!
   while kill -0 $pid 2> /dev/null; do
     if (( waited >= limit )); then
-      kill -TERM -- -$pid 2> /dev/null; [[ -n $TRUN ]] && pkill -TERM -f -- $TRUN 2> /dev/null
+      killtree $pid TERM; [[ -n $TRUN ]] && pkill -TERM -f -- $TRUN 2> /dev/null
       sleep 5
-      kill -KILL -- -$pid 2> /dev/null; [[ -n $TRUN ]] && pkill -KILL -f -- $TRUN 2> /dev/null
+      killtree $pid KILL; [[ -n $TRUN ]] && pkill -KILL -f -- $TRUN 2> /dev/null
       wait $pid 2> /dev/null
       return 124
     fi
@@ -393,7 +402,7 @@ S)
   (( n == SCREEN_COUNT )) || verdict FAIL "$n of $SCREEN_COUNT screenshots" 1
   verdict PASS "$SCREEN_COUNT screenshots and machine checks for $SHA in $EVIDENCE";;
 T)
-  say "Task 627 step T: desktop window tests from $WORK/desktop. Login: none. Dialog: none. Network: Playwright CDN (Chromium download). Electron windows open and close themselves."
+  say "Task 627 step T: desktop window tests from $WORK/desktop. Login: none. Dialog: none. Network: Playwright Chromium download (cdn.playwright.dev, storage.googleapis.com). Electron windows open and close themselves."
   [[ -f $WORK/B.ok && $(<$WORK/B.ok) == $SHA ]] || { NEXT="zsh $SELF B"; verdict FAIL "run B for $SHA first" 1; }
   TRUN=$WORK/t-run
   rm -rf $TRUN; mkdir -p $TRUN/home $TRUN/tmp $TRUN/browsers $TRUN/settings-evidence $EVIDENCE

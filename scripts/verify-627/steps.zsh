@@ -34,6 +34,17 @@
 #       facts.json + driver.log to <Worktree>/scripts/verify-627/evidence/<sha>/ (untracked). A window appears for
 #       ~1-3 min and closes itself; do not interact with it. Nothing is saved; no native dialog opens.
 #       Login: none. Dialog: none. Network: none. ~2-4 min. Observable: 18 PNGs, facts.json verdict PASS.
+#   T   Window tests on the host, the same six files as the CI 627 step (window, monitor-ui, team-graph, settings-window,
+#       usage-live, activity-live; the last two skip without a live executing Agent), from B's build at $WORK/desktop.
+#       Isolated under $WORK/t-run: HOME (window.test.mjs adds projects to HOME/.graphtraj; the user's ~/.graphtraj is
+#       never touched), TMPDIR, PLAYWRIGHT_BROWSERS_PATH and the settings evidence. Installs Playwright Chromium there
+#       (bounded 300 s), then runs `node --test --test-concurrency=1 --test-timeout=300000` with the whole run bounded
+#       at 720 s; on the bound the process group and every process naming $WORK/t-run are killed (exit 124). Prints the
+#       TAP summary and each failing test's name, location and first error line; copies the log to
+#       <Worktree>/scripts/verify-627/evidence/<sha>/t-run.log (untracked). Electron windows appear and close
+#       themselves; do not interact with them. Nothing is saved outside $WORK/t-run.
+#       Login: none. Dialog: none. Network: Playwright CDN (Chromium download). ~3-8 min.
+#       Observable: "# pass N" and "# fail 0", VERDICT PASS.
 #   P0  Push preflight, read only on GitHub: gh/git versions; gh auth status (account only); origin is LUOXIAO92/graphtraj;
 #       remote branch absent, equal to or an ancestor of HEAD (else STOP, never force); the P preconditions: since BASE
 #       (dev 626f9301) exactly the macOS, Linux and Windows adoption workflows changed (desktop-repair-package.yml
@@ -97,6 +108,8 @@ WORK=${TMPDIR:-/tmp}
 WORK=${WORK%/}/graphtraj-627-$SHA
 EVIDENCE=$WT/scripts/verify-627/evidence/$SHA
 SCREEN_COUNT=18
+T_INSTALL_S=${VERIFY627_T_INSTALL_S:-300}
+T_LIMIT_S=${VERIFY627_T_LIMIT_S:-720}
 WORKFLOWS=(.github/workflows/desktop-linux-adoption.yml .github/workflows/desktop-macos-adoption.yml .github/workflows/desktop-win-adoption.yml)
 NWF=${#WORKFLOWS}
 WFNAMES="desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml"
@@ -149,7 +162,31 @@ allow() {
     extra+=GH_PROMPT_DISABLED=1
   fi
   /usr/bin/env -i HOME=${RUN_HOME:-$HOME} USER=${USER:-} LOGNAME=${LOGNAME:-${USER:-}} PATH=$APATH TERM=${TERM:-dumb} \
-    TMPDIR=${TMPDIR:-/tmp} LANG=en_US.UTF-8 GRAPHTRAJ_TOOL=$TOOL $extra "$@"
+    TMPDIR=${RUN_TMPDIR:-${TMPDIR:-/tmp}} LANG=en_US.UTF-8 GRAPHTRAJ_TOOL=$TOOL $extra $RUN_ENV "$@"
+}
+# T only: extra allowlisted variables (the isolated Playwright cache and settings evidence), empty otherwise.
+RUN_ENV=()
+# bounded <seconds> <log> <command...>: run the command through allow() in its own process group, wait for it in this
+# process, and kill the group (and any process whose command line names $TRUN) if it outlives the bound.
+# Prints nothing; the exit status is the command's, or 124 when it was killed.
+TRUN=
+bounded() {
+  local limit=$1 log=$2 waited=0 pid rc; shift 2
+  setopt local_options monitor
+  allow "$@" > $log 2>&1 &
+  pid=$!
+  while kill -0 $pid 2> /dev/null; do
+    if (( waited >= limit )); then
+      kill -TERM -- -$pid 2> /dev/null; [[ -n $TRUN ]] && pkill -TERM -f -- $TRUN 2> /dev/null
+      sleep 5
+      kill -KILL -- -$pid 2> /dev/null; [[ -n $TRUN ]] && pkill -KILL -f -- $TRUN 2> /dev/null
+      wait $pid 2> /dev/null
+      return 124
+    fi
+    sleep 2; (( waited += 2 ))
+  done
+  wait $pid; rc=$?
+  return $rc
 }
 g() { LOGIN=1 allow $GIT -C $WT "$@"; }
 hj() { allow $PY -I $GHJSON "$@"; }
@@ -160,7 +197,9 @@ verdict() {
   if [[ -z $next ]]; then
     case $STEP:$1 in
       00:PASS) next="zsh $SELF B";;
-      B:PASS) next="zsh $SELF S";;
+      B:PASS) next="zsh $SELF S    (screens)   or   zsh $SELF T    (window tests)";;
+      T:PASS) next="tell the Leader: window tests passed, log $EVIDENCE/t-run.log";;
+      T:FAIL) next="tell the Leader: log $EVIDENCE/t-run.log; re-run after a fix (B first if desktop/ changed): zsh $SELF T";;
       S:PASS) next="tell the Leader: evidence at $EVIDENCE; after the Leader's review and the user's approval of the push: zsh $SELF P0";;
       S:FAIL) next="tell the Leader: facts at $EVIDENCE/facts.json (driver log $EVIDENCE/driver.log); re-run after a fix: zsh $SELF S";;
       P0:PASS) next="zsh $SELF P    (fast-forward push of this branch under the user's standing approval; starts the macOS, Linux and Windows runs)";;
@@ -353,6 +392,36 @@ S)
   local n=${#${pngs:#*-failure.png}}
   (( n == SCREEN_COUNT )) || verdict FAIL "$n of $SCREEN_COUNT screenshots" 1
   verdict PASS "$SCREEN_COUNT screenshots and machine checks for $SHA in $EVIDENCE";;
+T)
+  say "Task 627 step T: desktop window tests from $WORK/desktop. Login: none. Dialog: none. Network: Playwright CDN (Chromium download). Electron windows open and close themselves."
+  [[ -f $WORK/B.ok && $(<$WORK/B.ok) == $SHA ]] || { NEXT="zsh $SELF B"; verdict FAIL "run B for $SHA first" 1; }
+  TRUN=$WORK/t-run
+  rm -rf $TRUN; mkdir -p $TRUN/home $TRUN/tmp $TRUN/browsers $TRUN/settings-evidence $EVIDENCE
+  RUN_ENV=(PLAYWRIGHT_BROWSERS_PATH=$TRUN/browsers GRAPHTRAJ_SETTINGS_EVIDENCE=$TRUN/settings-evidence)
+  cd $WORK/desktop
+  print -r -- "isolated: HOME=$TRUN/home TMPDIR=$TRUN/tmp PLAYWRIGHT_BROWSERS_PATH=$TRUN/browsers (never ~/.graphtraj)"
+  print -r -- "\$ node node_modules/playwright/cli.js install chromium   (bound ${T_INSTALL_S}s; log $TRUN/install.log)"
+  RUN_HOME=$TRUN/home RUN_TMPDIR=$TRUN/tmp bounded $T_INSTALL_S $TRUN/install.log $NODE node_modules/playwright/cli.js install chromium
+  local inst=$?
+  tail -3 $TRUN/install.log; print -r -- "install exit $inst"
+  (( inst == 0 )) || verdict FAIL "Playwright Chromium install exit $inst$( (( inst == 124 )) && print -r -- ' (killed at the bound)') (log $TRUN/install.log)" 1
+  if [[ ${VERIFY627_T_SETUP_ONLY:-} == 1 ]]; then NEXT="zsh $SELF T   (without VERIFY627_T_SETUP_ONLY, on a host that can open windows)"; verdict PASS "setup-only rehearsal: Chromium installed under $TRUN/browsers"; fi
+  local -a wtests=(tests/window.test.mjs tests/monitor-ui.test.mjs tests/team-graph.test.mjs tests/settings-window.test.mjs tests/usage-live.test.mjs tests/activity-live.test.mjs)
+  print -r -- "\$ node --test --test-concurrency=1 --test-timeout=300000 ${wtests}   (whole run bound ${T_LIMIT_S}s)"
+  RUN_HOME=$TRUN/home RUN_TMPDIR=$TRUN/tmp bounded $T_LIMIT_S $TRUN/t-run.log $NODE --preserve-symlinks --preserve-symlinks-main \
+    --test --test-concurrency=1 --test-timeout=300000 $wtests
+  local trc=$?
+  cp $TRUN/t-run.log $EVIDENCE/t-run.log
+  print -r -- "--- TAP summary"
+  grep -E "^# (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms) " $EVIDENCE/t-run.log
+  print -r -- "--- failing tests (name, location, first error line)"
+  awk '/^not ok /{show=1; print; next} show && /^  location:/{print} show && /^  error:/{print; show=0}' $EVIDENCE/t-run.log
+  print -r -- "log: $EVIDENCE/t-run.log (exit $trc)"
+  local tfail=$(grep -E '^# fail ' $EVIDENCE/t-run.log | awk '{print $3}') tpass=$(grep -E '^# pass ' $EVIDENCE/t-run.log | awk '{print $3}')
+  (( trc == 124 )) && verdict FAIL "window tests killed at the ${T_LIMIT_S}s bound (no TAP summary expected); see the log" 1
+  [[ -z $tfail ]] && verdict FAIL "no TAP summary (exit $trc); see the log" 1
+  (( trc == 0 && tfail == 0 )) || verdict FAIL "pass ${tpass:-?} fail $tfail (exit $trc)" 1
+  verdict PASS "pass $tpass fail 0 for $SHA";;
 P0)
   say "[P0] Push preflight, read only. Login: your gh login (account shown, no token) and ssh key (git ls-remote). Dialog: none. Network: GitHub."
   ghwork
@@ -395,5 +464,5 @@ W)
   [[ $target == $(g rev-parse HEAD) ]] || print -r -- "NOTE: observed SHA $target differs from local HEAD $(g rev-parse HEAD)"
   observe_push $target;;
 *)
-  print -r -- "usage: zsh ${0:t} 00|B|S|P0|P|W [sha]"; exit 2;;
+  print -r -- "usage: zsh ${0:t} 00|B|S|T|P0|P|W [sha]"; exit 2;;
 esac

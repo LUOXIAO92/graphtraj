@@ -1,0 +1,39 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 14 items
+
+tests/test_tool_name_591.py::test_no_production_line_names_the_old_tool PASSED [  7%]
+tests/test_tool_name_591.py::test_every_allowed_look_alike_is_still_there PASSED [ 14%]
+tests/test_tool_name_591.py::test_no_production_line_shows_an_old_label PASSED [ 21%]
+tests/test_tool_name_591.py::test_a_relayed_message_has_the_exact_header PASSED [ 28%]
+tests/test_tool_name_591.py::test_every_relayed_message_header_has_its_spaces PASSED [ 35%]
+tests/test_tool_name_591.py::test_the_label_guard_sees_each_old_label PASSED [ 42%]
+tests/test_tool_name_591.py::test_the_guard_sees_the_forms_a_half_rename_leaves PASSED [ 50%]
+tests/test_tool_name_591.py::test_the_tool_name_is_subagents_and_public PASSED [ 57%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[claude/host_context.mjs-^const TOOL = "([^"]*)";$] PASSED [ 64%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[claude-plugin/hooks/host_context.mjs-^const TOOL = "([^"]*)";$] PASSED [ 71%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[pi/extension.mjs-^export const TOOL = '([^']*)';$] PASSED [ 78%]
+tests/test_tool_name_591.py::test_each_module_holds_one_tool_constant_equal_to_tool_name[dsh/review.mjs-^export const TOOL = '([^']*)';$] PASSED [ 85%]
+tests/test_tool_name_591.py::test_standalone_plugin_server_key_and_cli_names PASSED [ 92%]
+tests/test_tool_name_591.py::test_the_hook_rewrite_refuses_a_template_it_would_not_change FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=35ffaff9c6bc45eea4cc63c9edfa7032: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+________ test_the_hook_rewrite_refuses_a_template_it_would_not_change _________
+tests\test_tool_name_591.py:199: in test_the_hook_rewrite_refuses_a_template_it_would_not_change
+    hook = written['/p/hooks/host_context.mjs']
+E   KeyError: '/p/hooks/host_context.mjs'
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_tool_name_591.xml -
+============================ slowest 10 durations =============================
+0.05s call     tests/test_tool_name_591.py::test_no_production_line_shows_an_old_label
+0.04s call     tests/test_tool_name_591.py::test_every_allowed_look_alike_is_still_there
+0.03s call     tests/test_tool_name_591.py::test_a_relayed_message_has_the_exact_header
+0.03s call     tests/test_tool_name_591.py::test_no_production_line_names_the_old_tool
+0.01s call     tests/test_tool_name_591.py::test_every_relayed_message_header_has_its_spaces
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_tool_name_591.py::test_the_hook_rewrite_refuses_a_template_it_would_not_change - KeyError: '/p/hooks/host_context.mjs'
+======================== 1 failed, 13 passed in 0.24s =========================

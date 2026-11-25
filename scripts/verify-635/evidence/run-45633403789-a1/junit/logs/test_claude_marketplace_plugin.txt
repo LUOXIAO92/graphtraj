@@ -1,0 +1,50 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 21 items
+
+tests/test_claude_marketplace_plugin.py::test_checked_in_module_is_generated_from_host_context PASSED [  4%]
+tests/test_claude_marketplace_plugin.py::test_manifests_name_graftling_and_bake_in_no_path PASSED [  9%]
+tests/test_claude_marketplace_plugin.py::test_plugin_configuration_is_created_then_keeps_user_keys SKIPPED [ 14%]
+tests/test_claude_marketplace_plugin.py::test_plugin_host_stands_aside_for_configuration_write_material[graftling] SKIPPED [ 19%]
+tests/test_claude_marketplace_plugin.py::test_plugin_host_stands_aside_for_configuration_write_material[agents] SKIPPED [ 23%]
+tests/test_claude_marketplace_plugin.py::test_host_plugin_handles_only_its_servers_tools[None] PASSED [ 28%]
+tests/test_claude_marketplace_plugin.py::test_host_plugin_handles_only_its_servers_tools[graphtraj] PASSED [ 33%]
+tests/test_claude_marketplace_plugin.py::test_configuration_write_registers_graftling_and_drops_its_old_agents_entry SKIPPED [ 38%]
+tests/test_claude_marketplace_plugin.py::test_plugin_serve_without_prior_configuration_writes_it_and_logs_its_refusal SKIPPED [ 42%]
+tests/test_claude_marketplace_plugin.py::test_context_finds_the_configuration_above_the_session_cwd SKIPPED [ 47%]
+tests/test_claude_marketplace_plugin.py::test_launcher_names_what_to_install_when_python_cannot_run_graftling[missing-GRAFTLING_PYTHON=] SKIPPED [ 52%]
+tests/test_claude_marketplace_plugin.py::test_launcher_names_what_to_install_when_python_cannot_run_graftling[without-GRAFTLING_PYTHON=] SKIPPED [ 57%]
+tests/test_claude_marketplace_plugin.py::test_launcher_execs_the_found_python_with_the_host SKIPPED [ 61%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[set] PASSED [ 66%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[default] PASSED [ 71%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[without] PASSED [ 76%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[same] PASSED [ 80%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[ancestor] PASSED [ 85%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[foreign] PASSED [ 90%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[descendant] PASSED [ 95%]
+tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[sibling] PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=bdc2f330101e49bbbff481dd56c4bf9f: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_claude_marketplace_plugin.xml -
+============================ slowest 10 durations =============================
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[descendant]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[set]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[default]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[foreign]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[without]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_host_plugin_handles_only_its_servers_tools[None]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[ancestor]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[sibling]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_host_plugin_handles_only_its_servers_tools[graphtraj]
+0.04s call     tests/test_claude_marketplace_plugin.py::test_plugin_mod_uses_plugin_tool_names_and_its_python[same]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_claude_marketplace_plugin.py:71: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [2] tests\test_claude_marketplace_plugin.py:86: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests\test_claude_marketplace_plugin.py:136: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests\test_claude_marketplace_plugin.py:160: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests\test_claude_marketplace_plugin.py:172: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [2] tests\test_claude_marketplace_plugin.py:192: POSIX-only: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+SKIPPED [1] tests\test_claude_marketplace_plugin.py:217: POSIX-only: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+======================== 12 passed, 9 skipped in 0.55s ========================

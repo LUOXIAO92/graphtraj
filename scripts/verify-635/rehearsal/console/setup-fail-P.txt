@@ -1,13 +1,15 @@
 $ VERIFY635_GRAFTLING=/tmp/claude-501/rh635/setup-fail/graftling VERIFY635_GREMOTE=/tmp/claude-501/rh635/setup-fail/gremote.git VERIFY635_GH=/tmp/claude-501/rh635/setup-fail/gh/gh VERIFY635_EVIDENCE=/tmp/claude-501/rh635/setup-fail/evidence VERIFY635_POLL_S=1 VERIFY635_APPEAR_S=10 VERIFY635_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/635-graftling-windows-process-tree to graftling /tmp/claude-501/rh635/setup-fail/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh635/setup-fail/graftling; head e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b contains graftling dev 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced bc4298b611afce70dd876c5fe79f764c9f966d8a; others are ancestors of the base)
---- bundle commits on 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
+PASS: bundle verifies against /tmp/claude-501/rh635/setup-fail/graftling; head 7609e52089e638c963cc54c28438c99ea3964f99 contains graftling dev d5fb80c7cf5d85a19971c434e7f247568ad22bef (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced bc4298b611afce70dd876c5fe79f764c9f966d8a d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+--- bundle commits on d5fb80c7cf5d85a19971c434e7f247568ad22bef:
+  7609e52 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev d5fb80c7 (638, W6) into agent/635-graftling-windows-process-tree
+  acc18b4 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Breakaway test: read breakaway.json on its own, not as a PID (635 correction 2)
   e0e6da9 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 478dfd7f (634, W2) into agent/635-graftling-windows-process-tree
   6f520df LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Confirm-ended tree check on every platform; kill Codex service on adopt failure (635 correction 1)
   01557f6 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Owned process trees: process group on POSIX, named Job Object on Windows (635, W3)
 PASS: author and committer are the noreply identity
---- files changed since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
+--- files changed since d5fb80c7cf5d85a19971c434e7f247568ad22bef:
    .github/workflows/windows.yml     |   2 +-
    src/graftling/_win32.py           | 227 +++++++++++++++-
    src/graftling/calls.py            |  27 +-
@@ -24,14 +26,14 @@ PASS: author and committer are the noreply identity
    src/graftling/process_tree.py     | 230 ++++++++++++++++
    src/graftling/review.py           |  27 +-
    tests/test_agent_control.py       |  49 ++--
-   tests/test_process_tree_635.py    | 542 ++++++++++++++++++++++++++++++++++++++
-   17 files changed, 1241 insertions(+), 138 deletions(-)
+   tests/test_process_tree_635.py    | 544 ++++++++++++++++++++++++++++++++++++++
+   17 files changed, 1243 insertions(+), 138 deletions(-)
 PASS: changed paths are within the allowed set: src/graftling/process_tree.py, src/graftling/_win32.py, src/graftling/control.py, src/graftling/calls.py, src/graftling/review.py, src/graftling/claude/execution.py, src/graftling/claude/driver.py, src/graftling/pi/execution.py, src/graftling/pi/driver.py, src/graftling/codex/app_server.py, src/graftling/codex/driver.py, src/graftling/dsh/service.py, src/graftling/dsh/watcher.py, src/graftling/dsh/driver.py, tests/test_process_tree_635.py, tests/test_agent_control.py, .github/workflows/windows.yml
---- .github/workflows/windows.yml at e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b against 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
-PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'dev']
+--- .github/workflows/windows.yml at 7609e52089e638c963cc54c28438c99ea3964f99 against d5fb80c7cf5d85a19971c434e7f247568ad22bef
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev']
 PASS: the workflow is the base one with only its push branches line changed
---- .github/workflows/windows.yml at 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced (632's accepted workflow with 633's and 634's branches; every other property by 632's wfcheck)
-PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'dev']; judged below with it set back to 632's
+--- .github/workflows/windows.yml at d5fb80c7cf5d85a19971c434e7f247568ad22bef (632's accepted workflow with 633's, 634's and 638's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'dev', 'agent/638-graftling-windows-paths-encoding']; judged below with it set back to 632's
 PASS: push branches are exactly agent/632-graftling-windows-ci and dev
 PASS: triggers: push and workflow_dispatch only
 PASS: permissions: contents: read
@@ -58,26 +60,26 @@ PASS: the suite step runs every test file through .github/run_test_files.py with
 PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
-PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
-PASS: the 17 W3 tests of new-tests.txt are defined at e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b (tests/test_process_tree_635.py, tests/test_agent_control.py)
-PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt parses: 81 expected Windows failures and 0 expected hangs (W3 (635) 6, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
-expected list: 7 W3 (635) entries at the base: 1 to delete, 6 kept with an 'after W3:' note (suggested W4 (636) 5, W5 (637) 1)
-PASS: the W3 (635) lines are deleted or kept with an 'after W3:' note as tabled; every other line is byte-identical and in order
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since d5fb80c7cf5d85a19971c434e7f247568ad22bef
+PASS: the 17 W3 tests of new-tests.txt are defined at 7609e52089e638c963cc54c28438c99ea3964f99 (tests/test_process_tree_635.py, tests/test_agent_control.py)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt parses: 44 expected Windows failures and 0 expected hangs (W4 (636) 42, W5 (637) 1, W8 (not registered; outside this round) 1), 19 allowed environment skips
+expected list: 7 W3 (635) entries at the base: 1 to delete, 6 moved to Main's owners (W4 (636) 5, W5 (637) 1)
+PASS: the W3 (635) lines are deleted or moved to Main's owners as tabled; no W3 (635) line remains; every other line is byte-identical and in order
 PASS: agent/635-graftling-windows-process-tree is absent on graftling /tmp/claude-501/rh635/setup-fail/gremote.git
 PASS: /tmp/claude-501/rh635/setup-fail/graftling has no local agent/635-graftling-windows-process-tree (P creates it from the bundle)
 $ git -C /tmp/claude-501/rh635/setup-fail/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/graftling-635.bundle refs/heads/agent/635-graftling-windows-process-tree:refs/heads/agent/635-graftling-windows-process-tree
   From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/graftling-635.bundle
    * [new branch]      agent/635-graftling-windows-process-tree -> agent/635-graftling-windows-process-tree
-PASS: /tmp/claude-501/rh635/setup-fail/graftling local agent/635-graftling-windows-process-tree = e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b
-$ git -C /tmp/claude-501/rh635/setup-fail/graftling push /tmp/claude-501/rh635/setup-fail/gremote.git refs/heads/agent/635-graftling-windows-process-tree:refs/heads/agent/635-graftling-windows-process-tree   (e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b)
+PASS: /tmp/claude-501/rh635/setup-fail/graftling local agent/635-graftling-windows-process-tree = 7609e52089e638c963cc54c28438c99ea3964f99
+$ git -C /tmp/claude-501/rh635/setup-fail/graftling push /tmp/claude-501/rh635/setup-fail/gremote.git refs/heads/agent/635-graftling-windows-process-tree:refs/heads/agent/635-graftling-windows-process-tree   (7609e52089e638c963cc54c28438c99ea3964f99)
   To /tmp/claude-501/rh635/setup-fail/gremote.git
    * [new branch]      agent/635-graftling-windows-process-tree -> agent/635-graftling-windows-process-tree
-PASS: graftling /tmp/claude-501/rh635/setup-fail/gremote.git agent/635-graftling-windows-process-tree = e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b
-looking for the .github/workflows/windows.yml run (event push) of e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+PASS: graftling /tmp/claude-501/rh635/setup-fail/gremote.git agent/635-graftling-windows-process-tree = 7609e52089e638c963cc54c28438c99ea3964f99
+looking for the .github/workflows/windows.yml run (event push) of 7609e52089e638c963cc54c28438c99ea3964f99 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
 run 51000000000 present after 1s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [23:19:18] run 51000000000: completed failure
---- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+  [23:44:12] run 51000000000: completed failure
+--- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head 7609e52089e638c963cc54c28438c99ea3964f99 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed
@@ -95,8 +97,8 @@ JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling
   step 15 | success   | Complete job | other: success or skipped
 --- job log saved: /tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
   per-file pytest summaries: 1
-$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b-1 -D /tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/junit
-test files in e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b: 61
+$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-7609e52089e638c963cc54c28438c99ea3964f99-1 -D /tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/junit
+test files in 7609e52089e638c963cc54c28438c99ea3964f99: 62
 --- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt
 runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
 run_test_files exit code: missing
@@ -109,35 +111,14 @@ collected in JUnit: 0 | passed 0 | failed 0 | errors 0 | skipped 0
 --- expected hangs: 0; observed hangs: 0 (0 as expected)
 --- unexpected hangs: 0
 --- listed hangs that did not hang: 0
---- expected Windows failures: 81; observed failures and errors: 0 (0 as expected)
+--- expected Windows failures: 44; observed failures and errors: 0 (0 as expected)
 --- unexpected failures: 0
     origins of the unexpected failures: 
 --- unexpected passes (listed as failing, passed): 0
---- listed failures that were skipped or not collected: 81
-  ABSENT tests/test_agents_connections_presets.py::test_a_declared_runtime_without_a_driver_is_refused_at_host_start | 
-  ABSENT tests/test_agents_connections_presets.py::test_a_model_discovery_cannot_verify_is_refused | 
-  ABSENT tests/test_agents_connections_presets.py::test_an_unavailable_runtime_fails_create_without_an_agent | 
-  ABSENT tests/test_agents_connections_presets.py::test_connections_and_presets_are_read_with_their_names | 
-  ABSENT tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts | 
-  ABSENT tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted | 
-  ABSENT tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments0-invalid-preset-Preset 'missing' is not declared] | 
-  ABSENT tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments1-invalid-preset-uses Runtime 'claude'] | 
-  ABSENT tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments2-invalid-model-contradicts preset 'reviewer'] | 
-  ABSENT tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments3-invalid-reasoning-effort-contradicts preset 'reviewer'] | 
-  ABSENT tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments4-invalid-model-is not a candidate] | 
-  ABSENT tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments5-invalid-reasoning-effort-supports reasoning_effort ['low', 'high']] | 
-  ABSENT tests/test_agents_connections_presets.py::test_one_host_registers_drivers_for_several_runtimes | 
-  ABSENT tests/test_agents_connections_presets.py::test_preset_fills_model_and_effort_and_the_document_reports_them | 
-  ABSENT tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    home: /x\n-2-connections.a.runtime: required] | 
-  ABSENT tests/test_agents_connections_presets.py::test_several_connections_for_one_runtime_need_a_preset | 
-  ABSENT tests/test_agents_connections_presets.py::test_writing_a_choice_keeps_connections_presets_and_comments | 
-  ABSENT tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server | 
-  ABSENT tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open | 
+--- listed failures that were skipped or not collected: 44
   ABSENT tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns | 
   ABSENT tests/test_connection_serve.py::test_removed_control_directory_stops_the_service | 
-  ABSENT tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation | 
   ABSENT tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key | 
-  ABSENT tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child | 
   ABSENT tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once | 
   ABSENT tests/test_dsh_standalone_child.py::test_a_missing_stored_dsh_session_is_not_resumable | 
   ABSENT tests/test_dsh_standalone_child.py::test_a_native_failure_reaches_the_parent_with_its_reason | 
@@ -152,19 +133,11 @@ collected in JUnit: 0 | passed 0 | failed 0 | errors 0 | skipped 0
   ABSENT tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.0-rc.2] | 
   ABSENT tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.1-alpha.5] | 
   ABSENT tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.2-alpha.2] | 
-  ABSENT tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings | 
-  ABSENT tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] | 
   ABSENT tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host | 
   ABSENT tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session | 
   ABSENT tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on | 
   ABSENT tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root | 
   ABSENT tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd | 
-  ABSENT tests/test_envelope_validation_555.py::test_arguments_file_content_is_validated_with_the_envelope | 
-  ABSENT tests/test_envelope_validation_555.py::test_arguments_file_outside_the_boundary_is_refused | 
-  ABSENT tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[None-does not exist] | 
-  ABSENT tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[["do-not-echo-7f3a"]-must hold a JSON object] | 
-  ABSENT tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[{"runtime": "do-not-echo-7f3a",-is not valid JSON (line 1, column] | 
-  ABSENT tests/test_envelope_validation_555.py::test_arguments_file_supplies_and_inline_overrides | 
   ABSENT tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host | 
   ABSENT tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default | 
   ABSENT tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh] | 
@@ -181,15 +154,7 @@ collected in JUnit: 0 | passed 0 | failed 0 | errors 0 | skipped 0
   ABSENT tests/test_pi_dsh_notice_holding.py::test_real_extension_waits_for_the_entry_after_message_end | 
   ABSENT tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[dsh] | 
   ABSENT tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[pi] | 
-  ABSENT tests/test_pi_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings | 
-  ABSENT tests/test_pi_standalone_host.py::test_configuration_refusals[document10-'read' or 'write'] | 
-  ABSENT tests/test_pi_standalone_host.py::test_configuration_refusals[document5-"claude" must be an object] | 
-  ABSENT tests/test_pi_standalone_host.py::test_configuration_refusals[document6-worktree_path is always the cwd] | 
-  ABSENT tests/test_pi_standalone_host.py::test_configuration_refusals[document7-Unknown or fixed Pi settings] | 
-  ABSENT tests/test_pi_standalone_host.py::test_configuration_refusals[document8-non-empty string] | 
-  ABSENT tests/test_pi_standalone_host.py::test_configuration_refusals[document9-absolute paths] | 
   ABSENT tests/test_pi_standalone_host.py::test_host_starts_from_root_only_and_closes_at_shutdown | 
-  ABSENT tests/test_tool_name_591.py::test_the_hook_rewrite_refuses_a_template_it_would_not_change | 
   ABSENT tests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable | 
   ABSENT tests/test_unified_data_root_577.py::test_dsh_configuration_wins_over_the_variable | 
   ABSENT tests/test_unified_data_root_577.py::test_dsh_host_uses_the_variable_instead_of_the_project_root | 
@@ -218,5 +183,5 @@ evidence: /tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1 (git-igno
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh W 51000000000    (observe again; no push, no re-run)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
 next: correction round: compare /tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/observed-expected.txt with /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-632/windows-expected.txt and read /tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/w3-tests.txt; after a new bundle: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh 00 then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/635-graftling-windows-process-tree/scripts/verify-635/steps.zsh P
-VERDICT 635 P: FAIL (run 51000000000 attempt 1 on e0e6da9e1b6ea490460f1cb856cd97d7f8a8db4b; mechanics: FAIL step 'Install graftling and pinned test tools' is failure; step 'Show runner, Python and pytest versions' is skipped; step 'Run the graftling test suite' is skipped (did not run the suite to its end); run_test_files exit code missing: the driver did not finish (0 or 1 expected); no per-file records (files.json): [Errno 2] No such file or directory: '/tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/junit/files.json'; results: FAIL JUnit holds no test; 81 listed failures skipped or absent; W3 tests: FAIL 0 of 17 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 635 P: FAIL (run 51000000000 attempt 1 on 7609e52089e638c963cc54c28438c99ea3964f99; mechanics: FAIL step 'Install graftling and pinned test tools' is failure; step 'Show runner, Python and pytest versions' is skipped; step 'Run the graftling test suite' is skipped (did not run the suite to its end); run_test_files exit code missing: the driver did not finish (0 or 1 expected); no per-file records (files.json): [Errno 2] No such file or directory: '/tmp/claude-501/rh635/setup-fail/evidence/run-51000000000-a1/junit/files.json'; results: FAIL JUnit holds no test; 44 listed failures skipped or absent; W3 tests: FAIL 0 of 17 W3 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]

@@ -1,0 +1,58 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+.....................................ssssssssssss....................... [ 30%]
+........................................................................ [ 38%]
+...................................................ssssssss............. [ 45%]
+........................................................................ [ 53%]
+................................s....................................... [ 60%]
+........................................................................ [ 68%]
+........................................................................ [ 76%]
+...........F............................................................ [ 83%]
+........................................................................ [ 91%]
+........................................................................ [ 98%]
+...........                                                              [100%]
+=================================== FAILURES ===================================
+___________ test_a_request_notice_returns_promptly_while_pi_holds_it ___________
+
+pi_host_process = <function pi_host_process.<locals>.build at 0x105770400>
+
+    def test_a_request_notice_returns_promptly_while_pi_holds_it(pi_host_process: Callable) -> None:
+        """The driver path and ask_parent must not wait for a turn; shown later settles the request."""
+        driver = Driver()
+        driver.finish = None
+        process = pi_host_process(shown='queued', driver=driver)
+        agent = process.create()
+        run = wait_until(lambda: driver.runs.get(agent))
+        began = time.monotonic()
+        run.events.request({'request_token': 'token-1', 'request_id': 7, 'method': 'claude/can_use_tool',
+                            'params': {'tool_name': 'Bash'}})
+        assert time.monotonic() - began < 1.5
+        child = bind(process.control, Caller('runtime-mcp', agent))
+        began = time.monotonic()
+        child({'action': 'ask_parent', 'kind': 'decision', 'question': 'Which?', 'timeout_seconds': 0.05})
+        assert time.monotonic() - began < 1.5
+        assert len(process.pipe.lines) == 2 and len(process.notices.awaiting) == 2
+        assert len(process.flush()) == 2  # still awaiting: not pushed again
+        process.notices.acknowledge(process.pipe.lines[0]['id'], True)
+>       assert [notice['request'] for notice in process.control.held_notices(process.caller)] == [
+            process.pipe.lines[1]['id'].rsplit(':', 1)[1]]
+E       AssertionError: assert ['token-1', '...a91c72826ecb'] == ['8adbdb842be...a91c72826ecb']
+E         
+E         At index 0 diff: 'token-1' != '8adbdb842be547a69f1da91c72826ecb'
+E         Left contains one more item: '8adbdb842be547a69f1da91c72826ecb'
+E         Use -v to get more diff
+
+/private/tmp/claude-501/graftling-638-base/tests/test_pi_dsh_notice_holding.py:602: AssertionError
+=========================== short test summary info ============================
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+1 failed, 925 passed, 21 skipped in 249.33s (0:04:09)
+exit 1

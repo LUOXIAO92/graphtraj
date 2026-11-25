@@ -1,0 +1,147 @@
+$ VERIFY638_GRAFTLING=/tmp/claude-501/w638/rehearsal/rerun/graftling VERIFY638_GREMOTE=/tmp/claude-501/w638/rehearsal/rerun/gremote.git VERIFY638_GH=/tmp/claude-501/w638/rehearsal/rerun/gh/gh VERIFY638_EXPECTED=/tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt VERIFY638_EVIDENCE=/tmp/claude-501/w638/rehearsal/rerun/evidence VERIFY638_POLL_S=1 VERIFY638_APPEAR_S=10 VERIFY638_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/638-graftling-windows-paths-encoding to graftling /tmp/claude-501/w638/rehearsal/rerun/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/w638/rehearsal/rerun/graftling; head d5fb80c7cf5d85a19971c434e7f247568ad22bef; prerequisites defad1db083e911900cbea1cb0ef165e6a66d322 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced are 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced or its ancestors
+PASS: the bundle head descends from graftling dev 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced (dev takes it fast-forward)
+--- bundle commits on 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
+  d5fb80c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the open-files check counts growth after one warm-up Session (638)
+  c1a0fe5 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 478dfd7f (W1 633, W2 634) into agent/638-graftling-windows-paths-encoding
+  df09100 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the Pi stand-in Python answers the import probe with -X utf8 (638)
+  0a313f5 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: the Python probe prints UTF-8; a directory arguments file is refused before opening (638)
+  6ac51d8 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows workflow: run on the 638 branch; the suite's temporary directory has a non-ASCII name (638)
+  cc0f13b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows paths, links and encoding (638)
+PASS: author and committer are the noreply identity
+--- files changed since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced:
+   .github/workflows/windows.yml                      | 13 +++-
+   src/graftling/claude-plugin/hooks/host_context.mjs |  6 +-
+   src/graftling/claude/display.py                    |  2 +
+   src/graftling/claude/driver.py                     |  4 +-
+   src/graftling/claude/execution.py                  |  7 ++-
+   src/graftling/claude/host.py                       |  9 ++-
+   src/graftling/claude/host_context.mjs              |  6 +-
+   src/graftling/claude/settings.py                   |  9 ++-
+   src/graftling/cli.py                               |  2 +
+   src/graftling/codex/host.py                        |  8 ++-
+   src/graftling/codex/managed_session.py             |  7 ++-
+   src/graftling/connection.py                        |  8 +--
+   src/graftling/discovery.py                         | 14 ++++-
+   src/graftling/dsh/execution.py                     |  3 +
+   src/graftling/dsh/host.py                          |  2 +
+   src/graftling/dsh/plugin.mjs                       | 19 ++++--
+   src/graftling/dsh/settings.py                      |  2 +-
+   src/graftling/links.py                             | 43 +++++++++++++
+   src/graftling/mcp.py                               |  2 +
+   src/graftling/member_processes.py                  |  2 +-
+   src/graftling/models.py                            | 11 +++-
+   src/graftling/pi/execution.py                      | 20 ++++--
+   src/graftling/pi/extension.mjs                     | 16 +++--
+   src/graftling/pi/host.py                           |  4 +-
+   src/graftling/process.py                           |  2 +-
+   src/graftling/stdio.py                             | 20 ++++++
+   src/graftling/tool_descendants.py                  |  6 +-
+   tests/test_agents_connections_presets.py           | 14 +++--
+   tests/test_child_server_name_551.py                |  4 +-
+   tests/test_claude_archive_batches_468.py           | 27 ++++++--
+   tests/test_dsh_plugin_install_python.py            | 39 +++++++++---
+   tests/test_dsh_providers_608.py                    |  3 +
+   tests/test_dsh_standalone_host.py                  | 12 ++--
+   tests/test_envelope_validation_555.py              | 27 ++++++++
+   tests/test_pi_default_host_572.py                  |  5 +-
+   tests/test_pi_standalone_host.py                   | 28 +++++----
+   tests/test_tool_name_591.py                        |  2 +-
+   tests/test_windows_symbolic_links_638.py           | 71 ++++++++++++++++++++++
+   38 files changed, 390 insertions(+), 89 deletions(-)
+PASS: pyproject.toml, pytest.ini, the per-file driver, tests/posix_only.py and tests/conftest.py unchanged since 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+--- .github/workflows/windows.yml at d5fb80c7cf5d85a19971c434e7f247568ad22bef against 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+PASS: the only removed line is the push branches line
+PASS: push branches: base list plus agent/638-graftling-windows-paths-encoding
+PASS: the other added lines are exactly the non-ASCII temporary directory setup
+PASS: step names unchanged: Keep symbolic links on this runner | Check out the commit under test | Fail unless the linked package documents are symbolic links | Set up Node 22.18.0 x64 | Set up Python 3.13.7 x64 | Install graftling and pinned test tools | Show runner, Python and pytest versions | Run the graftling test suite | Retain JUnit results
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: TEMP is set before .github/run_test_files.py runs
+PASS: PYTHONUTF8 stays 1
+PASS: /tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt parses: 2 expected Windows failures and 0 expected hangs (W4 (636) 2), 19 allowed environment skips
+PASS: graftling /tmp/claude-501/w638/rehearsal/rerun/gremote.git has agent/638-graftling-windows-paths-encoding at df09100421e56d8c02a8c49a50664e601244eb17, an ancestor of the bundle head (fast-forward)
+PASS: /tmp/claude-501/w638/rehearsal/rerun/graftling has no local agent/638-graftling-windows-paths-encoding (P creates it from the bundle)
+$ git -C /tmp/claude-501/w638/rehearsal/rerun/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/graftling-638.bundle refs/heads/agent/638-graftling-windows-paths-encoding:refs/heads/agent/638-graftling-windows-paths-encoding
+  From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/graftling-638.bundle
+   * [new branch]      agent/638-graftling-windows-paths-encoding -> agent/638-graftling-windows-paths-encoding
+PASS: /tmp/claude-501/w638/rehearsal/rerun/graftling local agent/638-graftling-windows-paths-encoding = d5fb80c7cf5d85a19971c434e7f247568ad22bef
+$ git -C /tmp/claude-501/w638/rehearsal/rerun/graftling push /tmp/claude-501/w638/rehearsal/rerun/gremote.git refs/heads/agent/638-graftling-windows-paths-encoding:refs/heads/agent/638-graftling-windows-paths-encoding   (d5fb80c7cf5d85a19971c434e7f247568ad22bef)
+  To /tmp/claude-501/w638/rehearsal/rerun/gremote.git
+     df09100..d5fb80c  agent/638-graftling-windows-paths-encoding -> agent/638-graftling-windows-paths-encoding
+PASS: graftling /tmp/claude-501/w638/rehearsal/rerun/gremote.git agent/638-graftling-windows-paths-encoding = d5fb80c7cf5d85a19971c434e7f247568ad22bef
+looking for the .github/workflows/windows.yml run (event push) of d5fb80c7cf5d85a19971c434e7f247568ad22bef on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+run 51000000000 present after 2s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+waiting for run 51000000000 (completion bound 30s, poll 1s)
+  [23:18:26] run 51000000000: completed failure
+--- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head d5fb80c7cf5d85a19971c434e7f247568ad22bef | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | setup: must succeed
+  step  3 | success   | Check out the commit under test | setup: must succeed
+  step  4 | success   | Fail unless the linked package documents are symbolic links | setup: must succeed
+  step  5 | success   | Set up Node 22.18.0 x64 | setup: must succeed
+  step  7 | success   | Set up Python 3.13.7 x64 | setup: must succeed
+  step  8 | success   | Install graftling and pinned test tools | setup: must succeed
+  step  9 | success   | Show runner, Python and pytest versions | setup: must succeed
+  step 10 | failure   | Run the graftling test suite | suite: success or failure (results judged from JUnit)
+  step 11 | success   | Retain JUnit results | upload: must succeed
+  step 12 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 13 | skipped   | Post Set up Node 22.18.0 x64 | other: success or skipped
+  step 14 | success   | Post Check out the commit under test | other: success or skipped
+  step 15 | success   | Complete job | other: success or skipped
+--- job log saved: /tmp/claude-501/w638/rehearsal/rerun/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
+  per-file pytest summaries: 1
+$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-d5fb80c7cf5d85a19971c434e7f247568ad22bef-1 -D /tmp/claude-501/w638/rehearsal/rerun/evidence/run-51000000000-a1/junit
+test files in d5fb80c7cf5d85a19971c434e7f247568ad22bef: 61
+--- per-file records and results against /tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+run_test_files exit code: 1
+--- test files: 61 recorded | ended 61 | hung 0 | not run 0 | in the commit: 61
+  slowest ended files: tests/test_agent_completion.py 2.5 s, tests/test_agent_control.py 2.5 s, tests/test_agents_connections_presets.py 2.5 s, tests/test_agents_request_notices.py 2.5 s, tests/test_agents_server_name.py 2.5 s
+merged JUnit files: 61
+collected in JUnit: 975 | passed 951 | failed 2 | errors 0 | skipped 22
+--- POSIX-only skips: 0 in 0 modules
+--- allowed environment skips (not Windows-specific): 21
+  x12: Explicit pinned official SDK comparison
+  x2: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+  x2: Requires one explicitly retained native trace.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Requires assigned native startup diagnosis.
+--- skips without the 'POSIX-only: ' prefix and not allowed: 1, by reason:
+  x1: Node is required
+  by test:
+  tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[False] | Node is required
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 2; observed failures and errors: 2 (1 as expected)
+--- unexpected failures: 1
+  FAIL tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True] | origin src/graftling/connection.py:68 (W4?; from junit) | graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+    origins of the unexpected failures: junit 1
+--- unexpected passes (listed as failing, passed): 1
+  PASS tests/test_connection_serve.py::test_removed_control_directory_stops_the_service | listed origin src/graftling/connection.py:68 W4 (636)
+--- listed failures that were skipped or not collected: 0
+observed list written: /tmp/claude-501/w638/rehearsal/rerun/evidence/run-51000000000-a1/observed-expected.txt
+--- non-ASCII paths
+suite temporary directory (temp-directory.txt): D:\a\_temp\graftling-测试-ü  'D:\\a\\_temp\\graftling-\u6d4b\u8bd5-\xfc'
+per-file logs printing a path under it: 1 of 61 (e.g. test_agent_completion.txt)
+TEMP PASS the suite ran under 'D:\\a\\_temp\\graftling-\u6d4b\u8bd5-\xfc' (non-ASCII)
+evidence: /tmp/claude-501/w638/rehearsal/rerun/evidence/run-51000000000-a1
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/steps.zsh W 51000000000    (observe again; no push, no re-run)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
+next: correction round: compare /tmp/claude-501/w638/rehearsal/rerun/evidence/run-51000000000-a1/observed-expected.txt with /tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt; after a new bundle: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/steps.zsh 00 then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/steps.zsh P
+VERDICT 638 P: FAIL (run 51000000000 attempt 1 on d5fb80c7cf5d85a19971c434e7f247568ad22bef; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; non-ASCII temporary directory; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]

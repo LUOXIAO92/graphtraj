@@ -1,0 +1,815 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 57 items
+
+tests/test_pi_dsh_notice_holding.py::test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host[pi] PASSED [  1%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host[dsh] PASSED [  3%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_refused_by_the_session_stays_held_for_the_next_host[pi] PASSED [  5%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_refused_by_the_session_stays_held_for_the_next_host[dsh] PASSED [  7%]
+tests/test_pi_dsh_notice_holding.py::test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated[pi] PASSED [  8%]
+tests/test_pi_dsh_notice_holding.py::test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated[dsh] PASSED [ 10%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_shown_by_status_is_not_pushed[pi] PASSED [ 12%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_shown_by_status_is_not_pushed[dsh] PASSED [ 14%]
+tests/test_pi_dsh_notice_holding.py::test_a_hierarchy_status_settles_every_held_end_it_shows[pi] PASSED [ 15%]
+tests/test_pi_dsh_notice_holding.py::test_a_hierarchy_status_settles_every_held_end_it_shows[dsh] PASSED [ 17%]
+tests/test_pi_dsh_notice_holding.py::test_a_body_shown_while_the_flush_runs_is_not_pushed[pi] PASSED [ 19%]
+tests/test_pi_dsh_notice_holding.py::test_a_body_shown_while_the_flush_runs_is_not_pushed[dsh] PASSED [ 21%]
+tests/test_pi_dsh_notice_holding.py::test_a_held_end_being_flushed_is_shown_queueing_and_not_settled_as_read[pi] PASSED [ 22%]
+tests/test_pi_dsh_notice_holding.py::test_a_held_end_being_flushed_is_shown_queueing_and_not_settled_as_read[dsh] PASSED [ 24%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_flush_does_not_lose_a_body_read_during_it[pi] PASSED [ 26%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_flush_does_not_lose_a_body_read_during_it[dsh] PASSED [ 28%]
+tests/test_pi_dsh_notice_holding.py::test_shutdowns_own_wait_does_not_settle_the_ends_it_causes[pi] PASSED [ 29%]
+tests/test_pi_dsh_notice_holding.py::test_shutdowns_own_wait_does_not_settle_the_ends_it_causes[dsh] PASSED [ 31%]
+tests/test_pi_dsh_notice_holding.py::test_a_live_end_is_pushed_once_with_the_host_up[pi] PASSED [ 33%]
+tests/test_pi_dsh_notice_holding.py::test_a_live_end_is_pushed_once_with_the_host_up[dsh] PASSED [ 35%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once[pi] PASSED [ 36%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once[dsh] PASSED [ 38%]
+tests/test_pi_dsh_notice_holding.py::test_each_native_request_notifies_once_with_its_own_identity[pi] PASSED [ 40%]
+tests/test_pi_dsh_notice_holding.py::test_each_native_request_notifies_once_with_its_own_identity[dsh] PASSED [ 42%]
+tests/test_pi_dsh_notice_holding.py::test_ask_parent_notifies_once_without_its_question[pi] PASSED [ 43%]
+tests/test_pi_dsh_notice_holding.py::test_ask_parent_notifies_once_without_its_question[dsh] PASSED [ 45%]
+tests/test_pi_dsh_notice_holding.py::test_dsh_flush_retries_a_refusal_within_its_bound_without_spinning PASSED [ 47%]
+tests/test_pi_dsh_notice_holding.py::test_dsh_flush_retry_stops_at_shutdown PASSED [ 49%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi] FAILED [ 50%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh] FAILED [ 52%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[pi] FAILED [ 54%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[dsh] FAILED [ 56%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_refused_notice_stays_held FAILED [ 57%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed FAILED [ 59%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_pi_took_is_delivered_only_when_it_is_in_the_session PASSED [ 61%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_pi_took_and_never_wrote_is_delivered_by_the_next_host PASSED [ 63%]
+tests/test_pi_dsh_notice_holding.py::test_a_status_while_pi_holds_the_notice_shows_the_body_and_settles_nothing PASSED [ 64%]
+tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it PASSED [ 66%]
+tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[pi] FAILED [ 68%]
+tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[dsh] FAILED [ 70%]
+tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[pi] FAILED [ 71%]
+tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[dsh] FAILED [ 73%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_deliver_once_when_pi_writes_the_notice FAILED [ 75%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it FAILED [ 77%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_waits_for_the_entry_after_message_end FAILED [ 78%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown FAILED [ 80%]
+tests/test_pi_dsh_notice_holding.py::test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it SKIPPED [ 82%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry0] SKIPPED [ 84%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry1] SKIPPED [ 85%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry2] SKIPPED [ 87%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry3] SKIPPED [ 89%]
+tests/test_pi_dsh_notice_holding.py::test_extension_says_ready_once_at_the_first_turn_and_not_before SKIPPED [ 91%]
+tests/test_pi_dsh_notice_holding.py::test_extension_with_a_ui_says_ready_after_its_grace_when_no_turn_starts SKIPPED [ 92%]
+tests/test_pi_dsh_notice_holding.py::test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inactive_session PASSED [ 94%]
+tests/test_pi_dsh_notice_holding.py::test_a_nested_dsh_parent_gives_each_request_its_own_relay_id PASSED [ 96%]
+tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_when_the_sessions_turn_begins_not_at_attach SKIPPED [ 98%]
+tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_after_its_grace_in_a_session_with_no_turn SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=cd983d0361b34cf1ab8d95053aaafa35: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+_ test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi] _
+tests\test_pi_dsh_notice_holding.py:496: in test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing
+    outcome = run_native(tmp_path, kind)
+tests\test_pi_dsh_notice_holding.py:484: in run_native
+    assert result.returncode == 0, result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_process_flush0\native\dsh\lib\bin.py", line 22, in <module>
+E         host.stdin.flush()
+E         ~~~~~~~~~~~~~~~~^^
+E     OSError: [Errno 22] Invalid argument
+E     Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+E     OSError: [Errno 22] Invalid argument
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush0\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush0\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+_ test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh] _
+tests\test_pi_dsh_notice_holding.py:496: in test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing
+    outcome = run_native(tmp_path, kind)
+tests\test_pi_dsh_notice_holding.py:484: in run_native
+    assert result.returncode == 0, result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_process_flush1\native\dsh\lib\bin.py", line 22, in <module>
+E         host.stdin.flush()
+E         ~~~~~~~~~~~~~~~~^^
+E     OSError: [Errno 22] Invalid argument
+E     Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+E     OSError: [Errno 22] Invalid argument
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush1\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush1\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+_ test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[pi] _
+tests\test_pi_dsh_notice_holding.py:512: in test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: Traceback (most recent call last):
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E       File "<frozen runpy>", line 88, in _run_code
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+E         main()
+E         ~~~~^^
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+E         with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                                close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E   assert 1 == 0
+_ test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[dsh] _
+tests\test_pi_dsh_notice_holding.py:512: in test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: Traceback (most recent call last):
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E       File "<frozen runpy>", line 88, in _run_code
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+E         main()
+E         ~~~~^^
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+E         with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                                native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E   assert 1 == 0
+_________________ test_a_real_host_refused_notice_stays_held __________________
+tests\test_pi_dsh_notice_holding.py:521: in test_a_real_host_refused_notice_stays_held
+    outcome = run_native(tmp_path, 'pi', shown='false')
+tests\test_pi_dsh_notice_holding.py:484: in run_native
+    assert result.returncode == 0, result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_refused_notic0\native\dsh\lib\bin.py", line 22, in <module>
+E         host.stdin.flush()
+E         ~~~~~~~~~~~~~~~~^^
+E     OSError: [Errno 22] Invalid argument
+E     Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+E     OSError: [Errno 22] Invalid argument
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_refused_notic0\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_refused_notic0\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+_ test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed _
+tests\test_pi_dsh_notice_holding.py:530: in test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed
+    outcome = run_native(tmp_path, 'pi', shown='none')
+tests\test_pi_dsh_notice_holding.py:484: in run_native
+    assert result.returncode == 0, result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_unacknowledge0\native\dsh\lib\bin.py", line 22, in <module>
+E         host.stdin.flush()
+E         ~~~~~~~~~~~~~~~~^^
+E     OSError: [Errno 22] Invalid argument
+E     Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+E     OSError: [Errno 22] Invalid argument
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_unacknowledge0\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_unacknowledge0\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+__________ test_a_shutdown_end_stays_held_through_the_real_main[pi] ___________
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:661: in test_a_shutdown_end_stays_held_through_the_real_main
+    pipe = run_main(tmp_path, monkeypatch, kind, prepare)
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:648: in run_main
+    host.main()
+D:\a\graftling\graftling\src\graftling\pi\host.py:499: in main
+    with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:420: in agents_connection
+    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:68: in worker_connection
+    raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E   graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+__________ test_a_shutdown_end_stays_held_through_the_real_main[dsh] __________
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:661: in test_a_shutdown_end_stays_held_through_the_real_main
+    pipe = run_main(tmp_path, monkeypatch, kind, prepare)
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:648: in run_main
+    host.main()
+D:\a\graftling\graftling\src\graftling\dsh\host.py:337: in main
+    with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:420: in agents_connection
+    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:68: in worker_connection
+    raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E   graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+__ test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[pi] ___
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:680: in test_shutdown_through_the_real_main_does_not_continue_a_parent_agent
+    run_main(tmp_path, monkeypatch, kind, prepare)
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:648: in run_main
+    host.main()
+D:\a\graftling\graftling\src\graftling\pi\host.py:499: in main
+    with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:420: in agents_connection
+    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:68: in worker_connection
+    raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E   graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+__ test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[dsh] __
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:680: in test_shutdown_through_the_real_main_does_not_continue_a_parent_agent
+    run_main(tmp_path, monkeypatch, kind, prepare)
+D:\a\graftling\graftling\tests\test_pi_dsh_notice_holding.py:648: in run_main
+    host.main()
+D:\a\graftling\graftling\src\graftling\dsh\host.py:337: in main
+    with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:420: in agents_connection
+    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py:141: in __enter__
+    return next(self.gen)
+D:\a\graftling\graftling\src\graftling\connection.py:68: in worker_connection
+    raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E   graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+_____ test_real_extension_and_host_deliver_once_when_pi_writes_the_notice _____
+tests\test_pi_dsh_notice_holding.py:741: in test_real_extension_and_host_deliver_once_when_pi_writes_the_notice
+    first = run_pi(tmp_path, 'written')
+tests\test_pi_dsh_notice_holding.py:734: in run_pi
+    assert result.returncode == 0, result.stderr
+E   AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+E           if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+E                                               ^
+E     
+E     Error: Traceback (most recent call last):
+E     
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E     
+E       File "<frozen runpy>", line 88, in _run_code
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+E     
+E         main()
+E     
+E         ~~~~^^
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+E     
+E         with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E                                close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+E     
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E     
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E     
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E     
+E         at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+E         at ChildProcess.emit (node:events:518:28)
+E         at maybeClose (node:internal/child_process:1101:16)
+E         at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+E     
+E     Node.js v22.18.0
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_and_host_d0\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+_____ test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it ______
+tests\test_pi_dsh_notice_holding.py:750: in test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it
+    assert len(run_pi(tmp_path, 'queue')['sent']) == 1
+tests\test_pi_dsh_notice_holding.py:734: in run_pi
+    assert result.returncode == 0, result.stderr
+E   AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+E           if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+E                                               ^
+E     
+E     Error: Traceback (most recent call last):
+E     
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E     
+E       File "<frozen runpy>", line 88, in _run_code
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+E     
+E         main()
+E     
+E         ~~~~^^
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+E     
+E         with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E                                close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+E     
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E     
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E     
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E     
+E         at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+E         at ChildProcess.emit (node:events:518:28)
+E         at maybeClose (node:internal/child_process:1101:16)
+E         at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+E     
+E     Node.js v22.18.0
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_and_host_k0\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+__________ test_real_extension_waits_for_the_entry_after_message_end __________
+tests\test_pi_dsh_notice_holding.py:760: in test_real_extension_waits_for_the_entry_after_message_end
+    assert len(run_pi(tmp_path, 'unwritten')['sent']) == 1
+tests\test_pi_dsh_notice_holding.py:734: in run_pi
+    assert result.returncode == 0, result.stderr
+E   AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+E           if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+E                                               ^
+E     
+E     Error: Traceback (most recent call last):
+E     
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E     
+E       File "<frozen runpy>", line 88, in _run_code
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+E     
+E         main()
+E     
+E         ~~~~^^
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+E     
+E         with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E                                close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+E     
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E     
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E     
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E     
+E         at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+E         at ChildProcess.emit (node:events:518:28)
+E         at maybeClose (node:internal/child_process:1101:16)
+E         at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+E     
+E     Node.js v22.18.0
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_waits_for_0\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+_ test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown _
+tests\test_pi_dsh_notice_holding.py:767: in test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown
+    fact = run_pi(tmp_path, 'queue')['sent'][0]
+tests\test_pi_dsh_notice_holding.py:734: in run_pi
+    assert result.returncode == 0, result.stderr
+E   AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+E           if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+E                                               ^
+E     
+E     Error: Traceback (most recent call last):
+E     
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E     
+E       File "<frozen runpy>", line 88, in _run_code
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+E     
+E         main()
+E     
+E         ~~~~^^
+E     
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+E     
+E         with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E                                close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+E     
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E     
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E     
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E     
+E         return next(self.gen)
+E     
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E     
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E     
+E         at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+E         at ChildProcess.emit (node:events:518:28)
+E         at maybeClose (node:internal/child_process:1101:16)
+E         at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+E     
+E     Node.js v22.18.0
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_and_host_d1\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_dsh_notice_holding.xml -
+============================ slowest 10 durations =============================
+0.54s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi]
+0.54s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed
+0.53s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh]
+0.53s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[pi]
+0.53s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_refused_notice_stays_held
+0.52s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[dsh]
+0.24s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it
+0.24s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_deliver_once_when_pi_writes_the_notice
+0.24s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown
+0.23s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_waits_for_the_entry_after_message_end
+=========================== short test summary info ===========================
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi] - AssertionError: Traceback (most recent call last):
+    File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_process_flush0\native\dsh\lib\bin.py", line 22, in <module>
+      host.stdin.flush()
+      ~~~~~~~~~~~~~~~~^^
+  OSError: [Errno 22] Invalid argument
+  Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+  OSError: [Errno 22] Invalid argument
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush0\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush0\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh] - AssertionError: Traceback (most recent call last):
+    File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_process_flush1\native\dsh\lib\bin.py", line 22, in <module>
+      host.stdin.flush()
+      ~~~~~~~~~~~~~~~~^^
+  OSError: [Errno 22] Invalid argument
+  Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+  OSError: [Errno 22] Invalid argument
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush1\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_process_flush1\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[pi] - AssertionError: Traceback (most recent call last):
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+      main()
+      ~~~~^^
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+      with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+assert 1 == 0
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[dsh] - AssertionError: Traceback (most recent call last):
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+      main()
+      ~~~~^^
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+      with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+assert 1 == 0
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_real_host_refused_notice_stays_held - AssertionError: Traceback (most recent call last):
+    File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_refused_notic0\native\dsh\lib\bin.py", line 22, in <module>
+      host.stdin.flush()
+      ~~~~~~~~~~~~~~~~^^
+  OSError: [Errno 22] Invalid argument
+  Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+  OSError: [Errno 22] Invalid argument
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_refused_notic0\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_refused_notic0\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed - AssertionError: Traceback (most recent call last):
+    File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-38\test_a_real_host_unacknowledge0\native\dsh\lib\bin.py", line 22, in <module>
+      host.stdin.flush()
+      ~~~~~~~~~~~~~~~~^^
+  OSError: [Errno 22] Invalid argument
+  Exception ignored in: <_io.TextIOWrapper name=3 encoding='utf-8'>
+  OSError: [Errno 22] Invalid argument
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_unacknowledge0\\native\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_real_host_unacknowledge0\\native\\dsh\\lib\\bin.py", line 22, in <module>\n    host.stdin.flush()\n    ~~~~~~~~~~~~~~~~^^\nOSError: [Errno 22] Invalid argument\nException ignored in: <_io.TextIOWrapper name=3 encoding=\'utf-8\'>\nOSError: [Errno 22] Invalid argument\n').returncode
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[pi] - graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[dsh] - graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+FAILED tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[pi] - graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+FAILED tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[dsh] - graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+FAILED tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_deliver_once_when_pi_writes_the_notice - AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+        if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+                                            ^
+  
+  Error: Traceback (most recent call last):
+  
+    File "<frozen runpy>", line 198, in _run_module_as_main
+  
+    File "<frozen runpy>", line 88, in _run_code
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+  
+      main()
+  
+      ~~~~^^
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+  
+      with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+                             close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+  
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+  
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+  
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+  
+      at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+      at ChildProcess.emit (node:events:518:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+  
+  Node.js v22.18.0
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_and_host_d0\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+FAILED tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it - AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+        if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+                                            ^
+  
+  Error: Traceback (most recent call last):
+  
+    File "<frozen runpy>", line 198, in _run_module_as_main
+  
+    File "<frozen runpy>", line 88, in _run_code
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+  
+      main()
+  
+      ~~~~^^
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+  
+      with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+                             close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+  
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+  
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+  
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+  
+      at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+      at ChildProcess.emit (node:events:518:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+  
+  Node.js v22.18.0
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_and_host_k0\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+FAILED tests/test_pi_dsh_notice_holding.py::test_real_extension_waits_for_the_entry_after_message_end - AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+        if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+                                            ^
+  
+  Error: Traceback (most recent call last):
+  
+    File "<frozen runpy>", line 198, in _run_module_as_main
+  
+    File "<frozen runpy>", line 88, in _run_code
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+  
+      main()
+  
+      ~~~~^^
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+  
+      with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+                             close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+  
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+  
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+  
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+  
+      at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+      at ChildProcess.emit (node:events:518:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+  
+  Node.js v22.18.0
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_waits_for_0\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+FAILED tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown - AssertionError: file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201
+        if (code !== 0 || !ready) failure = new Error(diagnostic || 'Independent Pi host failed.');
+                                            ^
+  
+  Error: Traceback (most recent call last):
+  
+    File "<frozen runpy>", line 198, in _run_module_as_main
+  
+    File "<frozen runpy>", line 88, in _run_code
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+  
+      main()
+  
+      ~~~~^^
+  
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+  
+      with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+                             close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+  
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+  
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+  
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+  
+      return next(self.gen)
+  
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+  
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+  
+      at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)
+      at ChildProcess.emit (node:events:518:28)
+      at maybeClose (node:internal/child_process:1101:16)
+      at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+  
+  Node.js v22.18.0
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.EXE', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_real_extension_and_host_d1\\fake-pi.mjs'], returncode=1, stdout='', stderr='file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201\n      if (code !== 0 || !ready) failure = new Error(diagnostic || \'Independent Pi host failed.\');\n                                          ^\n\nError: Traceback (most recent call last):\n\n  File "<frozen runpy>", line 198, in _run_module_as_main\n\n  File "<frozen runpy>", line 88, in _run_code\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 533, in <module>\n\n    main()\n\n    ~~~~^^\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\pi\\host.py", line 499, in main\n\n    with agents_connection(root / \'live\' / \'pi-host\', operate, authenticate,\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n                           close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:\n\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 420, in agents_connection\n\n    with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:\n\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\contextlib.py", line 141, in __enter__\n\n    return next(self.gen)\n\n  File "D:\\a\\graftling\\graftling\\src\\graftling\\connection.py", line 68, in worker_connection\n\n    raise AgentsError(\'authority-denied\', \'Windows does not support the authenticated local control pipe.\')\n\ngraftling.tool.AgentsError: Windows does not support the authenticated local control pipe.\n\n\n    at ChildProcess.<anonymous> (file:///D:/a/graftling/graftling/src/graftling/pi/extension.mjs:201:43)\n    at ChildProcess.emit (node:events:518:28)\n    at maybeClose (node:internal/child_process:1101:16)\n    at ChildProcess._handle.onexit (node:internal/child_process:304:5)\n\nNode.js v22.18.0\n').returncode
+SKIPPED [9] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+================== 14 failed, 34 passed, 9 skipped in 8.28s ===================

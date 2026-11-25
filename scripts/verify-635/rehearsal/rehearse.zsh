@@ -11,8 +11,8 @@ S=${1:?scratch dir}; JUNIT=${2:?junit file}; HERE=${0:A:h}; STEPS=$HERE/../steps
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 REAL=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
 BRANCH=agent/635-graftling-windows-process-tree
-# graftling dev with W2 (634) integrated; the candidate merges it (635 correction 1).
-BASE=478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+# graftling dev with W2 (634) and W6 (638) integrated; the candidate merges it (635 correction 2).
+BASE=d5fb80c7cf5d85a19971c434e7f247568ad22bef
 BUNDLE=$HERE/../graftling-635.bundle
 LIST=$HERE/../../verify-632/windows-expected.txt
 NOREPLY=(-c user.name=LUOXIAO92 -c user.email=89069722+LUOXIAO92@users.noreply.github.com)
@@ -29,7 +29,7 @@ for case in tree.getroot().iter("testcase"):
         if child.tag == "skipped" and child.get("message", "").startswith(("Windows only", "Windows-only")):
             case.remove(child)
 tree.write(sys.argv[2], encoding="utf-8", xml_declaration=True)' $JUNIT $S/junit-w3-passed.xml
-# Failing in the stand-in run: every `fail` entry of the edited list, a W3 line this Task kept first (mismatch makes
+# Failing in the stand-in run: every `fail` entry of the edited list, a line this Task moved first (mismatch makes
 # the first one pass: a listed entry that unexpectedly passes). It passes in the simulated JUnit.
 MOVED=tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd
 FAILS=($MOVED ${(f)"$(awk -F'\t' -v moved=$MOVED '$1=="fail" && $2!=moved {print $2}' $LIST)"})
@@ -99,8 +99,8 @@ git -C $S/badsrc $NOREPLY commit -q -am 'rehearsal: changes outside W3'
 git -C $S/badsrc bundle create -q $S/bad.bundle $BASE..refs/heads/$BRANCH
 BAD=$S/bad.bundle; fresh disallowed; step disallowed disallowed-00.txt 00; step disallowed disallowed-P.txt P; unset BAD
 print -r -- "--- after P: remote $(git -C $S/disallowed/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/disallowed-P.txt
-# 00 not ready, P STOP: the expected list with one kept W3 line moved to another owner (owners are Main's to change).
-awk -F'\t' -v OFS='\t' -v moved=$MOVED '$1=="fail" && $2==moved {$4="W4 (636)"} {print}' $LIST > $S/bad-owner-list.txt
+# 00 not ready, P STOP: the expected list with one moved line left at W3 (635) instead of Main's owner (correction 2).
+awk -F'\t' -v OFS='\t' -v moved=$MOVED '$1=="fail" && $2==moved {$4="W3 (635)"} {print}' $LIST > $S/bad-owner-list.txt
 BADLIST=$S/bad-owner-list.txt; fresh bad-owner; step bad-owner bad-owner-00.txt 00; step bad-owner bad-owner-P.txt P
 unset BADLIST
 print -r -- "--- after P: remote $(git -C $S/bad-owner/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/bad-owner-P.txt

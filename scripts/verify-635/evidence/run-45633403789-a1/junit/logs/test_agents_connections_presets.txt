@@ -1,0 +1,259 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 59 items
+
+tests/test_agents_connections_presets.py::test_connections_and_presets_are_read_with_their_names FAILED [  1%]
+tests/test_agents_connections_presets.py::test_no_file_and_boolean_only_files_read_as_before PASSED [  3%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    token: x\n-4-connections.a.token: unknown field] PASSED [  5%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n  a:\n    runtime: codex\n-4-a is repeated] PASSED [  6%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    runtime: codex\n-4-runtime is repeated] PASSED [  8%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: gemini\n-3-connections.a.runtime: expected one of] PASSED [ 10%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    home: /x\n-2-connections.a.runtime: required] FAILED [ 11%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    models: claude\n-4-expected a non-empty list] PASSED [ 13%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    models: [x, x]\n-4-a model id is repeated] PASSED [ 15%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    models: [{alias: y}]\n-4-models.id: required] PASSED [ 16%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    home: relative\n-4-expected an absolute path] PASSED [ 18%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    api_key_env: sk-123\n-4-never a key] PASSED [ 20%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\n    base_url: https://u:p@h/\n-4-credential-free] PASSED [ 22%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: 3\n-3-expected a non-empty string] PASSED [ 23%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[presets:\n  p:\n    connection: missing\n-3-no connection 'missing' is declared] PASSED [ 25%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[presets:\n  p:\n    model: m\n-2-give either connection or runtime] PASSED [ 27%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    runtime: claude\npresets:\n  p:\n    connection: a\n    runtime: claude\n-5-give either connection or runtime] PASSED [ 28%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[presets:\n  p:\n    runtime: pi\n    effort: high\n-4-presets.p.effort: unknown field] PASSED [ 30%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[save_normalized_sessions: "true"\n-1-true or false] PASSED [ 32%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[save_normalized_sessions: yes\n-1-true or false] PASSED [ 33%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[backfill_history: true\nbackfill_history: false\n-2-backfill_history is repeated] PASSED [ 35%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[roles: {}\n-1-roles: unknown field] PASSED [ 37%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections: [a]\n-1-connections must be a mapping] PASSED [ 38%]
+tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a: {runtime: claude\n-3-not valid YAML] PASSED [ 40%]
+tests/test_agents_connections_presets.py::test_writing_a_choice_keeps_connections_presets_and_comments FAILED [ 42%]
+tests/test_agents_connections_presets.py::test_no_connections_keeps_the_original_prepare_call PASSED [ 44%]
+tests/test_agents_connections_presets.py::test_preset_fills_model_and_effort_and_the_document_reports_them FAILED [ 45%]
+tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted FAILED [ 47%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments0-invalid-preset-Preset 'missing' is not declared] FAILED [ 49%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments1-invalid-preset-uses Runtime 'claude'] FAILED [ 50%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments2-invalid-model-contradicts preset 'reviewer'] FAILED [ 52%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments3-invalid-reasoning-effort-contradicts preset 'reviewer'] FAILED [ 54%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments4-invalid-model-is not a candidate] FAILED [ 55%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments5-invalid-reasoning-effort-supports reasoning_effort ['low', 'high']] FAILED [ 57%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments6-unsupported-runtime-Runtime 'pi'] PASSED [ 59%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments7-invalid-input-request.preset: must not be empty] PASSED [ 61%]
+tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments8-invalid-input-request.effort] PASSED [ 62%]
+tests/test_agents_connections_presets.py::test_a_model_discovery_cannot_verify_is_refused FAILED [ 64%]
+tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts FAILED [ 66%]
+tests/test_agents_connections_presets.py::test_without_a_connection_a_model_is_checked_against_the_native_login PASSED [ 67%]
+tests/test_agents_connections_presets.py::test_several_connections_for_one_runtime_need_a_preset FAILED [ 69%]
+tests/test_agents_connections_presets.py::test_an_invalid_config_fails_create_with_its_line PASSED [ 71%]
+tests/test_agents_connections_presets.py::test_a_driver_without_selection_support_refuses_a_choice PASSED [ 72%]
+tests/test_agents_connections_presets.py::test_create_schema_lists_the_new_optional_arguments PASSED [ 74%]
+tests/test_agents_connections_presets.py::test_one_host_registers_drivers_for_several_runtimes FAILED [ 76%]
+tests/test_agents_connections_presets.py::test_a_declared_runtime_without_a_driver_is_refused_at_host_start FAILED [ 77%]
+tests/test_agents_connections_presets.py::test_an_unavailable_runtime_fails_create_without_an_agent FAILED [ 79%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[claude] SKIPPED [ 81%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[codex] SKIPPED [ 83%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[pi] SKIPPED [ 84%]
+tests/test_agents_connections_presets.py::test_agents_drivers_report_not_installed_and_not_logged_in[dsh] SKIPPED [ 86%]
+tests/test_agents_connections_presets.py::test_claude_driver_applies_connection_model_and_effort SKIPPED [ 88%]
+tests/test_agents_connections_presets.py::test_codex_driver_applies_connection_model_and_effort SKIPPED [ 89%]
+tests/test_agents_connections_presets.py::test_pi_driver_applies_model_and_effort_and_resolves_another_provider PASSED [ 91%]
+tests/test_agents_connections_presets.py::test_dsh_driver_applies_connection_model_and_effort SKIPPED [ 93%]
+tests/test_agents_connections_presets.py::test_boolean_only_files_keep_the_previous_grammar[backfill_history:true\n-expected0] PASSED [ 94%]
+tests/test_agents_connections_presets.py::test_boolean_only_files_keep_the_previous_grammar[  save_normalized_sessions: false\nbackfill_history: true  # note\n-expected1] PASSED [ 96%]
+tests/test_agents_connections_presets.py::test_a_non_boolean_choice_beside_connections_is_refused PASSED [ 98%]
+tests/test_agents_connections_presets.py::test_a_third_party_named_claude_connection_keeps_its_models SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=f6648119399b4905a2b433d4ba425068: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+___________ test_connections_and_presets_are_read_with_their_names ____________
+tests\test_agents_connections_presets.py:129: in test_connections_and_presets_are_read_with_their_names
+    declared = read_connections(root)
+src\graftling\config.py:170: in read_connections
+    _, connections, presets, reviewers, passed = _read(Path(root))
+src\graftling\config.py:353: in _read
+    raise fail(item, f"{label}: expected an absolute path")
+E   ValueError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_connections_and_presets_a0\config.yml:5: connections.work-claude.home: expected an absolute path
+_ test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    home: /x\n-2-connections.a.runtime: required] _
+tests\test_agents_connections_presets.py:181: in test_reading_is_strict_and_names_file_and_line
+    assert str(caught.value).startswith(f'{tmp_path / "config.yml"}:{line}: ')
+E   AssertionError: assert False
+E    +  where False = <built-in method startswith of str object at 0x0000022D9F36CFA0>('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:2: ')
+E    +    where <built-in method startswith of str object at 0x0000022D9F36CFA0> = 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path'.startswith
+E    +      where 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path' = str(ValueError('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path'))
+E    +        where ValueError('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path') = <ExceptionInfo ValueError('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path') tblen=3>.value
+________ test_writing_a_choice_keeps_connections_presets_and_comments _________
+tests\test_agents_connections_presets.py:187: in test_writing_a_choice_keeps_connections_presets_and_comments
+    before = read_connections(root)
+src\graftling\config.py:170: in read_connections
+    _, connections, presets, reviewers, passed = _read(Path(root))
+src\graftling\config.py:353: in _read
+    raise fail(item, f"{label}: expected an absolute path")
+E   ValueError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_writing_a_choice_keeps_co0\config.yml:5: connections.work-claude.home: expected an absolute path
+______ test_preset_fills_model_and_effort_and_the_document_reports_them _______
+tests\test_agents_connections_presets.py:215: in test_preset_fills_model_and_effort_and_the_document_reports_them
+    assert not failed, document
+E   AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_preset_fills_model_and_ef0\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+E   assert not True
+____________ test_explicit_values_equal_to_the_preset_are_accepted ____________
+tests\test_agents_connections_presets.py:235: in test_explicit_values_equal_to_the_preset_are_accepted
+    assert not failed
+E   assert not True
+_ test_invalid_choices_fail_with_a_code_naming_the_field[arguments0-invalid-preset-Preset 'missing' is not declared] _
+tests\test_agents_connections_presets.py:258: in test_invalid_choices_fail_with_a_code_naming_the_field
+    assert failed and document['error']['code'] == code, document
+E   AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with0\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+E   assert (True and 'invalid-config' == 'invalid-preset'
+E     
+E     - invalid-preset
+E     + invalid-config)
+_ test_invalid_choices_fail_with_a_code_naming_the_field[arguments1-invalid-preset-uses Runtime 'claude'] _
+tests\test_agents_connections_presets.py:258: in test_invalid_choices_fail_with_a_code_naming_the_field
+    assert failed and document['error']['code'] == code, document
+E   AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with1\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+E   assert (True and 'invalid-config' == 'invalid-preset'
+E     
+E     - invalid-preset
+E     + invalid-config)
+_ test_invalid_choices_fail_with_a_code_naming_the_field[arguments2-invalid-model-contradicts preset 'reviewer'] _
+tests\test_agents_connections_presets.py:258: in test_invalid_choices_fail_with_a_code_naming_the_field
+    assert failed and document['error']['code'] == code, document
+E   AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with2\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+E   assert (True and 'invalid-config' == 'invalid-model'
+E     
+E     - invalid-model
+E     + invalid-config)
+_ test_invalid_choices_fail_with_a_code_naming_the_field[arguments3-invalid-reasoning-effort-contradicts preset 'reviewer'] _
+tests\test_agents_connections_presets.py:258: in test_invalid_choices_fail_with_a_code_naming_the_field
+    assert failed and document['error']['code'] == code, document
+E   AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with3\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+E   assert (True and 'invalid-config' == 'invalid-reasoning-effort'
+E     
+E     - invalid-reasoning-effort
+E     + invalid-config)
+_ test_invalid_choices_fail_with_a_code_naming_the_field[arguments4-invalid-model-is not a candidate] _
+tests\test_agents_connections_presets.py:258: in test_invalid_choices_fail_with_a_code_naming_the_field
+    assert failed and document['error']['code'] == code, document
+E   AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with4\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+E   assert (True and 'invalid-config' == 'invalid-model'
+E     
+E     - invalid-model
+E     + invalid-config)
+_ test_invalid_choices_fail_with_a_code_naming_the_field[arguments5-invalid-reasoning-effort-supports reasoning_effort ['low', 'high']] _
+tests\test_agents_connections_presets.py:258: in test_invalid_choices_fail_with_a_code_naming_the_field
+    assert failed and document['error']['code'] == code, document
+E   AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with5\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+E   assert (True and 'invalid-config' == 'invalid-reasoning-effort'
+E     
+E     - invalid-reasoning-effort
+E     + invalid-config)
+_______________ test_a_model_discovery_cannot_verify_is_refused _______________
+tests\test_agents_connections_presets.py:271: in test_a_model_discovery_cannot_verify_is_refused
+    assert failed and document['error']['code'] == 'invalid-model'
+E   AssertionError: assert (True and 'invalid-config' == 'invalid-model'
+E     
+E     - invalid-model
+E     + invalid-config)
+_______________ test_discovery_supplies_candidates_and_efforts ________________
+tests\test_agents_connections_presets.py:279: in test_discovery_supplies_candidates_and_efforts
+    assert not failed
+E   assert not True
+___________ test_several_connections_for_one_runtime_need_a_preset ____________
+tests\test_agents_connections_presets.py:305: in test_several_connections_for_one_runtime_need_a_preset
+    assert failed and document['error']['code'] == 'ambiguous-connection'
+E   AssertionError: assert (True and 'invalid-config' == 'ambiguous-connection'
+E     
+E     - ambiguous-connection
+E     + invalid-config)
+____________ test_one_host_registers_drivers_for_several_runtimes _____________
+tests\test_agents_connections_presets.py:340: in test_one_host_registers_drivers_for_several_runtimes
+    control.require_connections()
+src\graftling\control.py:1177: in require_connections
+    raise AgentsError("invalid-config", str(error)) from None
+E   graftling.tool.AgentsError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_one_host_registers_driver0\config.yml:5: connections.work-claude.home: expected an absolute path
+______ test_a_declared_runtime_without_a_driver_is_refused_at_host_start ______
+tests\test_agents_connections_presets.py:354: in test_a_declared_runtime_without_a_driver_is_refused_at_host_start
+    assert caught.value.code == 'unsupported-runtime' and "'local-codex'" in caught.value.message
+E   AssertionError: assert ('invalid-config' == 'unsupported-runtime'
+E     
+E     - unsupported-runtime
+E     + invalid-config)
+__________ test_an_unavailable_runtime_fails_create_without_an_agent __________
+tests\test_agents_connections_presets.py:361: in test_an_unavailable_runtime_fails_create_without_an_agent
+    assert failed and document['error']['code'] == 'runtime-unavailable'
+E   AssertionError: assert (True and 'invalid-config' == 'runtime-unavailable'
+E     
+E     - runtime-unavailable
+E     + invalid-config)
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_agents_connections_presets.xml -
+============================ slowest 10 durations =============================
+0.03s call     tests/test_agents_connections_presets.py::test_without_a_connection_a_model_is_checked_against_the_native_login
+0.03s call     tests/test_agents_connections_presets.py::test_no_connections_keeps_the_original_prepare_call
+0.03s call     tests/test_agents_connections_presets.py::test_a_third_party_named_claude_connection_keeps_its_models
+0.01s call     tests/test_agents_connections_presets.py::test_boolean_only_files_keep_the_previous_grammar[  save_normalized_sessions: false\nbackfill_history: true  # note\n-expected1]
+0.01s call     tests/test_agents_connections_presets.py::test_boolean_only_files_keep_the_previous_grammar[backfill_history:true\n-expected0]
+0.01s setup    tests/test_agents_connections_presets.py::test_connections_and_presets_are_read_with_their_names
+0.01s setup    tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments4-invalid-model-is not a candidate]
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_agents_connections_presets.py::test_connections_and_presets_are_read_with_their_names - ValueError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_connections_and_presets_a0\config.yml:5: connections.work-claude.home: expected an absolute path
+FAILED tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    home: /x\n-2-connections.a.runtime: required] - AssertionError: assert False
+ +  where False = <built-in method startswith of str object at 0x0000022D9F36CFA0>('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:2: ')
+ +    where <built-in method startswith of str object at 0x0000022D9F36CFA0> = 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path'.startswith
+ +      where 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path' = str(ValueError('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path'))
+ +        where ValueError('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path') = <ExceptionInfo ValueError('C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_reading_is_strict_and_nam4\\config.yml:3: connections.a.home: expected an absolute path') tblen=3>.value
+FAILED tests/test_agents_connections_presets.py::test_writing_a_choice_keeps_connections_presets_and_comments - ValueError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_writing_a_choice_keeps_co0\config.yml:5: connections.work-claude.home: expected an absolute path
+FAILED tests/test_agents_connections_presets.py::test_preset_fills_model_and_effort_and_the_document_reports_them - AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_preset_fills_model_and_ef0\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+assert not True
+FAILED tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted - assert not True
+FAILED tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments0-invalid-preset-Preset 'missing' is not declared] - AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with0\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+assert (True and 'invalid-config' == 'invalid-preset'
+  
+  - invalid-preset
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments1-invalid-preset-uses Runtime 'claude'] - AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with1\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+assert (True and 'invalid-config' == 'invalid-preset'
+  
+  - invalid-preset
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments2-invalid-model-contradicts preset 'reviewer'] - AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with2\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+assert (True and 'invalid-config' == 'invalid-model'
+  
+  - invalid-model
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments3-invalid-reasoning-effort-contradicts preset 'reviewer'] - AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with3\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+assert (True and 'invalid-config' == 'invalid-reasoning-effort'
+  
+  - invalid-reasoning-effort
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments4-invalid-model-is not a candidate] - AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with4\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+assert (True and 'invalid-config' == 'invalid-model'
+  
+  - invalid-model
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments5-invalid-reasoning-effort-supports reasoning_effort ['low', 'high']] - AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with5\\config.yml:5: connections.work-claude.home: expected an absolute path'}}
+assert (True and 'invalid-config' == 'invalid-reasoning-effort'
+  
+  - invalid-reasoning-effort
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_a_model_discovery_cannot_verify_is_refused - AssertionError: assert (True and 'invalid-config' == 'invalid-model'
+  
+  - invalid-model
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts - assert not True
+FAILED tests/test_agents_connections_presets.py::test_several_connections_for_one_runtime_need_a_preset - AssertionError: assert (True and 'invalid-config' == 'ambiguous-connection'
+  
+  - ambiguous-connection
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_one_host_registers_drivers_for_several_runtimes - graftling.tool.AgentsError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_one_host_registers_driver0\config.yml:5: connections.work-claude.home: expected an absolute path
+FAILED tests/test_agents_connections_presets.py::test_a_declared_runtime_without_a_driver_is_refused_at_host_start - AssertionError: assert ('invalid-config' == 'unsupported-runtime'
+  
+  - unsupported-runtime
+  + invalid-config)
+FAILED tests/test_agents_connections_presets.py::test_an_unavailable_runtime_fails_create_without_an_agent - AssertionError: assert (True and 'invalid-config' == 'runtime-unavailable'
+  
+  - runtime-unavailable
+  + invalid-config)
+SKIPPED [8] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+================== 17 failed, 34 passed, 8 skipped in 0.78s ===================

@@ -1,0 +1,4 @@
+STOP: the bundle's prerequisites defad1db083e911900cbea1cb0ef165e6a66d322 df09100421e56d8c02a8c49a50664e601244eb17 do not include graftling dev 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+VERDICT 638 00: STOP
+STOP: the bundle's prerequisite df09100421e56d8c02a8c49a50664e601244eb17 is not graftling dev 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced or an ancestor of it
+VERDICT 638 00: STOP

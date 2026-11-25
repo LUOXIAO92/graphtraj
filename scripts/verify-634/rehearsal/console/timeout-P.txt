@@ -1,0 +1,44 @@
+$ VERIFY634_GRAFTLING=/tmp/claude-501/rh634/timeout/graftling VERIFY634_GREMOTE=/tmp/claude-501/rh634/timeout/gremote.git VERIFY634_GH=/tmp/claude-501/rh634/timeout/gh/gh VERIFY634_EVIDENCE=/tmp/claude-501/rh634/timeout/runs VERIFY634_POLL_S=1 VERIFY634_APPEAR_S=4 VERIFY634_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/634-graftling-windows-durable-writes to graftling /tmp/claude-501/rh634/timeout/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/rh634/timeout/graftling; head 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6 on base defad1db083e911900cbea1cb0ef165e6a66d322
+--- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
+  2fadc6c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: locks without the 10 s limit, try_exclusive, durable replacement (634)
+PASS: author and committer are the noreply identity
+--- files changed since defad1db083e911900cbea1cb0ef165e6a66d322:
+   .github/workflows/windows.yml          |   2 +-
+   src/graftling/_win32.py                | 146 +++++++++++++++++++++
+   src/graftling/claude/support.py        |  14 +--
+   src/graftling/codex/managed_session.py |  22 +---
+   src/graftling/config.py                |   7 +-
+   src/graftling/control.py               |  13 +-
+   src/graftling/durable.py               | 128 +++++++++++++++++++
+   src/graftling/locks.py                 |  73 ++++++++---
+   src/graftling/pi/execution.py          |  14 +--
+   src/graftling/sessions/archive.py      |  39 +++---
+   src/graftling/tool_descendants.py      |  12 +-
+   tests/test_locks_durable_634.py        | 223 +++++++++++++++++++++++++++++++++
+   tests/test_windows_emulation_619.py    |  24 ++--
+   13 files changed, 607 insertions(+), 110 deletions(-)
+PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml
+PASS: .github/workflows/windows.yml differs from defad1db083e911900cbea1cb0ef165e6a66d322 only in on.push.branches, which adds agent/634-graftling-windows-durable-writes
+PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-632/windows-expected.txt parses: 89 expected Windows failures and 0 expected hangs (W1 (633) 23, W3 (635) 6, W4 (636) 22, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+W2 (634) entries left in the list: 0
+PASS: agent/634-graftling-windows-durable-writes is absent on graftling /tmp/claude-501/rh634/timeout/gremote.git
+PASS: /tmp/claude-501/rh634/timeout/graftling has no local agent/634-graftling-windows-durable-writes (P creates it from the bundle)
+$ git -C /tmp/claude-501/rh634/timeout/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/graftling-634.bundle refs/heads/agent/634-graftling-windows-durable-writes:refs/heads/agent/634-graftling-windows-durable-writes
+  From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/graftling-634.bundle
+   * [new branch]      agent/634-graftling-windows-durable-writes -> agent/634-graftling-windows-durable-writes
+PASS: /tmp/claude-501/rh634/timeout/graftling local agent/634-graftling-windows-durable-writes = 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6
+$ git -C /tmp/claude-501/rh634/timeout/graftling push /tmp/claude-501/rh634/timeout/gremote.git refs/heads/agent/634-graftling-windows-durable-writes:refs/heads/agent/634-graftling-windows-durable-writes   (2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6)
+  To /tmp/claude-501/rh634/timeout/gremote.git
+   * [new branch]      agent/634-graftling-windows-durable-writes -> agent/634-graftling-windows-durable-writes
+PASS: graftling /tmp/claude-501/rh634/timeout/gremote.git agent/634-graftling-windows-durable-writes = 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6
+looking for the .github/workflows/windows.yml run (event push) of 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6 on LUOXIAO92/graftling (appearance bound 4s, poll 1s)
+appearance timeout after 4s: no .github/workflows/windows.yml run for 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6
+other workflows for this SHA:
+  OTHER	.github/workflows/other.yml	51000000643	push	completed	success	https://github.com/LUOXIAO92/graftling/actions/runs/51000000643
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/steps.zsh W 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6    (re-observe; no push)
+VERDICT 634 P: FAIL (the .github/workflows/windows.yml run never appeared within 4s)
+[exit 1]

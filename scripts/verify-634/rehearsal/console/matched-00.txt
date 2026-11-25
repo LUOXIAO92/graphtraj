@@ -1,0 +1,40 @@
+$ VERIFY634_GRAFTLING=/tmp/claude-501/rh634/matched/graftling VERIFY634_GREMOTE=/tmp/claude-501/rh634/matched/gremote.git VERIFY634_GH=/tmp/claude-501/rh634/matched/gh/gh VERIFY634_EVIDENCE=/tmp/claude-501/rh634/matched/runs VERIFY634_POLL_S=1 VERIFY634_APPEAR_S=10 VERIFY634_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify634-stand-in | gh path: /tmp/claude-501/rh634/matched/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-634 fake)
+    - Active account: true
+PASS: /tmp/claude-501/rh634/matched/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/rh634/matched/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/rh634/matched/graftling; head 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6 on base defad1db083e911900cbea1cb0ef165e6a66d322
+--- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
+  2fadc6c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: locks without the 10 s limit, try_exclusive, durable replacement (634)
+PASS: author and committer are the noreply identity
+--- files changed since defad1db083e911900cbea1cb0ef165e6a66d322:
+   .github/workflows/windows.yml          |   2 +-
+   src/graftling/_win32.py                | 146 +++++++++++++++++++++
+   src/graftling/claude/support.py        |  14 +--
+   src/graftling/codex/managed_session.py |  22 +---
+   src/graftling/config.py                |   7 +-
+   src/graftling/control.py               |  13 +-
+   src/graftling/durable.py               | 128 +++++++++++++++++++
+   src/graftling/locks.py                 |  73 ++++++++---
+   src/graftling/pi/execution.py          |  14 +--
+   src/graftling/sessions/archive.py      |  39 +++---
+   src/graftling/tool_descendants.py      |  12 +-
+   tests/test_locks_durable_634.py        | 223 +++++++++++++++++++++++++++++++++
+   tests/test_windows_emulation_619.py    |  24 ++--
+   13 files changed, 607 insertions(+), 110 deletions(-)
+PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml
+PASS: .github/workflows/windows.yml differs from defad1db083e911900cbea1cb0ef165e6a66d322 only in on.push.branches, which adds agent/634-graftling-windows-durable-writes
+PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-632/windows-expected.txt parses: 89 expected Windows failures and 0 expected hangs (W1 (633) 23, W3 (635) 6, W4 (636) 22, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+W2 (634) entries left in the list: 0
+PASS: /tmp/claude-501/rh634/matched/graftling has no local agent/634-graftling-windows-durable-writes (P creates it from the bundle)
+PASS: agent/634-graftling-windows-durable-writes is absent on graftling /tmp/claude-501/rh634/matched/gremote.git
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/steps.zsh P    (publishes graftling 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6 to LUOXIAO92/graftling agent/634-graftling-windows-durable-writes, then waits for the Windows tests run)
+VERDICT 634 00: PASS (P ready: yes; remote branch absent; candidate graftling 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6)
+[exit 0]

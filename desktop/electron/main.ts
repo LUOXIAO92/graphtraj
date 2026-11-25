@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, session } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, session } from 'electron';
 import path from 'node:path';
 import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -17,11 +17,14 @@ let projects: Projects;
 let settings: SettingsClient;
 let writes: Promise<unknown> = Promise.resolve();
 
+/** The --bg token of desktop/src/tokens.css for the current appearance, so the first frame matches the theme. */
+const windowBackground = () => nativeTheme.shouldUseDarkColors ? '#14171c' : '#f6f7f9';
+
 /** Create a sandboxed observer window without a local web server. */
 function createWindow(): void {
   window = new BrowserWindow({
     width: 1440, height: 900, minWidth: 960, minHeight: 600,
-    title: 'GraphTraj',
+    title: 'GraphTraj', backgroundColor: windowBackground(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: true,
@@ -31,6 +34,10 @@ function createWindow(): void {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.on('closed', () => { window = null; });
+  // Follow appearance changes (system or nativeTheme.themeSource) for resizes and reloads.
+  const follow = () => window?.setBackgroundColor(windowBackground());
+  nativeTheme.on('updated', follow);
+  window.on('closed', () => nativeTheme.off('updated', follow));
   void window.loadFile(page);
 }
 

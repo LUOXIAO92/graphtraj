@@ -1,0 +1,246 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 35 items
+
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document0-must be a JSON object] PASSED [  2%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document1-Unknown DSH host configuration keys] PASSED [  5%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document2-absolute data root] PASSED [  8%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document3-absolute data root] PASSED [ 11%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] FAILED [ 14%]
+tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings FAILED [ 17%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields0] PASSED [ 20%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields1] PASSED [ 22%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields2] PASSED [ 25%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields3] PASSED [ 28%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields4] PASSED [ 31%]
+tests/test_dsh_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults PASSED [ 34%]
+tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models PASSED [ 37%]
+tests/test_dsh_standalone_host.py::test_codex_without_settings_is_refused_at_create PASSED [ 40%]
+tests/test_dsh_standalone_host.py::test_notice_receiver_outcomes PASSED  [ 42%]
+tests/test_dsh_standalone_host.py::test_each_message_request_and_error_reaches_the_main_once PASSED [ 45%]
+tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question PASSED [ 48%]
+tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session FAILED [ 51%]
+tests/test_dsh_standalone_host.py::test_host_start_refusals PASSED       [ 54%]
+tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on FAILED [ 57%]
+tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh PASSED [ 60%]
+tests/test_dsh_standalone_host.py::test_dsh_package_declares_the_host_bundle PASSED [ 62%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_relays_each_notice_to_its_main_session SKIPPED [ 65%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_is_inert_inside_an_agent SKIPPED [ 68%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[None] SKIPPED [ 71%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[] SKIPPED [ 74%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[None] SKIPPED [ 77%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[relative/project] SKIPPED [ 80%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[/nonexistent-570/project] SKIPPED [ 82%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[file] SKIPPED [ 85%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root FAILED [ 88%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_reports_an_unwritable_project SKIPPED [ 91%]
+tests/test_dsh_standalone_host.py::test_default_configuration_is_the_project_root_without_runtime_settings PASSED [ 94%]
+tests/test_dsh_standalone_host.py::test_default_host_records_land_in_the_project PASSED [ 97%]
+tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=d701111b460842f7a8aac3011a50e6c0: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+______ test_configuration_refusals[document4-"claude" must be an object] ______
+tests\test_dsh_standalone_host.py:40: in test_configuration_refusals
+    host.read_configuration(document)
+src\graftling\dsh\host.py:102: in read_configuration
+    raise ValueError('The DSH host configuration needs an absolute data root "root".')
+E   ValueError: The DSH host configuration needs an absolute data root "root".
+
+During handling of the above exception, another exception occurred:
+tests\test_dsh_standalone_host.py:39: in test_configuration_refusals
+    with pytest.raises(ValueError, match=message):
+E   AssertionError: Regex pattern did not match.
+E    Regex: '"claude" must be an object'
+E    Input: 'The DSH host configuration needs an absolute data root "root".'
+__________ test_configuration_accepts_root_and_per_runtime_settings ___________
+tests\test_dsh_standalone_host.py:45: in test_configuration_accepts_root_and_per_runtime_settings
+    root, settings = host.read_configuration({'root': '/data'})
+src\graftling\dsh\host.py:102: in read_configuration
+    raise ValueError('The DSH host configuration needs an absolute data root "root".')
+E   ValueError: The DSH host configuration needs an absolute data root "root".
+______________ test_host_binds_only_the_supplied_native_session _______________
+tests\test_dsh_standalone_host.py:356: in test_host_binds_only_the_supplied_native_session
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: Traceback (most recent call last):
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E       File "<frozen runpy>", line 88, in _run_code
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+E         main()
+E         ~~~~^^
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+E         with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                                native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E   assert 1 == 0
+_____________________ test_host_starts_with_archiving_on ______________________
+tests\test_dsh_standalone_host.py:386: in test_host_starts_with_archiving_on
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: Traceback (most recent call last):
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E       File "<frozen runpy>", line 88, in _run_code
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+E         main()
+E         ~~~~^^
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+E         with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                                native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E   assert 1 == 0
+________ test_host_without_configuration_serves_the_project_data_root _________
+tests\test_dsh_standalone_host.py:583: in test_host_without_configuration_serves_the_project_data_root
+    assert outcome['code'] == 0, outcome['stderr']
+E   AssertionError: Traceback (most recent call last):
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E       File "<frozen runpy>", line 88, in _run_code
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+E         main()
+E         ~~~~^^
+E       File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+E         with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                                native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E   assert 1 == 0
+____________ test_default_root_is_shared_with_the_claude_code_host ____________
+D:\a\graftling\graftling\tests\test_dsh_standalone_host.py:690: in test_default_root_is_shared_with_the_claude_code_host
+    claude_host.require_free_channel(root / 'live' / 'channel.json')   # the DSH host is not "another host"
+D:\a\graftling\graftling\src\graftling\claude\host.py:135: in require_free_channel
+    owner = live_channel(channel_file)
+D:\a\graftling\graftling\src\graftling\claude\host.py:120: in live_channel
+    return endpoint if host_alive(endpoint['address']) else None
+D:\a\graftling\graftling\src\graftling\connection.py:163: in host_alive
+    descriptor = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
+E   AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+---------------------------- Captured stdout call -----------------------------
+{"notice": {"id": "dec655b6d4294b5699e1c1721b02a828:completed", "agent": "agent-3ca995464e8d458ca79f9f4aaf90f185", "session": "native-90f185", "event": "completed", "message": "answer", "execution": "dec655b6d4294b5699e1c1721b02a828", "text": "[Graftling notice from agent-3ca995464e8d458ca79f9f4aaf90f185 \u00b7 completed \u00b7 execution dec655b6d4294b5699e1c1721b02a828]\n\nanswer"}}
+{"notice": {"id": "e6778f5ce612458d92aabb05a941b1c7:completed", "agent": "agent-c698e3e3c1c64c039161bdb8859e1da8", "session": "native-9e1da8", "event": "completed", "message": "answer", "execution": "e6778f5ce612458d92aabb05a941b1c7", "text": "[Graftling notice from agent-c698e3e3c1c64c039161bdb8859e1da8 \u00b7 completed \u00b7 execution e6778f5ce612458d92aabb05a941b1c7]\n\nanswer"}}
+{"notice": {"id": "3328d93aabf14f4494e3eb41595f6135:completed", "agent": "agent-12fb3e9269084d9fa640af55ca549c01", "session": "native-549c01", "event": "completed", "message": "answer", "execution": "3328d93aabf14f4494e3eb41595f6135", "text": "[Graftling notice from agent-12fb3e9269084d9fa640af55ca549c01 \u00b7 completed \u00b7 execution 3328d93aabf14f4494e3eb41595f6135]\n\nanswer"}}
+{"notice": {"id": "843d3b3aa7e1474d8d9b2b0f2effc729:completed", "agent": "agent-fe9f91be667f4512ae8be3db79caf68a", "session": "native-caf68a", "event": "completed", "message": "answer", "execution": "843d3b3aa7e1474d8d9b2b0f2effc729", "text": "[Graftling notice from agent-fe9f91be667f4512ae8be3db79caf68a \u00b7 completed \u00b7 execution 843d3b3aa7e1474d8d9b2b0f2effc729]\n\nanswer"}}
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_standalone_host.xml -
+============================ slowest 10 durations =============================
+4.09s call     tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host
+3.05s call     tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models
+2.06s call     tests/test_dsh_standalone_host.py::test_each_message_request_and_error_reaches_the_main_once
+1.15s call     tests/test_dsh_standalone_host.py::test_host_start_refusals
+1.01s call     tests/test_dsh_standalone_host.py::test_default_host_records_land_in_the_project
+0.32s call     tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session
+0.31s call     tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root
+0.30s call     tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on
+0.23s call     tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh
+0.22s call     tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question
+=========================== short test summary info ===========================
+FAILED tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] - AssertionError: Regex pattern did not match.
+ Regex: '"claude" must be an object'
+ Input: 'The DSH host configuration needs an absolute data root "root".'
+FAILED tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings - ValueError: The DSH host configuration needs an absolute data root "root".
+FAILED tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session - AssertionError: Traceback (most recent call last):
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+      main()
+      ~~~~^^
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+      with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+assert 1 == 0
+FAILED tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on - AssertionError: Traceback (most recent call last):
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+      main()
+      ~~~~^^
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+      with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+assert 1 == 0
+FAILED tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root - AssertionError: Traceback (most recent call last):
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 363, in <module>
+      main()
+      ~~~~^^
+    File "D:\a\graftling\graftling\src\graftling\dsh\host.py", line 337, in main
+      with agents_connection(root / 'live' / 'dsh-host', operate, authenticate,
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             native_context=lambda: expected, close_seconds=CLOSE_SECONDS) as address:
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+assert 1 == 0
+FAILED tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host - AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+SKIPPED [8] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_dsh_standalone_host.py:593: POSIX-only: a read-only directory made with chmod 0o555 and checked with os.geteuid
+================== 6 failed, 20 passed, 9 skipped in 13.27s ===================

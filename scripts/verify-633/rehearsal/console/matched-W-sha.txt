@@ -5,7 +5,7 @@ PASS: bundle verifies against /tmp/claude-501/rh633/matched/graftling; head bc42
 looking for the .github/workflows/windows.yml run (event any) of bc4298b611afce70dd876c5fe79f764c9f966d8a on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
 run 51000000000 present after 0s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [21:59:09] run 51000000000: completed failure
+  [22:16:59] run 51000000000: completed failure
 --- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head bc4298b611afce70dd876c5fe79f764c9f966d8a | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped

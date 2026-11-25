@@ -1,9 +1,9 @@
 $ VERIFY633_GRAFTLING=/tmp/claude-501/rh633/disallowed/graftling VERIFY633_GREMOTE=/tmp/claude-501/rh633/disallowed/gremote.git VERIFY633_GH=/tmp/claude-501/rh633/disallowed/gh/gh VERIFY633_EVIDENCE=/tmp/claude-501/rh633/disallowed/evidence VERIFY633_POLL_S=1 VERIFY633_APPEAR_S=10 VERIFY633_DONE_S=30 VERIFY633_BUNDLE=/tmp/claude-501/rh633/bad.bundle zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/633-graftling-windows-process to graftling /tmp/claude-501/rh633/disallowed/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh633/disallowed/graftling; head 0c4209e269834bc8a7afb2ea2d8fb5d13f48c8a3 on base defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: bundle verifies against /tmp/claude-501/rh633/disallowed/graftling; head 5897d6437cb0ec09dd145cb41f49c2a620bcbd1b on base defad1db083e911900cbea1cb0ef165e6a66d322
 --- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
-  0c4209e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: changes outside W1
+  5897d64 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: changes outside W1
   bc4298b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows process facts and liveness; control._alive uses them (633, W1)
 PASS: author and committer are the noreply identity
 --- files changed since defad1db083e911900cbea1cb0ef165e6a66d322:
@@ -15,7 +15,7 @@ PASS: author and committer are the noreply identity
    tests/test_process_windows_633.py | 160 ++++++++++++++++++++++++++
    6 files changed, 538 insertions(+), 19 deletions(-)
 FAIL: paths changed outside the allowed set: README.md
---- .github/workflows/windows.yml at 0c4209e269834bc8a7afb2ea2d8fb5d13f48c8a3 against defad1db083e911900cbea1cb0ef165e6a66d322
+--- .github/workflows/windows.yml at 5897d6437cb0ec09dd145cb41f49c2a620bcbd1b against defad1db083e911900cbea1cb0ef165e6a66d322
 PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'dev']
 FAIL: the workflow differs from the base beyond the push branches line (101 -> 101 lines; first differences: ["16: '    timeout-minutes: 90' -> '    timeout-minutes: 91'"])
 --- .github/workflows/windows.yml at defad1db083e911900cbea1cb0ef165e6a66d322 (632's accepted workflow, every other property)
@@ -46,7 +46,7 @@ PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
 PASS: .github/run_test_files.py and tests/posix_only.py unchanged since defad1db083e911900cbea1cb0ef165e6a66d322
-PASS: the 13 W1 tests of new-tests.txt are defined in tests/test_process_windows_633.py at 0c4209e269834bc8a7afb2ea2d8fb5d13f48c8a3
+PASS: the 13 W1 tests of new-tests.txt are defined in tests/test_process_windows_633.py at 5897d6437cb0ec09dd145cb41f49c2a620bcbd1b
 STOP: the bundle head does not meet the checks above; nothing pushed. Run: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-633/steps.zsh 00
 VERDICT 633 P: STOP
 [exit 1]

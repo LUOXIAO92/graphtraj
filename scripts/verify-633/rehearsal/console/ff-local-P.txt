@@ -45,9 +45,9 @@ PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
 PASS: .github/run_test_files.py and tests/posix_only.py unchanged since defad1db083e911900cbea1cb0ef165e6a66d322
 PASS: the 13 W1 tests of new-tests.txt are defined in tests/test_process_windows_633.py at bc4298b611afce70dd876c5fe79f764c9f966d8a
-PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-632/windows-expected.txt parses: 189 expected Windows failures and 0 expected hangs (W1 (633) 16, W2 (634) 107, W3 (635) 6, W4 (636) 22, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
-expected list: 23 W1 (633) entries at the base: 7 deleted (predicted to pass), 16 kept with an 'after W1:' note
-PASS: only W1 (633) lines changed; every other line is byte-identical and in order
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-632/windows-expected.txt parses: 189 expected Windows failures and 0 expected hangs (W2 (634) 107, W3 (635) 7, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+expected list: 23 W1 (633) entries at the base: 7 to delete, 16 moved to Main's owners (W3 (635) 1, W4 (636) 15)
+PASS: the W1 (633) lines are deleted or moved to Main's owners as tabled; every other line is byte-identical and in order
 PASS: agent/633-graftling-windows-process is absent on graftling /tmp/claude-501/rh633/ff-local/gremote.git
 PASS: /tmp/claude-501/rh633/ff-local/graftling local agent/633-graftling-windows-process is at defad1db083e911900cbea1cb0ef165e6a66d322, an ancestor of the bundle head (P fast-forwards it from the bundle)
 $ git -C /tmp/claude-501/rh633/ff-local/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-633/graftling-633.bundle refs/heads/agent/633-graftling-windows-process:refs/heads/agent/633-graftling-windows-process
@@ -61,7 +61,7 @@ PASS: graftling /tmp/claude-501/rh633/ff-local/gremote.git agent/633-graftling-w
 looking for the .github/workflows/windows.yml run (event push) of bc4298b611afce70dd876c5fe79f764c9f966d8a on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
 run 51000000000 present after 1s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [21:59:39] run 51000000000: completed failure
+  [22:17:32] run 51000000000: completed failure
 --- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head bc4298b611afce70dd876c5fe79f764c9f966d8a | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped

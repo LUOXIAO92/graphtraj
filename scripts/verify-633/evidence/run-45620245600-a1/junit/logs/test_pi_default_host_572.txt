@@ -1,0 +1,105 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 16 items
+
+tests/test_pi_default_host_572.py::test_without_flag_or_variable_the_installed_python_hosts_the_project_default SKIPPED [  6%]
+tests/test_pi_default_host_572.py::test_without_an_installation_python_the_error_names_the_variable PASSED [ 12%]
+tests/test_pi_default_host_572.py::test_a_python_importing_another_graftling_is_not_used SKIPPED [ 18%]
+tests/test_pi_default_host_572.py::test_an_editable_checkout_finds_python_on_path SKIPPED [ 25%]
+tests/test_pi_default_host_572.py::test_the_variable_wins_over_the_installation SKIPPED [ 31%]
+tests/test_pi_default_host_572.py::test_the_flag_wins_over_the_default_root SKIPPED [ 37%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[relative/project] SKIPPED [ 43%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[/no/such/project] SKIPPED [ 50%]
+tests/test_pi_default_host_572.py::test_an_unusable_session_directory_is_refused_naming_the_flag[FILE] SKIPPED [ 56%]
+tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_SESSION_ID] SKIPPED [ 62%]
+tests/test_pi_default_host_572.py::test_a_dsh_managed_context_without_the_flag_stays_inert[DSH_AGENT_SOURCE] SKIPPED [ 68%]
+tests/test_pi_default_host_572.py::test_a_child_keeps_its_owner_connection_and_python SKIPPED [ 75%]
+tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default FAILED [ 81%]
+tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag PASSED [ 87%]
+tests/test_pi_default_host_572.py::test_default_configuration_is_the_root_only_form PASSED [ 93%]
+tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=406d74e3446045c28bd584f926e19e68: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+___________ test_the_host_without_config_serves_the_project_default ___________
+tests\test_pi_default_host_572.py:197: in test_the_host_without_config_serves_the_project_default
+    assert process.returncode == 0, process.stderr.read()
+E   AssertionError: Traceback (most recent call last):
+E       File "<frozen runpy>", line 198, in _run_module_as_main
+E       File "<frozen runpy>", line 88, in _run_code
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+E         main()
+E         ~~~~^^
+E       File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+E         with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                                close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+E                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+E         with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+E              ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+E         return next(self.gen)
+E       File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+E         raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+E     graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+E     
+E   assert 1 == 0
+E    +  where 1 = <Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...>.returncode
+____________ test_default_root_is_shared_with_the_claude_code_host ____________
+D:\a\graftling\graftling\tests\test_pi_default_host_572.py:272: in test_default_root_is_shared_with_the_claude_code_host
+    claude_host.require_free_channel(root / 'live' / 'channel.json')   # the Pi host is not "another host"
+D:\a\graftling\graftling\src\graftling\claude\host.py:135: in require_free_channel
+    owner = live_channel(channel_file)
+D:\a\graftling\graftling\src\graftling\claude\host.py:120: in live_channel
+    return endpoint if host_alive(endpoint['address']) else None
+D:\a\graftling\graftling\src\graftling\connection.py:163: in host_alive
+    descriptor = os.open(address, os.O_RDONLY | os.O_DIRECTORY)
+E   AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+---------------------------- Captured stdout call -----------------------------
+{"notice": {"id": "3daf81956e6542e9aec4c84a599025e9:completed", "alias": "agent-b995e7000aea4ce1ad93f2f1b942e20e", "agent": "agent-b995e7000aea4ce1ad93f2f1b942e20e", "event": "completed", "message": "answer", "execution": "3daf81956e6542e9aec4c84a599025e9"}}
+{"notice": {"id": "06ef47629b834b97afa45efd3d61739d:completed", "alias": "agent-3f0225c1eb3d4110ae5f0bebf03ad8eb", "agent": "agent-3f0225c1eb3d4110ae5f0bebf03ad8eb", "event": "completed", "message": "answer", "execution": "06ef47629b834b97afa45efd3d61739d"}}
+{"notice": {"id": "573399e242934772affb94712a9d0f70:completed", "alias": "agent-2c106b21c5e847d99d7d1cab7c16d4fd", "agent": "agent-2c106b21c5e847d99d7d1cab7c16d4fd", "event": "completed", "message": "answer", "execution": "573399e242934772affb94712a9d0f70"}}
+{"notice": {"id": "269c9d0cbd6d4660abe9bb9764df7cee:completed", "alias": "agent-22833a89d39845d38c2897c58db978e7", "agent": "agent-22833a89d39845d38c2897c58db978e7", "event": "completed", "message": "answer", "execution": "269c9d0cbd6d4660abe9bb9764df7cee"}}
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_default_host_572.xml -
+============================ slowest 10 durations =============================
+3.10s call     tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host
+0.25s call     tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default
+0.19s call     tests/test_pi_default_host_572.py::test_an_uncreatable_default_root_is_refused_naming_the_flag
+0.08s call     tests/test_pi_default_host_572.py::test_without_an_installation_python_the_error_names_the_variable
+0.07s setup    tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host
+0.01s setup    tests/test_pi_default_host_572.py::test_without_flag_or_variable_the_installed_python_hosts_the_project_default
+
+(4 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_pi_default_host_572.py::test_the_host_without_config_serves_the_project_default - AssertionError: Traceback (most recent call last):
+    File "<frozen runpy>", line 198, in _run_module_as_main
+    File "<frozen runpy>", line 88, in _run_code
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 533, in <module>
+      main()
+      ~~~~^^
+    File "D:\a\graftling\graftling\src\graftling\pi\host.py", line 499, in main
+      with agents_connection(root / 'live' / 'pi-host', operate, authenticate,
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             close_seconds=CLOSE_SECONDS, files=Path.cwd()) as address:
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 420, in agents_connection
+      with worker_connection(directory, operate, authenticate=authenticate, close_seconds=close_seconds) as address:
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\contextlib.py", line 141, in __enter__
+      return next(self.gen)
+    File "D:\a\graftling\graftling\src\graftling\connection.py", line 68, in worker_connection
+      raise AgentsError('authority-denied', 'Windows does not support the authenticated local control pipe.')
+  graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.
+  
+assert 1 == 0
+ +  where 1 = <Popen: returncode: 1 args: ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\...>.returncode
+FAILED tests/test_pi_default_host_572.py::test_default_root_is_shared_with_the_claude_code_host - AttributeError: module 'os' has no attribute 'O_DIRECTORY'
+SKIPPED [11] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+=================== 2 failed, 3 passed, 11 skipped in 4.03s ===================

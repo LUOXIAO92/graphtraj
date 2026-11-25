@@ -3,7 +3,7 @@ scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_R
 PASS: bundle verifies against /tmp/claude-501/rh633/matched/graftling; head bc4298b611afce70dd876c5fe79f764c9f966d8a on base defad1db083e911900cbea1cb0ef165e6a66d322
 == [W] Observe only (no push, no re-run) run 51000000000. Login: gh login. Dialog: none. Network: GitHub.
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [21:59:10] run 51000000000: completed failure
+  [22:17:00] run 51000000000: completed failure
 --- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head bc4298b611afce70dd876c5fe79f764c9f966d8a | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped

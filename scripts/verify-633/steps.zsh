@@ -23,8 +23,9 @@
 #       changed since the base are within ALLOWED (below); the workflow is the base one with only its push branches
 #       line changed, to exactly [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, dev], and the
 #       base workflow passes 632's wfcheck; .github/run_test_files.py is unchanged; the W1 tests (new-tests.txt) are
-#       defined at the head; windows-expected.txt parses, and differs from GraphTraj dev 7add0b40's only in W1 (633)
-#       lines; the local branch in <Harness>/graftling and the remote branch are each absent, the bundle head, or an
+#       defined at the head; windows-expected.txt parses, and differs from GraphTraj dev 7add0b40's only in its 23 W1
+#       (633) lines: 7 deleted, 16 kept in place with the owner Main decided after run 45620245600 (W4 (636) 15,
+#       W3 (635) 1; the node-id table in wincheck633.py); the local branch in <Harness>/graftling and the remote branch are each absent, the bundle head, or an
 #       ancestor of it (else STOP). Login: gh login, git credential helper (ls-remote). Dialog: none. ~10 s.
 #   P   Publish and wait. OUTWARD-FACING: (1) fetches the bundle into <Harness>/graftling as local branch
 #       agent/633-graftling-windows-process (only if absent or an ancestor; git fetch without '+' is fast-forward
@@ -205,12 +206,12 @@ check_head() {
   (( missing == 0 )) && print -r -- "PASS: the $(grep -vc '^#' $NEWTESTS) W1 tests of new-tests.txt are defined in tests/test_process_windows_633.py at $GSHA"
   return $(( bad + missing ))
 }
-check_list() {  # the expected list parses; the Worktree's list differs from LIST_BASE only in W1 (633) lines
+check_list() {  # the expected list parses; it differs from LIST_BASE only in the W1 (633) lines, as tabled
   local bad=0
   wc_ expected $EXPECTED || (( bad++ ))
   allow $GIT -C $WT show ${LIST_BASE}:scripts/verify-632/windows-expected.txt > $WORK/expected-base.txt 2> /dev/null \
     || { print -r -- "FAIL: GraphTraj $LIST_BASE is not readable here"; return $(( bad + 1 )); }
-  w1_ w1edit $WORK/expected-base.txt $WT/scripts/verify-632/windows-expected.txt || (( bad++ ))
+  w1_ w1edit $WORK/expected-base.txt $EXPECTED || (( bad++ ))
   [[ $EXPECTED == $WT/scripts/verify-632/windows-expected.txt ]] || print -r -- "NOTE: judged against $EXPECTED (rehearsal)"
   return $bad
 }

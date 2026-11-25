@@ -1,0 +1,119 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 13 items
+
+tests/test_envelope_validation_555.py::test_envelope_and_argument_errors_return_together PASSED [  7%]
+tests/test_envelope_validation_555.py::test_flat_tool_reports_every_problem PASSED [ 15%]
+tests/test_envelope_validation_555.py::test_validate_schema_lists_all_and_stays_a_value_error PASSED [ 23%]
+tests/test_envelope_validation_555.py::test_any_of_reports_the_meant_alternative PASSED [ 30%]
+tests/test_envelope_validation_555.py::test_arguments_file_supplies_and_inline_overrides FAILED [ 38%]
+tests/test_envelope_validation_555.py::test_arguments_file_content_is_validated_with_the_envelope FAILED [ 46%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[None-does not exist] FAILED [ 53%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[{"runtime": "do-not-echo-7f3a",-is not valid JSON (line 1, column] FAILED [ 61%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[["do-not-echo-7f3a"]-must hold a JSON object] FAILED [ 69%]
+tests/test_envelope_validation_555.py::test_arguments_file_outside_the_boundary_is_refused FAILED [ 76%]
+tests/test_envelope_validation_555.py::test_without_a_host_boundary_a_file_is_refused PASSED [ 84%]
+tests/test_envelope_validation_555.py::test_envelope_schema_describes_the_file_field PASSED [ 92%]
+tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=48ac37991deb4fcebcaad36b79e66c7a: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+______________ test_arguments_file_supplies_and_inline_overrides ______________
+tests\test_envelope_validation_555.py:89: in test_arguments_file_supplies_and_inline_overrides
+    result = handle_request({'action': 'execute', 'feature': 'create', 'arguments_file': 'args/create.json',
+src\graftling\discovery.py:210: in handle_request
+    arguments = read_arguments(request, files)
+src\graftling\discovery.py:150: in read_arguments
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+E   AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+_________ test_arguments_file_content_is_validated_with_the_envelope __________
+tests\test_envelope_validation_555.py:102: in test_arguments_file_content_is_validated_with_the_envelope
+    result = handle_request({'action': 'execute', 'feature': 'create', 'arguments_file': 'a.json',
+src\graftling\discovery.py:210: in handle_request
+    arguments = read_arguments(request, files)
+src\graftling\discovery.py:150: in read_arguments
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+E   AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+______ test_arguments_file_refusals_echo_no_content[None-does not exist] ______
+tests\test_envelope_validation_555.py:117: in test_arguments_file_refusals_echo_no_content
+    result = handle_request({'action': 'execute', 'feature': 'status', 'arguments_file': 'a.json'},
+src\graftling\discovery.py:210: in handle_request
+    arguments = read_arguments(request, files)
+src\graftling\discovery.py:150: in read_arguments
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+E   AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+_ test_arguments_file_refusals_echo_no_content[{"runtime": "do-not-echo-7f3a",-is not valid JSON (line 1, column] _
+tests\test_envelope_validation_555.py:117: in test_arguments_file_refusals_echo_no_content
+    result = handle_request({'action': 'execute', 'feature': 'status', 'arguments_file': 'a.json'},
+src\graftling\discovery.py:210: in handle_request
+    arguments = read_arguments(request, files)
+src\graftling\discovery.py:150: in read_arguments
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+E   AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+_ test_arguments_file_refusals_echo_no_content[["do-not-echo-7f3a"]-must hold a JSON object] _
+tests\test_envelope_validation_555.py:117: in test_arguments_file_refusals_echo_no_content
+    result = handle_request({'action': 'execute', 'feature': 'status', 'arguments_file': 'a.json'},
+src\graftling\discovery.py:210: in handle_request
+    arguments = read_arguments(request, files)
+src\graftling\discovery.py:150: in read_arguments
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+E   AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+_____________ test_arguments_file_outside_the_boundary_is_refused _____________
+tests\test_envelope_validation_555.py:137: in test_arguments_file_outside_the_boundary_is_refused
+    directory = handle_request({'action': 'execute', 'feature': 'status', 'arguments_file': '.'},
+src\graftling\discovery.py:210: in handle_request
+    arguments = read_arguments(request, files)
+src\graftling\discovery.py:150: in read_arguments
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+E   AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+_________ test_agents_mcp_reads_files_inside_the_verified_session_cwd _________
+tests\test_envelope_validation_555.py:205: in test_agents_mcp_reads_files_inside_the_verified_session_cwd
+    assert done.returncode == 0, done.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-30\test_agents_mcp_reads_files_in0\dsh\lib\bin.py", line 7, in <module>
+E         address = json.loads(host.stdout.readline())['connection']
+E                   ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\json\__init__.py", line 346, in loads
+E         return _default_decoder.decode(s)
+E                ~~~~~~~~~~~~~~~~~~~~~~~^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\json\decoder.py", line 345, in decode
+E         obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+E                    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+E       File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\json\decoder.py", line 363, in raw_decode
+E         raise JSONDecodeError("Expecting value", s, err.value) from None
+E     json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-30\\test_agents_mcp_reads_files_in0\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-30\\test_agents_mcp_reads_files_in0\\dsh\\lib\\bin.py", line 7, in <module>\n    address = json.loads(host.stdout.readline())[\'connection\']\n              ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\json\\__init__.py", line 346, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\json\\decoder.py", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\json\\decoder.py", line 363, in raw_decode\n    raise JSONDecodeError("Expecting value", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)\n').returncode
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_envelope_validation_555.xml -
+============================ slowest 10 durations =============================
+0.45s call     tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd
+0.01s setup    tests/test_envelope_validation_555.py::test_arguments_file_supplies_and_inline_overrides
+
+(8 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_envelope_validation_555.py::test_arguments_file_supplies_and_inline_overrides - AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+FAILED tests/test_envelope_validation_555.py::test_arguments_file_content_is_validated_with_the_envelope - AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+FAILED tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[None-does not exist] - AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+FAILED tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[{"runtime": "do-not-echo-7f3a",-is not valid JSON (line 1, column] - AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+FAILED tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[["do-not-echo-7f3a"]-must hold a JSON object] - AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+FAILED tests/test_envelope_validation_555.py::test_arguments_file_outside_the_boundary_is_refused - AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+FAILED tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd - AssertionError: Traceback (most recent call last):
+    File "C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-30\test_agents_mcp_reads_files_in0\dsh\lib\bin.py", line 7, in <module>
+      address = json.loads(host.stdout.readline())['connection']
+                ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\json\__init__.py", line 346, in loads
+      return _default_decoder.decode(s)
+             ~~~~~~~~~~~~~~~~~~~~~~~^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\json\decoder.py", line 345, in decode
+      obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+                 ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\json\decoder.py", line 363, in raw_decode
+      raise JSONDecodeError("Expecting value", s, err.value) from None
+  json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-30\\test_agents_mcp_reads_files_in0\\dsh\\lib\\bin.py'], returncode=1, stdout='', stderr='Traceback (most recent call last):\n  File "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-30\\test_agents_mcp_reads_files_in0\\dsh\\lib\\bin.py", line 7, in <module>\n    address = json.loads(host.stdout.readline())[\'connection\']\n              ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\json\\__init__.py", line 346, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\json\\decoder.py", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File "C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\Lib\\json\\decoder.py", line 363, in raw_decode\n    raise JSONDecodeError("Expecting value", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)\n').returncode
+========================= 7 failed, 6 passed in 0.72s =========================

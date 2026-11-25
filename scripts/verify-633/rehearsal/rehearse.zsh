@@ -27,11 +27,11 @@ for case in tree.getroot().iter("testcase"):
         if child.tag == "skipped" and child.get("message", "").startswith("Windows only"):
             case.remove(child)
 tree.write(sys.argv[2], encoding="utf-8", xml_declaration=True)' $JUNIT $S/junit-w1-passed.xml
-# Failing in the stand-in run: every `fail` entry of the edited list, a W1 (633) host test first (mismatch makes the
-# first one pass: a listed W1 entry that unexpectedly passes). test_agent_control's W1 entry is not first: in the
-# simulated JUnit it reaches its POSIX-only part and skips, so it could not stand for a pass.
-FAILS=(${(f)"$(awk -F'\t' '$1=="fail" && $4=="W1 (633)" && $2 !~ /test_agent_control/ {print $2}' $LIST
-              awk -F'\t' '$1=="fail" && ($4!="W1 (633)" || $2 ~ /test_agent_control/) {print $2}' $LIST)"})
+# Failing in the stand-in run: every `fail` entry of the edited list, a line this Task moved first (mismatch makes the
+# first one pass: a listed entry that unexpectedly passes). It is a host test that passes in the simulated JUnit
+# (test_agent_control's moved line skips there in its POSIX-only part, so it could not stand for a pass).
+MOVED=tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session
+FAILS=($MOVED ${(f)"$(awk -F'\t' -v moved=$MOVED '$1=="fail" && $2!=moved {print $2}' $LIST)"})
 NEWFAIL=tests/test_process_windows_633.py::test_process_alive_never_terminates_its_target
 diverged_commit() { git -C $1 commit-tree -p $BASE -m diverged "$BASE^{tree}"; }
 fresh() {  # fresh <scenario> [junit]: a new bare remote, scratch graftling clone and fake gh state
@@ -48,7 +48,7 @@ exec $PY -I $HERE/fakegh633.py $S/$1/gh \"\$@\"" > $S/$1/gh/gh; chmod +x $S/$1/g
 knobs() {
   print -r -- VERIFY633_GRAFTLING=$S/$1/graftling VERIFY633_GREMOTE=$S/$1/gremote.git VERIFY633_GH=$S/$1/gh/gh \
     VERIFY633_EVIDENCE=$S/$1/evidence VERIFY633_POLL_S=1 VERIFY633_APPEAR_S=${2:-10} VERIFY633_DONE_S=30 \
-    ${BAD:+VERIFY633_BUNDLE=$BAD}
+    ${BAD:+VERIFY633_BUNDLE=$BAD} ${BADLIST:+VERIFY633_EXPECTED=$BADLIST}
 }
 step() {  # step <scenario> <file> <step> [args]: run one step with the knobs, keep the console output
   local sc=$1 file=$2; shift 2
@@ -98,6 +98,11 @@ git -C $S/badsrc $NOREPLY commit -q -am 'rehearsal: changes outside W1'
 git -C $S/badsrc bundle create -q $S/bad.bundle $BASE..refs/heads/$BRANCH
 BAD=$S/bad.bundle; fresh disallowed; step disallowed disallowed-00.txt 00; step disallowed disallowed-P.txt P; unset BAD
 print -r -- "--- after P: remote $(git -C $S/disallowed/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/disallowed-P.txt
+# 00 not ready, P STOP: the expected list with one moved line under an owner the table does not name (correction 1).
+awk -F'\t' -v OFS='\t' -v moved=$MOVED '$1=="fail" && $2==moved {$4="W2 (634)"} {print}' $LIST > $S/bad-owner-list.txt
+BADLIST=$S/bad-owner-list.txt; fresh bad-owner; step bad-owner bad-owner-00.txt 00; step bad-owner bad-owner-P.txt P
+unset BADLIST
+print -r -- "--- after P: remote $(git -C $S/bad-owner/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/bad-owner-P.txt
 # The real <Harness>/graftling was only read: its branches are the same before and after.
 AFTER=$(real_state)
 { print -r -- "real graftling branches before rehearsal:"; print -r -- $BEFORE; print -r -- "after:"; print -r -- $AFTER

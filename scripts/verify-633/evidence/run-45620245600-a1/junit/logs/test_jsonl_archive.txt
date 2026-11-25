@@ -1,0 +1,263 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 23 items
+
+tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination FAILED [  4%]
+tests/test_jsonl_archive.py::test_reject_reordering_dropped_identity_and_changed_final FAILED [  8%]
+tests/test_jsonl_archive.py::test_optional_policy_and_late_backfill_preserve_existing_records FAILED [ 13%]
+tests/test_jsonl_archive.py::test_stream_restart_final_backfill_and_late_notification FAILED [ 17%]
+tests/test_jsonl_archive.py::test_stream_semantic_boundaries_and_stale_writer FAILED [ 21%]
+tests/test_jsonl_archive.py::test_attachments_portable_and_unknown_required_event_refuses_projection FAILED [ 26%]
+tests/test_jsonl_archive.py::test_native_fork_chain_compaction_and_original_times FAILED [ 30%]
+tests/test_jsonl_archive.py::test_score_probability_alignment_survives_jsonl_and_history_prefix FAILED [ 34%]
+tests/test_jsonl_archive.py::test_process_exit_keeps_partial_output_and_requires_resolution FAILED [ 39%]
+tests/test_jsonl_archive.py::test_same_source_finalization_at_last_checkpoint_and_parallel_pending FAILED [ 43%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.content] FAILED [ 47%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[/data/content] FAILED [ 52%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history] FAILED [ 56%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history_base] FAILED [ 60%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[inheritedPrefix] FAILED [ 65%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[messageOrder] FAILED [ 69%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.id] FAILED [ 73%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.toolCallId] FAILED [ 78%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[unknownNativeGap] FAILED [ 82%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[parentSession] FAILED [ 86%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[history] FAILED [ 91%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[/inheritedPrefix] FAILED [ 95%]
+tests/test_jsonl_archive.py::test_missing_optional_metadata_does_not_block_complete_messages FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=35859651b7044515bb845e9574818b8f: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+_____ test_native_history_not_notifications_defines_order_and_pagination ______
+tests\test_jsonl_archive.py:83: in test_native_history_not_notifications_defines_order_and_pagination
+    store = JsonlSessionStore.create(path, header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_native_history_not_notifi0\\sessions\\0deeb8fa1dbbee4c0dbe7f5e3c9183940139f26d22797ee8ab07c00557a4c2ff'
+__________ test_reject_reordering_dropped_identity_and_changed_final __________
+tests\test_jsonl_archive.py:124: in test_reject_reordering_dropped_identity_and_changed_final
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_reject_reordering_dropped0'
+______ test_optional_policy_and_late_backfill_preserve_existing_records _______
+tests\test_jsonl_archive.py:149: in test_optional_policy_and_late_backfill_preserve_existing_records
+    store = archive.store('canonical')
+src\graftling\sessions\archive.py:874: in store
+    store = JsonlSessionStore.create(archive_path(self.root, session_id), self._mapped[session_id],
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_optional_policy_and_late_0\\independent\\sessions\\0deeb8fa1dbbee4c0dbe7f5e3c9183940139f26d22797ee8ab07c00557a4c2ff'
+__________ test_stream_restart_final_backfill_and_late_notification ___________
+tests\test_jsonl_archive.py:172: in test_stream_restart_final_backfill_and_late_notification
+    store = JsonlSessionStore.create(path, header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_stream_restart_final_back0'
+______________ test_stream_semantic_boundaries_and_stale_writer _______________
+tests\test_jsonl_archive.py:211: in test_stream_semantic_boundaries_and_stale_writer
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_stream_semantic_boundarie0'
+___ test_attachments_portable_and_unknown_required_event_refuses_projection ___
+tests\test_jsonl_archive.py:230: in test_attachments_portable_and_unknown_required_event_refuses_projection
+    store = JsonlSessionStore.create(directory / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_attachments_portable_and_0\\original'
+____________ test_native_fork_chain_compaction_and_original_times _____________
+tests\test_jsonl_archive.py:275: in test_native_fork_chain_compaction_and_original_times
+    store = JsonlSessionStore.create(tmp_path / 'child.jsonl', header(seeded=True))
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_native_fork_chain_compact0'
+_____ test_score_probability_alignment_survives_jsonl_and_history_prefix ______
+tests\test_jsonl_archive.py:300: in test_score_probability_alignment_survives_jsonl_and_history_prefix
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_score_probability_alignme0'
+_______ test_process_exit_keeps_partial_output_and_requires_resolution ________
+tests\test_jsonl_archive.py:338: in test_process_exit_keeps_partial_output_and_requires_resolution
+    assert result.returncode == 17
+E   assert 1 == 17
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', '-c', "\nimport json, os, sys\nfrom pathlib import Path\nfrom graftling.sessions.archive import JsonlSessionStore, ArchiveStream\npath, header, event, run = sys.argv[1:]\nstore = JsonlSessionStore.create(Path(path), json.loads(header))\nwriter = ArchiveStream(store, 'stream', json.loads(event))\nwriter.feed(json.loads(run), 0)\nwriter.checkpoint()\nos._exit(17)\n", 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_process_exit_keeps_partia0\\session.jsonl', '{"version": 5, "id": "canonical", "createdAt": 100, "isSeeded": false}', '{"type": "assistant/message", "seq": 0, "time": 99, "surfaceOp": "append", "data": {"turn": 0, "step": 0, "message": {"id": "answer", "role": "assistant", "source": {"kind": "model", "model": "fixture", "provider": "fixture"}, "content": []}, "stream": []}, "native": {"runtime": "fixture", "sessionId": "native", "locator": "answer", "record": {"id": "answer", "role": "assistant", "text": "done", "created": 99, "ciphertext": "opaque==", "unknown": [null, {"x": 7}]}}}', '{"type": "text-run", "requestId": "request", "attemptId": "attempt", "messageId": "answer", "index": 0, "blockType": "text", "text": "partial"}'], returncode=1).returncode
+---------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<string>", line 6, in <module>
+    store = JsonlSessionStore.create(Path(path), json.loads(header))
+  File "D:\a\graftling\graftling\src\graftling\sessions\archive.py", line 295, in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\a\graftling\graftling\src\graftling\sessions\archive.py", line 104, in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_process_exit_keeps_partia0'
+____ test_same_source_finalization_at_last_checkpoint_and_parallel_pending ____
+tests\test_jsonl_archive.py:355: in test_same_source_finalization_at_last_checkpoint_and_parallel_pending
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_same_source_finalization_0'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[data.content] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_0'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[/data/content] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_1'
+___ test_messages_refuse_declared_content_history_or_identity_gaps[history] ___
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_2'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[history_base] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_3'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[inheritedPrefix] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_4'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[messageOrder] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_5'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[data.message.id] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_6'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[data.message.toolCallId] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_7'
+_ test_messages_refuse_declared_content_history_or_identity_gaps[unknownNativeGap] _
+tests\test_jsonl_archive.py:384: in test_messages_refuse_declared_content_history_or_identity_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', header())
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_8'
+___________ test_messages_refuse_header_history_gaps[parentSession] ___________
+tests\test_jsonl_archive.py:397: in test_messages_refuse_header_history_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_header_hi0'
+______________ test_messages_refuse_header_history_gaps[history] ______________
+tests\test_jsonl_archive.py:397: in test_messages_refuse_header_history_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_header_hi1'
+_________ test_messages_refuse_header_history_gaps[/inheritedPrefix] __________
+tests\test_jsonl_archive.py:397: in test_messages_refuse_header_history_gaps
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_header_hi2'
+_______ test_missing_optional_metadata_does_not_block_complete_messages _______
+tests\test_jsonl_archive.py:415: in test_missing_optional_metadata_does_not_block_complete_messages
+    store = JsonlSessionStore.create(tmp_path / 'session.jsonl', metadata)
+src\graftling\sessions\archive.py:295: in create
+    _replace(path, (_encode(metadata) + '\n').encode())
+src\graftling\sessions\archive.py:104: in _replace
+    directory = os.open(path.parent, os.O_RDONLY)
+E   PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_missing_optional_metadata0'
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_jsonl_archive.xml -
+============================ slowest 10 durations =============================
+0.19s call     tests/test_jsonl_archive.py::test_process_exit_keeps_partial_output_and_requires_resolution
+0.04s call     tests/test_jsonl_archive.py::test_score_probability_alignment_survives_jsonl_and_history_prefix
+0.01s call     tests/test_jsonl_archive.py::test_stream_semantic_boundaries_and_stale_writer
+0.01s call     tests/test_jsonl_archive.py::test_reject_reordering_dropped_identity_and_changed_final
+0.01s call     tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[messageOrder]
+0.01s call     tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history_base]
+0.01s call     tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[unknownNativeGap]
+0.01s call     tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[/data/content]
+0.01s call     tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[/inheritedPrefix]
+0.01s call     tests/test_jsonl_archive.py::test_optional_policy_and_late_backfill_preserve_existing_records
+=========================== short test summary info ===========================
+FAILED tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_native_history_not_notifi0\\sessions\\0deeb8fa1dbbee4c0dbe7f5e3c9183940139f26d22797ee8ab07c00557a4c2ff'
+FAILED tests/test_jsonl_archive.py::test_reject_reordering_dropped_identity_and_changed_final - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_reject_reordering_dropped0'
+FAILED tests/test_jsonl_archive.py::test_optional_policy_and_late_backfill_preserve_existing_records - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_optional_policy_and_late_0\\independent\\sessions\\0deeb8fa1dbbee4c0dbe7f5e3c9183940139f26d22797ee8ab07c00557a4c2ff'
+FAILED tests/test_jsonl_archive.py::test_stream_restart_final_backfill_and_late_notification - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_stream_restart_final_back0'
+FAILED tests/test_jsonl_archive.py::test_stream_semantic_boundaries_and_stale_writer - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_stream_semantic_boundarie0'
+FAILED tests/test_jsonl_archive.py::test_attachments_portable_and_unknown_required_event_refuses_projection - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_attachments_portable_and_0\\original'
+FAILED tests/test_jsonl_archive.py::test_native_fork_chain_compaction_and_original_times - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_native_fork_chain_compact0'
+FAILED tests/test_jsonl_archive.py::test_score_probability_alignment_survives_jsonl_and_history_prefix - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_score_probability_alignme0'
+FAILED tests/test_jsonl_archive.py::test_process_exit_keeps_partial_output_and_requires_resolution - assert 1 == 17
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', '-c', "\nimport json, os, sys\nfrom pathlib import Path\nfrom graftling.sessions.archive import JsonlSessionStore, ArchiveStream\npath, header, event, run = sys.argv[1:]\nstore = JsonlSessionStore.create(Path(path), json.loads(header))\nwriter = ArchiveStream(store, 'stream', json.loads(event))\nwriter.feed(json.loads(run), 0)\nwriter.checkpoint()\nos._exit(17)\n", 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_process_exit_keeps_partia0\\session.jsonl', '{"version": 5, "id": "canonical", "createdAt": 100, "isSeeded": false}', '{"type": "assistant/message", "seq": 0, "time": 99, "surfaceOp": "append", "data": {"turn": 0, "step": 0, "message": {"id": "answer", "role": "assistant", "source": {"kind": "model", "model": "fixture", "provider": "fixture"}, "content": []}, "stream": []}, "native": {"runtime": "fixture", "sessionId": "native", "locator": "answer", "record": {"id": "answer", "role": "assistant", "text": "done", "created": 99, "ciphertext": "opaque==", "unknown": [null, {"x": 7}]}}}', '{"type": "text-run", "requestId": "request", "attemptId": "attempt", "messageId": "answer", "index": 0, "blockType": "text", "text": "partial"}'], returncode=1).returncode
+FAILED tests/test_jsonl_archive.py::test_same_source_finalization_at_last_checkpoint_and_parallel_pending - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_same_source_finalization_0'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.content] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_0'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[/data/content] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_1'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_2'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history_base] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_3'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[inheritedPrefix] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_4'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[messageOrder] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_5'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.id] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_6'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.toolCallId] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_7'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[unknownNativeGap] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_declared_8'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[parentSession] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_header_hi0'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[history] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_header_hi1'
+FAILED tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[/inheritedPrefix] - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_messages_refuse_header_hi2'
+FAILED tests/test_jsonl_archive.py::test_missing_optional_metadata_does_not_block_complete_messages - PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-33\\test_missing_optional_metadata0'
+============================= 23 failed in 1.39s ==============================

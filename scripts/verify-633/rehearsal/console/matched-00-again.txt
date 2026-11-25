@@ -53,9 +53,9 @@ PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
 PASS: .github/run_test_files.py and tests/posix_only.py unchanged since defad1db083e911900cbea1cb0ef165e6a66d322
 PASS: the 13 W1 tests of new-tests.txt are defined in tests/test_process_windows_633.py at bc4298b611afce70dd876c5fe79f764c9f966d8a
-PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-632/windows-expected.txt parses: 189 expected Windows failures and 0 expected hangs (W1 (633) 16, W2 (634) 107, W3 (635) 6, W4 (636) 22, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
-expected list: 23 W1 (633) entries at the base: 7 deleted (predicted to pass), 16 kept with an 'after W1:' note
-PASS: only W1 (633) lines changed; every other line is byte-identical and in order
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-632/windows-expected.txt parses: 189 expected Windows failures and 0 expected hangs (W2 (634) 107, W3 (635) 7, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+expected list: 23 W1 (633) entries at the base: 7 to delete, 16 moved to Main's owners (W3 (635) 1, W4 (636) 15)
+PASS: the W1 (633) lines are deleted or moved to Main's owners as tabled; every other line is byte-identical and in order
 PASS: /tmp/claude-501/rh633/matched/graftling local agent/633-graftling-windows-process = bundle head
 PASS: graftling /tmp/claude-501/rh633/matched/gremote.git already has agent/633-graftling-windows-process at the bundle head
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-633/steps.zsh W    (the branch is already at the bundle head; observes its push run, no push)

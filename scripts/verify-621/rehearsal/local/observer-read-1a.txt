@@ -1,0 +1,4 @@
+$ cd $R/bnd2/first-project && echo {"action":"execute","feature":"desktop_activity","arguments":{"task_id":"1"}} | graphtraj-tool --desktop-observer --allowed-features desktop_activity   (unbound: GRAPHTRAJ_CLI_CONNECTION/GRAPHTRAJ_PARENT_ALIAS unset)
+failed False scope project
+{'alias': 'research@x1', 'session': 'native-research@x1', 'state': 'retired', 'last_outcome': None, 'historical': True}
+Note: a fixture membership (retired) only shows the fields exist; a running swarm member needs the Linux CI host (tests/linux_adoption_input.py is Linux-only).

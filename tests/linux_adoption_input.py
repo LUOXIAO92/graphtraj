@@ -24,6 +24,24 @@ def operate(call: Callable[[dict], Any], feature: str, arguments: dict) -> dict:
     return reply.document
 
 
+def observe_member(project: Path, task_id: str, alias: str) -> dict:
+    """Read one member's public session state as the human desktop observer.
+
+    Runs the installed ``graphtraj-tool --desktop-observer`` exactly as the desktop
+    app does; no caller identity is created, removed or replaced.
+    """
+    tool = os.environ.get('GRAPHTRAJ_TOOL') or str(Path(sys.executable).with_name('graphtraj-tool'))
+    completed = subprocess.run([tool,'--desktop-observer', '--allowed-features', 'desktop_activity'],
+                               cwd=project, capture_output=True, text=True, timeout=60, check=True,
+                               input=json.dumps({'action': 'execute', 'feature': 'desktop_activity',
+                                                 'arguments': {'task_id': task_id}}) + '\n')
+    reply = json.loads(completed.stdout)
+    assert not reply.get('failed'), reply
+    member = next(agent for agent in reply['result']['agents'] if agent['alias'] == alias)
+    return {'session': member.get('session'), 'state': member.get('state'),
+            'last_outcome': member.get('last_outcome')}
+
+
 def main() -> None:
     """Retain one public host binding until the controlled execution completes."""
     assert sys.platform == 'linux', 'This fixture is for the target Linux CI host'
@@ -100,12 +118,23 @@ def main() -> None:
                                 connection.sendall(b'finish')
                         assert terminal.wait(30), 'Runner did not deliver completion to the retained host'
                         assert result['events'][-1]['event'] == 'completed', result['events']
-                        result['afterCompletion'] = operate(host, 'subagents', {
-                            'action': 'status', 'agent': task['alias']})['result']
-                        final = result['afterCompletion']['aliases'][0]
-                        assert final['activity'] == 'idle' and final['last_outcome'] == 'completed', final
+                        # `subagents status` needs a verified caller (agents.py run_agents_feature) and
+                        # this host is an unbound CI process by design. Read what it already holds:
+                        # the retained completion event, and the human desktop observer's public read.
+                        completion = result['events'][-1]
+                        ended = json.loads(completion['message'].split('\n', 1)[1])
+                        result['afterCompletion'] = observe_member(project, task_id, task['alias'])
+                        final = {**result['afterCompletion'], 'execution_id': completion['execution'],
+                                 'outcome': ended['outcome']}
+                        assert completion['alias'] == task['alias'], completion
+                        assert final['state'] == 'idle' and final['last_outcome'] == 'completed', final
+                        assert ended['outcome'] == 'completed' and ended['execution_id'] == completion['execution'], ended
                         assert result['uiExitCode'] == 0 and result['ui']['uiPassed'], result['ui']
-                        assert {key: final[key] for key in ('session', 'execution_id')} == result['ui']['controlledExecution']
+                        # The same Session ran throughout the GUI checks and is the one that completed.
+                        assert {'session': ended['session'], 'execution_id': completion['execution']} == {
+                            'session': task['session'], 'execution_id': task['execution_id']}, (ended, task)
+                        assert final['session'] == result['ui']['controlledExecution']['session'] == task['session']
+                        assert result['ui']['controlledExecution']['state'] == 'running', result['ui']
                         result['passed'] = True
                     except Exception as error:
                         result['failure'] = str(error)
@@ -113,8 +142,11 @@ def main() -> None:
                         raise
                     finally:
                         if not terminal.is_set():
-                            result['cleanup'] = operate(host, 'subagents', {
-                                'action': 'interrupt', 'agent': task['alias']})['result']
+                            # Record the attempt without masking the failure above: an unbound
+                            # host may be refused subagents control (authority-unavailable).
+                            reply = host({'action': 'execute', 'feature': 'subagents',
+                                          'arguments': {'action': 'interrupt', 'agent': task['alias']}})
+                            result['cleanup'] = reply.document
     except Exception as error:
         result['failure'] = str(error)
         raise

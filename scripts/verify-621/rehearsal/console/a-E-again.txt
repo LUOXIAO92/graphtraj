@@ -1,0 +1,25 @@
+$ VERIFY621_REMOTE=/tmp/claude-501/r621/evidence/remote.git VERIFY621_GH=/tmp/claude-501/r621/evidence/gh/gh VERIFY621_HTMP=/tmp/claude-501/r621/evidence/htmp VERIFY621_PTMP=/tmp/claude-501/r621/evidence/ptmp VERIFY621_POLL_S=1 VERIFY621_APPEAR_S=10 VERIFY621_DONE_S=30 zsh steps.zsh E
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [E] Evidence of run 45546698537, read only on GitHub. Login: gh login. Dialog: none. Network: GitHub.
+already present, not downloaded again: /tmp/claude-501/r621/evidence/htmp/mac-evidence-45546698537
+copy already present: /tmp/claude-501/r621/evidence/ptmp/mac-evidence-45546698537
+--- files (bytes, path under /tmp/claude-501/r621/evidence/htmp/mac-evidence-45546698537)
+          21  environment.txt
+         434  evidence.json
+          13  screens/00-start.png
+          13  screens/failure.png
+--- evidence.json
+  passed: False
+  failure:
+    TimeoutError: locator.waitFor: Timeout 30000ms exceeded.
+      waiting for getByRole('button', { name: 'Add project' })
+  steps: 8 recorded; last 6:
+    - stand-in step 3
+    - stand-in step 4
+    - stand-in step 5
+    - stand-in step 6
+    - stand-in step 7
+    - stand-in step 8
+  screenshots: screens/00-start.png, screens/failure.png
+VERDICT 621 E: PASS (evidence at /tmp/claude-501/r621/evidence/htmp/mac-evidence-45546698537 and /tmp/claude-501/r621/evidence/ptmp/mac-evidence-45546698537)
+[exit 0]

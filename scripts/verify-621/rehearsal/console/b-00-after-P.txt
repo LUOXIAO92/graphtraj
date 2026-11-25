@@ -1,0 +1,27 @@
+$ VERIFY621_REMOTE=/tmp/claude-501/r621/success/remote.git VERIFY621_GH=/tmp/claude-501/r621/success/gh/gh VERIFY621_HTMP=/tmp/claude-501/r621/success/htmp VERIFY621_PTMP=/tmp/claude-501/r621/success/ptmp VERIFY621_POLL_S=1 VERIFY621_APPEAR_S=10 VERIFY621_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: your gh login (account shown, no token) and ssh key (git ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify621-stand-in | gh path: /tmp/claude-501/r621/success/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-621 fake)
+    - Active account: true
+PASS: origin is git@github.com:LUOXIAO92/graphtraj.git
+NOTE: rehearsal remote /tmp/claude-501/r621/success/remote.git is used instead of origin for ls-remote/push
+PASS: desktop-macos-adoption.yml on default branch main: workflow_dispatch: yes; mode option standard: yes
+PASS: workflow desktop-macos-adoption.yml state active
+PASS: desktop-macos-adoption.yml at HEAD offers workflow_dispatch mode standard
+PASS: run 45546698537 artifact graphtraj-macos-adoption-evidence: FOUND 1 size=812345 expired=false expires_at=2027-02-23T00:00:00Z
+current branch: agent/621-macos-adoption-script-d-ui | HEAD 22302e55bff596eb8407a7fe6460177e1291abf7
+PASS: /tmp/claude-501/r621/success/remote.git already has agent/621-macos-adoption-script-d-ui at HEAD (no push needed; D dispatches)
+--- P preconditions
+PASS: on agent/621-macos-adoption-script-d-ui
+PASS: tracked tree clean
+PASS: base 055669d9 is an ancestor of HEAD
+PASS: desktop/tests/adoption.mjs changed since base
+PASS: nothing changed since base under .github/workflows desktop/src desktop/electron src
+next: zsh /private/tmp/claude-501/r621/repo/scripts/verify-621/steps.zsh E    (downloads the evidence of run 45546698537; read only)
+next: zsh /private/tmp/claude-501/r621/repo/scripts/verify-621/steps.zsh D    (dispatches on the already pushed HEAD and waits)
+VERDICT 621 00: PASS (E available; P ready: yes; remote branch equal; candidate 22302e55bff596eb8407a7fe6460177e1291abf7)
+[exit 0]

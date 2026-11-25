@@ -11,7 +11,7 @@ PY=/Users/luoxiao/miniconda3/bin/python3.13
 OUT=$HERE/console; mkdir -p $OUT
 rm -rf $S; mkdir -p $S
 git clone -q --no-checkout $WT $S/repo
-git -C $S/repo checkout -q -b $BRANCH $(git -C $WT rev-parse HEAD)
+git -C $S/repo checkout -q -B $BRANCH $(git -C $WT rev-parse HEAD)
 git -C $S/repo remote set-url origin git@github.com:LUOXIAO92/graphtraj.git
 STEPS=$S/repo/scripts/verify-621/steps.zsh
 fresh() {  # fresh <scenario>: new bare remote and fake gh state

@@ -1,0 +1,27 @@
+$ VERIFY621_REMOTE=/tmp/claude-501/r621/success/remote.git VERIFY621_GH=/tmp/claude-501/r621/success/gh/gh VERIFY621_HTMP=/tmp/claude-501/r621/success/htmp VERIFY621_PTMP=/tmp/claude-501/r621/success/ptmp VERIFY621_POLL_S=1 VERIFY621_APPEAR_S=10 VERIFY621_DONE_S=30 zsh steps.zsh W
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [W] Observe only (no push, no dispatch) run <newest dispatch of 22302e55bff596eb8407a7fe6460177e1291abf7>. Login: gh login. Dialog: none. Network: GitHub.
+waiting for run 46100000002 (completion bound 30s, poll 1s)
+  [14:37:43] run 46100000002: completed success
+--- run 46100000002 | completed | success | head 22302e55bff596eb8407a7fe6460177e1291abf7 | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000002
+  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000002/job/1
+--- evidence of run 46100000002
+already present, not downloaded again: /tmp/claude-501/r621/success/htmp/mac-evidence-46100000002
+copy already present: /tmp/claude-501/r621/success/ptmp/mac-evidence-46100000002
+--- files (bytes, path under /tmp/claude-501/r621/success/htmp/mac-evidence-46100000002)
+          21  environment.txt
+         273  evidence.json
+          13  screens/00-start.png
+--- evidence.json
+  passed: True
+  steps: 8 recorded; last 6:
+    - stand-in step 3
+    - stand-in step 4
+    - stand-in step 5
+    - stand-in step 6
+    - stand-in step 7
+    - stand-in step 8
+  screenshots: screens/00-start.png
+next: zsh /private/tmp/claude-501/r621/repo/scripts/verify-621/steps.zsh W 46100000002    (observe again; no push, no dispatch)
+VERDICT 621 W: PASS (run 46100000002 success; evidence download ok; https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000002)
+[exit 0]

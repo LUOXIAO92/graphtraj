@@ -1,0 +1,21 @@
+$ VERIFY621_REMOTE=/tmp/claude-501/r621/timeout/remote.git VERIFY621_GH=/tmp/claude-501/r621/timeout/gh/gh VERIFY621_HTMP=/tmp/claude-501/r621/timeout/htmp VERIFY621_PTMP=/tmp/claude-501/r621/timeout/ptmp VERIFY621_POLL_S=1 VERIFY621_APPEAR_S=10 VERIFY621_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push, dispatch and wait. OUTWARD-FACING: git push /tmp/claude-501/r621/timeout/remote.git agent/621-macos-adoption-script-d-ui (fast-forward only, never force) and gh workflow run desktop-macos-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: on agent/621-macos-adoption-script-d-ui
+PASS: tracked tree clean
+PASS: base 055669d9 is an ancestor of HEAD
+PASS: desktop/tests/adoption.mjs changed since base
+PASS: nothing changed since base under .github/workflows desktop/src desktop/electron src
+$ git push /tmp/claude-501/r621/timeout/remote.git refs/heads/agent/621-macos-adoption-script-d-ui:refs/heads/agent/621-macos-adoption-script-d-ui   (HEAD 22302e55bff596eb8407a7fe6460177e1291abf7)
+  To /tmp/claude-501/r621/timeout/remote.git
+   * [new branch]        agent/621-macos-adoption-script-d-ui -> agent/621-macos-adoption-script-d-ui
+PASS: /tmp/claude-501/r621/timeout/remote.git agent/621-macos-adoption-script-d-ui = 22302e55bff596eb8407a7fe6460177e1291abf7
+existing dispatch runs of desktop-macos-adoption.yml on agent/621-macos-adoption-script-d-ui: 1
+$ gh workflow run desktop-macos-adoption.yml --repo LUOXIAO92/graphtraj --ref agent/621-macos-adoption-script-d-ui -f mode=standard
+  ✓ Created workflow_dispatch event for desktop-macos-adoption.yml at agent/621-macos-adoption-script-d-ui
+waiting for the new run of 22302e55bff596eb8407a7fe6460177e1291abf7 to appear (bound 4s, poll 1s)
+appearance timeout after 4s: no new dispatch run with head_sha 22302e55bff596eb8407a7fe6460177e1291abf7
+next: zsh /private/tmp/claude-501/r621/repo/scripts/verify-621/steps.zsh W    (takes the newest dispatched run of HEAD once it appears; no dispatch)
+next: /tmp/claude-501/r621/timeout/gh/gh run list --repo LUOXIAO92/graphtraj --workflow desktop-macos-adoption.yml --branch agent/621-macos-adoption-script-d-ui --event workflow_dispatch
+VERDICT 621 P: FAIL (dispatched, but no run for 22302e55bff596eb8407a7fe6460177e1291abf7 appeared within 4s)
+[exit 1]

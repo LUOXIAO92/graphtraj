@@ -1,0 +1,447 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+.....................................ssssssssssss....................... [ 30%]
+........................................................................ [ 38%]
+........F..................F.FF....................ssssssss............. [ 45%]
+........................................................................ [ 53%]
+................................s....................................... [ 60%]
+........................................................................ [ 68%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 91%]
+........................................................................ [ 98%]
+.......FFFF                                                              [100%]
+=================================== FAILURES ===================================
+________ test_child_ends_completed_after_the_owner_main_thread_returns _________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_child_ends_completed_afte0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_child_ends_completed_aft...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+
+    def test_child_ends_completed_after_the_owner_main_thread_returns(tmp_path: Path, native_settings: dict) -> None:
+        """The turn completes during interpreter shutdown; the end processing runs in full."""
+        root  = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        owner = subprocess.Popen(
+            [sys.executable, '-c', OWNER, str(root), json.dumps(native_settings), json.dumps(reclaim.CALLER)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        found: dict = {}
+        try:
+            created = json.loads(owner.stdout.readline())
+            found   = reclaim.wait_for(lambda: len(reclaim.tools(since)) == 3, 10) and reclaim.tools(since)
+            assert found, 'the peer did not start the tool'
+    
+            # The process exits only after the non-daemon owner has finished the end processing.
+            stdout, stderr = owner.communicate(timeout=30)
+            print('owner exit:', owner.returncode, 'stderr:', stderr[-2000:])
+            assert owner.returncode == 0, stderr
+    
+            execution = reclaim.record(root, created['agent'])
+            print('end record:', json.dumps({key: execution.get(key) for key in ('state', 'outcome', 'error')}))
+            assert execution['state'] == 'ended'
+            assert execution['outcome'] == 'completed' and execution.get('error') is None, execution
+    
+            directory   = Path(execution['process']['tool_descendants']).parent
+            termination = next(directory.glob('codex-termination-*.yml'), None)
+            assert termination is not None, 'the owner-side reclaim did not record its end'
+            report = yaml.safe_load(termination.read_text())['escaped_processes']
+>           assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+E           assert [20216, 20218] == [20218, 20220]
+E             
+E             At index 0 diff: 20216 != 20218
+E             Use -v to get more diff
+
+tests/test_codex_child_interpreter_shutdown_473.py:71: AssertionError
+----------------------------- Captured stdout call -----------------------------
+owner exit: 0 stderr: 
+end record: {"state": "ended", "outcome": "completed", "error": null}
+_____________ test_owner_killed_then_reconciliation_stops_the_tool _____________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_owner_killed_then_reconci0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_owner_killed_then_reconc...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+
+    def test_owner_killed_then_reconciliation_stops_the_tool(tmp_path: Path, native_settings: dict) -> None:
+        """SIGKILL the owner and its service; one reconciling read stops the recorded tool."""
+        root = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        owner = subprocess.Popen([sys.executable, '-c', OWNER, str(root), json.dumps(native_settings), json.dumps(CALLER)],
+                                 stdout=subprocess.PIPE, text=True)
+        user = subprocess.Popen(['/bin/sleep', '461'], start_new_session=True)
+        found: dict[str, Identity] = {}
+        service = None
+        try:
+            created = json.loads(owner.stdout.readline())
+            agent = created['agent']
+            facts = record(root, agent)['process']
+            assert facts['tool_marker'] and facts['tool_descendants']
+    
+            def recorded():
+                try:
+                    commands = {entry['argv'] for entry in read_sidecar(facts['tool_descendants'])}
+                except (OSError, ValueError):
+                    return None
+                return {f'/bin/sh -c {TOOL}', '/bin/sleep 462'} <= commands
+    
+            assert wait_for(recorded), 'the owner did not record the tool shell'
+            found = tools(since)
+            service = identity(facts['runtime_pid'])
+            assert service is not None and service.start >= since
+            owner.send_signal(signal.SIGKILL)
+            owner.wait(5)
+            os.killpg(service.pgid, signal.SIGKILL)  # the service's own group, checked above
+            assert wait_for(lambda: not is_alive(service), 10)
+    
+            def reaped() -> bool:
+                # A killed service stays a zombie until launchd reaps it; control's kill(pid, 0) still sees it.
+                try:
+                    os.kill(service.pid, 0)
+                except ProcessLookupError:
+                    return True
+                return identity(service.pid) is not None  # reused by another process: not ours, gone for us
+            assert wait_for(reaped, 10)
+            assert is_alive(found['shell']) and is_alive(found['sleep']), 'the tool outlived owner and service'
+    
+            call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+            status = call({'action': 'status', 'agent': agent}).document
+            execution = record(root, agent)
+            report = execution.get('escaped_processes')
+            print('escaped_processes:', json.dumps(report))
+            assert status['result'].get('last_result', {}).get('error', {}).get('code') == 'owner-exited', (status, execution)
+>           assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+E           assert [20290, 20292] == [20294, 20296]
+E             
+E             At index 0 diff: 20290 != 20294
+E             Use -v to get more diff
+
+tests/test_codex_tool_reclaim_462.py:197: AssertionError
+----------------------------- Captured stdout call -----------------------------
+escaped_processes: {"found": [{"command": "/bin/sh -c /bin/sleep 462; :", "pid": 20290}, {"command": "/bin/sleep 462", "pid": 20292}], "remaining": [], "stopped": [{"command": "/bin/sh -c /bin/sleep 462; :", "pid": 20290}, {"command": "/bin/sleep 462", "pid": 20292}]}
+__________ test_reclaim_runs_when_the_interpreter_refuses_new_threads __________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_reclaim_runs_when_the_int0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_reclaim_runs_when_the_in...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1076d96a0>
+
+    def test_reclaim_runs_when_the_interpreter_refuses_new_threads(
+            tmp_path: Path, native_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Correction 2: an owner thread outliving its interpreter's shutdown still stops the tools.
+    
+        At shutdown CPython refuses new executor work, so ``asyncio.to_thread`` raises. The real host's child
+        then ended RUNTIME_WORKER_FAILED with no reclaim. This test models an interpreter that also refuses
+        new threads, where the reclaim runs on the owner's own thread. CPython 3.13 still starts threads
+        while it joins the non-daemon ones after the main thread has ended (473); only executors refuse then.
+        """
+        import asyncio
+        import graftling.codex.managed_session as owner
+    
+        async def refused(*args, **kwargs):
+            raise RuntimeError('cannot schedule new futures after interpreter shutdown')
+    
+        class Shutdown:
+            class Thread:
+                def __init__(self, *args, **kwargs):
+                    pass
+    
+                def start(self):
+                    raise RuntimeError("can't create new thread at interpreter shutdown")
+    
+        monkeypatch.setattr(asyncio, 'to_thread', refused)
+        monkeypatch.setattr(owner, 'threading', Shutdown)
+        root = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        user = subprocess.Popen(['/bin/sleep', '461'], start_new_session=True)
+        found: dict[str, Identity] = {}
+        try:
+            call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+            created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'tool-end'}).document
+            found = wait_for(lambda: len(tools(since)) == 3, 10) and tools(since)
+            assert found, 'the peer did not start the tool'
+            facts = record(root, created['agent'])['process']
+            directory = Path(facts['tool_descendants']).parent
+            termination = wait_for(lambda: next(directory.glob('codex-termination-*.yml'), None), 20)
+            assert termination is not None, 'the owner-side reclaim did not run'
+            report = yaml.safe_load(termination.read_text())['escaped_processes']
+            print('escaped_processes:', json.dumps(report))
+            assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+            assert report['remaining'] == [] and 'error' not in report
+            assert not is_alive(found['shell']) and not is_alive(found['sleep'])
+>           assert is_alive(found['other']) and user.poll() is None
+E           assert (False)
+E            +  where False = is_alive(Identity(pid=20317, ppid=20315, pgid=20315, uid=501, start=1795585277019014))
+
+tests/test_codex_tool_reclaim_462.py:267: AssertionError
+----------------------------- Captured stdout call -----------------------------
+escaped_processes: {"found": [{"pid": 20318, "command": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 20320, "command": "/bin/sleep 462"}], "stopped": [{"pid": 20318, "command": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 20320, "command": "/bin/sleep 462"}], "remaining": []}
+__________________ test_a_slow_reclaim_does_not_delay_the_end __________________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_a_slow_reclaim_does_not_d0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_a_slow_reclaim_does_not_...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x1076da120>
+
+    def test_a_slow_reclaim_does_not_delay_the_end(
+            tmp_path: Path, native_settings: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Correction 3: the end is recorded without waiting for the owner-side reclaim.
+    
+        A stop's caller reads the end record as soon as the native turn is interrupted
+        (tests/test_team_replacement.py). With the reclaim on the path that ends the
+        execution, its scans made that record late. Here the reclaim takes 3 s more.
+        """
+        import graftling.codex.managed_session as owner
+    
+        real = owner.stop_tool_processes
+    
+        def slow(*args, **kwargs):
+            time.sleep(3)
+            return real(*args, **kwargs)
+    
+        monkeypatch.setattr(owner, 'stop_tool_processes', slow)
+        root = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        found: dict[str, Identity] = {}
+        try:
+            call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+            created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'tool-end'}).document
+            found = wait_for(lambda: len(tools(since)) == 3, 10) and tools(since)
+            assert found, 'the peer did not start the tool'
+            done = call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20}).document
+            assert done['result']['last_result']['outcome'] == 'completed', done
+            directory = Path(record(root, created['agent'])['process']['tool_descendants']).parent
+            assert next(directory.glob('codex-termination-*.yml'), None) is None, \
+                'the end was recorded only after the reclaim'
+            termination = wait_for(lambda: next(directory.glob('codex-termination-*.yml'), None), 20)
+            assert termination is not None, 'the owner-side reclaim did not run'
+            report = yaml.safe_load(termination.read_text())['escaped_processes']
+            assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+>           assert is_alive(found['other'])
+E           assert False
+E            +  where False = is_alive(Identity(pid=20339, ppid=20337, pgid=20337, uid=501, start=1795585280074933))
+
+tests/test_codex_tool_reclaim_462.py:311: AssertionError
+________________ test_graftling_imports_under_windows_emulation ________________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_graftling_imports_under_w0')
+
+    def test_graftling_imports_under_windows_emulation(tmp_path: Path) -> None:
+        """``import graftling`` and its Session archive succeed without ``fcntl``."""
+>       report = emulated(
+            'import graftling, graftling.sessions, graftling.sessions.archive, graftling.locks\n'
+            'print(json.dumps({"os": graftling.locks.os.name, "fcntl": "fcntl" in vars(graftling.locks),\n'
+            '                  "read_session": callable(graftling.read_session)}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'import graftling, graftling.sessions, graftling.sessions.archive, graftling.locks\nprint(json.dumps({"os": graftling....e, "fcntl": "fcntl" in vars(graftling.locks),\n                  "read_session": callable(graftling.read_session)}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_graftling_imports_under_w0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 59, in <module>
+E             import graftling, graftling.sessions, graftling.sessions.archive, graftling.locks
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+_________ test_archive_lock_goes_through_windows_lock_under_emulation __________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_archive_lock_goes_through0')
+
+    def test_archive_lock_goes_through_windows_lock_under_emulation(tmp_path: Path) -> None:
+        """Creating an archive takes and releases its lock through ``msvcrt``.
+    
+        Only the lock is checked here; writing archives on Windows stays unsupported.
+        """
+>       report = emulated(
+            'from pathlib import Path\n'
+            'from graftling.sessions.archive import JsonlSessionStore\n'
+            'from graftling.sessions.protocol import SESSION_FORMAT_VERSION\n'
+            'header = {"version": SESSION_FORMAT_VERSION, "id": "s-619", "createdAt": 0, "isSeeded": False}\n'
+            'path = Path("sessions/p/s-619.jsonl")\n'
+            'try:\n'
+            '    JsonlSessionStore.create(path, header)\n'
+            '    error = None\n'
+            'except Exception as caught:\n'
+            '    error = type(caught).__name__ + ": " + str(caught)\n'
+            'print(json.dumps({"calls": EMULATED, "lock": path.with_suffix(".lock").exists(), "error": error}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'from pathlib import Path\nfrom graftling.sessions.archive import JsonlSessionStore\nfrom graftling.sessions.protocol ... " + str(caught)\nprint(json.dumps({"calls": EMULATED, "lock": path.with_suffix(".lock").exists(), "error": error}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_archive_lock_goes_through0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 60, in <module>
+E             from graftling.sessions.archive import JsonlSessionStore
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+_________ test_process_listing_refuses_clearly_under_windows_emulation _________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_process_listing_refuses_c0')
+
+    def test_process_listing_refuses_clearly_under_windows_emulation(tmp_path: Path) -> None:
+        """Listing marked processes names Windows instead of loading libproc.dylib."""
+>       report = emulated(
+            'from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes\n'
+            'try:\n'
+            '    find_marked_processes("m-619")\n'
+            '    raised = None\n'
+            'except OSError as error:\n'
+            '    raised = str(error)\n'
+            'print(json.dumps({"raised": raised, "stop": stop_marked_processes("m-619"),\n'
+            '                  "ancestors": sorted(ancestor_pids()) == [os.getpid()]}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes\ntry:\n    find_ma... "stop": stop_marked_processes("m-619"),\n                  "ancestors": sorted(ancestor_pids()) == [os.getpid()]}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_process_listing_refuses_c0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 59, in <module>
+E             from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+________ test_codex_parent_host_refuses_clearly_under_windows_emulation ________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_codex_parent_host_refuses0')
+
+    def test_codex_parent_host_refuses_clearly_under_windows_emulation(tmp_path: Path) -> None:
+        """The Codex parent host names Windows instead of failing on ``import fcntl``."""
+>       report = emulated(
+            'from graftling import AgentsError\n'
+            'from graftling.codex.host import CodexHost\n'
+            'try:\n'
+            '    CodexHost.__new__(CodexHost).run()\n'
+            '    raised = None\n'
+            'except Exception as error:\n'
+            '    raised = [type(error).__name__, getattr(error, "code", None), str(error)]\n'
+            'print(json.dumps({"raised": raised}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'from graftling import AgentsError\nfrom graftling.codex.host import CodexHost\ntry:\n    CodexHost.__new__(CodexHost)...    raised = [type(error).__name__, getattr(error, "code", None), str(error)]\nprint(json.dumps({"raised": raised}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-456/test_codex_parent_host_refuses0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 59, in <module>
+E             from graftling import AgentsError
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns
+FAILED tests/test_codex_tool_reclaim_462.py::test_owner_killed_then_reconciliation_stops_the_tool
+FAILED tests/test_codex_tool_reclaim_462.py::test_reclaim_runs_when_the_interpreter_refuses_new_threads
+FAILED tests/test_codex_tool_reclaim_462.py::test_a_slow_reclaim_does_not_delay_the_end
+FAILED tests/test_windows_emulation_619.py::test_graftling_imports_under_windows_emulation
+FAILED tests/test_windows_emulation_619.py::test_archive_lock_goes_through_windows_lock_under_emulation
+FAILED tests/test_windows_emulation_619.py::test_process_listing_refuses_clearly_under_windows_emulation
+FAILED tests/test_windows_emulation_619.py::test_codex_parent_host_refuses_clearly_under_windows_emulation
+8 failed, 918 passed, 21 skipped in 253.34s (0:04:13)

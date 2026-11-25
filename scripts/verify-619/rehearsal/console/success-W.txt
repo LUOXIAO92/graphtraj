@@ -1,0 +1,41 @@
+$ VERIFY619_REMOTE=/tmp/claude-501/619/reh/success/remote.git VERIFY619_GRAFTLING=/tmp/claude-501/619/reh/success/graftling VERIFY619_GREMOTE=/tmp/claude-501/619/reh/success/gremote.git VERIFY619_GH=/tmp/claude-501/619/reh/success/gh/gh VERIFY619_POLL_S=1 VERIFY619_APPEAR_S=10 VERIFY619_DONE_S=30 zsh steps.zsh W
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+PASS: bundle verifies against /tmp/claude-501/619/reh/success/graftling; head 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9 (on 82e9d12b7c4a76e4074d405fbd135f3c38f1103a) = workflow graftling SHA
+== [W] Observe only (no push) the run for 2d195d050934dadf86019156882919bdc45a6dce. Login: gh login. Dialog: none. Network: GitHub.
+observing .github/workflows/desktop-win-adoption.yml for 2d195d050934dadf86019156882919bdc45a6dce on LUOXIAO92/graphtraj (appearance bound 10s, completion bound 30s, poll 1s)
+run present after 1s
+  [15:20:30] in_progress -;
+  [15:20:31] completed failure;
+--- results for 2d195d050934dadf86019156882919bdc45a6dce
+RUN Windows desktop adoption 266 | id 46100000000 | completed | conclusion failure (information only) | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000
+JOB windows-adoption | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000/job/47100000000
+  step  1 | success   | Set up job | must not fail (success or skipped)
+  step  2 | success   | Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262 | must not fail (success or skipped)
+  step  3 | success   | Keep graftling's symbolic links on this runner | must not fail (success or skipped)
+  step  4 | success   | Check out graftling at the version GraphTraj declares | COUNTED
+  step  5 | success   | Fail unless graftling's linked package documents are real | COUNTED
+  step  6 | success   | Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 | must not fail (success or skipped)
+  step  7 | success   | Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 | must not fail (success or skipped)
+  step  8 | success   | Confirm native desktop session | must not fail (success or skipped)
+  step  9 | success   | Install pinned build dependencies | COUNTED
+  step 10 | success   | Build desktop and check Windows native settings | COUNTED
+  step 11 | success   | Package pinned runtime and application | COUNTED
+  step 12 | success   | Install archive to persistent user directory | COUNTED
+  step 13 | failure   | Exercise actual installed window and native dialogs | not counted (pre-D UI script, 620/621)
+  step 14 | success   | Retain installation artifact | not counted (always() upload)
+  step 15 | success   | Retain exact checks and native UI evidence | not counted (always() upload)
+  step 16 | success   | Post Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 | must not fail (success or skipped)
+  step 17 | success   | Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 | must not fail (success or skipped)
+  step 18 | success   | Post Check out graftling at the version GraphTraj declares | must not fail (success or skipped)
+  step 19 | success   | Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262 | must not fail (success or skipped)
+  step 20 | success   | Complete job | must not fail (success or skipped)
+NOTE: the run concluded failure only because the not-counted UI step 'Exercise actual installed window and native dialogs' is failure
+job log lines naming graftling 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9: 1
+  2026-11-25T00:00:00Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9
+no other workflow triggered for this SHA
+--- tail of: gh run view 46100000000 --repo LUOXIAO92/graphtraj --log-failed
+windows-adoption	stand-in failed step	2026-11-25T00:00:00Z ERROR: stand-in failed log for run 46100000000
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/619-graftling-windows-import/scripts/verify-619/steps.zsh W 2d195d050934dadf86019156882919bdc45a6dce    (re-observe; no push)
+next: /tmp/claude-501/619/reh/success/gh/gh run rerun 46100000000 --repo LUOXIAO92/graphtraj --failed    (only if a counted step failed transiently; not run by this step)
+VERDICT 619 W: PASS (all 6 counted steps success; candidate graftling 616671870fb2dd9679ea18fdfdbd2f094b1ae0a9 in the job log; run 46100000000 conclusion failure)
+[exit 0]

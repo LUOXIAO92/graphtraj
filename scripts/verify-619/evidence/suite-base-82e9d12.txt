@@ -1,0 +1,239 @@
+$ cd base-82e9d12 && venv-base/bin/python -m pytest -p no:cacheprovider -q -rfE   (TMPDIR=/tmp/claude-501, sequential; base tree from git archive 82e9d12 + tests/test_windows_emulation_619.py copied in)
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+.....................................ssssssssssss....................... [ 30%]
+........................................................................ [ 38%]
+...................................................ssssssss............. [ 45%]
+........................................................................ [ 53%]
+................................s....................................... [ 60%]
+........................................................................ [ 68%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 91%]
+........................................................................ [ 98%]
+.......FFFF                                                              [100%]
+=================================== FAILURES ===================================
+________________ test_graftling_imports_under_windows_emulation ________________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_graftling_imports_under_w0')
+
+    def test_graftling_imports_under_windows_emulation(tmp_path: Path) -> None:
+        """``import graftling`` and its Session archive succeed without ``fcntl``."""
+>       report = emulated(
+            'import graftling, graftling.sessions, graftling.sessions.archive, graftling.locks\n'
+            'print(json.dumps({"os": graftling.locks.os.name, "fcntl": "fcntl" in vars(graftling.locks),\n'
+            '                  "read_session": callable(graftling.read_session)}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'import graftling, graftling.sessions, graftling.sessions.archive, graftling.locks\nprint(json.dumps({"os": graftling....e, "fcntl": "fcntl" in vars(graftling.locks),\n                  "read_session": callable(graftling.read_session)}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_graftling_imports_under_w0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 59, in <module>
+E             import graftling, graftling.sessions, graftling.sessions.archive, graftling.locks
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+_________ test_archive_lock_goes_through_windows_lock_under_emulation __________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_archive_lock_goes_through0')
+
+    def test_archive_lock_goes_through_windows_lock_under_emulation(tmp_path: Path) -> None:
+        """Creating an archive takes and releases its lock through ``msvcrt``.
+    
+        Only the lock is checked here; writing archives on Windows stays unsupported.
+        """
+>       report = emulated(
+            'from pathlib import Path\n'
+            'from graftling.sessions.archive import JsonlSessionStore\n'
+            'from graftling.sessions.protocol import SESSION_FORMAT_VERSION\n'
+            'header = {"version": SESSION_FORMAT_VERSION, "id": "s-619", "createdAt": 0, "isSeeded": False}\n'
+            'path = Path("sessions/p/s-619.jsonl")\n'
+            'try:\n'
+            '    JsonlSessionStore.create(path, header)\n'
+            '    error = None\n'
+            'except Exception as caught:\n'
+            '    error = type(caught).__name__ + ": " + str(caught)\n'
+            'print(json.dumps({"calls": EMULATED, "lock": path.with_suffix(".lock").exists(), "error": error}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:108: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'from pathlib import Path\nfrom graftling.sessions.archive import JsonlSessionStore\nfrom graftling.sessions.protocol ... " + str(caught)\nprint(json.dumps({"calls": EMULATED, "lock": path.with_suffix(".lock").exists(), "error": error}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_archive_lock_goes_through0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 60, in <module>
+E             from graftling.sessions.archive import JsonlSessionStore
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+_________ test_process_listing_refuses_clearly_under_windows_emulation _________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_process_listing_refuses_c0')
+
+    def test_process_listing_refuses_clearly_under_windows_emulation(tmp_path: Path) -> None:
+        """Listing marked processes names Windows instead of loading libproc.dylib."""
+>       report = emulated(
+            'from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes\n'
+            'try:\n'
+            '    find_marked_processes("m-619")\n'
+            '    raised = None\n'
+            'except OSError as error:\n'
+            '    raised = str(error)\n'
+            'print(json.dumps({"raised": raised, "stop": stop_marked_processes("m-619"),\n'
+            '                  "ancestors": sorted(ancestor_pids()) == [os.getpid()]}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes\ntry:\n    find_ma... "stop": stop_marked_processes("m-619"),\n                  "ancestors": sorted(ancestor_pids()) == [os.getpid()]}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_process_listing_refuses_c0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 59, in <module>
+E             from graftling.member_processes import ancestor_pids, find_marked_processes, stop_marked_processes
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+________ test_codex_parent_host_refuses_clearly_under_windows_emulation ________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_codex_parent_host_refuses0')
+
+    def test_codex_parent_host_refuses_clearly_under_windows_emulation(tmp_path: Path) -> None:
+        """The Codex parent host names Windows instead of failing on ``import fcntl``."""
+>       report = emulated(
+            'from graftling import AgentsError\n'
+            'from graftling.codex.host import CodexHost\n'
+            'try:\n'
+            '    CodexHost.__new__(CodexHost).run()\n'
+            '    raised = None\n'
+            'except Exception as error:\n'
+            '    raised = [type(error).__name__, getattr(error, "code", None), str(error)]\n'
+            'print(json.dumps({"raised": raised}))\n',
+            tmp_path,
+        )
+
+tests/test_windows_emulation_619.py:146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+script = 'from graftling import AgentsError\nfrom graftling.codex.host import CodexHost\ntry:\n    CodexHost.__new__(CodexHost)...    raised = [type(error).__name__, getattr(error, "code", None), str(error)]\nprint(json.dumps({"raised": raised}))\n'
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-464/test_codex_parent_host_refuses0')
+
+    def emulated(script: str, tmp_path: Path) -> dict:
+        """Run ``script`` under the emulation; return the JSON it prints last."""
+        source = str(Path(graftling.__file__).resolve().parents[1])
+        program = f'SOURCE = {source!r}\n' + EMULATION + script
+        result = subprocess.run([sys.executable, '-c', program], cwd=tmp_path,
+                                capture_output=True, text=True, timeout=120, check=False)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 59, in <module>
+E             from graftling import AgentsError
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/__init__.py", line 72, in <module>
+E             from graftling.sessions.archive import read_session
+E           File "<string>", line 33, in nt_import
+E             module = builtins.__import__(name, globals, locals, fromlist, level)
+E           File "<string>", line 42, in exec_module
+E             super().exec_module(module)
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^
+E           File "/private/tmp/claude-501/619/base/src/graftling/sessions/archive.py", line 14, in <module>
+E             import fcntl
+E           File "<string>", line 30, in nt_import
+E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+E         ModuleNotFoundError: No module named 'fcntl'
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+
+tests/test_windows_emulation_619.py:88: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_windows_emulation_619.py::test_graftling_imports_under_windows_emulation
+FAILED tests/test_windows_emulation_619.py::test_archive_lock_goes_through_windows_lock_under_emulation
+FAILED tests/test_windows_emulation_619.py::test_process_listing_refuses_clearly_under_windows_emulation
+FAILED tests/test_windows_emulation_619.py::test_codex_parent_host_refuses_clearly_under_windows_emulation
+4 failed, 922 passed, 21 skipped in 245.71s (0:04:05)

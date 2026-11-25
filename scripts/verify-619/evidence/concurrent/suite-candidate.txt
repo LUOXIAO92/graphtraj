@@ -1,0 +1,170 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+.....................................ssssssssssss....................... [ 30%]
+........................................................................ [ 38%]
+........F.................FF.......................ssssssss............. [ 45%]
+........................................................................ [ 53%]
+................................s....................................... [ 60%]
+........................................................................ [ 68%]
+........................................................................ [ 76%]
+........................................................................ [ 83%]
+........................................................................ [ 91%]
+........................................................................ [ 98%]
+...........                                                              [100%]
+=================================== FAILURES ===================================
+________ test_child_ends_completed_after_the_owner_main_thread_returns _________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-457/test_child_ends_completed_afte0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-457/test_child_ends_completed_aft...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+
+    def test_child_ends_completed_after_the_owner_main_thread_returns(tmp_path: Path, native_settings: dict) -> None:
+        """The turn completes during interpreter shutdown; the end processing runs in full."""
+        root  = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        owner = subprocess.Popen(
+            [sys.executable, '-c', OWNER, str(root), json.dumps(native_settings), json.dumps(reclaim.CALLER)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        found: dict = {}
+        try:
+            created = json.loads(owner.stdout.readline())
+            found   = reclaim.wait_for(lambda: len(reclaim.tools(since)) == 3, 10) and reclaim.tools(since)
+            assert found, 'the peer did not start the tool'
+    
+            # The process exits only after the non-daemon owner has finished the end processing.
+            stdout, stderr = owner.communicate(timeout=30)
+            print('owner exit:', owner.returncode, 'stderr:', stderr[-2000:])
+            assert owner.returncode == 0, stderr
+    
+            execution = reclaim.record(root, created['agent'])
+            print('end record:', json.dumps({key: execution.get(key) for key in ('state', 'outcome', 'error')}))
+            assert execution['state'] == 'ended'
+            assert execution['outcome'] == 'completed' and execution.get('error') is None, execution
+    
+            directory   = Path(execution['process']['tool_descendants']).parent
+            termination = next(directory.glob('codex-termination-*.yml'), None)
+            assert termination is not None, 'the owner-side reclaim did not record its end'
+            report = yaml.safe_load(termination.read_text())['escaped_processes']
+            assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+            assert not reclaim.is_alive(found['shell']) and not reclaim.is_alive(found['sleep'])
+>           assert reclaim.is_alive(found['other']), "another execution's process is untouched"
+E           AssertionError: another execution's process is untouched
+E           assert False
+E            +  where False = <function is_alive at 0x104ee40e0>(Identity(pid=20219, ppid=20217, pgid=20217, uid=501, start=1795585264989286))
+E            +    where <function is_alive at 0x104ee40e0> = reclaim.is_alive
+
+tests/test_codex_child_interpreter_shutdown_473.py:73: AssertionError
+----------------------------- Captured stdout call -----------------------------
+owner exit: 0 stderr: 
+end record: {"state": "ended", "outcome": "completed", "error": null}
+____________ test_normal_end_owner_stops_the_tool_the_service_left _____________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-457/test_normal_end_owner_stops_th0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-457/test_normal_end_owner_stops_t...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+
+    def test_normal_end_owner_stops_the_tool_the_service_left(tmp_path: Path, native_settings: dict) -> None:
+        """The service exits after its turn without stopping its tool; the owner stops it."""
+        root = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        user = subprocess.Popen(['/bin/sleep', '461'], start_new_session=True)
+        found: dict[str, Identity] = {}
+        try:
+            call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+            created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'tool-end'}).document
+            found = wait_for(lambda: len(tools(since)) == 3, 10) and tools(since)
+            done = call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20}).document
+            assert done['result']['last_result']['outcome'] == 'completed', done
+            execution = record(root, created['agent'])
+            facts = execution['process']
+            assert facts['tool_marker'] and facts['tool_descendants'].endswith('.json')
+            # The owner reclaims on its own thread after the end is recorded (Correction 3).
+            directory = Path(facts['tool_descendants']).parent
+            termination = wait_for(lambda: next(directory.glob('codex-termination-*.yml'), None), 20)
+            assert termination is not None, 'the owner-side reclaim did not run'
+            entries = read_sidecar(facts['tool_descendants'])
+            print('sidecar:', json.dumps(entries))
+            assert {found['shell'].pid, found['sleep'].pid} <= {entry['pid'] for entry in entries}
+            assert found['other'].pid not in {entry['pid'] for entry in entries}, 'another marker is foreign'
+            report = yaml.safe_load(termination.read_text())['escaped_processes']
+            print('escaped_processes:', json.dumps(report))
+            assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+            assert report['remaining'] == [] and 'error' not in report
+            assert not is_alive(found['shell']) and not is_alive(found['sleep'])
+>           assert is_alive(found['other']), "another execution's process is untouched"
+E           AssertionError: another execution's process is untouched
+E           assert False
+E            +  where False = is_alive(Identity(pid=20278, ppid=20276, pgid=20276, uid=501, start=1795585272339735))
+
+tests/test_codex_tool_reclaim_462.py:141: AssertionError
+----------------------------- Captured stdout call -----------------------------
+sidecar: [{"pid": 20279, "ppid": 20274, "pgid": 20279, "uid": 501, "start": 1795585272461645, "argv": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 20281, "ppid": 20279, "pgid": 20279, "uid": 501, "start": 1795585272467326, "argv": "/bin/sleep 462"}]
+escaped_processes: {"found": [{"pid": 20279, "command": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 20281, "command": "/bin/sleep 462"}], "stopped": [{"pid": 20279, "command": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 20281, "command": "/bin/sleep 462"}], "remaining": []}
+_____________ test_owner_killed_then_reconciliation_stops_the_tool _____________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-457/test_owner_killed_then_reconci0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-457/test_owner_killed_then_reconc...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+
+    def test_owner_killed_then_reconciliation_stops_the_tool(tmp_path: Path, native_settings: dict) -> None:
+        """SIGKILL the owner and its service; one reconciling read stops the recorded tool."""
+        root = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        owner = subprocess.Popen([sys.executable, '-c', OWNER, str(root), json.dumps(native_settings), json.dumps(CALLER)],
+                                 stdout=subprocess.PIPE, text=True)
+        user = subprocess.Popen(['/bin/sleep', '461'], start_new_session=True)
+        found: dict[str, Identity] = {}
+        service = None
+        try:
+            created = json.loads(owner.stdout.readline())
+            agent = created['agent']
+            facts = record(root, agent)['process']
+            assert facts['tool_marker'] and facts['tool_descendants']
+    
+            def recorded():
+                try:
+                    commands = {entry['argv'] for entry in read_sidecar(facts['tool_descendants'])}
+                except (OSError, ValueError):
+                    return None
+                return {f'/bin/sh -c {TOOL}', '/bin/sleep 462'} <= commands
+    
+            assert wait_for(recorded), 'the owner did not record the tool shell'
+            found = tools(since)
+            service = identity(facts['runtime_pid'])
+            assert service is not None and service.start >= since
+            owner.send_signal(signal.SIGKILL)
+            owner.wait(5)
+            os.killpg(service.pgid, signal.SIGKILL)  # the service's own group, checked above
+            assert wait_for(lambda: not is_alive(service), 10)
+    
+            def reaped() -> bool:
+                # A killed service stays a zombie until launchd reaps it; control's kill(pid, 0) still sees it.
+                try:
+                    os.kill(service.pid, 0)
+                except ProcessLookupError:
+                    return True
+                return identity(service.pid) is not None  # reused by another process: not ours, gone for us
+            assert wait_for(reaped, 10)
+            assert is_alive(found['shell']) and is_alive(found['sleep']), 'the tool outlived owner and service'
+    
+            call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+            status = call({'action': 'status', 'agent': agent}).document
+            execution = record(root, agent)
+            report = execution.get('escaped_processes')
+            print('escaped_processes:', json.dumps(report))
+            assert status['result'].get('last_result', {}).get('error', {}).get('code') == 'owner-exited', (status, execution)
+            assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+            assert report['remaining'] == [] and 'error' not in report
+            assert not is_alive(found['shell']) and not is_alive(found['sleep'])
+>           assert is_alive(found['other']), "another execution's process is untouched"
+E           AssertionError: another execution's process is untouched
+E           assert False
+E            +  where False = is_alive(Identity(pid=20297, ppid=20295, pgid=20295, uid=501, start=1795585275560471))
+
+tests/test_codex_tool_reclaim_462.py:200: AssertionError
+----------------------------- Captured stdout call -----------------------------
+escaped_processes: {"found": [{"command": "", "pid": 20294}, {"command": "", "pid": 20296}], "remaining": [], "stopped": [{"command": "", "pid": 20294}, {"command": "", "pid": 20296}]}
+=========================== short test summary info ============================
+FAILED tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns
+FAILED tests/test_codex_tool_reclaim_462.py::test_normal_end_owner_stops_the_tool_the_service_left
+FAILED tests/test_codex_tool_reclaim_462.py::test_owner_killed_then_reconciliation_stops_the_tool
+3 failed, 923 passed, 21 skipped in 253.76s (0:04:13)

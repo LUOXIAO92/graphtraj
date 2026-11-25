@@ -175,6 +175,7 @@ O)
   rid=${cols[1]}; sha=${cols[2]}; run_state=${cols[3]}; conclusion=${cols[4]}; url=${cols[5]}
   print -r -- "chosen run: $rid | head $sha | $run_state | $url"
   start=$SECONDS
+  [[ $run_state != completed ]] && print -r -- "waiting for run $rid to complete (poll ${POLL_S}s, bound ${DONE_S}s)"
   while [[ $run_state != completed ]]; do
     if (( SECONDS - start >= DONE_S )); then
       print -r -- "run $rid still $run_state after $((SECONDS - start))s"

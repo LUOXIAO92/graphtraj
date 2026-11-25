@@ -4,6 +4,10 @@ import type { Graph, Task } from '../electron/types';
 import { taskFocus, taskRouterOptions, monitorGraph, taskChildren, taskStatus, taskPaths, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
 import './task-canvas.css';
 import { TaskMiniMap } from './task-minimap';
+import { Icon } from './ui';
+
+/** The minimap's fixed size (advice mockup 01); fit() keeps the content above it. */
+const MINIMAP = { width: 176, height: 108 } as const;
 
 export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void };
 type Props = { graph: Graph; projectName: string; expanded: ReadonlySet<string>; selected: string | null;
@@ -53,26 +57,38 @@ function card(task: Task, children: Task[], open: boolean, select: () => void, t
   element.dataset.taskId = task.task_id;
   element.setAttribute('role', 'group');
   element.setAttribute('aria-label', task.title);
-  const title = document.createElement('button');
-  title.className = 'native-task-title';
-  title.textContent = task.title;
-  title.onclick = event => { event.stopPropagation(); select(); };
-  element.append(title);
+  // V5: a '#id + status chip' row above the title. V3: the unchanged status word sits in the
+  // same chip + shape as ui.tsx Status. The row's text stays `#id · status[ · → #ids]`; the
+  // separator is only hidden visually and CSS puts the chip at the row's right end.
   const meta = document.createElement('div');
-  meta.className = 'native-task-meta';
-  // V3: the unchanged status word sits in the same chip + shape as ui.tsx Status;
-  // the meta text stays `#id · status[ · → #ids]`.
+  meta.className = 'native-task-meta native-task-top';
   const status = taskStatus(task);
   const tone = status.toLowerCase().replaceAll(' ', '-');
   element.dataset.status = tone;
+  const id = document.createElement('span');
+  id.className = 'native-task-id';
+  id.textContent = `#${task.task_id}`;
+  const separator = document.createElement('span');
+  separator.className = 'native-task-separator';
+  separator.textContent = ' · ';
   const chip = document.createElement('span');
   chip.className = `status status-${tone}`;
   const dot = document.createElement('span');
   dot.className = 'status-dot';
   chip.append(dot, status);
-  meta.append(`#${task.task_id} · `, chip);
-  if (task.replaced_by.length) meta.append(` · → ${task.replaced_by.map(id => `#${id}`).join(', ')}`);
+  meta.append(id, separator, chip);
+  if (task.replaced_by.length) {
+    const replaced = document.createElement('span');
+    replaced.className = 'native-task-replaced';
+    replaced.textContent = ` · → ${task.replaced_by.map(item => `#${item}`).join(', ')}`;
+    meta.append(replaced);
+  }
   element.append(meta);
+  const title = document.createElement('button');
+  title.className = 'native-task-title';
+  title.textContent = task.title;
+  title.onclick = event => { event.stopPropagation(); select(); };
+  element.append(title);
   const delivery = document.createElement('div');
   delivery.className = 'native-task-meta';
   const receipts = (task.delivery ?? []).filter(fact => fact.task_id !== task.task_id);
@@ -119,13 +135,16 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   const pathLabel = useRef<HTMLOutputElement>(null);
   // The system light/dark theme recolours the X6 cells (tokens are read when drawing).
   const [theme, setTheme] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const [zoom, setZoom] = useState(1);
   // Polling unchanged native facts must not rebuild cells or move the viewport.
   const topology = JSON.stringify([props.projectName, props.graph.tasks, [...props.expanded].sort(), theme]);
 
   function fit(minScale = .05): void {
     const graph = engine.current;
     if (!graph || !container.current?.clientWidth) return;
-    graph.zoomToFit({ padding: 36, minScale, maxScale: 1, useCellGeometry: false });
+    // V5: the bottom overlays (legend and zoom at the left, the minimap at the right) take
+    // MINIMAP.height + 16 px; the fitted content keeps clear of them (626 leftover at 1000 px).
+    graph.zoomToFit({ padding: { top: 36, left: 36, right: 36, bottom: MINIMAP.height + 44 }, minScale, maxScale: 1, useCellGeometry: false });
     graph.positionContent('top-left', { useCellGeometry: false });
     const translation = graph.translate();
     graph.translate(translation.tx + 36, translation.ty + 36);
@@ -150,7 +169,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
         ...taskRouterOptions, startDirections: ['right'], endDirections: ['left'],
       } }, connector: { name: 'jumpover', args: { type: 'gap', size: 6, radius: 8 } } },
     });
-    graph.use(new TaskMiniMap({ container: minimap.current!, width: 220, height: 140,
+    graph.use(new TaskMiniMap({ container: minimap.current!, ...MINIMAP,
       graphOptions: { createCellView: cell => cell.isNode() ? MapNodeView : null } }));
     engine.current = graph;
     graph.on('blank:click', () => current.current.select(null));
@@ -161,6 +180,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       if (pathLabel.current) pathLabel.current.textContent = data.relations.map(item => `#${item.source} ${title(item.source)} ${item.kind === 'replacement' ? 'replaced by' : item.kind === 'acceptance' ? 'accepted into' : '→'} #${item.target} ${title(item.target)}${item.event_id ? ` · ${item.event_id}` : ''}`).join(' · ');
     });
     graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
+    graph.on('scale', ({ sx }) => setZoom(sx));
     const media = matchMedia('(prefers-color-scheme: dark)');
     const follow = () => setTheme(media.matches ? 'dark' : 'light');
     media.addEventListener('change', follow);
@@ -277,7 +297,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       element.classList.toggle('selected', selected);
       element.classList.toggle('related', !!props.selected && emphasized.has(node.id));
       element.querySelector('button')!.setAttribute('aria-pressed', String(selected));
-      element.style.opacity = matches.has(node.id) && emphasized.has(node.id) ? '1' : '.25';
+      element.style.opacity = matches.has(node.id) && emphasized.has(node.id) ? '1' : '.5';
     }
     for (const edge of graph.getEdges()) {
       const data = edge.getData<MonitorEdge>();
@@ -294,11 +314,22 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     if (props.active && first.current && projection.current?.nodes.length) { fit(.65); first.current = false; }
   }, [props.active]);
 
+  // V5: one legend with the real line types (the same dash patterns as the edges above), bottom-left
+  // above the zoom controls; the minimap sits bottom-right.
   return <><div className="native-task-canvas" ref={container} aria-label="Native task canvas"/>
     <div className="native-minimap" ref={minimap} aria-label="Task map navigator"/>
-    <div className="native-relation-legend"><span>→ Dependency</span><span>⇢ Replacement</span><span>⋯▶ Accepted delivery</span></div>
-    <output ref={pathLabel} className="native-path-label" aria-live="polite"/>
-    <div className="native-task-zoom"><button aria-label="Zoom in" onClick={() => engine.current?.zoom(.15)}>+</button>
-      <button aria-label="Zoom out" onClick={() => engine.current?.zoom(-.15)}>−</button>
-      <span>Drag to pan · Ctrl/⌘ + scroll to zoom</span></div></>;
+    <div className="native-canvas-overlays">
+      <div className="native-relation-legend">
+        <span className="legend-dependency"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4"/></svg>Dependency</span>
+        <span className="legend-replacement"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" strokeDasharray="8 5"/></svg>Replacement</span>
+        <span className="legend-acceptance"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" strokeDasharray="3 3"/></svg>Accepted delivery</span>
+        <span className="legend-crossing"><svg width="28" height="8" aria-hidden="true"><path d="M0 6H9a5 5 0 0 1 10 0H28"/></svg>Crossing</span>
+      </div>
+      <div className="native-task-zoom" title="Drag to pan · Ctrl/⌘ + scroll to zoom">
+        <button aria-label="Zoom out" onClick={() => engine.current?.zoom(-.15)}><Icon name="minus" size={16}/></button>
+        <span>{Math.round(zoom * 100)}%</span>
+        <button aria-label="Zoom in" onClick={() => engine.current?.zoom(.15)}><Icon name="plus" size={16}/></button>
+      </div>
+    </div>
+    <output ref={pathLabel} className="native-path-label" aria-live="polite"/></>;
 });

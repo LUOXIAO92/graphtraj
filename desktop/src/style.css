@@ -54,10 +54,6 @@ h1 { font-weight: 550; font-size: var(--fs-2xl); letter-spacing: -.3px; line-hei
 .react-flow__controls-button + .react-flow__controls-button { border-left: 1px solid var(--border-ui); }
 .react-flow__controls-button:hover { background: var(--surface-alt); }
 .react-flow__controls-button svg { fill: currentColor; width: 12px; }
-.map-caption { position: absolute; bottom: 23px; right: 17px; display: flex; align-items: center; gap: 7px; font-size: var(--fs-xs); color: var(--muted); pointer-events: none; }
-.map-caption-line { width: 20px; height: 1px; background: var(--muted); }
-.map-search-results { position: absolute; z-index: 10; top: 14px; left: 14px; background: var(--surface); border: 1px solid var(--border-ui); border-radius: 9px; padding: 10px; box-shadow: var(--shadow-md); display: flex; flex-direction: column; gap: 7px; min-width: 200px; max-width: calc(100% - 28px); }
-.map-search-results strong { font-size: var(--fs-xs); color: var(--muted); padding: 2px 6px; }
 .map-search-results button { text-align: left; border-radius: 5px; font-size: var(--fs-sm); padding: 6px; }
 .map-search-results button:hover { background: var(--accent-soft); color: var(--accent-ink); }
 .conversation-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; min-width: 0; }

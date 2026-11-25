@@ -35,7 +35,6 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
     refresh: <><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 14 6M18 18A8 8 0 0 1 4 12"/></>,
     alert: <><path d="M12 3 2.5 20h19Z"/><path d="M12 10v4m0 3v.5"/></>,
     minus: <path d="M5 12h14"/>,
-    index: <><path d="M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] ?? paths.graph}</svg>;
 }

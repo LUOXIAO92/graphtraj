@@ -77,7 +77,8 @@ test('D navigation preserves separate project graphs and independent column read
     second: element.querySelectorAll('.activity-history')[1].scrollTop, horizontal: element.querySelector('.agent-columns').scrollLeft }));
   assert.deepEqual(restored, positions);
   await page.getByRole('button', { name: 'PROJECTS', exact: true }).click();
-  await page.locator('.project-button').filter({ hasText: '/projects/second' }).click();
+  // V11 (Task 627): the entry's subtitle is the parent directory; the full root is its title.
+  await page.locator('.project-button[title="/projects/second"]').click();
   await monitor.getByRole('searchbox').fill('second current');
   await monitor.locator('.native-task-card[data-task-id="1"] .native-task-title').waitFor();
   assert.deepEqual(await visibleGraphTitles(), ['second current', 'second previous'], 'Only the selected project paints graph cards');
@@ -86,7 +87,7 @@ test('D navigation preserves separate project graphs and independent column read
   await monitor.locator('.agent-column').first().locator('.tool-card').last().waitFor();
   assert.deepEqual(await visibleGraphTitles(), [], 'Neither mounted project may paint over expanded chat');
   assert.equal(await monitor.getByText('first alpha record 79', { exact: false }).count(), 0);
-  await page.locator('.project-button').filter({ hasText: '/projects/first' }).click();
+  await page.locator('.project-button[title="/projects/first"]').click();
   assert.equal(await monitor.locator('input[aria-label="Search tasks"]').inputValue(), 'first current');
   assert.deepEqual(await visibleGraphTitles(), [], 'Returning to preserved chat keeps other project graphs invisible');
   const again = await monitor.evaluate(element => ({ first: element.querySelectorAll('.activity-history')[0].scrollTop,
@@ -144,7 +145,8 @@ test('native task selection preserves layout; only expansion reveals nested task
   assert.equal(await cards.count(), 3);
   assert.deepEqual(await positions(), initial, 'selection must never rebuild/reposition the graph');
   assert.equal(await page.getByRole('button', { name: /^Expand A summary/ }).getAttribute('aria-expanded'), 'false');
-  assert.equal(await page.locator('.native-task-card[data-task-id="6"]').evaluate(node => node.style.opacity), '0.25');
+  // V5 (Task 627): unrelated cards stay readable at half opacity.
+  assert.equal(await page.locator('.native-task-card[data-task-id="6"]').evaluate(node => node.style.opacity), '0.5');
   await page.getByRole('button', { name: /^Expand A summary/ }).click();
   await page.getByRole('button', { name: 'Expand Nested summary', exact: true }).click();
   await page.getByRole('button', { name: 'First native result', exact: true }).waitFor();

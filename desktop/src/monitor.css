@@ -1,2 +1,93 @@
 /* Monitor surface (Task 627, advice 5.1): task graph tool row, canvas overlays, cards and the task-details inspector.
  * Owner in Task 627: E1. Imported in main.tsx after the legacy files and before tokens.css. */
+
+/* V4 tool row: search, filters, summary, counts, then the read-only note and the view actions. */
+.d-map-workspace { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+.d-floating-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); margin: 0; padding: 10px var(--sp-4); flex-shrink: 0; background: var(--bg); border-bottom: 1px solid var(--border-ui); }
+.new-graph-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
+.new-graph-controls > label { height: var(--control-h); padding: 0 10px; gap: 6px; border-radius: var(--r-md); color: var(--faint); }
+.new-graph-controls > label:focus-within { outline: 0; border-color: var(--accent-ui); box-shadow: 0 0 0 3px var(--accent-soft); }
+.new-graph-controls input { width: 170px; font-size: var(--fs-md); }
+.new-graph-controls select { height: var(--control-h); max-width: 220px; padding: 0 var(--sp-2); border-radius: var(--r-md); font-size: var(--fs-md); }
+.d-graph-count { color: var(--faint); font-size: var(--fs-sm); white-space: nowrap; }
+.canvas-readonly { display: flex; align-items: center; gap: var(--sp-2); color: var(--faint); font-size: var(--fs-sm); }
+.canvas-readonly-label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+/* U2: the canvas and the task-details inspector side by side; below ~1100 px the inspector
+ * falls back to the bottom shelf. The 'Search results' panel is docked at the canvas's left
+ * edge, so it never covers cards (621 interim 23). */
+.d-map-body { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.d-map-surface, .d-map-workspace.has-shelf .d-map-surface { display: flex; flex: 1 1 auto; min-width: 0; min-height: 0; margin: 0; }
+.d-map-surface .map-canvas { flex: 1; min-width: 0; min-height: 0; background: var(--bg); }
+.d-map-surface > .map-search-results { position: static; z-index: auto; display: flex; flex-direction: column; gap: 2px; width: 260px; min-width: 0; max-width: 34%; flex-shrink: 0; padding: var(--sp-2); overflow: auto; border: 0; border-right: 1px solid var(--border-ui); border-radius: 0; background: var(--surface); box-shadow: none; }
+.map-search-results > strong { padding: var(--sp-1) var(--sp-2); color: var(--faint); font-size: var(--fs-xs); font-weight: var(--fw-strong); letter-spacing: .06em; text-transform: uppercase; }
+.map-search-results > button { padding: 6px var(--sp-2); border-radius: var(--r-md); text-align: left; font-size: var(--fs-sm); line-height: 1.4; overflow-wrap: anywhere; }
+.map-search-results > button:hover { background: var(--surface-alt); }
+.map-canvas > .d-empty-configuration { position: absolute; inset: 0; pointer-events: none; }
+.map-canvas > .graph-filter-empty { position: absolute; top: var(--sp-3); left: var(--sp-4); z-index: 4; max-width: calc(100% - 32px); box-shadow: var(--shadow-md); }
+
+/* V5 canvas overlays: legend and zoom bottom-left, the minimap bottom-right (task-canvas.css). */
+.native-canvas-overlays { position: absolute; left: var(--sp-4); bottom: var(--sp-4); z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); pointer-events: none; }
+.native-canvas-overlays > * { pointer-events: auto; border: 1px solid var(--border-ui); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-md); }
+.native-canvas-overlays .native-relation-legend { position: static; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 6px var(--sp-3); color: var(--muted); font-size: var(--fs-xs); pointer-events: none; }
+.native-relation-legend > span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
+.native-relation-legend svg { overflow: visible; fill: none; stroke-width: 1.6; }
+.native-relation-legend .legend-dependency svg, .native-relation-legend .legend-crossing svg { stroke: var(--edge-dep); }
+.native-relation-legend .legend-replacement svg { stroke: var(--edge-repl); }
+.native-relation-legend .legend-acceptance svg { stroke: var(--edge-accept); }
+.native-canvas-overlays .native-task-zoom { position: static; display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-1); }
+.native-task-zoom > button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-md); color: var(--muted); }
+.native-task-zoom > button:hover { background: var(--surface-alt); color: var(--ink); }
+.native-task-zoom > span { min-width: 40px; padding: 0 var(--sp-1); color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; text-align: center; }
+
+/* V5 cards: a '#id + status chip' row above the title (TaskCanvas.tsx card()). */
+.native-task-top { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--faint); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.native-task-top > .native-task-separator { display: none; }
+.native-task-top > .status { order: 2; margin-left: auto; }
+.native-task-top > .native-task-replaced { order: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* U2 inspector (wide windows). */
+.d-task-shelf.d-task-inspector { position: relative; display: flex; flex-direction: column; width: var(--detail-width, 360px); max-width: 50%; flex-shrink: 0; min-height: 0; max-height: none; margin: 0; padding: 0; gap: 0; overflow: hidden; border: 0; border-left: 1px solid var(--border-ui); border-radius: 0; background: var(--surface); box-shadow: none; }
+.d-inspector-grip { position: absolute; left: 0; top: 0; bottom: 0; z-index: 2; width: 6px; height: auto; margin: 0; padding: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: col-resize; }
+.d-inspector-grip::-webkit-slider-runnable-track { height: 100%; background: transparent; }
+.d-inspector-grip::-webkit-slider-thumb { -webkit-appearance: none; width: 6px; height: 100%; background: transparent; }
+.d-inspector-grip:hover, .d-inspector-grip:focus-visible { background: color-mix(in srgb, var(--accent-ui) 45%, transparent); outline: none; }
+.d-inspector-head { padding: 14px var(--sp-4) var(--sp-3); border-bottom: 1px solid var(--border-ui); flex-shrink: 0; }
+.d-inspector-row { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-2); color: var(--faint); font-variant-numeric: tabular-nums; }
+.d-inspector-row > .button:last-child { margin-left: auto; }
+.d-task-inspector .d-inspector-head h2 { margin: 0; font-size: var(--fs-xl); font-weight: var(--fw-strong); line-height: 1.4; letter-spacing: 0; }
+.d-task-inspector .d-inspector-name { margin: var(--sp-1) 0 0; color: var(--faint); font-family: var(--font-mono); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.d-inspector-body { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; overflow: auto; padding: 14px var(--sp-4); }
+.d-task-inspector p { margin: 0; color: inherit; font-size: inherit; }
+.d-inspector-facts { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px var(--sp-3); margin: 0; font-size: var(--fs-sm); }
+.d-inspector-facts dt { color: var(--faint); }
+.d-inspector-facts dd { margin: 0; overflow-wrap: anywhere; }
+.d-inspector-link { color: var(--accent-ink); font-weight: var(--fw-medium); }
+.d-inspector-link:hover { text-decoration: underline; }
+.d-inspector-sections > details { margin: 0; max-height: none; overflow: visible; border: 1px solid var(--border-ui); border-radius: var(--r-md); color: var(--muted); font-size: var(--fs-sm); }
+.d-inspector-sections > details + details { margin-top: 6px; }
+.d-inspector-sections > details > summary { padding: var(--sp-2) 10px; color: var(--ink); font-weight: var(--fw-medium); }
+.d-inspector-sections > details > :not(summary) { padding: 0 10px 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.d-inspector-sections button { color: var(--accent-ink); text-align: left; }
+.d-inspector-team .shelf-team-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.d-inspector-team .shelf-team-heading .section-label { padding: 0; color: var(--faint); font-size: var(--fs-xs); letter-spacing: .06em; }
+.d-inspector-team .shelf-team-heading small { color: var(--faint); font-size: var(--fs-xs); }
+.d-task-inspector .member-pills { flex-direction: column; flex-wrap: nowrap; gap: 2px; max-height: none; overflow: visible; }
+.d-task-inspector .member-pills > button { width: 100%; padding: 7px var(--sp-2); border: 0; background: transparent; }
+.d-task-inspector .member-pills > button:hover { background: var(--surface-alt); }
+.d-inspector-team > .ui-state { margin-top: var(--sp-1); }
+.d-inspector-foot { display: flex; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--border-ui); flex-shrink: 0; }
+.d-inspector-foot > .button { flex: 1; }
+.d-monitor-error { margin: var(--sp-2) var(--sp-4) 0; flex-shrink: 0; }
+
+/* U2 fallback: below ~1100 px the inspector becomes the bottom shelf. The minimap and the
+ * legend step aside while it is open, so neither covers cards in the shorter canvas. */
+@media (max-width: 1099px) {
+  .d-map-body { flex-direction: column; }
+  .d-task-shelf.d-task-inspector { width: auto; max-width: none; max-height: 40vh; border-left: 0; border-top: 1px solid var(--border-ui); }
+  .d-inspector-grip { display: none; }
+  .d-map-workspace.has-shelf .native-minimap, .d-map-workspace.has-shelf .native-relation-legend { visibility: hidden; }
+  .d-floating-tools { padding-block: var(--sp-2); }
+  .new-graph-controls input { width: 140px; }
+  .d-map-surface, .d-map-workspace.has-shelf .d-map-surface { min-height: 200px; }
+}

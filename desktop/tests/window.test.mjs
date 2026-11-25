@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from 'playwright';
 import fixtures from './fixtures.cjs';
+import { projectsView, removeIndexEntry, taskTitle } from './adoption-shared.mjs';
 
 test('actual Electron window uses native graph, safe preload, refresh and persisted projects', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'graphtraj-window-'));
@@ -36,13 +37,17 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
     await app.evaluate(({ dialog }, selected) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] });
     }, folder);
+    // D: Add project lives on the Projects view, which does not navigate; return to the monitor.
+    await projectsView(page);
     await page.getByRole('button', { name: 'Add project', exact: true }).click();
-    await page.getByRole('button', { name: 'Add project', exact: true }).waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'Add project', exact: true, disabled: false }).waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'Monitor', exact: true }).click();
   }
+  const monitor = () => page.locator('.monitor-page:visible');
   await pick(first);
-  await page.getByText('first project', { exact: true }).waitFor();
+  await taskTitle(monitor(), 'first project').waitFor();
   await pick(second);
-  await page.getByText('second project', { exact: true }).waitFor();
+  await taskTitle(monitor(), 'second project').waitFor();
   assert.equal(await page.locator('.monitor-page:visible').getByText('first project', { exact: true }).count(), 0);
   const boundary = await page.evaluate(() => ({
     require: typeof window.require, process: typeof window.process,
@@ -55,34 +60,44 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
     try { await window.graphtraj.graph('/'); return 'unexpected'; }
     catch (error) { return String(error); }
   }), /Choose an added project/);
-  await page.locator('.monitor-page:visible .react-flow__node').first().click();
+  // The task graph is the X6 canvas (D); React Flow now draws only the team organisation tree.
+  await page.locator('.monitor-page:visible [aria-label="Native task canvas"] .native-task-card .native-task-title').first().click();
   await page.getByRole('complementary', { name: 'Task details' }).waitFor();
-  await page.getByText('No participating Agents recorded.').waitFor();
+  const details = page.getByRole('complementary', { name: 'Task details' });
+  await details.getByText('No participating Agents recorded.').waitFor();
   await page.evaluate(() => window.graphtraj.copyText('Observed plain text'));
   assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), 'Observed plain text');
+  // U2 (Task 627): the right-side inspector's width is a slider; End takes its maximum.
+  const width = () => details.evaluate(element => element.getBoundingClientRect().width);
+  const before = await width();
   await page.getByRole('slider', { name: 'Detail width' }).focus();
   await page.getByRole('slider', { name: 'Detail width' }).press('End');
+  assert.ok(await width() > before, 'Detail width widens the inspector');
   await page.getByRole('button', { name: 'Close details' }).click();
-  await page.getByRole('searchbox').fill('dependent');
-  await page.getByRole('button', { name: '#2 dependent', exact: true }).click();
-  await page.getByRole('complementary', { name: 'Task details' }).waitFor();
-  await page.getByRole('searchbox').fill('');
+  const search = monitor().getByRole('searchbox', { name: 'Search tasks', exact: true });
+  await search.fill('dependent');
+  await monitor().getByLabel('Search results', { exact: true }).getByRole('button', { name: '#2 dependent', exact: true }).click();
+  await details.waitFor();
+  await search.fill('');
   const nativeBeforeClose = fixtures.operate(second, 'task_graph');
   await app.close();
   app = await electron.launch({ args });
   page = await app.firstWindow();
-  await page.getByText('second project', { exact: true }).waitFor();
+  await taskTitle(monitor(), 'second project').waitFor();
   assert.deepEqual(fixtures.operate(second, 'task_graph'), nativeBeforeClose);
   fixtures.operate(second, 'task_register', fixtures.task('3', 'newly-observed', ['2']));
-  await page.getByText('newly observed', { exact: true }).waitFor({ timeout: 15000 });
+  await taskTitle(monitor(), 'newly observed').waitFor({ timeout: 15000 });
   const moved = second + '-moved';
+  // The connection status is the visible monitor's top-bar role=status (V4).
+  const connection = () => monitor().locator('header.d-monitor-caption [role="status"]');
   await fs.rename(second, moved);
-  await page.getByText('Offline / query error', { exact: false }).waitFor({ timeout: 15000 });
+  await connection().getByText('Offline / query error', { exact: false }).waitFor({ timeout: 15000 });
   await fs.rename(moved, second);
-  await page.getByText('Connected', { exact: false }).waitFor({ timeout: 15000 });
-  await page.getByRole('button', { name: `Remove ${canonicalSecond}`, exact: true }).click();
-  await page.locator('.project-button').filter({ hasText: canonicalFirst }).click();
-  await page.getByText('first project', { exact: true }).waitFor();
+  await connection().getByText('Connected', { exact: false }).waitFor({ timeout: 15000 });
+  await removeIndexEntry(page, canonicalSecond);
+  // V11 (Task 627): the entry's subtitle is the parent directory; the full root is its title.
+  await page.locator(`.project-button[title=${JSON.stringify(canonicalFirst)}]`).click();
+  await taskTitle(monitor(), 'first project').waitFor();
   assert.equal(fixtures.operate(second, 'task_graph').tasks.length, 3);
   // The after hook removes the remaining fixture entry and closes this window.
 });

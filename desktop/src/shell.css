@@ -19,3 +19,73 @@
 .ui-state-block .ui-state-text > h2 { font-size: var(--fs-xl); font-weight: var(--fw-medium); color: var(--ink); margin: 0; }
 .ui-state-block .ui-state-action { margin: 0; align-self: center; }
 .ui-state-block.ui-state-error { background: transparent; }
+
+/* V11 + U1 sidebar: brand and navigation share one left edge; current project → PROJECTS → GLOBAL. */
+.d-focused-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); }
+.d-focused-layout.sidebar-hidden { grid-template-columns: 0 minmax(0, 1fr); }
+.d-focused-sidebar { width: 232px; min-height: 0; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--border-ui); overflow-y: auto; overflow-x: hidden; }
+.sidebar-hidden .d-focused-sidebar { visibility: hidden; pointer-events: none; }
+.d-focused-sidebar [hidden] { display: none; }
+.d-focused-sidebar > header { display: flex; align-items: center; gap: var(--sp-2); height: var(--topbar-h); padding: 0 var(--sp-4); flex-shrink: 0; border-bottom: 1px solid var(--border-ui); }
+.d-focused-sidebar > header .logo-mark { width: 20px; height: 20px; }
+.d-focused-sidebar > header .logo-mark svg { width: 20px; height: 20px; }
+.d-focused-sidebar > header > strong { font-size: var(--fs-xl); font-weight: var(--fw-strong); letter-spacing: -.2px; }
+.d-current-project-nav, .d-project-navigation, .d-global-navigation { padding: var(--sp-2); flex-shrink: 0; }
+.d-project-navigation, .d-global-navigation { border-top: 1px solid var(--border-ui); }
+.d-current-project-nav { padding-block: 10px var(--sp-2); }
+.d-current-project-name { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; padding: 2px var(--sp-2) var(--sp-2); }
+.d-current-project-name .project-avatar, .d-project-navigation .new-project-list .project-avatar { width: 24px; height: 24px; border-radius: var(--r-md); font-size: var(--fs-xs); font-weight: var(--fw-strong); text-transform: uppercase; }
+.d-current-project-nav .section-label { display: block; min-width: 0; padding: 0; color: var(--ink); font-size: var(--fs-md); font-weight: var(--fw-strong); letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-global-items > button, .d-settings-items > button, .d-current-project-nav > button { display: flex; align-items: center; gap: 10px; width: 100%; height: var(--nav-h); min-height: var(--nav-h); padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--muted); font-size: var(--fs-md); font-weight: var(--fw-regular); text-align: left; }
+.d-global-items > button > small, .d-settings-items > button > small { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); }
+.d-global-items > button:hover, .d-settings-items > button:hover, .d-current-project-nav > button:hover { background: var(--surface-alt); color: var(--ink); }
+.d-global-items > button[aria-current], .d-settings-items > button[aria-current], .d-current-project-nav > button[aria-current] { background: var(--accent-soft); color: var(--accent-ink); font-weight: var(--fw-medium); }
+.d-global-items > button[aria-expanded] > svg:last-child { margin-left: auto; }
+.d-global-items > .has-active-page { color: var(--accent-ink); }
+.d-settings-items { margin-left: 0; padding-left: 0; border-left: 0; }
+.d-settings-items > button { padding-left: 34px; }
+.d-focused-sidebar .d-sidebar-group-toggle { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); width: 100%; height: 28px; min-height: 28px; padding: 0 var(--sp-2); border-radius: var(--r-md); color: var(--faint); font-size: var(--fs-xs); font-weight: var(--fw-strong); letter-spacing: .06em; text-align: left; }
+.d-focused-sidebar .d-sidebar-group-toggle:hover { background: var(--surface-alt); color: var(--ink); }
+.d-project-section-heading { display: flex; align-items: center; gap: 2px; }
+.d-project-manage { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: var(--r-md); color: var(--muted); }
+.d-project-manage:hover { background: var(--surface-alt); color: var(--ink); }
+.d-project-navigation .new-project-search { height: 30px; margin: var(--sp-1) 0 6px; padding: 0 var(--sp-2); border-radius: var(--r-md); background: var(--bg); color: var(--faint); }
+.d-project-navigation .new-project-search input { font-size: var(--fs-sm); }
+.d-project-navigation .new-project-list { gap: 2px; margin-top: 0; }
+.d-project-navigation .new-project-list > button { gap: var(--sp-2); padding: 6px var(--sp-2); border: 0; border-radius: var(--r-md); box-shadow: none; background: transparent; }
+.d-project-navigation .new-project-list > button:hover { background: var(--surface-alt); }
+.d-project-navigation .new-project-list > button.selected { background: var(--surface-alt); box-shadow: inset 2px 0 0 var(--accent-ui); }
+.d-project-navigation .new-project-list strong { font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.d-project-navigation .new-project-list small { margin-top: 0; font-size: var(--fs-xs); color: var(--faint); }
+.d-project-navigation .new-project-list small.path-unavailable { color: var(--red); }
+.d-project-navigation .new-add-project { height: var(--nav-h); padding: 0 var(--sp-2); color: var(--faint); font-size: var(--fs-sm); }
+.d-project-navigation .sidebar-empty { padding: var(--sp-2); color: var(--faint); font-size: var(--fs-sm); }
+.d-focused-sidebar > footer { display: flex; align-items: center; gap: var(--sp-2); margin-top: auto; padding: 10px var(--sp-4); border-top: 1px solid var(--border-ui); color: var(--faint); font-size: var(--fs-xs); flex-shrink: 0; min-width: 0; }
+.d-focused-sidebar > footer > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* V4 top bar: project / view, the view switch, the connection status. */
+.d-focused-stage { position: relative; grid-column: 2; overflow: hidden; }
+.d-monitor-caption { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--sp-3); height: var(--topbar-h); padding: 0 var(--sp-4) 0 var(--sp-2); flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border-ui); }
+.d-monitor-crumb { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.d-monitor-crumb .project-avatar { width: 24px; height: 24px; border-radius: var(--r-md); font-size: var(--fs-xs); font-weight: var(--fw-strong); text-transform: uppercase; }
+.d-monitor-crumb > strong { min-width: 0; font-size: var(--fs-md); font-weight: var(--fw-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-monitor-crumb > span:last-child { color: var(--faint); white-space: nowrap; }
+.d-view-switch { display: inline-flex; padding: 2px; border-radius: var(--r-md); background: var(--surface-alt); }
+.d-view-switch > button { height: var(--control-h-sm); padding: 0 var(--sp-3); border-radius: var(--r-md); color: var(--muted); font-size: var(--fs-sm); font-weight: var(--fw-medium); white-space: nowrap; }
+.d-view-switch > button:hover { color: var(--ink); }
+.d-view-switch > button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: var(--fw-strong); box-shadow: var(--shadow-sm); }
+.d-connection { justify-self: end; display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d-connection::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.d-connection[data-state="error"] { color: var(--red); }
+.d-connection[data-state="error"]::before { background: var(--red); }
+.d-return-header { display: flex; align-items: center; gap: var(--sp-1); height: var(--topbar-h); flex-shrink: 0; padding: 0 var(--sp-4) 0 var(--sp-2); background: var(--surface); border-bottom: 1px solid var(--border-ui); }
+.d-return-header > .button:not(:first-child) { padding-left: var(--sp-1); color: var(--muted); }
+.d-return-header > span { margin-left: auto; font-size: var(--fs-sm); color: var(--faint); }
+.d-stage-error { position: absolute; inset: calc(var(--topbar-h) + var(--sp-2)) var(--sp-4) auto; z-index: 20; box-shadow: var(--shadow-md); }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Narrow windows wrap or hide secondary text; type keeps its step (V2). */
+@media (max-width: 1080px) {
+  .d-focused-layout { grid-template-columns: 208px minmax(0, 1fr); }
+  .d-focused-sidebar { width: 208px; }
+  .d-monitor-crumb > span:last-child { display: none; }
+}

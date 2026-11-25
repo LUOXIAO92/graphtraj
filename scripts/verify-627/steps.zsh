@@ -37,9 +37,11 @@
 #   T   Window tests on the host, the same six files as the CI 627 step (window, monitor-ui, team-graph, settings-window,
 #       usage-live, activity-live; the last two skip without a live executing Agent), from B's build at $WORK/desktop.
 #       Isolated under $WORK/t-run: HOME (window.test.mjs adds projects to HOME/.graphtraj; the user's ~/.graphtraj is
-#       never touched), TMPDIR, PLAYWRIGHT_BROWSERS_PATH and the settings evidence. Installs Playwright Chromium there
-#       (bounded 300 s), then runs `node --test --test-concurrency=1 --test-timeout=300000` with the whole run bounded
-#       at 720 s; on the bound its process tree and every process naming $WORK/t-run are killed (exit 124). Prints the
+#       never touched), TMPDIR and the settings evidence; PLAYWRIGHT_BROWSERS_PATH is ${TMPDIR}/graphtraj-627-pw-browsers
+#       (627's own cache, kept across runs, never the user's). Installs Playwright Chromium there
+#       (bounded 600 s; ~250 MB, skipped when already present), then runs `node --test --test-concurrency=1 --test-timeout=300000` with the whole run bounded
+#       at 720 s; on the bound its process tree and every process naming $WORK/t-run or the browser cache are killed
+#       (exit 124). Prints the
 #       TAP summary and each failing test's name, location and first error line; copies the log to
 #       <Worktree>/scripts/verify-627/evidence/<sha>/t-run.log (untracked). Electron windows appear and close
 #       themselves; do not interact with them. Nothing is saved outside $WORK/t-run.
@@ -109,7 +111,10 @@ WORK=${TMPDIR:-/tmp}
 WORK=${WORK%/}/graphtraj-627-$SHA
 EVIDENCE=$WT/scripts/verify-627/evidence/$SHA
 SCREEN_COUNT=18
-T_INSTALL_S=${VERIFY627_T_INSTALL_S:-300}
+T_INSTALL_S=${VERIFY627_T_INSTALL_S:-600}
+# T's Playwright browser cache: outside the Harness and the per-SHA work dir, so later T runs skip the download.
+PWB=${TMPDIR:-/tmp}
+PWB=${PWB%/}/graphtraj-627-pw-browsers
 T_LIMIT_S=${VERIFY627_T_LIMIT_S:-720}
 WORKFLOWS=(.github/workflows/desktop-linux-adoption.yml .github/workflows/desktop-macos-adoption.yml .github/workflows/desktop-win-adoption.yml)
 NWF=${#WORKFLOWS}
@@ -176,7 +181,7 @@ killtree() {
   kill -$2 $1 2> /dev/null
 }
 # bounded <seconds> <log> <command...>: run the command through allow() in the background, wait for it in this
-# process, and if it outlives the bound kill its process tree and any process whose command line names $TRUN
+# process, and if it outlives the bound kill its process tree and any process whose command line names $TRUN or $PWB
 # (Electron's --user-data-dir and Chromium live under it). Prints nothing; the exit status is the command's, or 124.
 TRUN=
 bounded() {
@@ -186,9 +191,9 @@ bounded() {
   pid=$!
   while kill -0 $pid 2> /dev/null; do
     if (( waited >= limit )); then
-      killtree $pid TERM; [[ -n $TRUN ]] && pkill -TERM -f -- $TRUN 2> /dev/null
+      killtree $pid TERM; [[ -n $TRUN ]] && { pkill -TERM -f -- $TRUN; pkill -TERM -f -- $PWB; } 2> /dev/null
       sleep 5
-      killtree $pid KILL; [[ -n $TRUN ]] && pkill -KILL -f -- $TRUN 2> /dev/null
+      killtree $pid KILL; [[ -n $TRUN ]] && { pkill -KILL -f -- $TRUN; pkill -KILL -f -- $PWB; } 2> /dev/null
       wait $pid 2> /dev/null
       return 124
     fi
@@ -405,16 +410,16 @@ T)
   say "Task 627 step T: desktop window tests from $WORK/desktop. Login: none. Dialog: none. Network: Playwright Chromium download (cdn.playwright.dev, storage.googleapis.com). Electron windows open and close themselves."
   [[ -f $WORK/B.ok && $(<$WORK/B.ok) == $SHA ]] || { NEXT="zsh $SELF B"; verdict FAIL "run B for $SHA first" 1; }
   TRUN=$WORK/t-run
-  rm -rf $TRUN; mkdir -p $TRUN/home $TRUN/tmp $TRUN/browsers $TRUN/settings-evidence $EVIDENCE
-  RUN_ENV=(PLAYWRIGHT_BROWSERS_PATH=$TRUN/browsers GRAPHTRAJ_SETTINGS_EVIDENCE=$TRUN/settings-evidence)
+  rm -rf $TRUN; mkdir -p $TRUN/home $TRUN/tmp $TRUN/settings-evidence $PWB $EVIDENCE
+  RUN_ENV=(PLAYWRIGHT_BROWSERS_PATH=$PWB GRAPHTRAJ_SETTINGS_EVIDENCE=$TRUN/settings-evidence)
   cd $WORK/desktop
-  print -r -- "isolated: HOME=$TRUN/home TMPDIR=$TRUN/tmp PLAYWRIGHT_BROWSERS_PATH=$TRUN/browsers (never ~/.graphtraj)"
+  print -r -- "isolated: HOME=$TRUN/home TMPDIR=$TRUN/tmp PLAYWRIGHT_BROWSERS_PATH=$PWB (627's own cache, kept across runs; never ~/.graphtraj or the user's Playwright cache)"
   print -r -- "\$ node node_modules/playwright/cli.js install chromium   (bound ${T_INSTALL_S}s; log $TRUN/install.log)"
   RUN_HOME=$TRUN/home RUN_TMPDIR=$TRUN/tmp bounded $T_INSTALL_S $TRUN/install.log $NODE node_modules/playwright/cli.js install chromium
   local inst=$?
   tail -3 $TRUN/install.log; print -r -- "install exit $inst"
   (( inst == 0 )) || verdict FAIL "Playwright Chromium install exit $inst$( (( inst == 124 )) && print -r -- ' (killed at the bound)') (log $TRUN/install.log)" 1
-  if [[ ${VERIFY627_T_SETUP_ONLY:-} == 1 ]]; then NEXT="zsh $SELF T   (without VERIFY627_T_SETUP_ONLY, on a host that can open windows)"; verdict PASS "setup-only rehearsal: Chromium installed under $TRUN/browsers"; fi
+  if [[ ${VERIFY627_T_SETUP_ONLY:-} == 1 ]]; then NEXT="zsh $SELF T   (without VERIFY627_T_SETUP_ONLY, on a host that can open windows)"; verdict PASS "setup-only rehearsal: Chromium installed under $PWB"; fi
   local -a wtests=(tests/window.test.mjs tests/monitor-ui.test.mjs tests/team-graph.test.mjs tests/settings-window.test.mjs tests/usage-live.test.mjs tests/activity-live.test.mjs)
   print -r -- "\$ node --test --test-concurrency=1 --test-timeout=300000 ${wtests}   (whole run bound ${T_LIMIT_S}s)"
   RUN_HOME=$TRUN/home RUN_TMPDIR=$TRUN/tmp bounded $T_LIMIT_S $TRUN/t-run.log $NODE --preserve-symlinks --preserve-symlinks-main \

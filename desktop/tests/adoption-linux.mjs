@@ -184,14 +184,14 @@ async function modelQuantities() {
     .evaluateAll(items => items.map(item => item.textContent));
   const footer = await dashboard.locator('.d-usage-history-note').evaluate(element => element.textContent);
   return {
-    records: (await model.locator('small').innerText()).match(/^(\d+) reports/)?.[1],
+    records: (await model.locator('small').textContent()).trim().match(/^(\d+) reports/)?.[1],
     input: titles.map(title => title.split(': ')[1]).find(Boolean)?.replace(' input tokens', ''),
     inputTotal: totals['INPUT · INCLUDES CACHE'],
     output: totals.OUTPUT,
     cacheRead: totals['CACHE READ'],
     cacheWrite: footer.match(/Cache writes: ([^.]+)\./)?.[1],
     rate: totals['KNOWN INPUT HIT RATE'],
-    priced: await model.locator('strong').innerText(),
+    priced: (await model.locator('strong').textContent()).trim(),
     unpriced: footer.match(/(\d+) unpriced/)?.[1],
   };
 }
@@ -344,7 +344,7 @@ try {
       .filter({ has: page.locator('summary small', { hasText: /^result · / }) }).locator('details.tool-card');
     await resultCard.locator(':scope > summary').click();
     const readable = resultCard.locator('.tool-details > pre, .tool-details > .tool-content').first();
-    assert.equal((await readable.innerText()).trim(), 'controlled tool output');
+    assert.equal((await readable.textContent()).replace(/\s+/g, ' ').trim(), 'controlled tool output');
     // Copy lives under the record's Technical details disclosure.
     await resultCard.locator('details.tool-technical > summary').click();
     await resultCard.getByRole('button', { name: 'Copy record', exact: true }).click();

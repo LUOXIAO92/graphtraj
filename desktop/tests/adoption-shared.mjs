@@ -130,7 +130,8 @@ export async function datedUsage({ page, first, second, agent, date, input = 100
   await dashboard.getByRole('alert').waitFor();
   await dates(date, date);
   await shot('dated-project-usage');
-  await button('All project usage').click();
+  // The sidebar entry's accessible name carries its project count ('All project usage 2', main.tsx:162).
+  await page.getByRole('button', { name: /^All project usage\b/ }).click();
   await dates(date, date);
   // Collection is asynchronous: wait for this project's actual quantity, not
   // just a row that is also present while its history is still loading.
@@ -140,7 +141,7 @@ export async function datedUsage({ page, first, second, agent, date, input = 100
     .some(title => title.textContent === `${date}: ${quantity} input tokens`), { date, quantity });
   await row(first).getByRole('cell').first().filter({ hasNotText: /^Unknown/ }).waitFor();
   assert.equal(await comparison.locator('tbody tr').count(), 2);
-  assert.match(await row(second).getByRole('cell').first().innerText(), /^Unknown/);
+  assert.match((await row(second).getByRole('cell').first().textContent()).trim(), /^Unknown/);
   assert.equal(await dashboard.getByRole('combobox').count(), 0);
   assert.equal(await modelList.count(), 0);
   assert.ok(!(await dashboard.innerText()).includes(agent));

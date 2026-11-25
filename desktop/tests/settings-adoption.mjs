@@ -107,8 +107,8 @@ export async function settingsAdoption({ page, firstId, secondId, runtimeHome, s
   await button('Refresh native models').click();
   const discovery = page.locator('.d-discovery-state');
   await discovery.locator('strong').filter({ hasNotText: /^Runtime discovery$/ }).waitFor();
-  const discoveryStatus = await discovery.locator('strong').innerText();
-  const discoveryText = `${discoveryStatus} · ${await page.getByText(/^Account access: /).filter({ visible: true }).innerText()}`;
+  const discoveryStatus = (await discovery.locator('strong').textContent()).trim();
+  const discoveryText = `${discoveryStatus} · ${(await page.getByText(/^Account access: /).filter({ visible: true }).textContent()).trim()}`;
   assert.match(discoveryText, /^(available|unknown)/);
   assert.match(discoveryText, /account access: unknown$/i);
   step(`Native discovery display: ${discoveryText}. No login or model run.`);

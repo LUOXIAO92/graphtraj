@@ -541,7 +541,7 @@ async function usageHistoryAdoption() {
     await noRecords().waitFor();
     assert.deepEqual(await chartInputs(), {});
     facts.screenshots.push(await shot(page, 'usage-no-records.png'));
-    await page.getByRole('button', { name: 'All project usage', exact: true }).click();
+    await page.getByRole('button', { name: /^All project usage\b/ }).click();
     await waitValue(() => comparison(first), expectedCompact(3000));
     await waitValue(() => comparison(second), expectedCompact(500));
     assert.equal(await dashboard().getByRole('combobox').count(), 0);
@@ -565,7 +565,7 @@ async function usageHistoryAdoption() {
     handle = await launch();
     page = await handle.firstWindow();
     page.setDefaultTimeout(30000);
-    await page.getByRole('button', { name: 'All project usage', exact: true }).click();
+    await page.getByRole('button', { name: /^All project usage\b/ }).click();
     await selectDates(localDate(today), localDate(today));
     await waitValue(() => comparison(first), expectedCompact(1000));
     await waitValue(() => comparison(second), expectedCompact(500));
@@ -682,7 +682,7 @@ async function settingsOnlyAdoption() {
     facts.settings.global = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
     facts.screenshots.push(await shot(page, '11-native-global-refusal.png'));
     // D names the merged global view 'All project usage' with heading 'Usage across projects' (UsageDashboard.tsx).
-    await page.getByRole('button', { name: 'All project usage', exact: true }).click();
+    await page.getByRole('button', { name: /^All project usage\b/ }).click();
     await page.getByRole('heading', { name: 'Usage across projects', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     assert.deepEqual(await monitorPosition(page), position);
@@ -862,18 +862,26 @@ async function main() {
     const monitor = page.locator('.monitor-page:visible');
     const nativeGraph = fixtures.operate(first, 'task_graph');
     for (const task of nativeGraph.tasks) {
-      // D cards show '#id · status' (TaskCanvas.tsx card); a replaced task shows its
+      // D cards show '#id · status[ · → #ids]' (TaskCanvas.tsx card); a replaced task shows its
       // disposition there and keeps execution status and 'Replaced / inactive' in Task facts.
+      // Since 626 (TaskCanvas.tsx 'V3') the status word is a chip <span class="status ...">
+      // and the card carries data-status; innerText would break the line at the chip, so the
+      // meta text is read as normalised textContent.
       const node = taskCard(monitor, task.task_id);
       await node.waitFor();
-      assert.match(await node.locator('.native-task-meta').first().innerText(),
-        new RegExp(`^#${task.task_id} · ${cardStatus(task)}\\b`));
+      const status = cardStatus(task);
+      const meta = node.locator('.native-task-meta').filter({ has: page.locator('.status') });
+      const replaced = task.replaced_by.length ? ` · → ${task.replaced_by.map(id => `#${id}`).join(', ')}` : '';
+      assert.equal((await meta.textContent()).replace(/\s+/g, ' ').trim(), `#${task.task_id} · ${status}${replaced}`);
+      assert.equal((await meta.locator('.status').textContent()).trim(), status);
+      assert.equal(await node.getAttribute('data-status'), status.toLowerCase().replaceAll(' ', '-'));
       if (!task.active) {
         await openTask(monitor, task.task_id);
         const taskFacts = page.getByRole('complementary', { name: 'Task details' }).locator('details').filter({ hasText: 'Task facts' });
         await taskFacts.locator('summary').click();
-        assert.match(await taskFacts.innerText(), /Replaced \/ inactive/);
-        assert.match(await taskFacts.innerText(), new RegExp(`Historical execution: ${task.status}\\.`));
+        const factsText = (await taskFacts.textContent()).replace(/\s+/g, ' ');
+        assert.match(factsText, /Replaced \/ inactive/);
+        assert.match(factsText, new RegExp(`Historical execution: ${task.status}\\.`));
         await page.getByRole('button', { name: 'Close details', exact: true }).click();
       }
     }
@@ -890,7 +898,8 @@ async function main() {
     assert.equal(await projectEntry(page, 'first-project').isVisible(), false);
     assert.equal(await page.getByRole('button', { name: 'Settings', exact: true }).isVisible(), true);
     const projectNavigation = page.getByRole('navigation', { name: 'Current project', exact: true });
-    assert.equal(await projectNavigation.locator('.section-label').innerText(), 'first-project');
+    // textContent: the label's CSS may transform case (626 tokens); the name itself must match.
+    assert.equal((await projectNavigation.locator('.section-label').textContent()).trim(), 'first-project');
     assert.deepEqual(await projectNavigation.getByRole('button').allTextContents(), ['Monitor', 'Teams & roles', 'Project usage']);
     facts.screenshots.push(await shot(page, '03c-project-list-collapsed.png'));
     await projectsToggle.click();

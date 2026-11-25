@@ -369,7 +369,7 @@ try {
     assert.equal(totals.OUTPUT, '80');
     assert.equal(totals['CACHE READ'], '600');
     assert.equal(totals['KNOWN INPUT HIT RATE'], '60.0%');
-    assert.match(await model.locator('strong').innerText(), /^\$0\.001925/);
+    assert.match((await model.locator('strong').textContent()).trim(), /^\$0\.001925/);
     facts.steps.push('Controlled 1000 input / 600 cache / 80 output gives 60% cache and $0.001925 at the bundled C snapshot; reasoning is not added twice');
   }
   await capture('dashboard');

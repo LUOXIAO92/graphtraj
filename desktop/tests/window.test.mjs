@@ -87,12 +87,37 @@ test('actual Electron window uses native graph, safe preload, refresh and persis
   await details.getByText('No participating Agents recorded.').waitFor();
   await page.evaluate(() => window.graphtraj.copyText('Observed plain text'));
   assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), 'Observed plain text');
-  // U2 (Task 627): the right-side inspector's width is a slider; End takes its maximum.
-  const width = () => details.evaluate(element => element.getBoundingClientRect().width);
-  const before = await width();
-  await page.getByRole('slider', { name: 'Detail width' }).focus();
-  await page.getByRole('slider', { name: 'Detail width' }).press('End');
-  assert.ok(await width() > before, 'Detail width widens the inspector');
+  // U2 (Task 627), both states. The window's CSS width depends on the runner's screen (1024 px on the macOS runner,
+  // run 45600065327), so the test asserts the state for the width it actually has, then forces the other.
+  const slider = () => page.getByRole('slider', { name: 'Detail width' });
+  const layout = () => monitor().evaluate(scope => {
+    const box = element => { const r = element.getBoundingClientRect(); return { x: r.left, y: r.top, right: r.right, bottom: r.bottom, width: r.width }; };
+    return { viewport: innerWidth, canvas: box(scope.querySelector('[aria-label="Native task canvas"]')),
+      details: box(scope.querySelector('aside[aria-label="Task details"]')) };
+  });
+  const atStart = await layout();
+  if (atStart.viewport < 1100) {
+    // (a) Below ~1100 CSS px the inspector falls back to a full-width bottom shelf with no width to adjust.
+    assert.ok(atStart.details.y >= atStart.canvas.bottom - 1, `Task details is below the canvas: ${JSON.stringify(atStart)}`);
+    assert.equal(await slider().count(), 0, 'no visible Detail width slider in the bottom shelf');
+  }
+  // (b) The inspector state, independent of the screen: zoom out so the CSS viewport is 1400 px wide
+  // (CSS width = window width / zoom factor; the factor is computed from the measured width, 1 when already wide).
+  const zoom = Math.min(1, atStart.viewport / 1400);
+  await app.evaluate(({ BrowserWindow }, factor) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(factor), zoom);
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('.monitor-page:not(.concealed) [aria-label="Native task canvas"]')?.getBoundingClientRect();
+    const aside = document.querySelector('.monitor-page:not(.concealed) aside[aria-label="Task details"]')?.getBoundingClientRect();
+    return innerWidth >= 1100 && canvas && aside && aside.left >= canvas.right - 1;
+  });
+  const wide = await layout();
+  assert.ok(wide.details.x >= wide.canvas.right - 1, `Task details is a right-side inspector: ${JSON.stringify(wide)}`);
+  await slider().focus();
+  await slider().press('End');
+  await page.waitForFunction(before => document.querySelector('.monitor-page:not(.concealed) aside[aria-label="Task details"]')
+    .getBoundingClientRect().width > before, wide.details.width);
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1));
+  await page.waitForFunction(width => innerWidth === width, atStart.viewport);
   await page.getByRole('button', { name: 'Close details' }).click();
   const search = monitor().getByRole('searchbox', { name: 'Search tasks', exact: true });
   await search.fill('dependent');

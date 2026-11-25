@@ -205,6 +205,11 @@ async function shot(page, name) {
   return path.relative(evidence, file);
 }
 
+/** A sidebar button (GLOBAL/Settings entries); Teams & roles has its own 'Agents & models' shortcut. */
+function sidebarButton(page, name) {
+  return page.getByRole('complementary', { name: 'Projects', exact: true }).getByRole('button', { name, exact: true });
+}
+
 /**
  * Locate a project entry in the sidebar by its directory name. Since Task 627 (V11) the entry shows
  * the parent directory as its subtitle and the full root as its title, so the title is matched.
@@ -388,11 +393,10 @@ async function nativeDialogAttempt(first) {
       command: `read ${path.relative(work, rolesFile)}`,
       output: cancelled.split('\n').filter(line => line.includes('model:')).join('; ') });
 
-    // Cover the global write boundary in this same real OS window too.
-    if (!await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible()) {
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    }
-    await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
+    // Cover the global write boundary in this same real OS window too. Sidebar-scoped: an open Teams & roles
+    // page has its own 'Agents & models' shortcut (Settings.tsx).
+    if (!await sidebarButton(page, 'Agents & models').isVisible()) await sidebarButton(page, 'Settings').click();
+    await sidebarButton(page, 'Agents & models').click();
     await page.getByRole('navigation', { name: 'Runtime provider model hierarchy', exact: true }).waitFor();
     const { selected } = await page.evaluate(() => window.graphtraj.projects());
     for (const [provider, answer] of [['native-approved', 'Save'], ['native-declined', 'Cancel']]) {
@@ -663,10 +667,8 @@ async function settingsOnlyAdoption() {
 
     // The global write boundary in this same installed window: direct Save and Cancel
     // (no approval sheet since 045ef3a4). Failure is retained, never retried in a new window.
-    if (!await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible()) {
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    }
-    await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
+    if (!await sidebarButton(page, 'Agents & models').isVisible()) await sidebarButton(page, 'Settings').click();
+    await sidebarButton(page, 'Agents & models').click();
     await page.getByRole('navigation', { name: 'Runtime provider model hierarchy', exact: true }).waitFor();
     for (const [provider, answer] of [['native-approved', 'Save'], ['native-declined', 'Cancel']]) {
       const before = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId);
@@ -912,11 +914,11 @@ async function main() {
     assert.deepEqual(await projectNavigation.getByRole('button').allTextContents(), ['Monitor', 'Teams & roles', 'Project usage']);
     facts.screenshots.push(await shot(page, '03c-project-list-collapsed.png'));
     await projectsToggle.click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Agents & models', exact: true }).click();
+    await sidebarButton(page, 'Settings').click();
+    await sidebarButton(page, 'Agents & models').click();
     await page.getByRole('heading', { name: 'Agents & models', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    assert.equal(await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible(), false);
+    await sidebarButton(page, 'Settings').click();
+    assert.equal(await sidebarButton(page, 'Agents & models').isVisible(), false);
     await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     step('GLOBAL and PROJECTS independently toggle; selected project/navigation remain outside list; Settings submenu toggles itself');
 

@@ -47,10 +47,12 @@ test('D navigation preserves separate project graphs and independent column read
   await page.getByRole('button', { name: 'PROJECTS', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Monitor', exact: true }).isVisible(), true);
   await page.getByRole('button', { name: 'GLOBAL', exact: true }).click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  assert.equal(await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible(), true);
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  assert.equal(await page.getByRole('button', { name: 'Agents & models', exact: true }).isVisible(), false);
+  // Sidebar-scoped like the adoption scripts: Teams & roles has its own 'Agents & models' shortcut.
+  const sidebar = page.getByRole('complementary', { name: 'Projects', exact: true });
+  await sidebar.getByRole('button', { name: 'Settings', exact: true }).click();
+  assert.equal(await sidebar.getByRole('button', { name: 'Agents & models', exact: true }).isVisible(), true);
+  await sidebar.getByRole('button', { name: 'Settings', exact: true }).click();
+  assert.equal(await sidebar.getByRole('button', { name: 'Agents & models', exact: true }).isVisible(), false);
   await monitor.getByRole('searchbox').fill('first current');
   await monitor.getByRole('searchbox').press('Enter');
   await monitor.getByRole('button', { name: 'Expand chat', exact: true }).click();

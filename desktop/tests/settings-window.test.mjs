@@ -59,8 +59,11 @@ test('desktop Save, Cancel, reopen and conflicts in both settings pages', async 
     assert.ok(projectId);
   }
   async function globalPage() {
-    if (!await button('Agents & models').isVisible()) await button('Settings').click();
-    await button('Agents & models').click();
+    // Sidebar-scoped: an open Teams & roles page has its own 'Agents & models' shortcut (Settings.tsx).
+    const sidebar = page.getByRole('complementary', { name: 'Projects', exact: true });
+    const entry = sidebar.getByRole('button', { name: 'Agents & models', exact: true });
+    if (!await entry.isVisible()) await sidebar.getByRole('button', { name: 'Settings', exact: true }).click();
+    await entry.click();
     await page.locator('.d-library-tree').waitFor();
   }
   try {

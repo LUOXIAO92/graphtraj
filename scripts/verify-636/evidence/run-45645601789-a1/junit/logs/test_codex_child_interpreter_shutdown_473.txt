@@ -1,0 +1,21 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 1 item
+
+tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=082328d352fb492288fcf4214a174fcf: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+________ test_child_ends_completed_after_the_owner_main_thread_returns ________
+tests\test_codex_child_interpreter_shutdown_473.py:46: in test_child_ends_completed_after_the_owner_main_thread_returns
+    since = identity(os.getpid()).start
+E   AttributeError: 'NoneType' object has no attribute 'start'
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_codex_child_interpreter_shutdown_473.xml -
+============================ slowest 10 durations =============================
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns - AttributeError: 'NoneType' object has no attribute 'start'
+============================== 1 failed in 0.20s ==============================

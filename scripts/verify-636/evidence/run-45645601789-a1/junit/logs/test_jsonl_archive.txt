@@ -1,0 +1,44 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 23 items
+
+tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination PASSED [  4%]
+tests/test_jsonl_archive.py::test_reject_reordering_dropped_identity_and_changed_final PASSED [  8%]
+tests/test_jsonl_archive.py::test_optional_policy_and_late_backfill_preserve_existing_records PASSED [ 13%]
+tests/test_jsonl_archive.py::test_stream_restart_final_backfill_and_late_notification PASSED [ 17%]
+tests/test_jsonl_archive.py::test_stream_semantic_boundaries_and_stale_writer PASSED [ 21%]
+tests/test_jsonl_archive.py::test_attachments_portable_and_unknown_required_event_refuses_projection PASSED [ 26%]
+tests/test_jsonl_archive.py::test_native_fork_chain_compaction_and_original_times PASSED [ 30%]
+tests/test_jsonl_archive.py::test_score_probability_alignment_survives_jsonl_and_history_prefix PASSED [ 34%]
+tests/test_jsonl_archive.py::test_process_exit_keeps_partial_output_and_requires_resolution PASSED [ 39%]
+tests/test_jsonl_archive.py::test_same_source_finalization_at_last_checkpoint_and_parallel_pending PASSED [ 43%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.content] PASSED [ 47%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[/data/content] PASSED [ 52%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history] PASSED [ 56%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[history_base] PASSED [ 60%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[inheritedPrefix] PASSED [ 65%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[messageOrder] PASSED [ 69%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.id] PASSED [ 73%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[data.message.toolCallId] PASSED [ 78%]
+tests/test_jsonl_archive.py::test_messages_refuse_declared_content_history_or_identity_gaps[unknownNativeGap] PASSED [ 82%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[parentSession] PASSED [ 86%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[history] PASSED [ 91%]
+tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[/inheritedPrefix] PASSED [ 95%]
+tests/test_jsonl_archive.py::test_missing_optional_metadata_does_not_block_complete_messages PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=7dee764ef90f4309aa1145f7fc1e7073: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_jsonl_archive.xml -
+============================ slowest 10 durations =============================
+0.17s call     tests/test_jsonl_archive.py::test_process_exit_keeps_partial_output_and_requires_resolution
+0.03s call     tests/test_jsonl_archive.py::test_score_probability_alignment_survives_jsonl_and_history_prefix
+0.02s call     tests/test_jsonl_archive.py::test_native_history_not_notifications_defines_order_and_pagination
+0.01s call     tests/test_jsonl_archive.py::test_stream_restart_final_backfill_and_late_notification
+0.01s call     tests/test_jsonl_archive.py::test_optional_policy_and_late_backfill_preserve_existing_records
+0.01s call     tests/test_jsonl_archive.py::test_attachments_portable_and_unknown_required_event_refuses_projection
+0.01s call     tests/test_jsonl_archive.py::test_reject_reordering_dropped_identity_and_changed_final
+0.01s call     tests/test_jsonl_archive.py::test_same_source_finalization_at_last_checkpoint_and_parallel_pending
+0.01s call     tests/test_jsonl_archive.py::test_stream_semantic_boundaries_and_stale_writer
+0.01s call     tests/test_jsonl_archive.py::test_messages_refuse_header_history_gaps[history]
+============================= 23 passed in 0.53s ==============================

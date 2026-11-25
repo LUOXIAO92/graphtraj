@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.237" timestamp="2026-11-25T15:31:52.703443+00:00" hostname="runnervmbpeip"><testcase classname="tests.test_codex_child_interpreter_shutdown_473" name="test_child_ends_completed_after_the_owner_main_thread_returns" file="tests\test_codex_child_interpreter_shutdown_473.py" line="42" time="0.005"><failure message="AttributeError: 'NoneType' object has no attribute 'start'">tests\test_codex_child_interpreter_shutdown_473.py:46: in test_child_ends_completed_after_the_owner_main_thread_returns
+    since = identity(os.getpid()).start
+E   AttributeError: 'NoneType' object has no attribute 'start'</failure></testcase></testsuite></testsuites>

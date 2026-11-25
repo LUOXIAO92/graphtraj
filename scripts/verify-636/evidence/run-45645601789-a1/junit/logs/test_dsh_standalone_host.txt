@@ -1,0 +1,59 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 35 items
+
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document0-must be a JSON object] PASSED [  2%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document1-Unknown DSH host configuration keys] PASSED [  5%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document2-absolute data root] PASSED [  8%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document3-absolute data root] PASSED [ 11%]
+tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] PASSED [ 14%]
+tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings PASSED [ 17%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields0] PASSED [ 20%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields1] PASSED [ 22%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields2] PASSED [ 25%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields3] PASSED [ 28%]
+tests/test_dsh_standalone_host.py::test_only_a_native_main_session_is_bound[fields4] PASSED [ 31%]
+tests/test_dsh_standalone_host.py::test_runtime_drivers_use_public_constructors_with_read_defaults PASSED [ 34%]
+tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models PASSED [ 37%]
+tests/test_dsh_standalone_host.py::test_codex_without_settings_is_refused_at_create PASSED [ 40%]
+tests/test_dsh_standalone_host.py::test_notice_receiver_outcomes PASSED  [ 42%]
+tests/test_dsh_standalone_host.py::test_each_message_request_and_error_reaches_the_main_once PASSED [ 45%]
+tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question PASSED [ 48%]
+tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session PASSED [ 51%]
+tests/test_dsh_standalone_host.py::test_host_start_refusals PASSED       [ 54%]
+tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on PASSED [ 57%]
+tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh PASSED [ 60%]
+tests/test_dsh_standalone_host.py::test_dsh_package_declares_the_host_bundle PASSED [ 62%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_relays_each_notice_to_its_main_session SKIPPED [ 65%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_is_inert_inside_an_agent SKIPPED [ 68%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[None] SKIPPED [ 71%]
+tests/test_dsh_standalone_host.py::test_plugin_host_row_without_configuration_starts_the_default_host[] SKIPPED [ 74%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[None] SKIPPED [ 77%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[relative/project] SKIPPED [ 80%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[/nonexistent-570/project] SKIPPED [ 82%]
+tests/test_dsh_standalone_host.py::test_plugin_without_configuration_refuses_a_session_without_a_project_directory[file] SKIPPED [ 85%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root PASSED [ 88%]
+tests/test_dsh_standalone_host.py::test_host_without_configuration_reports_an_unwritable_project SKIPPED [ 91%]
+tests/test_dsh_standalone_host.py::test_default_configuration_is_the_project_root_without_runtime_settings PASSED [ 94%]
+tests/test_dsh_standalone_host.py::test_default_host_records_land_in_the_project PASSED [ 97%]
+tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=c0a769ca65fe4d64af3a8f2582894fdd: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_standalone_host.xml -
+============================ slowest 10 durations =============================
+1.07s call     tests/test_dsh_standalone_host.py::test_host_start_refusals
+0.97s call     tests/test_dsh_standalone_host.py::test_host_without_configuration_serves_the_project_data_root
+0.71s call     tests/test_dsh_standalone_host.py::test_host_starts_with_archiving_on
+0.70s call     tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session
+0.22s call     tests/test_dsh_standalone_host.py::test_ask_parent_reaches_the_main_once_without_its_question
+0.22s call     tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh
+0.10s call     tests/test_dsh_standalone_host.py::test_default_root_is_shared_with_the_claude_code_host
+0.06s call     tests/test_dsh_standalone_host.py::test_each_message_request_and_error_reaches_the_main_once
+0.05s call     tests/test_dsh_standalone_host.py::test_notice_receiver_outcomes
+0.04s call     tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models
+=========================== short test summary info ===========================
+SKIPPED [8] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_dsh_standalone_host.py:596: POSIX-only: a read-only directory made with chmod 0o555 and checked with os.geteuid
+======================== 26 passed, 9 skipped in 4.38s ========================

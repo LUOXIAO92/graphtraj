@@ -9,8 +9,9 @@ $ gh auth status --hostname github.com   (token lines removed)
     - Active account: true
 PASS: /tmp/claude-501/rh636/ff/graftling origin is https://github.com/LUOXIAO92/graftling.git
 NOTE: rehearsal remote /tmp/claude-501/rh636/ff/gremote.git is used instead of graftling origin
-PASS: bundle verifies against /tmp/claude-501/rh636/ff/graftling; head 03d67a3b1c302163ed315a9451698840f14cf9a0 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh636/ff/graftling; head 1b3f95ec198e5b105b02ffe052d490b3ccdec616 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
 --- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
+  1b3f95e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account squatter runs from a file, within CreateProcessWithLogonW's 1024-character command line (636 correction 3)
   03d67a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account test never shows the temporary password in an assertion (636)
   61576b3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows pipe: a caller talks only to its own user's pipe; every pipe wait is bounded (636 corrections 1, 2)
   c04b075 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: an owner-started Runtime's callers are the processes in its job (636 Phase B)
@@ -24,7 +25,7 @@ PASS: author and committer are the noreply identity
    README.md                                  |   9 +
    src/graftling/_channel_posix.py            | 297 +++++++++++++++
    src/graftling/_channel_windows.py          | 454 +++++++++++++++++++++++
-   src/graftling/_win32.py                    | 367 ++++++++++++++++++-
+   src/graftling/_win32.py                    | 367 +++++++++++++++++-
    src/graftling/claude/binding.py            |   2 +-
    src/graftling/claude/host.py               |  25 +-
    src/graftling/codex/app_server.py          |   6 +-
@@ -34,10 +35,10 @@ PASS: author and committer are the noreply identity
    src/graftling/pi/execution.py              |   2 +-
    src/graftling/process.py                   |  30 +-
    src/graftling/process_tree.py              |   5 +-
-   tests/test_channel_windows_636.py          | 567 +++++++++++++++++++++++++++++
+   tests/test_channel_windows_636.py          | 576 +++++++++++++++++++++++++++++
    tests/test_channel_windows_emulated_636.py | 483 ++++++++++++++++++++++++
    tests/test_pi_dsh_notice_holding.py        |   5 +
-   17 files changed, 2273 insertions(+), 266 deletions(-)
+   17 files changed, 2282 insertions(+), 266 deletions(-)
 PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml and README.md
 PASS: .github/workflows/windows.yml differs from 7609e52089e638c963cc54c28438c99ea3964f99 only in on.push.branches, which adds agent/636-graftling-windows-named-pipe
 PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged
@@ -45,6 +46,6 @@ PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/c
 W4 (636) entries left in the list: 0
 PASS: /tmp/claude-501/rh636/ff/graftling local agent/636-graftling-windows-named-pipe is at ff19b05441d234a8c1cc312233c9c0d4b409af93, an ancestor of the bundle head (P fast-forwards it from the bundle)
 PASS: graftling /tmp/claude-501/rh636/ff/gremote.git has agent/636-graftling-windows-named-pipe at ff19b05441d234a8c1cc312233c9c0d4b409af93, an ancestor of the bundle head (fast-forward)
-next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh P    (publishes graftling 03d67a3b1c302163ed315a9451698840f14cf9a0 to LUOXIAO92/graftling agent/636-graftling-windows-named-pipe, then waits for the Windows tests run)
-VERDICT 636 00: PASS (P ready: yes; remote branch ancestor; candidate graftling 03d67a3b1c302163ed315a9451698840f14cf9a0)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh P    (publishes graftling 1b3f95ec198e5b105b02ffe052d490b3ccdec616 to LUOXIAO92/graftling agent/636-graftling-windows-named-pipe, then waits for the Windows tests run)
+VERDICT 636 00: PASS (P ready: yes; remote branch ancestor; candidate graftling 1b3f95ec198e5b105b02ffe052d490b3ccdec616)
 [exit 0]

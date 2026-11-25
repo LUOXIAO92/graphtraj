@@ -21,8 +21,8 @@
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
 #       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its prerequisites
-#       are graftling dev 75cb93b2 (W0, W1, W2, W3, W4, W6) and ancestors of it, the head contains 75cb93b2 and is
-#       shown; read through a temporary repository that borrows <Harness>/graftling's objects (nothing
+#       are graftling dev 75cb93b2 (W0, W1, W2, W3, W4, W6), ancestors of it, and round 1's pushed commit 25bd3968
+#       only as an ancestor of the head; the head contains 75cb93b2 and is shown; read through a temporary repository that borrows <Harness>/graftling's objects (nothing
 #       is written there): noreply identity; the paths changed since the base are within ALLOWED (below); the workflow
 #       is the base one with only its push branches line changed, to exactly [agent/632-graftling-windows-ci,
 #       agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes,
@@ -77,6 +77,10 @@ BRANCH=agent/637-graftling-windows-process-listing
 # merges it into its commit on 7609e520, so the bundle also lists 7609e520 as a prerequisite; check_bundle accepts
 # it only as an ancestor of BASE.
 BASE=75cb93b2d6515f95e949a01eaf63a15944722e44
+# Round 1's commit, which P pushed to graftling and fetched into <Harness>/graftling. The head records it by an
+# 'ours' merge (the tree stays the candidate's), so pushing the head is a fast-forward. The bundle lists it as a
+# prerequisite; check_bundle accepts this one commit, not an ancestor of BASE, only as an ancestor of the head.
+PUSHED=25bd396874b01a648fba021fe1e0807d3cded5ba
 # GraphTraj dev with 636's integrated expected list (2 entries: W5 and W8); this Task deletes only its W5 (637) line.
 LIST_BASE=035c3fa3
 REPO=LUOXIAO92/graftling
@@ -172,11 +176,15 @@ check_bundle() {  # the bundle verifies against $GRAFT; BASE is a prerequisite a
   (( ${prereqs[(Ie)$BASE]} )) || stop "the bundle's prerequisites are ${prereqs:-none}, without graftling dev $BASE"
   for prereq in $prereqs; do
     [[ $prereq == $BASE ]] && continue
+    if [[ $prereq == $PUSHED ]]; then
+      ancestor_of_head $PUSHED || stop "the bundle's prerequisite $PUSHED (round 1's pushed commit) is not an ancestor of the bundle head $GSHA"
+      continue
+    fi
     gg merge-base --is-ancestor $prereq $BASE 2> /dev/null \
       || stop "the bundle's prerequisite $prereq is not an ancestor of graftling dev $BASE"
   done
   ancestor_of_head $BASE || stop "graftling dev $BASE is not an ancestor of the bundle head $GSHA"
-  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA contains graftling dev $BASE (prerequisites: ${prereqs}; others are ancestors of the base)"
+  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA contains graftling dev $BASE (prerequisites: ${prereqs}; $PUSHED only as an ancestor of the head, others as ancestors of the base)"
 }
 # check_head: read the bundle head through a temporary repository borrowing $GRAFT's objects (read only there);
 # returns the number of FAILs.

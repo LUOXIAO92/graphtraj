@@ -1,11 +1,13 @@
 $ VERIFY637_GRAFTLING=/tmp/claude-501/rh637/disallowed/graftling VERIFY637_GREMOTE=/tmp/claude-501/rh637/disallowed/gremote.git VERIFY637_GH=/tmp/claude-501/rh637/disallowed/gh/gh VERIFY637_EVIDENCE=/tmp/claude-501/rh637/disallowed/evidence VERIFY637_POLL_S=1 VERIFY637_APPEAR_S=10 VERIFY637_DONE_S=30 VERIFY637_BUNDLE=/tmp/claude-501/rh637/bad.bundle zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/637-graftling-windows-process-listing to graftling /tmp/claude-501/rh637/disallowed/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh637/disallowed/graftling; head 5054e5bb82ab71517470131cead2abf4596fe9e3 contains graftling dev 75cb93b2d6515f95e949a01eaf63a15944722e44 (prerequisites: 7609e52089e638c963cc54c28438c99ea3964f99 75cb93b2d6515f95e949a01eaf63a15944722e44; others are ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh637/disallowed/graftling; head 8966297db04bacc478609d27cac12616fcb736c0 contains graftling dev 75cb93b2d6515f95e949a01eaf63a15944722e44 (prerequisites: 7609e52089e638c963cc54c28438c99ea3964f99 75cb93b2d6515f95e949a01eaf63a15944722e44; 25bd396874b01a648fba021fe1e0807d3cded5ba only as an ancestor of the head, others as ancestors of the base)
 --- bundle commits on 75cb93b2d6515f95e949a01eaf63a15944722e44:
-  5054e5b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: changes outside W5
+  8966297 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: changes outside W5
+  21a393e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Record the already-pushed round-1 commit 25bd3968 without its content (637)
   4bf338f LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 75cb93b2 (W4 636) into agent/637-graftling-windows-process-listing
   47e70a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: list and stop tool and member processes through the execution's job (637, W5)
+  25bd396 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: list and stop tool and member processes through the execution's job (637, W5)
 PASS: author and committer are the noreply identity
 --- files changed since 75cb93b2d6515f95e949a01eaf63a15944722e44:
    .github/workflows/windows.yml                      |   4 +-
@@ -27,7 +29,7 @@ PASS: author and committer are the noreply identity
    tests/test_process_listing_637.py                  | 310 +++++++++++++++++++++
    17 files changed, 704 insertions(+), 35 deletions(-)
 FAIL: paths changed outside the allowed set: README.md
---- .github/workflows/windows.yml at 5054e5bb82ab71517470131cead2abf4596fe9e3 against 75cb93b2d6515f95e949a01eaf63a15944722e44
+--- .github/workflows/windows.yml at 8966297db04bacc478609d27cac12616fcb736c0 against 75cb93b2d6515f95e949a01eaf63a15944722e44
 PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing']
 FAIL: the workflow differs from the base beyond the push branches line (112 -> 112 lines; first differences: ["16: '    timeout-minutes: 90' -> '    timeout-minutes: 91'"])
 --- .github/workflows/windows.yml at 75cb93b2d6515f95e949a01eaf63a15944722e44 (632's accepted workflow with 633's, 634's, 635's, 636's and 638's branches; every other property by 632's wfcheck)
@@ -59,7 +61,7 @@ PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
 PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 75cb93b2d6515f95e949a01eaf63a15944722e44
-PASS: the 6 W5 tests of new-tests.txt are defined at 5054e5bb82ab71517470131cead2abf4596fe9e3 (tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py)
+PASS: the 6 W5 tests of new-tests.txt are defined at 8966297db04bacc478609d27cac12616fcb736c0 (tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py)
 STOP: the bundle head does not meet the checks above; nothing pushed. Run: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/637-graftling-windows-process-listing/scripts/verify-637/steps.zsh 00
 VERDICT 637 P: STOP
 [exit 1]

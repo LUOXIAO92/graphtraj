@@ -9,10 +9,12 @@ $ gh auth status --hostname github.com   (token lines removed)
     - Active account: true
 PASS: /tmp/claude-501/rh637/guard/graftling origin is https://github.com/LUOXIAO92/graftling.git
 NOTE: rehearsal remote /tmp/claude-501/rh637/guard/gremote.git is used instead of graftling origin
-PASS: bundle verifies against /tmp/claude-501/rh637/guard/graftling; head 4bf338ff290b3d058154079a747e1e89444109a3 contains graftling dev 75cb93b2d6515f95e949a01eaf63a15944722e44 (prerequisites: 7609e52089e638c963cc54c28438c99ea3964f99 75cb93b2d6515f95e949a01eaf63a15944722e44; others are ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh637/guard/graftling; head 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0 contains graftling dev 75cb93b2d6515f95e949a01eaf63a15944722e44 (prerequisites: 75cb93b2d6515f95e949a01eaf63a15944722e44 25bd396874b01a648fba021fe1e0807d3cded5ba 7609e52089e638c963cc54c28438c99ea3964f99; 25bd396874b01a648fba021fe1e0807d3cded5ba only as an ancestor of the head, others as ancestors of the base)
 --- bundle commits on 75cb93b2d6515f95e949a01eaf63a15944722e44:
+  21a393e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Record the already-pushed round-1 commit 25bd3968 without its content (637)
   4bf338f LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 75cb93b2 (W4 636) into agent/637-graftling-windows-process-listing
   47e70a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: list and stop tool and member processes through the execution's job (637, W5)
+  25bd396 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: list and stop tool and member processes through the execution's job (637, W5)
 PASS: author and committer are the noreply identity
 --- files changed since 75cb93b2d6515f95e949a01eaf63a15944722e44:
    .github/workflows/windows.yml                      |   2 +-
@@ -33,7 +35,7 @@ PASS: author and committer are the noreply identity
    tests/test_process_listing_637.py                  | 310 +++++++++++++++++++++
    16 files changed, 701 insertions(+), 34 deletions(-)
 PASS: changed paths are within the allowed set: src/graftling/member_processes.py, src/graftling/tool_descendants.py, src/graftling/process_tree.py, src/graftling/_win32.py, src/graftling/control.py, src/graftling/claude/execution.py, src/graftling/pi/execution.py, src/graftling/dsh/execution.py, src/graftling/codex/app_server.py, src/graftling/codex/managed_session.py, PUBLIC_API.md, tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py, tests/test_codex_tool_reclaim_462.py, tests/codex_stdio_peer.py, .github/workflows/windows.yml
---- .github/workflows/windows.yml at 4bf338ff290b3d058154079a747e1e89444109a3 against 75cb93b2d6515f95e949a01eaf63a15944722e44
+--- .github/workflows/windows.yml at 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0 against 75cb93b2d6515f95e949a01eaf63a15944722e44
 PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing']
 PASS: the workflow is the base one with only its push branches line changed
 --- .github/workflows/windows.yml at 75cb93b2d6515f95e949a01eaf63a15944722e44 (632's accepted workflow with 633's, 634's, 635's, 636's and 638's branches; every other property by 632's wfcheck)
@@ -65,10 +67,10 @@ PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
 PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 75cb93b2d6515f95e949a01eaf63a15944722e44
-PASS: the 6 W5 tests of new-tests.txt are defined at 4bf338ff290b3d058154079a747e1e89444109a3 (tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py)
+PASS: the 6 W5 tests of new-tests.txt are defined at 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0 (tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py)
 PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/637-graftling-windows-process-listing/scripts/verify-632/windows-expected.txt parses: 1 expected Windows failures and 0 expected hangs (W8 (not registered; outside this round) 1), 19 allowed environment skips
 expected list: 1 W5 (637) entries at the base, 1 to delete; 0 'Leader-placed (inference)' entries kept as they were: []
 PASS: the W5 (637) line is deleted; no W5 (637) line remains; every other line is byte-identical and in order
-STOP: /tmp/claude-501/rh637/guard/graftling has local agent/637-graftling-windows-process-listing at c5da2f06c442e774af6c0c264bbb3d0848448943, not an ancestor of the bundle head 4bf338ff290b3d058154079a747e1e89444109a3; never overwrite. Inspect: git -C /tmp/claude-501/rh637/guard/graftling log --oneline -3 agent/637-graftling-windows-process-listing
+STOP: /tmp/claude-501/rh637/guard/graftling has local agent/637-graftling-windows-process-listing at 0dc1d494519ece2e2f8bbed1da235be9d40888ef, not an ancestor of the bundle head 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; never overwrite. Inspect: git -C /tmp/claude-501/rh637/guard/graftling log --oneline -3 agent/637-graftling-windows-process-listing
 VERDICT 637 00: STOP
 [exit 1]

@@ -94,6 +94,19 @@ print -r -- "--- after P: remote $(git -C $S/diverged/gremote.git rev-parse $BRA
 fresh ff-local; git -C $S/ff-local/graftling branch -q $BRANCH $BASE
 step ff-local ff-local-00.txt 00; step ff-local ff-local-P.txt P
 print -r -- "--- after P: clone $(git -C $S/ff-local/graftling rev-parse $BRANCH), remote $(git -C $S/ff-local/gremote.git rev-parse $BRANCH)" >> $OUT/ff-local-P.txt
+# PASS, the real state before this P: round 1's P pushed 25bd3968 and fetched it, so the remote branch and the local
+# branch of the graftling clone are both at it. 00: P ready, remote branch an ancestor; P fast-forwards both.
+PUSHED=25bd396874b01a648fba021fe1e0807d3cded5ba
+fresh pushed-before; git -C $S/pushed-before/gremote.git update-ref refs/heads/$BRANCH $PUSHED
+git -C $S/pushed-before/graftling branch -q $BRANCH $PUSHED
+step pushed-before pushed-before-00.txt 00; step pushed-before pushed-before-P.txt P
+print -r -- "--- after P: clone $(git -C $S/pushed-before/graftling rev-parse $BRANCH), remote $(git -C $S/pushed-before/gremote.git rev-parse $BRANCH); bundle head $HEAD_SHA; on the remote: $(git -C $S/pushed-before/gremote.git rev-list --count $PUSHED..$BRANCH) commits added, $PUSHED an ancestor: $(git -C $S/pushed-before/gremote.git merge-base --is-ancestor $PUSHED $BRANCH && print -r -- yes || print -r -- no)" >> $OUT/pushed-before-P.txt
+# STOP: the clone's branch at 25bd3968 but the remote at an unrelated commit (never forced; the remote is unchanged).
+fresh pushed-diverged; git -C $S/pushed-diverged/graftling branch -q $BRANCH $PUSHED
+UNRELATED=$(diverged_commit $S/pushed-diverged/gremote.git)
+git -C $S/pushed-diverged/gremote.git update-ref refs/heads/$BRANCH $UNRELATED
+step pushed-diverged pushed-diverged-00.txt 00; step pushed-diverged pushed-diverged-P.txt P
+print -r -- "--- after P: remote $(git -C $S/pushed-diverged/gremote.git rev-parse $BRANCH) (the unrelated commit $UNRELATED; unchanged), clone $(git -C $S/pushed-diverged/graftling rev-parse $BRANCH)" >> $OUT/pushed-diverged-P.txt
 # 00 not ready, P STOP: a bundle whose head also changes README.md and the workflow's job timeout.
 git clone -q --no-hardlinks $REAL $S/badsrc
 git -C $S/badsrc fetch -q $BUNDLE refs/heads/${BRANCH}:refs/heads/${BRANCH} && git -C $S/badsrc checkout -q $BRANCH

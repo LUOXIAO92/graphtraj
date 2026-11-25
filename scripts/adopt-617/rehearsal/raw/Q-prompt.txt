@@ -1,0 +1,4 @@
+
+[Q] Paste in the Claude Main (ONE call; arguments INLINE; Claude Code may first load the tool's schema with ToolSearch select:mcp__graphtraj__subagents; that is allowed):
+Using only mcp__graphtraj__subagents: call it with action "discover" and query "start an agent" (no feature, no arguments, no arguments_file). Print the raw result exactly and whether it was an error. Then, with Bash, save that raw result exactly (the whole document) as /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/Q.txt.
+  Success: no error; features lists exactly one entry, create (before 617, production also listed models).

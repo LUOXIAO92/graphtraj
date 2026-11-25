@@ -1,0 +1,25 @@
+G record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-99999999T999999-fixture
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+  run.txt: pytest temp root: /private/tmp/claude-501/adopt-617-G-20261125T122035 (TMPDIR=/tmp/claude-501, outside the Harness)
+  run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+  run.txt: candidate: 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | graftling wheel from git archive 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (v0.10.1, graftling-0.10.1-py3-none-any.whl)
+  run.txt: python: /private/tmp/claude-501/r617/scr/gvenv-617/bin/python
+  run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.1 | graphtraj 0.1.0
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_intent_queries_find_create or test_wheels_have_separate_owners or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document
+CHECK 617 GR the record's candidate 6d92d999 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 617 GR the record's graftling wheel is v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+CHECK 617 GR test interpreter graftling = 0.10.1: PASS
+CHECK 617 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-617-G-20261125T122035)
+CHECK 617 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3764 deselected | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+known non-blocking ids: ONLY those in 516's current definition; tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] is NOT known (617 requires it to pass)
+  NEW: tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] (615's intent test; no longer known)
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-3.log: exit 5
+  shard timeouts ('timed out after' lines): 0
+CHECK 617 GR G record (v0.10.1 wheel) has no new failure and no ABNORMAL shard: FAIL (1 NEW ids: run SR)
+start-an-agent: FAILED | lines: FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] - AssertionError: [create, models] (FIXTURE);
+CHECK 617 GR tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] RAN and PASSED in the record (its own -rA outcome line 'PASSED ...'): FAIL (FAILED)
+RESULT 617 G/GR: FAIL | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 1 | ABNORMAL shards: 0 | start-an-agent: FAILED

@@ -1,0 +1,4 @@
+production graphtraj graftling: 0.1.0 0.10.1
+graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473", "hashes": {"sha256": "ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.10.1 direct_url: {"archive_info": {"hash": "sha256=6a67b6f08c2581aa5baa2f38e2aef706fe7b6f14efecdec98c353ef21c579462", "hashes": {"sha256": "6a67b6f08c2581aa5baa2f38e2aef706fe7b6f14efecdec98c353ef21c579462"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/wheels-0.10.1/graftling-0.10.1-py3-none-any.whl"}
+CHECK 617 Q production is graftling 0.10.1 from wheels-0.10.1 and graphtraj from 616's wheels-4ef36426: PASS

@@ -1,0 +1,5 @@
+features:
+- feature: create
+  description: Create a child Agent on a Runtime; returns before its work finishes.
+- feature: models
+  description: List a Runtime's configured connections ...; read only, starts no Agent. (FIXTURE, YAML as GraphTraj's MCP text)

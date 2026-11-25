@@ -1,0 +1,76 @@
+CHECK 617 00 runs under zsh: PASS (zsh 5.9)
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 617 00 this uv's 'uv tool install --help' lists --managed-python: PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+CHECK 617 00 TMPDIR outside the Harness: PASS
+CHECK 617 00 /private/tmp/claude-501/r617/uvtool-617 absent: PASS
+
+### graftling repository /private/tmp/claude-501/r617/g (read only)
+dev: 3a35334e977d5a9536a42d320e2a3243d3989f6d in /private/tmp/claude-501/r617/gdev | main: 6f4aeb8fe9f47b71d81b9771486167b123308066 in /private/tmp/claude-501/r617/g
+CHECK 617 00 graftling dev = 3a35334e977d5a9536a42d320e2a3243d3989f6d: PASS
+CHECK 617 00 graftling main = 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0): PASS
+CHECK 617 00 dev is checked out in /private/tmp/claude-501/r617/gdev and main in /private/tmp/claude-501/r617/g: PASS
+CHECK 617 00 both worktrees clean (git status --porcelain empty): PASS
+CHECK 617 00 v0.10.1 absent locally: PASS
+
+### GitHub /private/tmp/claude-501/r617/origin.git (git ls-remote, read only)
+GitHub main: 6f4aeb8fe9f47b71d81b9771486167b123308066 | dev: 6f4aeb8fe9f47b71d81b9771486167b123308066 | v0.10.1: absent
+CHECK 617 00 GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 617 00 GitHub v0.10.1 absent: PASS
+CHECK 617 00 GitHub dev (6f4aeb8fe9f47b71d81b9771486167b123308066) is 3a35334e977d5a9536a42d320e2a3243d3989f6d or its ancestor, so rp fast-forwards it: PASS
+
+### bundle /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/graftling-0.10.1.bundle
+sha256: 73465bb69a725603e64015c32d8b2e1132cc144bdb5bd10ec541ac0c2c0b85a8
+CHECK 617 00 bundle sha256 = 73465bb69a725603e64015c32d8b2e1132cc144bdb5bd10ec541ac0c2c0b85a8: PASS
+CHECK 617 00 bundle verifies against /private/tmp/claude-501/r617/g (its prerequisite 3a35334e977d5a9536a42d320e2a3243d3989f6d is there): PASS
+list-heads: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a refs/heads/agent/617-graftling-0.10.1
+CHECK 617 00 bundle head = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (agent/617-graftling-0.10.1): PASS
+
+### the release commit, read from a scratch clone /private/tmp/claude-501/r617/scr/g00.git (objects shared from /private/tmp/claude-501/r617/g, which is not written)
+82e9d12b7c4a76e4074d405fbd135f3c38f1103a: graftling 0.10.1 (617) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | committer LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | parent 3a35334e977d5a9536a42d320e2a3243d3989f6d
+CHECK 617 00 82e9d12b7c4a76e4074d405fbd135f3c38f1103a is one commit on 3a35334e977d5a9536a42d320e2a3243d3989f6d: PASS
+CHECK 617 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+changed files: CHANGELOG.md src/graftling/__init__.py src/graftling/claude-plugin/.claude-plugin/plugin.json src/graftling/dsh/package.json src/graftling/pi/package.json 
+CHECK 617 00 the release commit changes exactly the 5 version/CHANGELOG files: PASS
+version at 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: __version__ = "0.10.1"
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+CHECK 617 00 README's first install line at 82e9d12b7c4a76e4074d405fbd135f3c38f1103a is C5's tagless command: PASS
+
+### production /private/tmp/claude-501/r617/project/.venv-runtime (read only)
+production graphtraj graftling: 0.1.0 0.10.0
+graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473", "hashes": {"sha256": "ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.10.0 direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+CHECK 617 00 production is graphtraj 0.1.0 (616's wheels-4ef36426) + graftling 0.10.0 (612's wheels-0.10.0): PASS
+CHECK 617 00 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+production bin: subagents subagents-mcp graphtraj-mcp agent-runner 
+CHECK 617 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
+
+### backups
+616's backup /private/tmp/claude-501/r617/project/tmp/616/backup (the current rollback, information; never written): not complete or absent
+CHECK 617 00 backup /private/tmp/claude-501/r617/scr/backup absent: PASS
+
+### this Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption (GraphTraj, unchanged: its product is production's 4ef36426; G tests it)
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+CHECK 617 00 HEAD's product (src tests plugins manuals pyproject.toml) = 4ef36426, HEAD differs only under scripts/, clean: PASS
+CHECK 617 00 Task 617 ready (current_definition 20261125T120251.218772+0900.md exists): PASS
+plugin and entry files (hashes; V and I require them unchanged):
+  d35a47ddcc32cd8b26e785d0da6071ec2b9f5e5e7585875e9cbc1ca03156dddb  /private/tmp/claude-501/r617/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
+  02299ad72cd0f6316f21f1fccc367b7a4a8e9985e45e9bc4b30b97810f55e9fe  /private/tmp/claude-501/r617/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json
+  ca13e022a2e263a9b635da3e31baea516867694661561dc9e7db923b10f5326b  /private/tmp/claude-501/r617/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json
+  19e5d01f021f16c6f7b2e33233062da07b5c813f8a29d9fd5cfcee237543ac63  /private/tmp/claude-501/r617/project/.mcp.json
+  2b5ead44c19129a9e7257ff4ab37620108e4c587b9025debd5d57d68575ad3c1  /private/tmp/claude-501/r617/project/.claude/settings.local.json
+  0c5f5cd013eaf80a8f901ccae95efff5281ccdee4e55d488df6820a36ca2877f  /private/tmp/claude-501/r617/project/.graphtraj/claude-host/config.json
+
+### Claude: version and one claude -p probe (the Claude login the user approved (603/604/612/616), named in Task 617's definition (acceptance))
+claude: /private/tmp/claude-501/r617/stub/claude -> /private/tmp/claude-501/r617/stub/claude | version: 2.1.330 (stub Claude Code, rehearsal fixture) | recorded at 00: 2.1.330 (stub Claude Code, rehearsal fixture)
+claude -p probe: model claude-opus-5-5 | apiKeySource none | answer 'READY-617 claude-opus-5-5 (stub, rehearsal fixture)' (stream: /private/tmp/claude-501/r617/scr/00-probe.jsonl)
+CHECK 617 00 claude -p answers READY-617 on claude-opus-5-5 through the Claude login (apiKeySource none: no API key): PASS
+
+### Main's Session (I, M, Mr, Q need it)
+no host serving /private/tmp/claude-501/r617/project/.graphtraj/claude-host/config.json found by ps
+source: newest transcript 11111111-2222-3333-4444-555555555617.jsonl
+MAIN=11111111-2222-3333-4444-555555555617 (saved to /private/tmp/claude-501/r617/scr/main.session)
+CHECK 617 00 Main's Session id found: PASS
+members_idle [00]: Task 617's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [00]: no member execution is active: PASS

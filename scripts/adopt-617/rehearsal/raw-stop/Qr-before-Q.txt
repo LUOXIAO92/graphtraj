@@ -1,0 +1,1 @@
+STOP: no /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/Q.txt: Main has not saved the raw discover result yet (Q's prompt)

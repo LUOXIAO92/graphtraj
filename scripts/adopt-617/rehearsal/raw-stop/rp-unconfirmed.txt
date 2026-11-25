@@ -1,0 +1,5 @@
+G/GR: RESULT 617 G/GR: PASS | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | start-an-agent: PASSED
+origin: /private/tmp/claude-501/r617/origin.git
+remote before: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/dev | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main
+will push: dev 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, main 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, refs/tags/v0.10.1 (76cccace1c3b3c20278461112c01801ed4f66375) (fast-forward only, --atomic, no force)
+STOP: the push is outward-facing. It is the user's decision 20261125T120212.212097+0900; run: ADOPT617_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh rp

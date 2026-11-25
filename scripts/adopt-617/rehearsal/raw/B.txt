@@ -1,0 +1,43 @@
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+CHECK 617 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+
+### graftling: git archive v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a) -> /private/tmp/claude-501/r617/scr/gsrc
+  src/graftling/__init__.py: __version__ = "0.10.1"
+  src/graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.1",
+  src/graftling/dsh/package.json:   "version": "0.10.1",
+  src/graftling/pi/package.json:   "version": "0.10.1",
+CHECK 617 B archive version strings (__init__.py and the 3 json) all 0.10.1: PASS
+CHANGELOG first heading: ## 0.10.1 (compatible)
+CHECK 617 B CHANGELOG heading '## 0.10.1 (compatible)' and no '## Unreleased': PASS
+graftling wheel: graftling-0.10.1-py3-none-any.whl
+  METADATA Version: 0.10.1
+  graftling/__init__.py: __version__ = "0.10.1"
+  graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.1",
+  graftling/dsh/package.json:   "version": "0.10.1",
+  graftling/pi/package.json:   "version": "0.10.1",
+CHECK 617 B graftling wheel reports 0.10.1 (METADATA, __init__.py, the 3 json): PASS
+  [console_scripts]: subagents subagents-mcp 
+CHECK 617 B graftling console scripts are exactly subagents, subagents-mcp: PASS
+graftling graftling-0.10.1-py3-none-any.whl vs /private/tmp/claude-501/r617/scr/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 617 B graftling wheel equals git archive v0.10.1: PASS
+CHECK 617 B the graftling wheel's files equal git archive v0.10.1: PASS
+  615 marker: discovery.py models description "'read only.'" x1 | 'starts no Agent' x0
+CHECK 617 B 615's fix is in the wheel (models description ends 'read only.' without 'starts no Agent'): PASS
+graftling wheel build/ or __pycache__/ entries: 0
+CHECK 617 B no build/ or __pycache__ in the graftling wheel: PASS
+
+### graphtraj: 616's wheel /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426 (production's, reused; never rebuilt)
+wheel: graphtraj-0.1.0-py3-none-any.whl | COMMIT: 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759
+graphtraj-0.1.0-py3-none-any.whl: OK
+CHECK 617 B 616's graphtraj wheel verifies (SHA256SUMS) and its sha256 is ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473: PASS
+CHECK 617 B 616's wheels-4ef36426 COMMIT is 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759: PASS
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/r617/scr/tsrc/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 617 B 616's graphtraj wheel equals git archive 4ef36426: PASS
+CHECK 617 B 616's graphtraj wheel's graphtraj/ files equal git archive 4ef36426 (G tests this Worktree's HEAD, whose product is 4ef36426): PASS
+Requires-Dist: ['graftling<0.11,>=0.10.0', 'click<9,>=8.1', 'PyYAML<7,>=6', 'websockets<17,>=15']
+CHECK 617 B graphtraj requires graftling graftling<0.11,>=0.10.0: includes 0.10.1, excludes 0.11.0: PASS
+
+### the graftling wheel G, V and I install: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/wheels-0.10.1
+graftling-0.10.1-py3-none-any.whl: OK
+CHECK 617 B /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/wheels-0.10.1 holds the wheel with SHA256SUMS and COMMIT: PASS
+wheel sha256: 6a67b6f08c2581aa5baa2f38e2aef706fe7b6f14efecdec98c353ef21c579462  graftling-0.10.1-py3-none-any.whl | graphtraj (reused): ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473  graphtraj-0.1.0-py3-none-any.whl

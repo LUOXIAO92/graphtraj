@@ -1,0 +1,12 @@
+Downloading cpython-3.14.7-macos-aarch64-none (download) (25.3MiB)
+ Downloaded cpython-3.14.7-macos-aarch64-none (download)
+Resolved 3 packages in 58ms
+   Building graftling @ git+file:///private/tmp/claude-501/r617/origin.git@82e9d12b7c4a76e4074d405fbd135f3c38f1103a
+      Built graftling @ git+file:///private/tmp/claude-501/r617/origin.git@82e9d12b7c4a76e4074d405fbd135f3c38f1103a
+Prepared 3 packages in 305ms
+Installed 3 packages in 3ms
+ + graftling==0.10.1 (from git+file:///private/tmp/claude-501/r617/origin.git@82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+ + pyyaml==6.0.4
+ + websockets==16.1.1
+Installed 2 executables: subagents, subagents-mcp
+warning: `/private/tmp/claude-501/r617/uvtool-617/bin` is not on your PATH. To use installed tools, add the directory to your PATH.

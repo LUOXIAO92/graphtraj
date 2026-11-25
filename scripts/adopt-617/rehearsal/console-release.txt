@@ -1,0 +1,572 @@
+## setup: graftling scratch clone + bare origin (GitHub stand-in)
+scratch graftling: main 6f4aeb8fe9f47b71d81b9771486167b123308066 | dev 3a35334e977d5a9536a42d320e2a3243d3989f6d | origin main 6f4aeb8fe9f47b71d81b9771486167b123308066 dev 6f4aeb8fe9f47b71d81b9771486167b123308066 HEAD -> refs/heads/main
+## setup: STUB claude and ps (fixtures)
+## setup: FAKE PRODUCTION /private/tmp/claude-501/r617/project (fixture built by the real product from 616's graphtraj 4ef36426 and 612's graftling 0.10.0 wheels)
+fake production: graphtraj 0.1.0 graftling 0.10.0 click 8.5.0 websockets 16.1.1 | pip check: WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+No broken requirements found. | .mcp.json servers: ['graphtraj'] | hook copy: hooks.json host_context.mjs 
+
+## script hygiene
+steps.zsh: assigned names 242 | special names among them: path HOME PATH TERM LANG | other than the intended (clean()'s env -i pass-throughs; path = the PATH array): none
+rehearse.zsh: assigned names 70 | special names among them: HOME PATH LANG | other than the intended (clean()'s env -i pass-throughs; path = the PATH array): none
+$NAME: followed by a letter (zsh modifier trap) in steps.zsh: 0 occurrences
+zsh -n steps.zsh: (empty = OK) | py_compile q617.py: (empty = OK)
+git diff 4ef36426 HEAD --name-only -- src tests plugins manuals pyproject.toml: (empty = production's product)
+
+## STOP: rel with dev moved (then dev is reset to 3a35334e977d5a9536a42d320e2a3243d3989f6d)
+
+######## rehearsal: STOP: rel with dev moved
+[rel] Main. graftling repository /private/tmp/claude-501/r617/g: fetch agent/617-graftling-0.10.1 from the bundle, fast-forward dev (/private/tmp/claude-501/r617/gdev) and main (/private/tmp/claude-501/r617/g) to 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, annotated tag v0.10.1 (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>). No network, no login. Dialog: none.
+before: dev 73cb965672491d497328a6647470d613bb9f0ae9 (in /private/tmp/claude-501/r617/gdev) | main 6f4aeb8fe9f47b71d81b9771486167b123308066 (in /private/tmp/claude-501/r617/g) | v0.10.1 absent
+STOP: graftling dev is 73cb965672491d497328a6647470d613bb9f0ae9, no longer 3a35334e977d5a9536a42d320e2a3243d3989f6d (moved since dispatch: 73cb965 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.
+
+rel STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw-stop/rel.txt to the Team; do not run B or rp.
+######## exit=1 (STOP: rel with dev moved)
+after the STOP: dev 73cb965672491d497328a6647470d613bb9f0ae9 main 6f4aeb8fe9f47b71d81b9771486167b123308066 tag v0.10.1 absent branch agent/617 absent
+
+######## rehearsal: 00
+[00] Main. Read only, apart from creating /private/tmp/claude-501/r617/scr (main.session, cc.version, the probe's stream, a scratch clone g00.git to read the bundle). Login: yes, one claude -p probe with the Claude login the user approved (603/604/612/616), named in Task 617's definition (acceptance); no Codex, Pi or DSH. Network: github.com (git ls-remote) and Claude. Dialog: none.
+CHECK 617 00 runs under zsh: PASS (zsh 5.9)
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 617 00 this uv's 'uv tool install --help' lists --managed-python: PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+CHECK 617 00 TMPDIR outside the Harness: PASS
+CHECK 617 00 /private/tmp/claude-501/r617/uvtool-617 absent: PASS
+
+### graftling repository /private/tmp/claude-501/r617/g (read only)
+dev: 3a35334e977d5a9536a42d320e2a3243d3989f6d in /private/tmp/claude-501/r617/gdev | main: 6f4aeb8fe9f47b71d81b9771486167b123308066 in /private/tmp/claude-501/r617/g
+CHECK 617 00 graftling dev = 3a35334e977d5a9536a42d320e2a3243d3989f6d: PASS
+CHECK 617 00 graftling main = 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0): PASS
+CHECK 617 00 dev is checked out in /private/tmp/claude-501/r617/gdev and main in /private/tmp/claude-501/r617/g: PASS
+CHECK 617 00 both worktrees clean (git status --porcelain empty): PASS
+CHECK 617 00 v0.10.1 absent locally: PASS
+
+### GitHub /private/tmp/claude-501/r617/origin.git (git ls-remote, read only)
+GitHub main: 6f4aeb8fe9f47b71d81b9771486167b123308066 | dev: 6f4aeb8fe9f47b71d81b9771486167b123308066 | v0.10.1: absent
+CHECK 617 00 GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 617 00 GitHub v0.10.1 absent: PASS
+CHECK 617 00 GitHub dev (6f4aeb8fe9f47b71d81b9771486167b123308066) is 3a35334e977d5a9536a42d320e2a3243d3989f6d or its ancestor, so rp fast-forwards it: PASS
+
+### bundle /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/graftling-0.10.1.bundle
+sha256: 73465bb69a725603e64015c32d8b2e1132cc144bdb5bd10ec541ac0c2c0b85a8
+CHECK 617 00 bundle sha256 = 73465bb69a725603e64015c32d8b2e1132cc144bdb5bd10ec541ac0c2c0b85a8: PASS
+CHECK 617 00 bundle verifies against /private/tmp/claude-501/r617/g (its prerequisite 3a35334e977d5a9536a42d320e2a3243d3989f6d is there): PASS
+list-heads: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a refs/heads/agent/617-graftling-0.10.1
+CHECK 617 00 bundle head = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (agent/617-graftling-0.10.1): PASS
+
+### the release commit, read from a scratch clone /private/tmp/claude-501/r617/scr/g00.git (objects shared from /private/tmp/claude-501/r617/g, which is not written)
+82e9d12b7c4a76e4074d405fbd135f3c38f1103a: graftling 0.10.1 (617) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | committer LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | parent 3a35334e977d5a9536a42d320e2a3243d3989f6d
+CHECK 617 00 82e9d12b7c4a76e4074d405fbd135f3c38f1103a is one commit on 3a35334e977d5a9536a42d320e2a3243d3989f6d: PASS
+CHECK 617 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+changed files: CHANGELOG.md src/graftling/__init__.py src/graftling/claude-plugin/.claude-plugin/plugin.json src/graftling/dsh/package.json src/graftling/pi/package.json 
+CHECK 617 00 the release commit changes exactly the 5 version/CHANGELOG files: PASS
+version at 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: __version__ = "0.10.1"
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+CHECK 617 00 README's first install line at 82e9d12b7c4a76e4074d405fbd135f3c38f1103a is C5's tagless command: PASS
+
+### production /private/tmp/claude-501/r617/project/.venv-runtime (read only)
+production graphtraj graftling: 0.1.0 0.10.0
+graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473", "hashes": {"sha256": "ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.10.0 direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+CHECK 617 00 production is graphtraj 0.1.0 (616's wheels-4ef36426) + graftling 0.10.0 (612's wheels-0.10.0): PASS
+CHECK 617 00 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+production bin: subagents subagents-mcp graphtraj-mcp agent-runner 
+CHECK 617 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
+
+### backups
+616's backup /private/tmp/claude-501/r617/project/tmp/616/backup (the current rollback, information; never written): not complete or absent
+CHECK 617 00 backup /private/tmp/claude-501/r617/scr/backup absent: PASS
+
+### this Worktree /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption (GraphTraj, unchanged: its product is production's 4ef36426; G tests it)
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+CHECK 617 00 HEAD's product (src tests plugins manuals pyproject.toml) = 4ef36426, HEAD differs only under scripts/, clean: PASS
+CHECK 617 00 Task 617 ready (current_definition 20261125T120251.218772+0900.md exists): PASS
+plugin and entry files (hashes; V and I require them unchanged):
+  d35a47ddcc32cd8b26e785d0da6071ec2b9f5e5e7585875e9cbc1ca03156dddb  /private/tmp/claude-501/r617/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
+  02299ad72cd0f6316f21f1fccc367b7a4a8e9985e45e9bc4b30b97810f55e9fe  /private/tmp/claude-501/r617/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json
+  ca13e022a2e263a9b635da3e31baea516867694661561dc9e7db923b10f5326b  /private/tmp/claude-501/r617/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json
+  19e5d01f021f16c6f7b2e33233062da07b5c813f8a29d9fd5cfcee237543ac63  /private/tmp/claude-501/r617/project/.mcp.json
+  2b5ead44c19129a9e7257ff4ab37620108e4c587b9025debd5d57d68575ad3c1  /private/tmp/claude-501/r617/project/.claude/settings.local.json
+  0c5f5cd013eaf80a8f901ccae95efff5281ccdee4e55d488df6820a36ca2877f  /private/tmp/claude-501/r617/project/.graphtraj/claude-host/config.json
+
+### Claude: version and one claude -p probe (the Claude login the user approved (603/604/612/616), named in Task 617's definition (acceptance))
+claude: /private/tmp/claude-501/r617/stub/claude -> /private/tmp/claude-501/r617/stub/claude | version: 2.1.330 (stub Claude Code, rehearsal fixture) | recorded at 00: 2.1.330 (stub Claude Code, rehearsal fixture)
+claude -p probe: model claude-opus-5-5 | apiKeySource none | answer 'READY-617 claude-opus-5-5 (stub, rehearsal fixture)' (stream: /private/tmp/claude-501/r617/scr/00-probe.jsonl)
+CHECK 617 00 claude -p answers READY-617 on claude-opus-5-5 through the Claude login (apiKeySource none: no API key): PASS
+
+### Main's Session (I, M, Mr, Q need it)
+no host serving /private/tmp/claude-501/r617/project/.graphtraj/claude-host/config.json found by ps
+source: newest transcript 11111111-2222-3333-4444-555555555617.jsonl
+MAIN=11111111-2222-3333-4444-555555555617 (saved to /private/tmp/claude-501/r617/scr/main.session)
+CHECK 617 00 Main's Session id found: PASS
+members_idle [00]: Task 617's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [00]: no member execution is active: PASS
+
+----- summary for Main (00) -----
+CHECK 617 00 runs under zsh: PASS (zsh 5.9)
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 617 00 this uv's 'uv tool install --help' lists --managed-python: PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+CHECK 617 00 TMPDIR outside the Harness: PASS
+CHECK 617 00 /private/tmp/claude-501/r617/uvtool-617 absent: PASS
+dev: 3a35334e977d5a9536a42d320e2a3243d3989f6d in /private/tmp/claude-501/r617/gdev | main: 6f4aeb8fe9f47b71d81b9771486167b123308066 in /private/tmp/claude-501/r617/g
+CHECK 617 00 graftling dev = 3a35334e977d5a9536a42d320e2a3243d3989f6d: PASS
+CHECK 617 00 graftling main = 6f4aeb8fe9f47b71d81b9771486167b123308066 (v0.10.0): PASS
+CHECK 617 00 dev is checked out in /private/tmp/claude-501/r617/gdev and main in /private/tmp/claude-501/r617/g: PASS
+CHECK 617 00 both worktrees clean (git status --porcelain empty): PASS
+CHECK 617 00 v0.10.1 absent locally: PASS
+GitHub main: 6f4aeb8fe9f47b71d81b9771486167b123308066 | dev: 6f4aeb8fe9f47b71d81b9771486167b123308066 | v0.10.1: absent
+CHECK 617 00 GitHub main = 6f4aeb8fe9f47b71d81b9771486167b123308066: PASS
+CHECK 617 00 GitHub v0.10.1 absent: PASS
+CHECK 617 00 GitHub dev (6f4aeb8fe9f47b71d81b9771486167b123308066) is 3a35334e977d5a9536a42d320e2a3243d3989f6d or its ancestor, so rp fast-forwards it: PASS
+sha256: 73465bb69a725603e64015c32d8b2e1132cc144bdb5bd10ec541ac0c2c0b85a8
+CHECK 617 00 bundle sha256 = 73465bb69a725603e64015c32d8b2e1132cc144bdb5bd10ec541ac0c2c0b85a8: PASS
+CHECK 617 00 bundle verifies against /private/tmp/claude-501/r617/g (its prerequisite 3a35334e977d5a9536a42d320e2a3243d3989f6d is there): PASS
+list-heads: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a refs/heads/agent/617-graftling-0.10.1
+CHECK 617 00 bundle head = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (agent/617-graftling-0.10.1): PASS
+CHECK 617 00 82e9d12b7c4a76e4074d405fbd135f3c38f1103a is one commit on 3a35334e977d5a9536a42d320e2a3243d3989f6d: PASS
+CHECK 617 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+CHECK 617 00 the release commit changes exactly the 5 version/CHANGELOG files: PASS
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+CHECK 617 00 README's first install line at 82e9d12b7c4a76e4074d405fbd135f3c38f1103a is C5's tagless command: PASS
+production graphtraj graftling: 0.1.0 0.10.0
+graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473", "hashes": {"sha256": "ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.10.0 direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+CHECK 617 00 production is graphtraj 0.1.0 (616's wheels-4ef36426) + graftling 0.10.0 (612's wheels-0.10.0): PASS
+CHECK 617 00 production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+production bin: subagents subagents-mcp graphtraj-mcp agent-runner 
+CHECK 617 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
+616's backup /private/tmp/claude-501/r617/project/tmp/616/backup (the current rollback, information; never written): not complete or absent
+CHECK 617 00 backup /private/tmp/claude-501/r617/scr/backup absent: PASS
+CHECK 617 00 HEAD's product (src tests plugins manuals pyproject.toml) = 4ef36426, HEAD differs only under scripts/, clean: PASS
+CHECK 617 00 Task 617 ready (current_definition 20261125T120251.218772+0900.md exists): PASS
+claude: /private/tmp/claude-501/r617/stub/claude -> /private/tmp/claude-501/r617/stub/claude | version: 2.1.330 (stub Claude Code, rehearsal fixture) | recorded at 00: 2.1.330 (stub Claude Code, rehearsal fixture)
+claude -p probe: model claude-opus-5-5 | apiKeySource none | answer 'READY-617 claude-opus-5-5 (stub, rehearsal fixture)' (stream: /private/tmp/claude-501/r617/scr/00-probe.jsonl)
+CHECK 617 00 claude -p answers READY-617 on claude-opus-5-5 through the Claude login (apiKeySource none: no API key): PASS
+MAIN=11111111-2222-3333-4444-555555555617 (saved to /private/tmp/claude-501/r617/scr/main.session)
+CHECK 617 00 Main's Session id found: PASS
+members_idle [00]: Task 617's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [00]: no member execution is active: PASS
+-----
+Success: every 'CHECK 617 00 ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh rel
+######## exit=0 (00)
+
+######## rehearsal: rel
+[rel] Main. graftling repository /private/tmp/claude-501/r617/g: fetch agent/617-graftling-0.10.1 from the bundle, fast-forward dev (/private/tmp/claude-501/r617/gdev) and main (/private/tmp/claude-501/r617/g) to 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, annotated tag v0.10.1 (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>). No network, no login. Dialog: none.
+before: dev 3a35334e977d5a9536a42d320e2a3243d3989f6d (in /private/tmp/claude-501/r617/gdev) | main 6f4aeb8fe9f47b71d81b9771486167b123308066 (in /private/tmp/claude-501/r617/g) | v0.10.1 absent
+
+### bundle (sha256 73465bb69a725603...): verify, fetch agent/617-graftling-0.10.1, check it is 82e9d12b7c4a76e4074d405fbd135f3c38f1103a on 3a35334e977d5a9536a42d320e2a3243d3989f6d
+/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/graftling-0.10.1.bundle is okay
+agent/617-graftling-0.10.1 = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (parent 3a35334e977d5a9536a42d320e2a3243d3989f6d) | author / committer: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> / LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+
+### dev: fast-forward 3a35334e977d5a9536a42d320e2a3243d3989f6d -> 82e9d12b7c4a76e4074d405fbd135f3c38f1103a in /private/tmp/claude-501/r617/gdev
+
+### main: fast-forward 6f4aeb8fe9f47b71d81b9771486167b123308066 -> 82e9d12b7c4a76e4074d405fbd135f3c38f1103a in /private/tmp/claude-501/r617/g
+
+### annotated tag v0.10.1 at 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+v0.10.1 -> 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | dev 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | main 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 617 rel v0.10.1 peels to 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel graftling main == dev == v0.10.1^{} == 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel v0.10.1 is an annotated tag with the noreply tagger: PASS
+CHECK 617 rel v0.10.1 message names 615 and compatible: PASS
+CHECK 617 rel version at v0.10.1 is 0.10.1: PASS (__version__ = "0.10.1")
+
+----- summary for Main (rel) -----
+before: dev 3a35334e977d5a9536a42d320e2a3243d3989f6d (in /private/tmp/claude-501/r617/gdev) | main 6f4aeb8fe9f47b71d81b9771486167b123308066 (in /private/tmp/claude-501/r617/g) | v0.10.1 absent
+CHECK 617 rel v0.10.1 peels to 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel graftling main == dev == v0.10.1^{} == 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel v0.10.1 is an annotated tag with the noreply tagger: PASS
+CHECK 617 rel v0.10.1 message names 615 and compatible: PASS
+CHECK 617 rel version at v0.10.1 is 0.10.1: PASS (__version__ = "0.10.1")
+-----
+Success: every 'CHECK 617 rel ...: PASS' (or 'already released').
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh B
+######## exit=0 (rel)
+
+######## rehearsal: rel again (already released)
+[rel] Main. graftling repository /private/tmp/claude-501/r617/g: fetch agent/617-graftling-0.10.1 from the bundle, fast-forward dev (/private/tmp/claude-501/r617/gdev) and main (/private/tmp/claude-501/r617/g) to 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, annotated tag v0.10.1 (LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>). No network, no login. Dialog: none.
+before: dev 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (in /private/tmp/claude-501/r617/gdev) | main 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (in /private/tmp/claude-501/r617/g) | v0.10.1 82e9d12b7c4a76e4074d405fbd135f3c38f1103a
+already released: v0.10.1 = main = dev = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (nothing to do)
+v0.10.1 -> 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | dev 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | main 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 617 rel v0.10.1 peels to 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel graftling main == dev == v0.10.1^{} == 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel v0.10.1 is an annotated tag with the noreply tagger: PASS
+CHECK 617 rel v0.10.1 message names 615 and compatible: PASS
+CHECK 617 rel version at v0.10.1 is 0.10.1: PASS (__version__ = "0.10.1")
+
+----- summary for Main (rel) -----
+before: dev 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (in /private/tmp/claude-501/r617/gdev) | main 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (in /private/tmp/claude-501/r617/g) | v0.10.1 82e9d12b7c4a76e4074d405fbd135f3c38f1103a
+already released: v0.10.1 = main = dev = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (nothing to do)
+CHECK 617 rel v0.10.1 peels to 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel graftling main == dev == v0.10.1^{} == 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rel v0.10.1 is an annotated tag with the noreply tagger: PASS
+CHECK 617 rel v0.10.1 message names 615 and compatible: PASS
+CHECK 617 rel version at v0.10.1 is 0.10.1: PASS (__version__ = "0.10.1")
+-----
+Success: every 'CHECK 617 rel ...: PASS' (or 'already released').
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh B
+######## exit=0 (rel again (already released))
+
+######## rehearsal: B
+[B] Main, before the push. Builds the graftling wheel with /Users/luoxiao/miniconda3/bin/python3.13 (--no-index --no-deps --no-build-isolation) from git archive v0.10.1 -> /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/wheels-0.10.1. graphtraj: 616's wheels-4ef36426 is REUSED by sha256 (never rebuilt) and compared with git archive 4ef36426. No network, no login. Dialog: none.
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+CHECK 617 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+
+### graftling: git archive v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a) -> /private/tmp/claude-501/r617/scr/gsrc
+  src/graftling/__init__.py: __version__ = "0.10.1"
+  src/graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.1",
+  src/graftling/dsh/package.json:   "version": "0.10.1",
+  src/graftling/pi/package.json:   "version": "0.10.1",
+CHECK 617 B archive version strings (__init__.py and the 3 json) all 0.10.1: PASS
+CHANGELOG first heading: ## 0.10.1 (compatible)
+CHECK 617 B CHANGELOG heading '## 0.10.1 (compatible)' and no '## Unreleased': PASS
+graftling wheel: graftling-0.10.1-py3-none-any.whl
+  METADATA Version: 0.10.1
+  graftling/__init__.py: __version__ = "0.10.1"
+  graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.1",
+  graftling/dsh/package.json:   "version": "0.10.1",
+  graftling/pi/package.json:   "version": "0.10.1",
+CHECK 617 B graftling wheel reports 0.10.1 (METADATA, __init__.py, the 3 json): PASS
+  [console_scripts]: subagents subagents-mcp 
+CHECK 617 B graftling console scripts are exactly subagents, subagents-mcp: PASS
+graftling graftling-0.10.1-py3-none-any.whl vs /private/tmp/claude-501/r617/scr/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 617 B graftling wheel equals git archive v0.10.1: PASS
+CHECK 617 B the graftling wheel's files equal git archive v0.10.1: PASS
+  615 marker: discovery.py models description "'read only.'" x1 | 'starts no Agent' x0
+CHECK 617 B 615's fix is in the wheel (models description ends 'read only.' without 'starts no Agent'): PASS
+graftling wheel build/ or __pycache__/ entries: 0
+CHECK 617 B no build/ or __pycache__ in the graftling wheel: PASS
+
+### graphtraj: 616's wheel /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426 (production's, reused; never rebuilt)
+wheel: graphtraj-0.1.0-py3-none-any.whl | COMMIT: 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759
+graphtraj-0.1.0-py3-none-any.whl: OK
+CHECK 617 B 616's graphtraj wheel verifies (SHA256SUMS) and its sha256 is ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473: PASS
+CHECK 617 B 616's wheels-4ef36426 COMMIT is 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759: PASS
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/r617/scr/tsrc/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 617 B 616's graphtraj wheel equals git archive 4ef36426: PASS
+CHECK 617 B 616's graphtraj wheel's graphtraj/ files equal git archive 4ef36426 (G tests this Worktree's HEAD, whose product is 4ef36426): PASS
+Requires-Dist: ['graftling<0.11,>=0.10.0', 'click<9,>=8.1', 'PyYAML<7,>=6', 'websockets<17,>=15']
+CHECK 617 B graphtraj requires graftling graftling<0.11,>=0.10.0: includes 0.10.1, excludes 0.11.0: PASS
+
+### the graftling wheel G, V and I install: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/wheels-0.10.1
+graftling-0.10.1-py3-none-any.whl: OK
+CHECK 617 B /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/wheels-0.10.1 holds the wheel with SHA256SUMS and COMMIT: PASS
+wheel sha256: 6a67b6f08c2581aa5baa2f38e2aef706fe7b6f14efecdec98c353ef21c579462  graftling-0.10.1-py3-none-any.whl | graphtraj (reused): ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473  graphtraj-0.1.0-py3-none-any.whl
+
+----- summary for Main (B) -----
+CHECK 617 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+CHECK 617 B archive version strings (__init__.py and the 3 json) all 0.10.1: PASS
+CHECK 617 B CHANGELOG heading '## 0.10.1 (compatible)' and no '## Unreleased': PASS
+CHECK 617 B graftling wheel reports 0.10.1 (METADATA, __init__.py, the 3 json): PASS
+CHECK 617 B graftling console scripts are exactly subagents, subagents-mcp: PASS
+CHECK 617 B graftling wheel equals git archive v0.10.1: PASS
+CHECK 617 B the graftling wheel's files equal git archive v0.10.1: PASS
+CHECK 617 B 615's fix is in the wheel (models description ends 'read only.' without 'starts no Agent'): PASS
+CHECK 617 B no build/ or __pycache__ in the graftling wheel: PASS
+wheel: graphtraj-0.1.0-py3-none-any.whl | COMMIT: 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759
+CHECK 617 B 616's graphtraj wheel verifies (SHA256SUMS) and its sha256 is ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473: PASS
+CHECK 617 B 616's wheels-4ef36426 COMMIT is 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759: PASS
+CHECK 617 B 616's graphtraj wheel equals git archive 4ef36426: PASS
+CHECK 617 B 616's graphtraj wheel's graphtraj/ files equal git archive 4ef36426 (G tests this Worktree's HEAD, whose product is 4ef36426): PASS
+Requires-Dist: ['graftling<0.11,>=0.10.0', 'click<9,>=8.1', 'PyYAML<7,>=6', 'websockets<17,>=15']
+CHECK 617 B graphtraj requires graftling graftling<0.11,>=0.10.0: includes 0.10.1, excludes 0.11.0: PASS
+CHECK 617 B /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/wheels-0.10.1 holds the wheel with SHA256SUMS and COMMIT: PASS
+wheel sha256: 6a67b6f08c2581aa5baa2f38e2aef706fe7b6f14efecdec98c353ef21c579462  graftling-0.10.1-py3-none-any.whl | graphtraj (reused): ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473  graphtraj-0.1.0-py3-none-any.whl
+-----
+Success: every 'CHECK 617 B ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh G    (Main starts it as a BACKGROUND command; it runs ~25-30 min and ends with its verdict, then: ADOPT617_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh rp. Meanwhile V may run: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh V)
+######## exit=0 (B)
+
+######## rehearsal: STOP: I before V/GR (nothing changed; no I.txt is written)
+[I] USER (Main tells the USER first; the USER /exits Main, then runs this in a normal Terminal). Waits for members, backs up to /private/tmp/claude-501/r617/scr/backup, installs ONLY the graftling 0.10.1 wheel into /private/tmp/claude-501/r617/project/.venv-runtime (graftling 0.10.0 -> 0.10.1; graphtraj 4ef36426 untouched) with pip --force-reinstall --no-deps --no-index, checks the real entries. No login. Dialog: none (one Enter to confirm). ~3 min plus waiting.
+STOP: V or G/GR has not passed. Nothing changed.
+######## exit=1 (STOP: I before V/GR (nothing changed; no I.txt is written))
+I.txt in raw/ after the STOP: absent
+
+######## rehearsal: STOP: rp (confirmed) before G/GR passed
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.10.1 to origin (/private/tmp/claude-501/r617/origin.git), fast-forward only, atomic, no force. Only after rel and after G/GR PASSED (the definition requires the paired GraphTraj suite before the push). The user's release decision is the push decision (Worldline user-decision 20261125T120212.212097+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+STOP: G/GR has not passed (/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/GR.ok absent or /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/GR.txt has no 'RESULT 617 G/GR: PASS'): the paired GraphTraj suite with the v0.10.1 wheel must pass before the push. Nothing pushed.
+
+rp STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/rp.txt to the Team.
+######## exit=1 (STOP: rp (confirmed) before G/GR passed)
+after the STOP: origin main 6f4aeb8fe9f47b71d81b9771486167b123308066 dev 6f4aeb8fe9f47b71d81b9771486167b123308066 tag v0.10.1 absent
+\n## G: the step's own process starts at 12:20:35; it must exit only after its shards end, with the verdict as its last output
+## G queue: a ps FIXTURE line shows another suite ('-m pytest') for ~5 s; G must wait for it in its own process
+
+######## rehearsal: G (-k: REAL tests incl. 615's intent test, a repository fixture and MCP/discovery tests)
+[G] Main STARTS THIS STEP IN THE BACKGROUND ITSELF (Runtime background command); the Runtime tells Main when it exits. Full GraphTraj suite: this Worktree's HEAD (editable; product = production's 4ef36426) + the v0.10.1 wheel from B, 6 parallel shards through scripts/run_test_shards.py with -rA (each test's own outcome is recorded); pytest temp under TMPDIR=/tmp/claude-501 (outside the Harness; checked below). Main's suite queue is serial: while another suite runs, G waits for it first. This process waits for the shards, then judges the record (GR) and exits; its LAST lines are the verdict, the counts, the start-an-agent outcome and the next command. Duration: ~25-30 min once the shards start, plus any wait behind another suite. No login, no network. Dialog: none.
+TMPDIR=/tmp/claude-501 (outside the Harness)
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+pytest temp root: /private/tmp/claude-501/adopt-617-G-20261125T122035 (TMPDIR=/tmp/claude-501, outside the Harness)
+launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+candidate: 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | graftling wheel from git archive 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (v0.10.1, graftling-0.10.1-py3-none-any.whl)
+python: /private/tmp/claude-501/r617/scr/gvenv-617/bin/python
+test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.1 | graphtraj 0.1.0
+REHEARSAL: extra pytest args after -- -rA: -k test_intent_queries_find_create or test_wheels_have_separate_owners or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document
+record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035
+12:20:37 waiting for another suite: 88 
+12:20:40 waiting for another suite: 88 
+12:20:42 started (6 shards; this step waits for them)
+12:20:46 ended (all shards ended: exit=1)
+
+### G: the suite has ended; GR judges its record (the same checks as the GR step)
+[GR] G runs this at its end; Main may rerun it alone to re-judge an ended G record. Read only: G's record, totals, every FAILED/ERROR id and ABNORMAL shard, classed against 516's CURRENT definition ONLY (a shard 'timed out after' is NEW), and the start-an-agent test's own outcome (it must have RUN and PASSED). No login. Dialog: none.
+G record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+  run.txt: pytest temp root: /private/tmp/claude-501/adopt-617-G-20261125T122035 (TMPDIR=/tmp/claude-501, outside the Harness)
+  run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+  run.txt: candidate: 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | graftling wheel from git archive 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (v0.10.1, graftling-0.10.1-py3-none-any.whl)
+  run.txt: python: /private/tmp/claude-501/r617/scr/gvenv-617/bin/python
+  run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.1 | graphtraj 0.1.0
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_intent_queries_find_create or test_wheels_have_separate_owners or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document
+CHECK 617 GR the record's candidate 6d92d999 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 617 GR the record's graftling wheel is v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+CHECK 617 GR test interpreter graftling = 0.10.1: PASS
+CHECK 617 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-617-G-20261125T122035)
+CHECK 617 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3764 deselected | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+known non-blocking ids: ONLY those in 516's current definition; tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] is NOT known (617 requires it to pass)
+  (no FAILED/ERROR lines)
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-3.log: exit 5
+  shard timeouts ('timed out after' lines): 0
+CHECK 617 GR G record (v0.10.1 wheel) has no new failure and no ABNORMAL shard: PASS
+start-an-agent: PASSED | lines: PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent];
+CHECK 617 GR tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] RAN and PASSED in the record (its own -rA outcome line 'PASSED ...'): PASS (PASSED)
+
+----- summary for Main (GR) -----
+G record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035
+CHECK 617 GR the record's candidate 6d92d999 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 617 GR the record's graftling wheel is v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+CHECK 617 GR test interpreter graftling = 0.10.1: PASS
+CHECK 617 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-617-G-20261125T122035)
+CHECK 617 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3764 deselected | exit: 1
+CHECK 617 GR G record (v0.10.1 wheel) has no new failure and no ABNORMAL shard: PASS
+start-an-agent: PASSED | lines: PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent];
+CHECK 617 GR tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] RAN and PASSED in the record (its own -rA outcome line 'PASSED ...'): PASS (PASSED)
+-----
+RESULT 617 G/GR: PASS | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | start-an-agent: PASSED
+
+==> next (paste as is): ADOPT617_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh rp
+######## exit=0 (G (-k: REAL tests incl. 615's intent test, a repository fixture and MCP/discovery tests))
+## G: the step's process exited at 12:20:46 | wait.txt: 12:20:37 waiting for another suite: 88 ;12:20:40 waiting for another suite: 88 ;12:20:42 started (6 shards; this step waits for them);12:20:46 ended (all shards ended: exit=1); | suite.txt last line: exit=1
+## G record's PASSED lines (-rA, the per-test outcomes GR reads):
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[launch a new agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[spawn agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[Start a new Agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]
+PASSED tests/test_agents_model_discovery.py::test_graphtraj_discovery_keeps_its_document[claude]
+PASSED tests/test_agents_model_discovery.py::test_graphtraj_discovery_keeps_its_document[codex]
+PASSED tests/test_agents_model_discovery.py::test_graphtraj_discovery_keeps_its_document[dsh]
+PASSED tests/test_agents_model_discovery.py::test_graphtraj_discovery_keeps_its_document[pi]
+PASSED tests/test_runtime_distribution.py::test_wheels_have_separate_owners
+PASSED tests/test_tool_name_592.py::test_the_mcp_server_lists_subagents_and_tasks_only
+
+## STOP: GR on a COPY of that record whose start-an-agent outcome line is replaced by a FAILED line (FIXTURE)
+fixture lines: FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] - AssertionError: [create, models] (FIXTURE);
+
+######## rehearsal: STOP: GR with the start-an-agent id FAILED (fixture record)
+[GR] G runs this at its end; Main may rerun it alone to re-judge an ended G record. Read only: G's record, totals, every FAILED/ERROR id and ABNORMAL shard, classed against 516's CURRENT definition ONLY (a shard 'timed out after' is NEW), and the start-an-agent test's own outcome (it must have RUN and PASSED). No login. Dialog: none.
+G record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-99999999T999999-fixture
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+  run.txt: pytest temp root: /private/tmp/claude-501/adopt-617-G-20261125T122035 (TMPDIR=/tmp/claude-501, outside the Harness)
+  run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+  run.txt: candidate: 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | graftling wheel from git archive 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (v0.10.1, graftling-0.10.1-py3-none-any.whl)
+  run.txt: python: /private/tmp/claude-501/r617/scr/gvenv-617/bin/python
+  run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.1 | graphtraj 0.1.0
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_intent_queries_find_create or test_wheels_have_separate_owners or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document
+CHECK 617 GR the record's candidate 6d92d999 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 617 GR the record's graftling wheel is v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+CHECK 617 GR test interpreter graftling = 0.10.1: PASS
+CHECK 617 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-617-G-20261125T122035)
+CHECK 617 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3764 deselected | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+known non-blocking ids: ONLY those in 516's current definition; tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] is NOT known (617 requires it to pass)
+  NEW: tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] (615's intent test; no longer known)
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-3.log: exit 5
+  shard timeouts ('timed out after' lines): 0
+CHECK 617 GR G record (v0.10.1 wheel) has no new failure and no ABNORMAL shard: FAIL (1 NEW ids: run SR)
+start-an-agent: FAILED | lines: FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] - AssertionError: [create, models] (FIXTURE);
+CHECK 617 GR tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] RAN and PASSED in the record (its own -rA outcome line 'PASSED ...'): FAIL (FAILED)
+
+----- summary for Main (GR) -----
+G record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-99999999T999999-fixture
+CHECK 617 GR the record's candidate 6d92d999 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 617 GR the record's graftling wheel is v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+CHECK 617 GR test interpreter graftling = 0.10.1: PASS
+CHECK 617 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-617-G-20261125T122035)
+CHECK 617 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3764 deselected | exit: 1
+  NEW: tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] (615's intent test; no longer known)
+CHECK 617 GR G record (v0.10.1 wheel) has no new failure and no ABNORMAL shard: FAIL (1 NEW ids: run SR)
+start-an-agent: FAILED | lines: FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] - AssertionError: [create, models] (FIXTURE);
+CHECK 617 GR tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] RAN and PASSED in the record (its own -rA outcome line 'PASSED ...'): FAIL (FAILED)
+-----
+RESULT 617 G/GR: FAIL | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 1 | ABNORMAL shards: 0 | start-an-agent: FAILED
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh SR    (NEW ids or an ABNORMAL shard: SR prints the suite-base command; a STOP line above: hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw-stop/GR.txt to the Team; do not push)
+######## exit=1 (STOP: GR with the start-an-agent id FAILED (fixture record))
+
+######## rehearsal: GR alone (re-judging the real rehearsal record; G already ran it at its end)
+[GR] G runs this at its end; Main may rerun it alone to re-judge an ended G record. Read only: G's record, totals, every FAILED/ERROR id and ABNORMAL shard, classed against 516's CURRENT definition ONLY (a shard 'timed out after' is NEW), and the start-an-agent test's own outcome (it must have RUN and PASSED). No login. Dialog: none.
+G record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035
+product guard: HEAD 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | git diff 4ef36426 HEAD -- src tests plugins manuals pyproject.toml: empty | other changes since 4ef36426 outside scripts/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+  run.txt: pytest temp root: /private/tmp/claude-501/adopt-617-G-20261125T122035 (TMPDIR=/tmp/claude-501, outside the Harness)
+  run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+  run.txt: candidate: 6d92d99985aba37017cebb49c7ed8ffaa6ee5afa | graftling wheel from git archive 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (v0.10.1, graftling-0.10.1-py3-none-any.whl)
+  run.txt: python: /private/tmp/claude-501/r617/scr/gvenv-617/bin/python
+  run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.1 | graphtraj 0.1.0
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_intent_queries_find_create or test_wheels_have_separate_owners or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document
+CHECK 617 GR the record's candidate 6d92d999 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 617 GR the record's graftling wheel is v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+CHECK 617 GR test interpreter graftling = 0.10.1: PASS
+CHECK 617 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-617-G-20261125T122035)
+CHECK 617 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3764 deselected | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+known non-blocking ids: ONLY those in 516's current definition; tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] is NOT known (617 requires it to pass)
+  (no FAILED/ERROR lines)
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035/shards/shard-3.log: exit 5
+  shard timeouts ('timed out after' lines): 0
+CHECK 617 GR G record (v0.10.1 wheel) has no new failure and no ABNORMAL shard: PASS
+start-an-agent: PASSED | lines: PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent];
+CHECK 617 GR tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] RAN and PASSED in the record (its own -rA outcome line 'PASSED ...'): PASS (PASSED)
+
+----- summary for Main (GR) -----
+G record: /private/tmp/claude-501/r617/project/.graphtraj/core/state/tasks/617-graftling-0-10-1-release-and-production-adoption/adoption/G-20261125T122035
+CHECK 617 GR the record's candidate 6d92d999 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 617 GR the record's graftling wheel is v0.10.1 (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+CHECK 617 GR test interpreter graftling = 0.10.1: PASS
+CHECK 617 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-617-G-20261125T122035)
+CHECK 617 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3764 deselected | exit: 1
+CHECK 617 GR G record (v0.10.1 wheel) has no new failure and no ABNORMAL shard: PASS
+start-an-agent: PASSED | lines: PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent];
+CHECK 617 GR tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent] RAN and PASSED in the record (its own -rA outcome line 'PASSED ...'): PASS (PASSED)
+-----
+RESULT 617 G/GR: PASS | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | start-an-agent: PASSED
+
+==> next (paste as is): ADOPT617_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh rp
+######## exit=0 (GR alone (re-judging the real rehearsal record; G already ran it at its end))
+
+######## rehearsal: STOP: rp unconfirmed (after GR passed; rp.txt is rewritten by the confirmed rp below)
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.10.1 to origin (/private/tmp/claude-501/r617/origin.git), fast-forward only, atomic, no force. Only after rel and after G/GR PASSED (the definition requires the paired GraphTraj suite before the push). The user's release decision is the push decision (Worldline user-decision 20261125T120212.212097+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+G/GR: RESULT 617 G/GR: PASS | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | start-an-agent: PASSED
+origin: /private/tmp/claude-501/r617/origin.git
+remote before: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/dev | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main
+will push: dev 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, main 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, refs/tags/v0.10.1 (76cccace1c3b3c20278461112c01801ed4f66375) (fast-forward only, --atomic, no force)
+STOP: the push is outward-facing. It is the user's decision 20261125T120212.212097+0900; run: ADOPT617_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh rp
+
+rp STOP (see above). Hand /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/rp.txt to the Team.
+######## exit=1 (STOP: rp unconfirmed (after GR passed; rp.txt is rewritten by the confirmed rp below))
+
+######## rehearsal: rp confirmed
+[rp] Main. Outward-facing: push graftling dev, main and refs/tags/v0.10.1 to origin (/private/tmp/claude-501/r617/origin.git), fast-forward only, atomic, no force. Only after rel and after G/GR PASSED (the definition requires the paired GraphTraj suite before the push). The user's release decision is the push decision (Worldline user-decision 20261125T120212.212097+0900). Network: github.com with the user's usual git credentials (osxkeychain); no other login. Dialog: none.
+G/GR: RESULT 617 G/GR: PASS | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | start-an-agent: PASSED
+origin: /private/tmp/claude-501/r617/origin.git
+remote before: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/dev | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main
+will push: dev 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, main 82e9d12b7c4a76e4074d405fbd135f3c38f1103a, refs/tags/v0.10.1 (76cccace1c3b3c20278461112c01801ed4f66375) (fast-forward only, --atomic, no force)
+To /private/tmp/claude-501/r617/origin.git
+   6f4aeb8..82e9d12  dev -> dev
+   6f4aeb8..82e9d12  main -> main
+ * [new tag]         v0.10.1 -> v0.10.1
+remote now: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/dev | 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/main | 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/tags/v0.10.1^{}
+CHECK 617 rp remote main == v0.10.1^{} == 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rp remote dev == local dev (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS
+
+----- summary for Main (rp) -----
+G/GR: RESULT 617 G/GR: PASS | 10 passed, 3764 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | start-an-agent: PASSED
+remote before: 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/dev | 6f4aeb8fe9f47b71d81b9771486167b123308066	refs/heads/main
+remote now: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/dev | 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/main | 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/tags/v0.10.1^{}
+CHECK 617 rp remote main == v0.10.1^{} == 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 rp remote dev == local dev (82e9d12b7c4a76e4074d405fbd135f3c38f1103a): PASS
+-----
+Success: both 'CHECK 617 rp ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh gh
+######## exit=0 (rp confirmed)
+
+######## rehearsal: gh
+[gh] Main. Read only: git ls-remote /private/tmp/claude-501/r617/origin.git. Network: github.com. No login. Dialog: none.
+GitHub: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/main | 76cccace1c3b3c20278461112c01801ed4f66375	refs/tags/v0.10.1 | 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/tags/v0.10.1^{}
+CHECK 617 gh GitHub main = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 gh GitHub v0.10.1^{} = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 gh GitHub v0.10.1 is the local annotated tag object: PASS (remote 76cccace1c3b3c20278461112c01801ed4f66375, local 76cccace1c3b3c20278461112c01801ed4f66375)
+
+----- summary for Main (gh) -----
+GitHub: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/main | 76cccace1c3b3c20278461112c01801ed4f66375	refs/tags/v0.10.1 | 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/tags/v0.10.1^{}
+CHECK 617 gh GitHub main = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 gh GitHub v0.10.1^{} = 82e9d12b7c4a76e4074d405fbd135f3c38f1103a: PASS
+CHECK 617 gh GitHub v0.10.1 is the local annotated tag object: PASS (remote 76cccace1c3b3c20278461112c01801ed4f66375, local 76cccace1c3b3c20278461112c01801ed4f66375)
+-----
+Success: three 'CHECK 617 gh ...: PASS'.
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh C5
+######## exit=0 (gh)
+
+######## rehearsal: C5 (FOREGROUND; source git+file:// scratch origin, no tag)
+[C5] Main, as a FOREGROUND command (612's background run lost uv's network). The README's TAGLESS install command (605) from GitHub, in /private/tmp/claude-501/r617/uvtool-617 only (uv's tool, bin, cache and Python directories under it); the USER's ~/.local, uv tool directory, dotfiles and conda are not touched. Network: github.com, PyPI, uv's Python download. No login. Dialog: none. ~2-3 min.
+
+### before: USER directories and conda (read only, where readable)
+snap: skipped (ADOPT617_NOSNAP, rehearsal only)
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin) | environment: UV_TOOL_DIR=/private/tmp/claude-501/r617/uvtool-617/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/r617/uvtool-617/bin UV_CACHE_DIR=/private/tmp/claude-501/r617/uvtool-617/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/r617/uvtool-617/python
+command: uv tool install --managed-python git+file:///private/tmp/claude-501/r617/origin.git   (uv = /Users/luoxiao/miniconda3/bin/uv; no tag: the default branch main)
+ + graftling==0.10.1 (from git+file:///private/tmp/claude-501/r617/origin.git@82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+ + pyyaml==6.0.4
+ + websockets==16.1.1
+Installed 2 executables: subagents, subagents-mcp
+warning: `/private/tmp/claude-501/r617/uvtool-617/bin` is not on your PATH. To use installed tools, add the directory to your PATH.
+uv tool install rc=0 (full output: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/C5-uv.txt)
+CHECK 617 C5 uv tool install rc 0: PASS
+uv tool dir: /private/tmp/claude-501/r617/uvtool-617/tools
+CHECK 617 C5 uv tool dir is /private/tmp/claude-501/r617/uvtool-617/tools: PASS
+tool python: /private/tmp/claude-501/r617/uvtool-617/tools/graftling/bin/python -> /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 | sys.prefix: /private/tmp/claude-501/r617/uvtool-617/tools/graftling | base: /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 -> /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 | graftling.__version__ 0.10.1 | metadata 0.10.1 | direct_url commit_id 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | requested_revision -
+CHECK 617 C5 graftling.__version__ and importlib.metadata version are 0.10.1: PASS
+CHECK 617 C5 sys.prefix is /private/tmp/claude-501/r617/uvtool-617/tools/graftling: PASS
+REPORT 617 C5 base interpreter: /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 (uv-managed) | uv-managed Pythons: cpython-3.14.7-macos-aarch64-none 
+CHECK 617 C5 tool environment base interpreter is uv-managed (under /private/tmp/claude-501/r617/uvtool-617/python): PASS (uv-managed)
+CHECK 617 C5 installed commit (direct_url commit_id) is the release commit 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (GitHub main): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+uv tool dir --bin: /private/tmp/claude-501/r617/uvtool-617/bin
+subagents --help (rc 0): usage: subagents [-h] request
+CHECK 617 C5 /private/tmp/claude-501/r617/uvtool-617/bin/subagents --help rc 0: PASS
+CHECK 617 C5 /private/tmp/claude-501/r617/uvtool-617/bin/subagents-mcp exists: PASS (#!/private/tmp/claude-501/r617/uvtool-617/tools/graftling/bin/python)
+
+### after: USER directories and conda
+snap compare: skipped (ADOPT617_NOSNAP, rehearsal only)
+
+----- summary for Main (C5) -----
+uv: /Users/luoxiao/miniconda3/bin/uv -> /Users/luoxiao/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin) | environment: UV_TOOL_DIR=/private/tmp/claude-501/r617/uvtool-617/tools UV_TOOL_BIN_DIR=/private/tmp/claude-501/r617/uvtool-617/bin UV_CACHE_DIR=/private/tmp/claude-501/r617/uvtool-617/cache UV_PYTHON_INSTALL_DIR=/private/tmp/claude-501/r617/uvtool-617/python
+command: uv tool install --managed-python git+file:///private/tmp/claude-501/r617/origin.git   (uv = /Users/luoxiao/miniconda3/bin/uv; no tag: the default branch main)
+uv tool install rc=0 (full output: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/rehearsal/raw/C5-uv.txt)
+CHECK 617 C5 uv tool install rc 0: PASS
+uv tool dir: /private/tmp/claude-501/r617/uvtool-617/tools
+CHECK 617 C5 uv tool dir is /private/tmp/claude-501/r617/uvtool-617/tools: PASS
+tool python: /private/tmp/claude-501/r617/uvtool-617/tools/graftling/bin/python -> /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 | sys.prefix: /private/tmp/claude-501/r617/uvtool-617/tools/graftling | base: /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 -> /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 | graftling.__version__ 0.10.1 | metadata 0.10.1 | direct_url commit_id 82e9d12b7c4a76e4074d405fbd135f3c38f1103a | requested_revision -
+CHECK 617 C5 graftling.__version__ and importlib.metadata version are 0.10.1: PASS
+CHECK 617 C5 sys.prefix is /private/tmp/claude-501/r617/uvtool-617/tools/graftling: PASS
+REPORT 617 C5 base interpreter: /private/tmp/claude-501/r617/uvtool-617/python/cpython-3.14.7-macos-aarch64-none/bin/python3.14 (uv-managed) | uv-managed Pythons: cpython-3.14.7-macos-aarch64-none 
+CHECK 617 C5 tool environment base interpreter is uv-managed (under /private/tmp/claude-501/r617/uvtool-617/python): PASS (uv-managed)
+CHECK 617 C5 installed commit (direct_url commit_id) is the release commit 82e9d12b7c4a76e4074d405fbd135f3c38f1103a (GitHub main): PASS (82e9d12b7c4a76e4074d405fbd135f3c38f1103a)
+uv tool dir --bin: /private/tmp/claude-501/r617/uvtool-617/bin
+subagents --help (rc 0): usage: subagents [-h] request
+CHECK 617 C5 /private/tmp/claude-501/r617/uvtool-617/bin/subagents --help rc 0: PASS
+CHECK 617 C5 /private/tmp/claude-501/r617/uvtool-617/bin/subagents-mcp exists: PASS (#!/private/tmp/claude-501/r617/uvtool-617/tools/graftling/bin/python)
+-----
+Success: every 'CHECK 617 C5 ...: PASS' (rc 0; version 0.10.1; commit 82e9d12b7c4a76e4074d405fbd135f3c38f1103a; subagents --help rc 0; subagents-mcp; USER directories and conda unchanged).
+
+==> next (paste as is): zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh V    (if V already passed: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/617-graftling-0-10-1-release-and-production-adoption/scripts/adopt-617/steps.zsh Mpre)
+######## exit=0 (C5 (FOREGROUND; source git+file:// scratch origin, no tag))

@@ -1,0 +1,10 @@
+CHECK 617 Qr the raw result is a JSON or YAML discover document: PASS
+Q.txt features: ['create']
+CHECK 617 Qr not an error: PASS
+CHECK 617 Qr discover 'start an agent' lists exactly [create] (models no longer matches; 615 in graftling 0.10.1): PASS (['create'])
+CHECK 617 Qr Q.txt checks above (a document, not an error, exactly [create]): PASS
+Main transcripts read: /private/tmp/claude-501/r617/projects/-fake/11111111-2222-3333-4444-555555555617.jsonl
+[Qr] tool calls after the split (2): ['ToolSearch', 'mcp__graphtraj__subagents']
+INFO 617 [Qr] ToolSearch {"query": "select:mcp__graphtraj__subagents", "max_results": 1}: ALLOWED (Claude Code loads the deferred schema of the same mcp__graphtraj tool; 614)
+[Qr] mcp__graphtraj__subagents discover {"action": "discover", "query": "start an agent"}: is_error False | features ['create']
+CHECK 617 Qr Main called mcp__graphtraj__subagents discover 'start an agent' after Q, answered without error with the same features as Q.txt: PASS (1 call(s), 1 matching; Q.txt features ['create'])

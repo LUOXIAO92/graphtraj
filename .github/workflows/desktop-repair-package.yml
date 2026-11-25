@@ -3,14 +3,14 @@ name: Package direct-save desktop 295
 # A dedicated push works before this workflow exists on the default branch.
 on:
   push:
-    branches: [agent/295-desktop-direct-settings-save, agent/300-desktop-ux-platform-packages, agent/306-task-hierarchy-desktop-adoption]
+    branches: [agent/295-desktop-direct-settings-save, agent/300-desktop-ux-platform-packages, agent/306-task-hierarchy-desktop-adoption, agent/618-desktop-workflows-graftling-ref]
 
 permissions:
   contents: read
 
 env:
   # graftling tag in GraphTraj's declared range (pyproject.toml).
-  GRAFTLING_REF: v0.5.2
+  GRAFTLING_REF: v0.10.1
   PRODUCT_COMMIT: ${{ github.sha }}
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
 
@@ -27,6 +27,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.sha }}
+      # graftling's src/graftling/PUBLIC_API.md and src/graftling/install are git
+      # symlinks that its wheel ships; without core.symlinks Git for Windows
+      # writes text stubs. Only this disposable runner's configuration changes.
+      - name: Keep graftling's symbolic links on this runner
+        run: git config --global core.symlinks true
       - name: Check out graftling at the version GraphTraj declares
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -34,7 +39,13 @@ jobs:
           ref: ${{ env.GRAFTLING_REF }}
           path: graftling
           persist-credentials: false
-          persist-credentials: false
+      - name: Fail unless graftling's linked package documents are real
+        run: |
+          $api = Get-Item graftling/src/graftling/PUBLIC_API.md
+          if ((Get-Content -Raw $api.FullName) -ne (Get-Content -Raw graftling/PUBLIC_API.md)) { throw "graftling/src/graftling/PUBLIC_API.md is not the linked document (LinkType=$($api.LinkType))" }
+          if (-not (Test-Path -PathType Container graftling/src/graftling/install)) { throw 'graftling/src/graftling/install is not a directory' }
+          if (-not (Get-ChildItem graftling/src/graftling/install -Filter *.md)) { throw 'graftling/src/graftling/install has no install guides' }
+          "PUBLIC_API.md LinkType=$($api.LinkType) length=$($api.Length); install: $((Get-ChildItem graftling/src/graftling/install -Filter *.md).Name -join ', ')"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.18.0'
@@ -60,7 +71,7 @@ jobs:
           npm --prefix desktop run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:GRAPHTRAJ_BUILD_PYTHON = (Get-Command python).Source
-          $env:GRAFTLING_SOURCE = Join-Path $env:GITHUB_WORKSPACE 'graftling/src/graftling'
+          $env:GRAFTLING_SOURCE = Join-Path $env:GITHUB_WORKSPACE 'graftling'
           node desktop/scripts/package-win.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain package and provenance
@@ -83,6 +94,13 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check out graftling at the version GraphTraj declares
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: LUOXIAO92/graftling
+          ref: ${{ env.GRAFTLING_REF }}
+          path: graftling
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -111,7 +129,7 @@ jobs:
       - name: Build and package without installing the application
         run: |
           npm --prefix desktop ci
-          node desktop/scripts/package-linux.mjs desktop/test-results/linux-package
+          GRAFTLING_SOURCE="$GITHUB_WORKSPACE/graftling" node desktop/scripts/package-linux.mjs desktop/test-results/linux-package
           cd desktop/test-results/linux-package
           sha256sum -c SHA256SUMS
       - name: Retain package and provenance

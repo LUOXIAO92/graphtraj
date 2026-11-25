@@ -1,7 +1,7 @@
 name: Windows desktop adoption 266
 on:
   push:
-    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win]
+    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref]
 permissions:
   contents: read
 jobs:
@@ -13,13 +13,18 @@ jobs:
         shell: pwsh
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
-      GRAFTLING_REF: v0.5.2
+      GRAFTLING_REF: v0.10.1
       PYTHONUTF8: '1'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      # graftling's src/graftling/PUBLIC_API.md and src/graftling/install are git
+      # symlinks that its wheel ships; without core.symlinks Git for Windows
+      # writes text stubs. Only this disposable runner's configuration changes.
+      - name: Keep graftling's symbolic links on this runner
+        run: git config --global core.symlinks true
       - name: Check out graftling at the version GraphTraj declares
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -27,6 +32,13 @@ jobs:
           ref: ${{ env.GRAFTLING_REF }}
           path: graftling
           persist-credentials: false
+      - name: Fail unless graftling's linked package documents are real
+        run: |
+          $api = Get-Item graftling/src/graftling/PUBLIC_API.md
+          if ((Get-Content -Raw $api.FullName) -ne (Get-Content -Raw graftling/PUBLIC_API.md)) { throw "graftling/src/graftling/PUBLIC_API.md is not the linked document (LinkType=$($api.LinkType))" }
+          if (-not (Test-Path -PathType Container graftling/src/graftling/install)) { throw 'graftling/src/graftling/install is not a directory' }
+          if (-not (Get-ChildItem graftling/src/graftling/install -Filter *.md)) { throw 'graftling/src/graftling/install has no install guides' }
+          "PUBLIC_API.md LinkType=$($api.LinkType) length=$($api.Length); install: $((Get-ChildItem graftling/src/graftling/install -Filter *.md).Name -join ', ')"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.18.0'
@@ -47,7 +59,12 @@ jobs:
         run: |
           python -m pip install --no-deps pip==25.3 setuptools==80.9.0 wheel==0.45.1 packaging==25.0 pytest==8.3.5 iniconfig==2.1.0 pluggy==1.6.0 colorama==0.4.6 click==8.1.8 PyYAML==6.0.2 websockets==15.0.1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($env:GITHUB_REF_NAME -eq 'agent/290-desktop-d-direct-port-win') { python -m pip install --no-deps . }
+          # tests/conftest.py stops the session unless graftling is installed and
+          # graphtraj resolves to this checkout with its graphtraj-session command.
+          python -m pip install --no-deps --no-build-isolation ./graftling
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --no-deps --no-build-isolation -e .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm --prefix desktop ci
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip freeze | Set-Content desktop/test-results/windows/build-packages.txt
@@ -62,7 +79,7 @@ jobs:
       - name: Package pinned runtime and application
         run: |
           $env:GRAPHTRAJ_BUILD_PYTHON = (Get-Command python).Source
-          $env:GRAFTLING_SOURCE = Join-Path $env:GITHUB_WORKSPACE 'graftling/src/graftling'
+          $env:GRAFTLING_SOURCE = Join-Path $env:GITHUB_WORKSPACE 'graftling'
           node desktop/scripts/package-win.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install archive to persistent user directory

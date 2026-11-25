@@ -2,7 +2,7 @@ name: Linux installed desktop adoption
 
 on:
   push:
-    branches: [agent/267-desktop-linux-adoption, agent/288-desktop-d-integrated-adoption-linux, agent/290-desktop-d-direct-port-linux, agent/291-desktop-global-model-role-flow]
+    branches: [agent/267-desktop-linux-adoption, agent/288-desktop-d-integrated-adoption-linux, agent/290-desktop-d-direct-port-linux, agent/291-desktop-global-model-role-flow, agent/618-desktop-workflows-graftling-ref]
 
 permissions:
   contents: read
@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
-      GRAFTLING_REF: v0.5.2
+      GRAFTLING_REF: v0.10.1
       ADOPTION_ROOT: ${{ github.workspace }}/desktop/test-results/linux-adoption
       ADOPTION_EXECUTABLE: /usr/bin/graphtraj-desktop
       ADOPTION_INSTALL_ROOT: /opt/graphtraj-desktop
@@ -42,7 +42,7 @@ jobs:
         working-directory: desktop
         run: |
           npm ci
-          GRAFTLING_SOURCE="$GITHUB_WORKSPACE/graftling/src/graftling" node scripts/package-linux.mjs "$GITHUB_WORKSPACE/desktop/test-results/linux-package"
+          GRAFTLING_SOURCE="$GITHUB_WORKSPACE/graftling" node scripts/package-linux.mjs "$GITHUB_WORKSPACE/desktop/test-results/linux-package"
       - name: Install the actual Debian artifact
         run: |
           cd desktop/test-results/linux-package

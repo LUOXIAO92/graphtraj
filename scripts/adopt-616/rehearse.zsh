@@ -101,7 +101,10 @@ tl() {  # FIXTURE transcript lines: $1 = id, $2 = tool name, $3 = input json, $4
   print "git diff 78f929ee 4ef36426 --name-only -- src tests plugins manuals pyproject.toml: $(git -C $WT diff --name-only 78f929ee 4ef36426 -- src tests plugins manuals pyproject.toml | tr '\n' ' ')"
   run $RAW 00 zsh $S 00
   run $RAW B zsh $S B
-  run $STOPS "STOP: I before V/GR614 (nothing changed)" zsh -fc "print | zsh $S I"
+  run $RAW "STOP: I before V/GR614 (nothing changed; no I.txt is written)" zsh -fc "print | zsh $S I"
+  print "\n## STOP: GR614 on a COPY of 614's record with one NEW failed id appended to a shard log (FIXTURE line)"
+  cp -Rp $R614 $SB/r614-new && print -r -- 'FAILED tests/test_new_616.py::test_not_known - AssertionError (FIXTURE)' >> $SB/r614-new/shards/shard-0.log
+  run $STOPS "STOP: GR614 with a NEW id" env ADOPT616_R614=$SB/r614-new zsh $S GR614
   run $RAW "GR614 (Task 614's REAL record)" zsh $S GR614
   run $RAW V zsh $S V
   print -r -- "77 0:10 $FH/.venv-runtime/bin/python -m graphtraj.execution.runner_worker $FH/.graphtraj/core/runner/sessions/999-x@engineer/launch.yml" > $SB/ps.txt
@@ -134,7 +137,7 @@ tl() {  # FIXTURE transcript lines: $1 = id, $2 = tool name, $3 = input json, $4
   print -r -- '{"tasks":[{"agent":"ag-member-1","alias":"616-x@advisor"}]} (fixture)' > $RAW/N.txt
   run $RAW Nr zsh $S Nr
   run $RAW P zsh $S P
-  run $STOPS "STOP: Pr before P.txt exists (Pr.txt is rewritten by the Pr below)" zsh $S Pr; cp -p $RAW/Pr.txt $STOPS/Pr.txt
+  run $RAW "STOP: Pr before P.txt exists (Pr.txt is rewritten by the Pr below; copy in raw-stop/)" zsh $S Pr; cp -p $RAW/Pr.txt $STOPS/Pr.txt
   print "\n## REHEARSAL STAND-IN for Main's MCP call: graftling's handle_request bound to GraphTraj's backend in the fake production venv (4ef36426 after I), as the native host binds a Main; execute models {runtime: claude}"
   sleep 1
   (cd $FH && cl HOME=$SB/home $FRT/bin/python -I -c 'import json, sys

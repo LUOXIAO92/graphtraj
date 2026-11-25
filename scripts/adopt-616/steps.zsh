@@ -201,7 +201,7 @@ sr_classify() {  # $1 = suite record. Sets SR_NEW, SR_ANY, SR_IDS (every FAILED/
   print -r -- "516 current definition (task.yml current_definition): $KNOWN516"
   [[ -f $KNOWN516 ]] || { print -r -- "STOP: cannot read 516's current definition"; SR_NEW=1; return 1; }
   local -a logs=($rec/shards/*.log(N.)); (( $#logs )) || logs=($rec/suite.txt)
-  print -r -- "shard logs read: ${#logs} (${logs:t})"
+  local -a shown=(${logs:t}); print -r -- "shard logs read: ${#logs} ($shown)"
   for id in ${(f)"$(clean $CONDA -I $SUITEIDS ids $logs)"}; do
     SR_ANY=1; t=${id%%\[*}
     if (( ${KNOWN_EXTRA[(Ie)$id]} )); then print -r -- "  known (611/614, fails on base too): $id"
@@ -428,7 +428,7 @@ I0) need_main; print "[I0] Main, before Mpre and a rerun of I. Read only, apart 
     mkdir -p $R/run$nrun || exit 1
     files=($R/I.txt(N) $R/I.ok(N) $R/I-*(N) $R/R.txt(N) $R/R-*(N))
     (( $#files )) && mv $files $R/run$nrun/ || exit 1
-    print -r -- "MOVED to $R/run$nrun/: ${files:t}"
+    moved=(${files:t}); print -r -- "MOVED to $R/run$nrun/: $moved"
     print -r -- "I failed after the install began; R restored production; I0 set its backup ($NB) and records aside" > $R/run$nrun/SUPERSEDED
     [[ ! -e $BK && -e $NB/COMPLETE && ! -e $R/I.txt && ! -e $R/R.txt ]]; ck $? "I0 backup and run$nrun records set aside; $BK and the current I/R records are absent"
     print -r -- "$BK612 (untouched): $([[ -e $BK612/COMPLETE ]] && print COMPLETE || print 'not complete or absent')"

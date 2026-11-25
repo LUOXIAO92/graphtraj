@@ -7,7 +7,7 @@ name: desktop-macos-adoption
 # workflow_dispatch stays available for later re-runs.
 on:
   push:
-    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos, agent/292-desktop-readable-runtime-events, agent/295-desktop-direct-settings-save-macos, agent/618-desktop-workflows-graftling-ref, agent/621-macos-adoption-script-d-ui]
+    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos, agent/292-desktop-readable-runtime-events, agent/295-desktop-direct-settings-save-macos, agent/618-desktop-workflows-graftling-ref, agent/621-macos-adoption-script-d-ui, agent/627-desktop-ui-structure-redesign]
   workflow_dispatch:
     inputs:
       mode:
@@ -23,7 +23,8 @@ jobs:
   installed-macos:
     name: Installed macOS artifact and adoption
     runs-on: macos-latest
-    timeout-minutes: 30
+    # The 627 branch also runs the desktop window tests before packaging.
+    timeout-minutes: ${{ github.ref_name == 'agent/627-desktop-ui-structure-redesign' && 45 || 30 }}
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
       GRAFTLING_REF: v0.10.1
@@ -91,6 +92,21 @@ jobs:
         run: |
           npx playwright install chromium
           node --test tests/monitor-ui.test.mjs
+
+      # Task 627 changes the shell, monitor, reader, configuration and usage surfaces; these
+      # window tests cover them from the built sources (window and settings-window start
+      # Electron, monitor-ui and team-graph a Playwright Chromium). usage-live and
+      # activity-live need a live executing Agent (GRAPHTRAJ_LIVE_PROJECT/TASK, model
+      # credentials), so their own skip guards report them as skipped here.
+      - name: Desktop window tests for the Task 627 surfaces
+        if: github.ref_name == 'agent/627-desktop-ui-structure-redesign'
+        env:
+          GRAPHTRAJ_SETTINGS_EVIDENCE: dist-package/adoption-evidence/window-tests/settings
+        run: |
+          set -o pipefail
+          mkdir -p dist-package/adoption-evidence/window-tests
+          npx playwright install chromium
+          node --preserve-symlinks --preserve-symlinks-main --test --test-concurrency=1 tests/window.test.mjs tests/monitor-ui.test.mjs tests/team-graph.test.mjs tests/settings-window.test.mjs tests/usage-live.test.mjs tests/activity-live.test.mjs 2>&1 | tee dist-package/adoption-evidence/window-tests/window-tests.log
 
       - name: Package the macOS artifact
         run: npm run package:mac

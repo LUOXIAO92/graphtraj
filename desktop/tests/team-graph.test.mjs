@@ -42,11 +42,34 @@ test('real TeamGraph handles connect, reconnect and disconnect encoded occurrenc
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(pathToFileURL(path.join(directory, 'index.html')).href);
-  const node = (name, index = 0) => page.getByRole('button', { name: `Configure agent studio.${name}`, exact: true }).nth(index);
-  const handle = (name, type) => node(name).locator(`.react-flow__handle.${type}`);
+  // React Flow 12 gives a focusable node wrapper role 'group' with the node's ariaLabel
+  // (TeamGraph.tsx `Configure agent <team.name>`); edges are groups named 'Edge from …', so no clash.
+  const node = (name, index = 0) => page.getByRole('group', { name: `Configure agent studio.${name}`, exact: true }).nth(index);
+  const handle = (name, type, index = 0) => node(name, index).locator(`.react-flow__handle.${type}`);
   await handle('leaf', 'target').waitFor({ state: 'visible' });
+  // Card contents and handle names (Task 627 V8): name, 'Runtime · model', tags; handle names unchanged.
+  const card = (name, index = 0) => node(name, index).locator('.d-org-node').evaluate(element => ({
+    name: element.querySelector(':scope > strong')?.textContent, model: element.querySelector(':scope > small')?.textContent,
+    tags: [...element.querySelectorAll('.d-org-tags > *')].map(tag => tag.textContent) }));
+  assert.deepEqual(await card('leaf'), { name: 'leaf', model: 'Controlled model', tags: ['Default effort'] });
+  assert.deepEqual(await card('worker', 1), { name: 'worker', model: 'Controlled model', tags: ['Default effort', 'Cross-team parent · preserved'] });
+  assert.equal(await handle('leaf', 'target').getAttribute('aria-label'), 'Parent connection');
+  assert.equal(await handle('leaf', 'source').getAttribute('aria-label'), 'Connect a child');
+  /** Each tree change remounts the flow (TeamGraph keys it by occurrence IDs) and fits the view again,
+   * so wait until both endpoints are measured and stay put for a frame before dragging. */
+  async function settled(locator) {
+    await locator.waitFor({ state: 'visible' });
+    let previous = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const box = await locator.boundingBox();
+      if (box && previous && JSON.stringify(box) === JSON.stringify(previous)) return box;
+      previous = box;
+    }
+    assert.fail('graph position did not settle');
+  }
   async function drag(from, to) {
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await settled(from); await settled(to);
     const a = await from.boundingBox(), b = await to.boundingBox();
     assert.ok(a && b);
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);

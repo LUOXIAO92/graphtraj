@@ -149,15 +149,37 @@ function uiAutomation(lines) {
  * this boundary so the assertion is not invented at the interface.
  */
 function queryActivity(root, taskId, alias) {
-  const reply = JSON.parse(execFileSync(process.env.GRAPHTRAJ_TOOL || 'graphtraj-tool',
+  if (!facts.unboundHost) facts.unboundHost = assertUnboundHost(root);
+  const reply = observerRead(root, { task_id: taskId, ...(alias ? { alias } : {}) });
+  if (reply.failed) throw new Error(JSON.stringify(reply));
+  // Since 54597af9 ('Separate project read authority from direct-parent control') only the
+  // live GUI window binding reads 'human' (src/graphtraj/execution/desktop_activity.py:47-49);
+  // every other verified caller, including this unbound CLI observer, reads 'project' (:58).
+  // The unbound-host guarantee is asserted by assertUnboundHost and the environment check in main().
+  assert.equal(reply.result.scope, 'project', 'CI must read through the unbound desktop observer; never strip Agent identity to obtain access');
+  return reply.result;
+}
+
+/** One request through the same `graphtraj-tool --desktop-observer` entry the installed app uses. */
+function observerRead(root, args) {
+  return JSON.parse(execFileSync(process.env.GRAPHTRAJ_TOOL || 'graphtraj-tool',
     ['--desktop-observer', '--allowed-features', 'desktop_activity'], {
       cwd: root, encoding: 'utf8',
-      input: JSON.stringify({ action: 'execute', feature: 'desktop_activity',
-        arguments: { task_id: taskId, ...(alias ? { alias } : {}) } }) + '\n',
+      input: JSON.stringify({ action: 'execute', feature: 'desktop_activity', arguments: args }) + '\n',
     }));
-  if (reply.failed) throw new Error(JSON.stringify(reply));
-  assert.equal(reply.result.scope, 'human', 'CI must be an unbound desktop host; never strip Agent identity to obtain access');
-  return reply.result;
+}
+
+/**
+ * Prove once per run that this process is the user's unbound host, not an Agent with stripped
+ * identity: a project read with no task_id or alias is served only when `human` holds (no
+ * verified caller, no bound Runtime, no parent or host connection; desktop_activity.py:52-53).
+ * Any Agent-bound caller is refused there with 'Supply task_id or alias for an explicit project
+ * read; the current hierarchy view is subagents status.' (desktop_activity.py:54-57).
+ */
+function assertUnboundHost(root) {
+  const reply = observerRead(root, {});
+  assert.ok(!reply.failed, `CI must be an unbound desktop host; never strip Agent identity to obtain access: ${JSON.stringify(reply)}`);
+  return { noTaskReadServed: true, scope: reply.result.scope, source: 'desktop_activity.py:52-57; 54597af9' };
 }
 
 /**

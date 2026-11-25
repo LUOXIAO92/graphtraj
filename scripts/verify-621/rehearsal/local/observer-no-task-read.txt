@@ -1,0 +1,3 @@
+$ cd $R/bnd2/first-project && echo {"action":"execute","feature":"desktop_activity","arguments":{}} | graphtraj-tool --desktop-observer --allowed-features desktop_activity   (GRAPHTRAJ_CLI_CONNECTION, GRAPHTRAJ_PARENT_ALIAS unset)
+failed False | scope project | keys ['agents', 'notices', 'scope', 'task_id', 'updated_at']
+Expected on CI: served with scope project (desktop_activity.py:52-58). An Agent-bound caller is refused at :54-57 with "Supply task_id or alias for an explicit project read; the current hierarchy view is subagents status."

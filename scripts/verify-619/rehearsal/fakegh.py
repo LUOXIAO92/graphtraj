@@ -11,6 +11,8 @@ Called as: python fakegh.py <state-dir> <gh arguments...>. <state-dir>/scenario 
                 success(), and the UI step failed); expected verdict PASS.
   other-fail    as success, but a step that is neither counted, the UI step nor an upload fails
                 ('Post Run actions/checkout@...', after every counted step, so only that rule can fail it); FAIL.
+  escape-log    as success; the driver then shows how the job-log endpoint was called. In every case the
+                endpoint refuses, as gh 2.97 does, unless --allow-escape-sequences is given; PASS.
 Never contacts GitHub.
 """
 import json
@@ -105,6 +107,9 @@ elif args[:2] == ["auth", "status"]:
     print("github.com\n  ✓ Logged in to github.com account stand-in-user (verify-619 fake)\n"
           "  - Active account: true\n  - Token: gho_************************************\n  - Token scopes: 'repo'")
 elif args[:1] == ["api"]:
+    # gh 2.97 refuses to output a response holding terminal escape sequences unless told to (619 real run).
+    escapes = "--allow-escape-sequences" in args
+    args = [item for item in args if item != "--allow-escape-sequences"]
     m = re.fullmatch(rf"repos/{REPO}/actions/runs\?head_sha=([0-9a-f]+)&per_page=100", args[1])
     if m:
         print(json.dumps(runs(m.group(1))))
@@ -113,6 +118,13 @@ elif args[:1] == ["api"]:
                "html_url": f"https://github.com/{REPO}/actions/runs/{RUN_ID}/job/{JOB_ID}", "steps": steps()}
         print(json.dumps({"total_count": 1, "jobs": [job]}))
     elif args[1] == f"repos/{REPO}/actions/jobs/{JOB_ID}/logs":
+        # Real job logs colour their group headers; the 'escape-log' case records how it was called.
+        (state / "logs-call").write_text(" ".join(sys.argv[2:]) + "\n")
+        if not escapes:
+            print("the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway",
+                  file=sys.stderr)
+            sys.exit(1)
+        print("2026-11-25T00:00:00Z \x1b[36;1mCheck out graftling at the version GraphTraj declares\x1b[0m")
         print(f"2026-11-25T00:00:00Z [command]\"C:\\Program Files\\Git\\bin\\git.exe\" checkout --progress --force {gsha}")
         print(f"2026-11-25T00:00:01Z HEAD is now at {gsha[:7]} Windows: import graftling")
     else:

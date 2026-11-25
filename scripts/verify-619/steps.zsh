@@ -241,7 +241,8 @@ observe() {  # observe SHA LABEL: waits for the run, prints results, ends with t
   # The graftling checkout must have fetched the candidate commit: its full SHA appears in the job log.
   jid=$(allow $PY -I -c 'import json, sys; print(next((j["id"] for j in json.load(open(sys.argv[1])).get("jobs", []) if j.get("name") == "windows-adoption"), ""))' $work/jobs.json)
   hits=0
-  if [[ -n $jid ]] && allow $GH api "repos/$REPO/actions/jobs/$jid/logs" > $work/job.log 2> $work/err; then
+  # Job logs carry ANSI colour codes; gh 2.97 refuses to output them without --allow-escape-sequences (619 run).
+  if [[ -n $jid ]] && allow $GH api --allow-escape-sequences "repos/$REPO/actions/jobs/$jid/logs" > $work/job.log 2> $work/err; then
     hits=$(grep -c -- $GSHA $work/job.log || true)
     print -r -- "job log lines naming graftling $GSHA: $hits"; grep -m 3 -- $GSHA $work/job.log | cut -c1-220 | sed 's/^/  /'
   else

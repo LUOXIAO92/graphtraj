@@ -1,0 +1,4 @@
+GitHub: 57bca73657d3135a4504904fcc3f1898c2419766	refs/heads/main | da51527db98da07548dfc921ccf0dea554433db3	refs/tags/v0.10.2 | 57bca73657d3135a4504904fcc3f1898c2419766	refs/tags/v0.10.2^{}
+CHECK 625 gh GitHub main = 57bca73657d3135a4504904fcc3f1898c2419766: PASS
+CHECK 625 gh GitHub v0.10.2^{} = 57bca73657d3135a4504904fcc3f1898c2419766: PASS
+CHECK 625 gh GitHub v0.10.2 is the local annotated tag object: PASS (remote da51527db98da07548dfc921ccf0dea554433db3, local da51527db98da07548dfc921ccf0dea554433db3)

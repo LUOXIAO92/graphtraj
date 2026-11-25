@@ -1,0 +1,43 @@
+product guard: HEAD 2c863655d346b404c31115db2d9a0c3143afd678 | git diff 4ef36426 HEAD -- src desktop/src pyproject.toml manuals skills plugins: empty | changes since GraphTraj dev 4b71012c outside scripts/adopt-625/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+CHECK 625 B setuptools importable offline in /Users/luoxiao/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+
+### graftling: git archive v0.10.2 (57bca73657d3135a4504904fcc3f1898c2419766) -> /private/tmp/claude-501/r625/scr/gsrc
+  src/graftling/__init__.py: __version__ = "0.10.2"
+  src/graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.2",
+  src/graftling/dsh/package.json:   "version": "0.10.2",
+  src/graftling/pi/package.json:   "version": "0.10.2",
+CHECK 625 B archive version strings (__init__.py and the 3 json) all 0.10.2: PASS
+CHANGELOG first heading: ## 0.10.2 (compatible)
+CHECK 625 B CHANGELOG heading '## 0.10.2 (compatible)' and no '## Unreleased': PASS
+graftling wheel: graftling-0.10.2-py3-none-any.whl
+  METADATA Version: 0.10.2
+  graftling/__init__.py: __version__ = "0.10.2"
+  graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.10.2",
+  graftling/dsh/package.json:   "version": "0.10.2",
+  graftling/pi/package.json:   "version": "0.10.2",
+CHECK 625 B graftling wheel reports 0.10.2 (METADATA, __init__.py, the 3 json): PASS
+  [console_scripts]: subagents subagents-mcp 
+CHECK 625 B graftling console scripts are exactly subagents, subagents-mcp: PASS
+graftling graftling-0.10.2-py3-none-any.whl vs /private/tmp/claude-501/r625/scr/gsrc/src: files 99 same=99 differing=0 | expected none | expected but equal: none
+CHECK 625 B graftling wheel equals git archive v0.10.2: PASS
+CHECK 625 B the graftling wheel's files equal git archive v0.10.2: PASS
+  619 marker in /private/tmp/claude-501/r625/scr/wheelview/graftling: sessions/archive.py 'import fcntl' x0, 'from graftling.locks import exclusive, ignore_in_git' x1, 'with exclusive(' x2 | member_processes.py Windows OSError x1 | codex/host.py Windows authority-denied x1
+CHECK 625 B wheel 619's fix is in /private/tmp/claude-501/r625/scr/wheelview/graftling (archive.py: no 'import fcntl', locks.exclusive x2; Windows errors in member_processes.py and codex/host.py): PASS
+graftling wheel build/ or __pycache__/ entries: 0
+CHECK 625 B no build/ or __pycache__ in the graftling wheel: PASS
+
+### graphtraj: 616's wheel /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426 (production's, reused; never rebuilt)
+wheel: graphtraj-0.1.0-py3-none-any.whl | COMMIT: 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759
+graphtraj-0.1.0-py3-none-any.whl: OK
+CHECK 625 B 616's graphtraj wheel verifies (SHA256SUMS) and its sha256 is ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473: PASS
+CHECK 625 B 616's wheels-4ef36426 COMMIT is 4ef36426ab6fa5a4769a23557aecf2aa2e2b3759: PASS
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs /private/tmp/claude-501/r625/scr/tsrc/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 625 B 616's graphtraj wheel equals git archive 4ef36426: PASS
+CHECK 625 B 616's graphtraj wheel's graphtraj/ files equal git archive 4ef36426 (G tests this Worktree's HEAD, whose product is 4ef36426): PASS
+Requires-Dist: ['graftling<0.11,>=0.10.0', 'click<9,>=8.1', 'PyYAML<7,>=6', 'websockets<17,>=15']
+CHECK 625 B graphtraj requires graftling graftling<0.11,>=0.10.0: includes 0.10.2, excludes 0.11.0: PASS
+
+### the graftling wheel G, V and I install: /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2
+graftling-0.10.2-py3-none-any.whl: OK
+CHECK 625 B /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2 holds the wheel with SHA256SUMS and COMMIT: PASS
+wheel sha256: ea9d68823667945d4bdc8f66a47e32d7b7a2aa073a2323b42b89f6b0f95c2191  graftling-0.10.2-py3-none-any.whl | graphtraj (reused): ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473  graphtraj-0.1.0-py3-none-any.whl

@@ -1,0 +1,5 @@
+G/GR: RESULT 625 G/GR: PASS | 10 passed, 3767 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | test interpreter graftling: 0.10.2
+origin: /private/tmp/claude-501/r625/origin.git
+remote before: 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/dev | 82e9d12b7c4a76e4074d405fbd135f3c38f1103a	refs/heads/main
+will push: dev 57bca73657d3135a4504904fcc3f1898c2419766, main 57bca73657d3135a4504904fcc3f1898c2419766, refs/tags/v0.10.2 (da51527db98da07548dfc921ccf0dea554433db3) (fast-forward only, --atomic, no force)
+STOP: the push is outward-facing. It is the user's decision 20261125T154402.789038+0900; run: ADOPT625_PUSH_CONFIRMED=yes zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/625-graftling-0-10-2-release-and-production-adoption/scripts/adopt-625/steps.zsh rp

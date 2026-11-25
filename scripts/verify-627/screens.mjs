@@ -325,14 +325,14 @@ role_tree:
     await shot('search');
     // Selecting through the panel (as adoption.mjs:931 does) opens Task details for that task.
     await monitor().getByLabel('Search results', { exact: true }).getByRole('button', { name: '#1 ui fixture', exact: true }).click();
-    await page.getByRole('complementary', { name: 'Task details' }).getByText('#1', { exact: true }).waitFor();
+    await page.getByRole('complementary', { name: 'Task details' }).locator('.shelf-task-id', { hasText: /^#1$/ }).waitFor();
     await search.fill('');
     await closeDetails();
     stage = `${theme}: members`;
     await monitor().getByRole('group', { name: 'Monitor view' }).getByRole('button', { name: 'Members', exact: true }).click();
-    const members = page.getByRole('region', { name: 'Agent members', exact: true });
-    // V7 rows carry the full alias in data-alias (the visible name may be shortened).
-    await members.locator('tr[data-alias="reviewer@x4"]').waitFor();
+    // V7 rows carry the full alias in data-alias (the visible name may be shortened). Two nested sections are named
+    // 'Agent members' (the view and the tree), so the row is located inside the visible monitor instead.
+    await monitor().locator('section.member-tree tr[data-alias="reviewer@x4"]').waitFor();
     await shot('members');
     stage = `${theme}: expanded chat`;
     await selectTaskOne();

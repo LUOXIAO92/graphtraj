@@ -16,6 +16,7 @@ import './canvas.css';
 import './d-refinement.css';
 import './d-polish.css';
 import './native.css';
+import './tokens.css';
 
 declare global { interface Window { graphtraj: DesktopAPI } }
 const projectName = (project?: Project) => project?.root.split(/[\\/]/).filter(Boolean).at(-1) || 'No project selected';

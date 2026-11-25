@@ -1,0 +1,136 @@
+// Task 626 step S driver: light/dark screenshots of the built desktop app over a disposable fixture.
+// argv: <desktop dir (built export)> <out dir>. Run only through steps.zsh S (allowlisted env, isolated HOME).
+// The theme is forced inside the app (Electron nativeTheme.themeSource); the system appearance is never touched.
+// No Save is pressed and no native picker is opened: the project is passed with --project.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+
+const [desktop, out] = process.argv.slice(2);
+const require = createRequire(path.join(desktop, 'package.json'));
+const { _electron: electron } = require('playwright');
+const executable = require('electron');
+const fixtures = require(path.join(desktop, 'tests', 'fixtures.cjs'));
+const facts = { desktop, out, executable, started: new Date().toISOString(), steps: [], themes: {}, pageErrors: [], problems: [] };
+const note = text => { facts.steps.push(text); console.log(`-- ${text}`); };
+const problem = text => { facts.problems.push(text); console.log(`!! ${text}`); };
+
+// ---- disposable fixture: several statuses, two agents with activity and usage, default team configuration ----
+const project = path.join(out, 'fixture', 'ui-fixture');
+await fs.mkdir(path.dirname(project), { recursive: true });
+await fixtures.makeProject(project, 'ui-fixture');
+const now = new Date();
+const message = (role, text) => ({ timestamp: now.toISOString(), type: 'response_item', payload: {
+  type: 'message', role, content: [{ type: role === 'user' ? 'input_text' : 'output_text', text }] } });
+const count = (input, cache, output) => ({ timestamp: now.toISOString(), type: 'event_msg', payload: { type: 'token_count', info: {
+  last_token_usage: { input_tokens: input, cached_input_tokens: cache, output_tokens: output, reasoning_output_tokens: 20 },
+  total_token_usage: { input_tokens: input, output_tokens: output } } } });
+const records = who => [
+  { type: 'turn_context', payload: { model: 'gpt-5.3-codex' } },
+  message('user', `Controlled fixture request for ${who}. No model execution.`),
+  message('assistant', `## Plan\nControlled retained **${who}** message.\n\n- read the task\n- report back\n\n\`inline code\` sample.`),
+  { timestamp: now.toISOString(), type: 'response_item', payload: { type: 'function_call', name: 'shell', call_id: `call-${who}`,
+    arguments: JSON.stringify({ command: ['ls', '-la'] }) } },
+  { timestamp: now.toISOString(), type: 'response_item', payload: { type: 'function_call_output', call_id: `call-${who}`,
+    output: 'total 8\nseed.txt' } },
+  count(12000, 8000, 640),
+  message('assistant', `Controlled retained ${who} summary. `.repeat(12)),
+  count(3000, 1000, 240),
+];
+await fixtures.recordActivity(project, { taskId: '1', taskName: 'ui-fixture', alias: 'engineer@x1', records: records('engineer'),
+  additionalMembers: [{ alias: 'leader@x2', historical: false, records: records('leader') }] });
+const definition = fixtures.operate(project, 'task_graph', { view: 'full' }).tasks.find(task => task.task_id === '2').current_definition;
+fixtures.operate(project, 'task_revise', { product_preserving: true, caused_by_event_ids: [], evidence_refs: ['evidence.md'], tasks: [
+  { ...fixtures.task('2', 'dependent', ['1']), disposition: 'superseded', replaced_by: ['3'], retirement_reason: 'Replaced by successor.',
+    current_definition: definition },
+  { ...fixtures.task('3', 'successor', ['1']), current_definition: null },
+  { ...fixtures.task('4', 'follow-up', ['3']), current_definition: null },
+] });
+const graphFacts = fixtures.operate(project, 'task_graph', { view: 'full' }).tasks.map(task => ({ id: task.task_id, status: task.status, disposition: task.disposition }));
+facts.fixtureTasks = graphFacts;
+note(`fixture project ${project}: ${JSON.stringify(graphFacts)}`);
+
+// ---- launch the built app ----
+const app = await electron.launch({ executablePath: executable,
+  args: [desktop, `--project=${project}`, `--user-data-dir=${path.join(out, 'profile')}`], env: process.env, timeout: 60000 });
+const page = await app.firstWindow();
+page.setDefaultTimeout(30000);
+page.on('pageerror', error => facts.pageErrors.push(String(error)));
+await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]; win.setContentSize(1440, 900); win.center(); });
+await page.locator('.native-task-card[data-task-id="1"] .native-task-title').waitFor();
+note('app window open with the fixture project');
+
+const tokens = ['--bg', '--surface', '--ink', '--edge-dep', '--edge-repl', '--edge-accept', '--accent-ui'];
+async function machine(theme) {
+  return page.evaluate(({ theme, tokens }) => {
+    const root = document.querySelector('.desktop-d');
+    const style = getComputedStyle(root);
+    const token = Object.fromEntries(tokens.map(name => [name, style.getPropertyValue(name).trim()]));
+    const edgeStrokes = [...new Set([...document.querySelectorAll('.monitor-page:not([hidden]) .x6-edge path[stroke]')]
+      .map(node => node.getAttribute('stroke')).filter(value => value && value !== 'none' && value !== 'transparent'))];
+    const frame = document.querySelector('.monitor-page:not([hidden]) [data-cell-id="project-frame"] rect');
+    return { theme, darkMatches: matchMedia('(prefers-color-scheme: dark)').matches, token,
+      bodyBackground: getComputedStyle(root).backgroundColor,
+      edgeStrokes, projectFrameFill: frame?.getAttribute('fill') ?? null,
+      cardStatusChips: [...document.querySelectorAll('.native-task-card .native-task-meta .status')].map(node => node.className + ' :: ' + node.textContent),
+      cardMeta: [...document.querySelectorAll('.native-task-card .native-task-meta')].map(node => node.textContent) };
+  }, { theme, tokens });
+}
+async function shot(theme, name) {
+  const file = path.join(out, `${theme}-${name}.png`);
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: file });
+  const size = (await fs.stat(file)).size;
+  facts.themes[theme].screens[name] = { file, size };
+  if (size < 10000) problem(`${theme} ${name} screenshot is only ${size} bytes`);
+  note(`${theme} ${name}: ${file} (${size} bytes)`);
+}
+
+for (const theme of ['light', 'dark']) {
+  await app.evaluate(({ nativeTheme }, value) => { nativeTheme.themeSource = value; }, theme);
+  await page.waitForFunction(dark => matchMedia('(prefers-color-scheme: dark)').matches === dark, theme === 'dark');
+  facts.themes[theme] = { screens: {} };
+  // Task graph with task 1 selected.
+  await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+  await page.locator('.native-task-card[data-task-id="1"] .native-task-title').click();
+  await page.getByRole('complementary', { name: 'Task details' }).waitFor();
+  await page.waitForTimeout(800);
+  facts.themes[theme].machine = await machine(theme);
+  await shot(theme, 'task-graph');
+  // Expanded chat.
+  await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
+  await page.locator('.agent-columns .agent-column, .agent-columns article').first().waitFor();
+  await shot(theme, 'chat');
+  await page.getByRole('button', { name: 'Collapse chat', exact: true }).click();
+  // Teams & roles (no edit, no Save).
+  await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
+  await page.getByRole('region', { name: 'Team organization tree' }).waitFor().catch(() => problem(`${theme}: Team organization tree region not found`));
+  await shot(theme, 'teams-roles');
+  // Project usage.
+  await page.getByRole('button', { name: 'Project usage', exact: true }).click();
+  await page.locator('.usage-dashboard').first().waitFor();
+  await shot(theme, 'project-usage');
+}
+await page.getByRole('button', { name: 'Monitor', exact: true }).click();
+await app.close();
+
+// ---- machine checks ----
+const light = facts.themes.light.machine, dark = facts.themes.dark.machine;
+const expectBg = { light: '#f6f7f9', dark: '#14171c' };
+for (const m of [light, dark]) {
+  if (m.darkMatches !== (m.theme === 'dark')) problem(`${m.theme}: prefers-color-scheme dark=${m.darkMatches}`);
+  if (m.token['--bg'] !== expectBg[m.theme]) problem(`${m.theme}: --bg is ${m.token['--bg']}, expected ${expectBg[m.theme]}`);
+  const allowed = [m.token['--edge-dep'], m.token['--edge-repl'], m.token['--edge-accept'], m.token['--accent-ui']];
+  if (!m.edgeStrokes.length) problem(`${m.theme}: no X6 edge stroke found`);
+  for (const stroke of m.edgeStrokes) if (!allowed.includes(stroke)) problem(`${m.theme}: X6 edge stroke ${stroke} is not an edge/accent token value`);
+  if (m.projectFrameFill !== m.token['--surface']) problem(`${m.theme}: X6 project frame fill ${m.projectFrameFill} != --surface ${m.token['--surface']}`);
+}
+if (light.token['--edge-dep'] === dark.token['--edge-dep'] || !light.edgeStrokes.includes(light.token['--edge-dep'])
+  || !dark.edgeStrokes.includes(dark.token['--edge-dep'])) problem('X6 dependency edge colour does not follow the theme');
+if (light.projectFrameFill === dark.projectFrameFill) problem('X6 project frame fill is the same in both themes');
+if (facts.pageErrors.length) problem(`page errors: ${facts.pageErrors.length}`);
+facts.verdict = facts.problems.length ? 'FAIL' : 'PASS';
+facts.finished = new Date().toISOString();
+await fs.writeFile(path.join(out, 'facts.json'), JSON.stringify(facts, null, 2) + '\n');
+console.log(`DRIVER ${facts.verdict} problems=${facts.problems.length}`);
+process.exitCode = facts.problems.length ? 1 : 0;

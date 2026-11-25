@@ -1,19 +1,19 @@
 /* Actual native states and unbounded identifiers in the transplanted D views. */
-.native-notice { padding: 9px 22px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; flex-shrink: 0; }
-.native-notice.error { background: #fcf1ef; color: #9b4237; }
+.native-notice { padding: 9px 22px; font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; flex-shrink: 0; }
+.native-notice.error { background: var(--red-soft); color: var(--red); }
 .d-focused-stage > .native-notice.error { position: absolute; inset: 48px 0 auto; z-index: 20; }
-.native-task-facts { font-size: 10px; color: var(--muted); margin-top: 8px; }
+.native-task-facts { font-size: var(--fs-xs); color: var(--muted); margin-top: 8px; }
 .native-task-facts p { margin-top: 7px; }
 .activity { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
 .d-library-content, .config-property-scroll { border: 0; margin: 0; }
-.record-source { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); margin-top: 9px; }
+.record-source { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); margin-top: 9px; }
 .record-source button { display: flex; align-items: center; gap: 5px; }
 .tool-details button { display: inline-flex; gap: 5px; margin-top: 8px; }
-.usage-supplement { margin: 0 0 18px; padding: 6px 10px; border-left: 2px solid var(--border-ui); color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
-.usage-supplement summary { cursor: pointer; line-height: 1.7; }
+.usage-supplement { margin: 0 0 18px; padding: 6px 10px; border-left: 2px solid var(--border-ui); color: var(--muted); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.usage-supplement summary { cursor: pointer; line-height: 1.5; }
 .usage-observation { margin-top: 10px; }
 .usage-observation dd { margin: 4px 0 10px; }
-.usage-observation pre { white-space: pre-wrap; font-size: 10px; }
+.usage-observation pre { white-space: pre-wrap; font-size: var(--fs-xs); font-family: var(--font-mono); }
 .d-task-shelf .member-pills { max-height: 112px; overflow: auto; }
 .member-pills strong { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .d-reading-index { overflow-x: auto; }
@@ -23,25 +23,21 @@
 .d-monitor-caption strong { max-width: 350px; }
 .new-project-list strong, .new-project-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .d-agent-properties h2, .d-task-shelf h2, .node-title, .node-subtitle, .d-dated-records strong { overflow-wrap: anywhere; }
-.change-list pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+.change-list pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-xs); font-family: var(--font-mono); }
 .d-usage-history-note { max-height: 32%; overflow: auto; }
 .d-usage-history-note .price-information { margin-top: 14px; }
-.d-project-add-form > p { color: var(--muted); margin-bottom: 18px; font-size: 12px; }
+.d-project-add-form > p { color: var(--muted); margin-bottom: 18px; font-size: var(--fs-sm); }
 .d-project-add-form > .button { margin-right: 8px; }
 .map-canvas > .d-empty-configuration { position: absolute; inset: 0; pointer-events: none; }
-.status-implementing, .status-running { color: var(--accent-ink); }
-.status-integrated { color: var(--green); }
-.status-implementing .status-dot, .status-running .status-dot { background: var(--accent-ui); }
-.status-integrated .status-dot { background: var(--green); }
 
 .summary-node { height: 100%; border: 1px solid var(--border-ui); border-radius: 8px; background: var(--surface); }
 .summary-node.expanded { background: color-mix(in srgb, var(--surface-alt) 70%, transparent); }
 .summary-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 16px; max-width: 600px; }
-.summary-heading strong { flex: 1; font-size: 16px; }
+.summary-heading strong { flex: 1; font-size: var(--fs-xl); }
 .summary-navigation { display: flex; gap: 4px; overflow-x: auto; padding: 4px 12px; flex-shrink: 0; }
 .summary-navigation > button { flex-shrink: 0; }
-.summary-heading > span, .node-membership { color: var(--muted); font-size: 11px; }
-.d-canvas-title select { pointer-events: auto; margin-top: 8px; padding: 5px 9px; background: var(--surface); border: 1px solid var(--border-ui); border-radius: 5px; max-width: min(480px, 60vw); }
+.summary-heading > span, .node-membership { color: var(--muted); font-size: var(--fs-xs); }
+.d-canvas-title select { pointer-events: auto; margin-top: 8px; padding: 5px 9px; background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong); border-radius: 5px; max-width: min(480px, 60vw); }
 .graph-filter-empty { position: absolute; top: 12px; left: 20px; z-index: 4; background: var(--surface); border: 1px solid var(--border-ui); border-radius: 6px; padding: 8px 12px; }
 /* Preserve a usable canvas when a long detail shelf and short window compete. */
 .d-map-workspace { overflow: auto; }
@@ -50,7 +46,8 @@
 .member-tree { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; overflow: auto; min-height: 0; }
 .member-tree .native-field { max-width: 420px; }
 .member-tree-rows { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; }
-.d-archive-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border-ui); border-radius: 6px; font-size: 12px; }
+.d-archive-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border-ui); border-radius: 6px; font-size: var(--fs-sm); }
 .d-archive-settings legend { font-weight: 600; padding: 0 4px; }
 .d-archive-settings label { display: flex; align-items: center; gap: 6px; }
+.d-archive-settings input { accent-color: var(--accent-ui); }
 .d-archive-settings small { flex-basis: 100%; color: var(--muted); }

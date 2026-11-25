@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Graph as X6, Shape, NodeView, type Cell } from '@antv/x6';
 import type { Graph, Task } from '../electron/types';
 import { taskFocus, taskRouterOptions, monitorGraph, taskChildren, taskStatus, taskPaths, projectBounds, type Size, type MonitorEdge } from './monitor-graph';
@@ -9,6 +9,19 @@ export type TaskCanvasHandle = { fit: () => void; locate: (id: string) => void }
 type Props = { graph: Graph; projectName: string; expanded: ReadonlySet<string>; selected: string | null;
   matches: ReadonlySet<string>; active: boolean; select: (id: string | null) => void; toggle: (id: string) => void };
 
+// X6 attributes are SVG strings that CSS var() cannot reach, so the canvas reads
+// the design tokens (tokens.css) whenever it draws, and redraws on theme change.
+const tokenNames = { surface: '--surface', surfaceAlt: '--surface-alt', ink: '--ink', muted: '--muted', faint: '--faint',
+  borderStrong: '--border-strong', accent: '--accent-ui', accentInk: '--accent-ink',
+  dependency: '--edge-dep', replacement: '--edge-repl', acceptance: '--edge-accept' } as const;
+type Palette = Record<keyof typeof tokenNames, string>;
+function canvasPalette(element: Element): Palette {
+  const style = getComputedStyle(element);
+  return Object.fromEntries(Object.entries(tokenNames).map(([key, name]) => [key, style.getPropertyValue(name).trim()])) as Palette;
+}
+const edgeColor = (kind: string, colors: Palette) => kind === 'replacement' ? colors.replacement
+  : kind === 'acceptance' ? colors.acceptance : colors.dependency;
+
 // Reuse the shared model without moving the main canvas HTML into the minimap.
 class MapNodeView extends NodeView {
   update(): void {
@@ -16,22 +29,22 @@ class MapNodeView extends NodeView {
     // HTML nodes carry invisible SVG bodies. Override only this thumbnail DOM,
     // never the shared model or the main canvas node attributes.
     if (this.cell.shape === 'native-task') {
+      const colors = canvasPalette(this.graph.container);
       const body = this.container.querySelector('rect');
-      body?.setAttribute('fill', '#94a3b8');
-      body?.setAttribute('stroke', '#64748b');
+      body?.setAttribute('fill', colors.faint);
+      body?.setAttribute('stroke', colors.muted);
     }
   }
   protected renderMarkup(): void {
+    const colors = canvasPalette(this.graph.container);
     this.renderJSONMarkup([{ tagName: 'rect', selector: 'body', attrs: {
-      width: this.cell.size().width, height: this.cell.size().height, fill: '#94a3b8', stroke: '#64748b',
+      width: this.cell.size().width, height: this.cell.size().height, fill: colors.faint, stroke: colors.muted,
     } }]);
   }
 }
 
 Shape.HTML.register({ shape: 'native-task', html: cell => cell.getData().element });
-X6.registerNode('task-frame', { inherit: 'rect', attrs: { body: {
-  fill: '#eef2f780', stroke: '#bdcbd9', strokeWidth: 1, rx: 12, ry: 12,
-} } });
+X6.registerNode('task-frame', { inherit: 'rect', attrs: { body: { strokeWidth: 1, rx: 12, ry: 12 } } });
 
 /** Build a text-only card shared by measurement and X6; task content is never HTML. */
 function card(task: Task, children: Task[], open: boolean, select: () => void, toggle: () => void): HTMLDivElement {
@@ -47,7 +60,18 @@ function card(task: Task, children: Task[], open: boolean, select: () => void, t
   element.append(title);
   const meta = document.createElement('div');
   meta.className = 'native-task-meta';
-  meta.textContent = `#${task.task_id} · ${taskStatus(task)}${task.replaced_by.length ? ` · → ${task.replaced_by.map(id => `#${id}`).join(', ')}` : ''}`;
+  // V3: the unchanged status word sits in the same chip + shape as ui.tsx Status;
+  // the meta text stays `#id · status[ · → #ids]`.
+  const status = taskStatus(task);
+  const tone = status.toLowerCase().replaceAll(' ', '-');
+  element.dataset.status = tone;
+  const chip = document.createElement('span');
+  chip.className = `status status-${tone}`;
+  const dot = document.createElement('span');
+  dot.className = 'status-dot';
+  chip.append(dot, status);
+  meta.append(`#${task.task_id} · `, chip);
+  if (task.replaced_by.length) meta.append(` · → ${task.replaced_by.map(id => `#${id}`).join(', ')}`);
   element.append(meta);
   const delivery = document.createElement('div');
   delivery.className = 'native-task-meta';
@@ -93,8 +117,10 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   const pendingLocate = useRef<string | null>(null);
   const pendingToggle = useRef<string | null>(null);
   const pathLabel = useRef<HTMLOutputElement>(null);
+  // The system light/dark theme recolours the X6 cells (tokens are read when drawing).
+  const [theme, setTheme] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   // Polling unchanged native facts must not rebuild cells or move the viewport.
-  const topology = JSON.stringify([props.projectName, props.graph.tasks, [...props.expanded].sort()]);
+  const topology = JSON.stringify([props.projectName, props.graph.tasks, [...props.expanded].sort(), theme]);
 
   function fit(minScale = .05): void {
     const graph = engine.current;
@@ -115,8 +141,9 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   useImperativeHandle(ref, () => ({ fit, locate }));
 
   useEffect(() => {
+    // The canvas background comes from CSS (.native-task-canvas uses --bg); the grid dots are drawn by X6.
     const graph = new X6({ container: container.current!, autoResize: true,
-      background: { color: '#f7f8fa' }, grid: { visible: true, size: 20 },
+      grid: { visible: true, size: 20, type: 'dot', args: { color: canvasPalette(container.current!).borderStrong, thickness: 1 } },
       interacting: false, panning: { enabled: true, eventTypes: ['leftMouseDown', 'mouseWheel'] },
       mousewheel: { enabled: true, modifiers: ['ctrl', 'meta'], minScale: .1, maxScale: 2 },
       connecting: { connectionPoint: 'anchor', router: { name: 'metro', args: {
@@ -134,12 +161,17 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       if (pathLabel.current) pathLabel.current.textContent = data.relations.map(item => `#${item.source} ${title(item.source)} ${item.kind === 'replacement' ? 'replaced by' : item.kind === 'acceptance' ? 'accepted into' : '→'} #${item.target} ${title(item.target)}${item.event_id ? ` · ${item.event_id}` : ''}`).join(' · ');
     });
     graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
-    return () => { graph.dispose(); engine.current = null; };
+    const media = matchMedia('(prefers-color-scheme: dark)');
+    const follow = () => setTheme(media.matches ? 'dark' : 'light');
+    media.addEventListener('change', follow);
+    return () => { media.removeEventListener('change', follow); graph.dispose(); engine.current = null; };
   }, []);
 
   useEffect(() => {
     const graph = engine.current!;
     const data = current.current;
+    const colors = canvasPalette(container.current!);
+    graph.drawGrid({ type: 'dot', args: { color: colors.borderStrong, thickness: 1 } });
     const children = taskChildren(data.graph);
     const tasks = new Map(data.graph.tasks.map(task => [task.task_id, task]));
     const sizes: Record<string, Size> = {};
@@ -174,19 +206,19 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       const bounds = projectBounds(result.nodes);
       // View-only containment, never a Task or an execution dependency.
       cells.push(graph.createNode({ id: 'project-frame', shape: 'task-frame', ...bounds, zIndex: -4,
-        attrs: { body: { fill: '#f8fafc', stroke: '#94a3b8', strokeWidth: 2, pointerEvents: 'none' } } }));
+        attrs: { body: { fill: colors.surface, stroke: colors.borderStrong, strokeWidth: 2, pointerEvents: 'none' } } }));
       cells.push(graph.createNode({ id: 'project-heading', shape: 'task-frame',
         x: bounds.x + 16, y: bounds.y + 12, width: Math.min(760, bounds.width - 32), height: 48, zIndex: -3,
         attrs: { body: { fill: 'none', stroke: 'none', pointerEvents: 'none' },
           label: { text: `Project · ${data.projectName}`, textAnchor: 'start', refX: 16,
-            fontSize: 16, fontWeight: 600, fill: '#334155', pointerEvents: 'none' } } }));
+            fontSize: 16, fontWeight: 600, fill: colors.ink, pointerEvents: 'none' } } }));
     }
     for (const node of result.nodes) {
       if (node.frame) cells.push(graph.createNode({ id: `frame:${node.id}`, shape: 'task-frame',
-        ...node.frame, zIndex: -2 }));
+        ...node.frame, zIndex: -2, attrs: { body: { fill: colors.surfaceAlt, fillOpacity: .5, stroke: colors.borderStrong } } }));
       const element = cards.current.get(node.id)!;
       element.style.height = `${node.height}px`;
-      const port = { attrs: { circle: { r: 3, magnet: false, fill: '#71849a', stroke: '#fff', strokeWidth: 1 } } };
+      const port = { attrs: { circle: { r: 3, magnet: false, fill: colors.dependency, stroke: colors.surface, strokeWidth: 1 } } };
       cells.push(graph.createNode({ id: node.id, shape: 'native-task', x: node.x, y: node.y,
         width: node.width, height: node.height, zIndex: 2, data: { element },
         ports: { groups: { in: { position: 'absolute', ...port }, out: { position: 'absolute', ...port } },
@@ -204,10 +236,10 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
           startDirections: ['right'], endDirections: ['left', 'right', 'top', 'bottom'] } },
       } : {}),
       ...(path.arrow && edge.kinds.length > 1 ? { labels: [{ position: .5, attrs: {
-        label: { text: edge.kinds.map(kind => kind === 'dependency' ? 'Dependency' : kind === 'acceptance' ? 'Accepted delivery' : 'Replacement').join(' + '), fontSize: 11, fill: '#365f9c' },
-        body: { fill: '#fff', stroke: '#bdcbd9', rx: 3, ry: 3 },
+        label: { text: edge.kinds.map(kind => kind === 'dependency' ? 'Dependency' : kind === 'acceptance' ? 'Accepted delivery' : 'Replacement').join(' + '), fontSize: 11, fill: colors.accentInk },
+        body: { fill: colors.surface, stroke: colors.borderStrong, rx: 3, ry: 3 },
       } }] } : {}),
-      attrs: { line: { stroke: edge.kind === 'replacement' ? '#986528' : edge.kind === 'acceptance' ? '#178271' : '#8192a6',
+      attrs: { line: { stroke: edgeColor(edge.kind, colors),
         strokeDasharray: edge.kind === 'replacement' ? '8 5' : edge.kind === 'acceptance' ? '3 3' : '', strokeWidth: 1.6,
         targetMarker: path.arrow ? { name: 'block', width: 10, height: 8 } : null } },
     }));
@@ -235,6 +267,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     const graph = engine.current;
     const result = projection.current;
     if (!graph || !result) return;
+    const colors = canvasPalette(container.current!);
     const focus = taskFocus(props.graph, props.selected);
     const emphasized = new Set([...focus].map(id => result.endpoints.get(id)));
     const matches = new Set([...props.matches].map(id => result.endpoints.get(id)));
@@ -251,7 +284,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
       const related = data.relations.some(item => focus.has(item.source) && focus.has(item.target));
       const visible = data.relations.some(item => focus.has(item.source) && focus.has(item.target)
         && props.matches.has(item.source) && props.matches.has(item.target));
-      edge.attr('line/stroke', data.kind === 'replacement' ? '#986528' : data.kind === 'acceptance' ? '#178271' : props.selected && related ? '#365f9c' : '#8192a6');
+      edge.attr('line/stroke', data.kind !== 'replacement' && data.kind !== 'acceptance' && props.selected && related ? colors.accent : edgeColor(data.kind, colors));
       edge.attr('line/strokeWidth', props.selected && related ? 3 : 1.6);
       edge.attr('line/opacity', visible ? 1 : .15);
     }

@@ -1,0 +1,92 @@
+/* The single source of design tokens (Task 624 advice 3.1/3.2, adopted in Task 626).
+ * Light values are the default; the dark block follows the system appearance
+ * (prefers-color-scheme), as the spec requires ("默认跟随系统明暗主题").
+ * Tokens are declared on :root (document canvas, getComputedStyle readers) and
+ * again on .desktop-d so they win over values HeroUI declares on :root/body.
+ * Import this file last in main.tsx.
+ * They are declared once more on any `.light` / `.dark` / `[data-theme]` element inside the app: React Flow's
+ * default colorMode puts `.light` on `.react-flow`, and HeroUI's theme block (`:root, .light, …`) would otherwise
+ * re-declare --surface, --muted, … there with its own light values (white org cards in dark, Task 626 host run). */
+:root, .desktop-d, .desktop-d :is(.light, .dark, [data-theme]) {
+  color-scheme: light;
+  --bg: #f6f7f9; --surface: #ffffff; --surface-alt: #f0f2f5; --surface-hover: #e7eaef; --sidebar: var(--surface);
+  --ink: #1f2933; --muted: #52606d; --faint: #6b7785;
+  --border-ui: #dfe4ea; --border-strong: #c3ccd7;
+  --accent-ui: #4a67a8; --accent-hover: #3e5893; --accent-soft: #e8eef9; --accent-ink: #35518d; --on-accent: #ffffff;
+  --green: #256c4f; --green-soft: #e4f3ea; --amber: #8a5a12; --amber-soft: #fbf1dc;
+  --red: #a3352f; --red-soft: #fcebe9; --red-border: #efc6c2; --neutral-soft: #eceff3;
+  --edge-dep: #8493a6; --edge-repl: #a0662a; --edge-accept: #1b8573;
+  --chart-color: #5479bd; --chart-secondary: #a9c0e4;
+  --backdrop: rgb(16 27 36 / .44);
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / .06); --shadow-md: 0 4px 14px rgb(16 24 40 / .10); --shadow-lg: 0 18px 48px rgb(16 24 40 / .22);
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 14px; --fs-xl: 16px; --fs-2xl: 20px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root, .desktop-d, .desktop-d :is(.light, .dark, [data-theme]) {
+    color-scheme: dark;
+    --bg: #14171c; --surface: #1b1f26; --surface-alt: #232831; --surface-hover: #2c323d;
+    --ink: #e6e9ee; --muted: #a9b3c0; --faint: #8a95a5;
+    --border-ui: #2d343f; --border-strong: #424b59;
+    --accent-ui: #7f9cdc; --accent-hover: #95aee6; --accent-soft: #243150; --accent-ink: #a9bfee; --on-accent: #10151f;
+    --green: #7fd0a6; --green-soft: #1b3328; --amber: #e3b866; --amber-soft: #3a2f17;
+    --red: #f0958d; --red-soft: #3d2221; --red-border: #6b3532; --neutral-soft: #272c35;
+    --edge-dep: #74819a; --edge-repl: #d09a55; --edge-accept: #4bb8a4;
+    --chart-color: #7f9cdc; --chart-secondary: #3f5384;
+    --backdrop: rgb(0 0 0 / .6);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / .4); --shadow-md: 0 4px 14px rgb(0 0 0 / .45); --shadow-lg: 0 18px 48px rgb(0 0 0 / .6);
+  }
+}
+/* HeroUI v3 variables, mapped once onto the tokens above (both themes).
+ * @heroui/styles 3.0.1 (dist/themes/default/variables.css) switches its own
+ * variables only under `.dark` / `[data-theme="dark"]`, while its `dark:`
+ * variant (dist/variants/index.css) falls back to prefers-color-scheme.
+ * Every colour variable its dark block changes (its three shadow variables
+ * excepted, which keep HeroUI's light values) is mapped here, so HeroUI
+ * components follow the system theme through these tokens without a class.
+ * (--surface and --muted share our names and are defined above.) */
+:root, .desktop-d, .desktop-d :is(.light, .dark, [data-theme]) {
+  --accent: var(--accent-ui); --accent-foreground: var(--on-accent);
+  --background: var(--bg); --foreground: var(--ink);
+  --surface-foreground: var(--ink);
+  --surface-secondary: var(--surface-alt); --surface-secondary-foreground: var(--ink);
+  --surface-tertiary: var(--surface-hover); --surface-tertiary-foreground: var(--ink);
+  --overlay: var(--surface); --overlay-foreground: var(--ink);
+  --default: var(--surface-alt); --default-foreground: var(--ink);
+  --segment: var(--surface); --segment-foreground: var(--ink);
+  --field-background: var(--surface); --field-foreground: var(--ink); --field-border: var(--border-strong); --field-placeholder: var(--faint);
+  --muted-foreground: var(--muted); --scrollbar: var(--faint);
+  --border: var(--border-ui); --separator: var(--border-ui);
+  --focus: var(--accent-ui); --link: var(--accent-ink);
+  --danger: var(--red); --danger-foreground: var(--on-accent);
+  --success: var(--green); --success-foreground: var(--on-accent);
+  --warning: var(--amber); --warning-foreground: var(--on-accent);
+}
+/* React Flow (@xyflow/react 12 dist/style.css) reads var(--xy-<name>, var(--xy-<name>-default)); its defaults are
+ * fixed light/dark literals chosen by colorMode. Map the colour variables onto the tokens (both themes). */
+.desktop-d .react-flow {
+  --xy-background-color: transparent;
+  --xy-background-pattern-dots-color: var(--border-strong); --xy-background-pattern-lines-color: var(--border-ui);
+  --xy-background-pattern-cross-color: var(--border-ui);
+  --xy-node-background-color: var(--surface); --xy-node-color: var(--ink); --xy-node-border: 1px solid var(--border-strong);
+  --xy-node-group-background-color: var(--surface-alt);
+  --xy-node-boxshadow-hover: var(--shadow-sm); --xy-node-boxshadow-selected: 0 0 0 1px var(--accent-ui);
+  --xy-edge-stroke: var(--edge-dep); --xy-edge-stroke-selected: var(--accent-ui);
+  --xy-edge-label-background-color: var(--surface); --xy-edge-label-color: var(--ink);
+  --xy-connectionline-stroke: var(--accent-ui);
+  --xy-handle-background-color: var(--accent-ui); --xy-handle-border-color: var(--surface);
+  --xy-controls-button-background-color: var(--surface); --xy-controls-button-background-color-hover: var(--surface-alt);
+  --xy-controls-button-color: var(--ink); --xy-controls-button-color-hover: var(--ink);
+  --xy-controls-button-border-color: var(--border-ui); --xy-controls-box-shadow: var(--shadow-sm);
+  --xy-attribution-background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+  --xy-minimap-background-color: var(--surface); --xy-minimap-node-background-color: var(--faint);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--bg) 60%, transparent);
+  --xy-selection-background-color: color-mix(in srgb, var(--accent-ui) 8%, transparent);
+  --xy-selection-border: 1px dotted var(--accent-ui); --xy-resize-background-color: var(--accent-ui);
+}
+.desktop-d .react-flow__attribution { font-size: var(--fs-xs); }
+.desktop-d .react-flow__attribution a { color: var(--faint); }
+html, body { background: var(--bg); color: var(--ink); }
+.desktop-d { font-family: var(--font-ui); background: var(--sidebar); color: var(--ink); }

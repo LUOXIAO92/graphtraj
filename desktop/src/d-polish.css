@@ -35,13 +35,6 @@
 .d-usage-empty { padding: 32px 0; max-width: 580px; }
 .d-usage-empty h2 { font-size: var(--fs-xl); font-weight: var(--fw-medium); line-height: 1.4; }
 .d-usage-empty p { font-size: var(--fs-sm); color: var(--muted); line-height: 1.5; margin-top: 12px; }
-.d-dated-records > div { display: grid; grid-template-columns: 80px minmax(110px, 1fr) auto 55px; gap: 12px; align-items: center; border-top: 1px solid var(--border-ui); padding: 13px 0; font-size: var(--fs-xs); }
-.d-dated-records time { font-size: var(--fs-xs); color: var(--muted); }
-.d-dated-records strong, .d-dated-records b { font-weight: var(--fw-medium); }
-.d-dated-records small { font-size: var(--fs-xs); color: var(--muted); }
-.d-dated-records > div > span:nth-child(2) > small { display: block; margin-top: 5px; }
-.d-dated-records > div > span:nth-child(3) { color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; text-align: right; }
-.d-dated-records b { text-align: right; font-variant-numeric: tabular-nums; }
 .d-usage-history-note { border-top: 1px solid var(--border-ui); background: var(--surface); flex-shrink: 0; padding: 13px 27px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
 .d-usage-history-note details { margin-top: 7px; }
 .d-usage-history-note summary { cursor: pointer; width: fit-content; }
@@ -54,7 +47,6 @@
   .d-dated-usage .new-usage-totals { gap: 12px; }
   .d-project-usage-table th, .d-project-usage-table td { padding-inline: 10px; }
   .d-project-usage-table tbody th { min-width: 175px; }
-  .d-dated-records > div { grid-template-columns: 70px minmax(100px, 1fr) auto 50px; gap: 9px; }
 }
 .d-focused-layout ::selection { background: var(--accent-soft); color: var(--ink); }
 .d-focused-layout input, .d-focused-layout textarea { caret-color: var(--accent-ui); }

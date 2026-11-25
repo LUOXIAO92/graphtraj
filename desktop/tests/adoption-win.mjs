@@ -8,7 +8,8 @@ import os from 'node:os';
 import { _electron as electron } from 'playwright';
 import { controlledInput, retainedRecords } from './retained-records.mjs';
 import { settingsAdoption } from './settings-adoption.mjs';
-import { datedUsage, parallelChat } from './adoption-shared.mjs';
+import { approvalDialogs, datedUsage, guardApprovals, openTask, parallelChat, projectsView,
+  removeIndexEntry } from './adoption-shared.mjs';
 import { localDate } from '../src/usage.ts';
 
 assert.equal(process.platform, 'win32', 'Adoption requires an actual Windows desktop');
@@ -60,9 +61,11 @@ async function makeProject(name, retained = false) {
   await fs.writeFile(path.join(project, '.graphtraj/roles.yml'), 'roles:\n  observation:\n    reader:\n      runtime: codex\n      model: controlled-original\n      api_key_env: WINDOWS_ADOPTION_TEST_KEY\nrole_tree: {}\n');
   let taskDirectory;
   for (const [id, title, dependencies] of [['1', name, []], ['2', 'dependent', ['1']]]) {
+    // The current task_register input requires the full Task fields (619 run 45560972529).
     const registered = operate(project, 'task_register', {
       task_id: id, task_name: title, title, dependencies,
       source: `https://github.com/example/controlled-windows/issues/${id}`,
+      schema_version: 2, parent_id: null, disposition: 'active', replaced_by: [], retirement_reason: null,
       body: 'Controlled Windows adoption record. No model execution.',
     });
     if (id === '1') taskDirectory = registered.task_directory;
@@ -146,7 +149,7 @@ while ((Get-Date) -lt $deadline -and -not $target) {
     [NativeWindows]::GetWindowText($window, $title, $title.Capacity) | Out-Null
     [NativeWindows]::GetClassName($window, $class, $class.Capacity) | Out-Null
     $observed += @{ handle=$window.ToInt64(); process=$windowProcess; ownerProcess=$ownerProcess; title=$title.ToString(); class=$class.ToString() }
-    $expected = if ($Action -eq 'pick') { 'Add existing GraphTraj project' } else { 'Save configuration?' }
+    $expected = if ($Action -eq 'pick') { 'Add existing GraphTraj project' } else { 'Relocate GraphTraj project' }
     if ($title.ToString() -eq $expected -or $class.ToString() -eq '#32770') {
       $dialogHandle = $window
       $target = [System.Windows.Automation.AutomationElement]::FromHandle($window)
@@ -183,7 +186,7 @@ foreach ($child in $children) {
 }
 $controls | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 ($Capture + '.win32-controls.json')
 [NativeWindows]::SetForegroundWindow($dialogHandle) | Out-Null
-if ($Action -eq 'pick') {
+if ($Action -eq 'pick' -or $Action -eq 'relocate') {
   $labels = @($controls | Where-Object { $_.visible -and $_.class -eq 'Static' -and $_.text.Replace('&','').Trim() -eq 'Folder:' })
   if ($labels.Count -ne 1) { throw 'Expected one actual native Folder label; see Win32 control evidence' }
   $edit = [NativeWindows]::GetNextDlgTabItem($dialogHandle, [IntPtr]$labels[0].handle, $false)
@@ -197,7 +200,7 @@ if ($Action -eq 'pick') {
     ConvertTo-Json | Set-Content -Encoding UTF8 ($Capture + '.selection.json')
   Save-DesktopCapture ($Capture + '.filled.png')
   $names = @('Select Folder')
-} elseif ($Action -eq 'approve') { $names = @('Save settings') } else { $names = @('Cancel') }
+} else { throw "Unknown native action $Action; D has no approval dialog (045ef3a4)" }
 $buttons = @($controls | Where-Object { $_.class -eq 'Button' -and $_.visible -and $_.enabled -and $names -contains $_.text.Replace('&','').Trim() })
 if ($buttons.Count -ne 1) { throw "Expected one actual native button for $Action; see Win32 control evidence" }
 $dialogTitle = $target.Current.Name
@@ -227,10 +230,24 @@ async function launch() {
   facts.processes = { launched: app.process().pid, main: mainProcess };
   await bounded('Focus installed window', app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); }));
   page.setDefaultTimeout(20000);
+  // D saves directly (no approval dialog since 045ef3a4); any message box is a regression.
+  await bounded('Guard approval dialogs', guardApprovals(app));
 }
-async function pick(folder) {
-  await page.getByRole('button', { name: 'Add project', exact: true }).click();
-  try { await native('pick', folder); } catch (error) {
+const secret = 'CONTROLLED-SECRET-MUST-NOT-APPEAR';
+const button = name => page.getByRole('button', { name, exact: true }).filter({ visible: true });
+const modelField = () => page.getByLabel('Model', { exact: true }).filter({ visible: true });
+const allSaved = () => page.getByText('All changes saved', { exact: true }).filter({ visible: true }).waitFor();
+/** After every Save: no approval dialog and no credential in the window. */
+async function checkSave(label) {
+  assert.equal(await approvalDialogs(app), 0, `${label}: D saves directly; no approval dialog may appear`);
+  assert.ok(!(await page.locator('body').innerText()).includes(secret), `${label}: the credential value must not appear`);
+}
+async function pick(folder, action = 'pick') {
+  // D: Add project and Relocate live in the Projects view (main.tsx ProjectIndexEditor).
+  await projectsView(page);
+  if (action === 'pick') await button('Add project').click();
+  else await button(`Relocate ${action.from}`).click();
+  try { await native(action === 'pick' ? 'pick' : 'relocate', folder); } catch (error) {
     facts.error = error.stack || String(error);
     await persist();
     try {
@@ -239,8 +256,10 @@ async function pick(folder) {
     } catch (captureError) { facts.captureError = String(captureError); }
     throw error;
   }
-  await page.locator('.project-button.current').filter({ hasText: folder }).waitFor();
-  await page.locator('.monitor-page:visible .react-flow__node').first().waitFor();
+  if (action !== 'pick') return;
+  await page.locator('.project-button[aria-current="true"]').filter({ hasText: folder }).waitFor();
+  await button('Monitor').click();
+  await page.locator('.monitor-page:visible .native-task-card').first().waitFor();
 }
 async function capture(name) {
   assert.ok(!(await page.locator('body').innerText()).includes('CONTROLLED-SECRET-MUST-NOT-APPEAR'));
@@ -260,6 +279,9 @@ try {
   // Never seed supplied user projects: both roots must be newly created by this test.
   const first = await fs.realpath(await makeProject('first-project', true));
   const second = await fs.realpath(await makeProject('second-project'));
+  // Only the real Relocate dialog can point a disposable entry at the second directory.
+  const relocateFrom = await fs.realpath(await makeProject('relocate-from'));
+  const relocateTo = await fs.realpath(await makeProject('relocate-to'));
   const secondRoles = path.join(second, '.graphtraj/roles.yml');
   const secondBefore = await fs.readFile(secondRoles);
   const firstRoles = path.join(first, '.graphtraj/roles.yml');
@@ -272,7 +294,9 @@ try {
   const secondState = await taskFiles(second);
   await launch();
   const surface = await bounded('Read renderer surface', page.evaluate(() => ({ methods: Object.keys(window.graphtraj).sort(), require: typeof window.require, process: typeof window.process })));
-  assert.deepEqual(surface.methods, ['activity', 'addProject', 'connections', 'copyText', 'graph', 'projects', 'relocateProject', 'removeProject', 'saveSettings', 'selectProject', 'settings', 'usage']);
+  // The exact current bridge (desktop/electron/preload.ts:4-19); members and saveArchive
+  // are reads and Session-archive switches, not execution control.
+  assert.deepEqual(surface.methods, ['activity', 'addProject', 'connections', 'copyText', 'graph', 'members', 'projects', 'relocateProject', 'removeProject', 'saveArchive', 'saveSettings', 'selectProject', 'settings', 'usage']);
   assert.equal(surface.require, 'undefined');
   assert.equal(surface.process, 'undefined');
   await pick(first);
@@ -281,8 +305,22 @@ try {
   await pick(second);
   assert.equal(await page.locator('.project-button').count(), 2);
   await capture('two-projects');
+  await pick(relocateFrom);
+  assert.equal(await page.locator('.project-button').count(), 3);
+  const relocateId = (await page.evaluate(() => window.graphtraj.projects())).projects.find(project => project.root === relocateFrom).id;
+  await pick(relocateTo, { from: relocateFrom });
+  await page.getByRole('row').filter({ hasText: relocateTo }).waitFor();
+  const relocatedEntry = (await page.evaluate(() => window.graphtraj.projects())).projects.find(project => project.id === relocateId);
+  assert.equal(relocatedEntry.root, relocateTo, 'The real Relocate dialog must change only the indexed path');
+  await capture('relocated');
+  await removeIndexEntry(page, relocateTo);
+  await page.locator('.project-button').filter({ hasText: relocateTo }).waitFor({ state: 'detached' });
+  assert.equal(await page.locator('.project-button').count(), 2);
+  assert.equal(operate(relocateFrom, 'task_graph').tasks.length, 2);
+  assert.equal(operate(relocateTo, 'task_graph').tasks.length, 2);
+  facts.steps.push('Actual Relocate dialog changed only the indexed path; removing that entry kept both directories');
   await page.locator('.project-button').filter({ hasText: first }).click();
-  await page.locator('.monitor-page:visible .react-flow__node[data-id="1"]').filter({ hasText: 'first-project' }).click();
+  await openTask(page.locator('.monitor-page:visible'), '1');
   await page.getByRole('complementary', { name: 'Task details' }).waitFor();
   const activity = operate(first, 'desktop_activity', { task_id: '1' });
   assert.equal(activity.agents.length, 2);
@@ -290,7 +328,8 @@ try {
   assert.equal(historical.state, 'retired');
   await parallelChat({ page, members: activity.agents, shot: capture });
   {
-    await page.locator('.activity-event').first().waitFor();
+    const reader = page.getByRole('region', { name: 'Expanded agent conversations', exact: true });
+    await reader.locator('.activity-event').first().waitFor();
     const observed = operate(first, 'desktop_activity', { task_id: '1', alias: historical.alias });
     const message = observed.events?.find(event => event.kind === 'message' && event.text);
     const tool = observed.events?.find(event => event.kind === 'tool' && event.name);
@@ -303,54 +342,71 @@ try {
     assert.equal(usage.tokens.input, 1000);
     assert.equal(usage.tokens.cache_read, 600);
     assert.equal(usage.tokens.output, 80); // Reasoning 20 is already a subset of output 80.
-    await page.locator('.activity-event').filter({ hasText: message.text }).first().waitFor();
-    await page.locator('.activity-event').filter({ hasText: tool.name }).first().waitFor();
-    await page.locator('.activity-event details summary').filter({ hasText: 'Result / details' }).first().click();
-    await page.getByText(facts.controlledInput.tool, { exact: true }).first().waitFor();
+    await reader.locator('.activity-event').filter({ hasText: message.text }).first().waitFor();
+    // D titles tool records 'Tool · <name>'; the result is its own record (Activity.tsx EventCard).
+    await reader.locator('.activity-event').filter({ hasText: `Tool · ${tool.name}` }).first().waitFor();
+    await reader.locator('details.tool-card > summary').filter({ hasText: /result · / }).first().click();
+    await reader.getByText(facts.controlledInput.tool, { exact: true }).filter({ visible: true }).first().waitFor();
     facts.steps.push('Nonempty native Chat message/tool rendered');
   }
   await capture('node-chat');
   await page.getByRole('button', { name: 'Project usage', exact: true }).click();
-  await page.locator('.usage-dashboard').waitFor();
+  const dashboard = page.getByRole('region', { name: 'Usage dashboard', exact: true });
+  await dashboard.waitFor();
   const usageDate = localDate(new Date(operate(first, 'desktop_activity', { task_id: '1', alias: historical.alias }).events.find(event => event.kind === 'usage').time));
-  await page.getByLabel('Start date').fill(usageDate);
-  await page.getByLabel('End date').fill(usageDate);
+  await dashboard.getByLabel('Start date').fill(usageDate);
+  await dashboard.getByLabel('End date').fill(usageDate);
   {
-    const row = page.getByRole('table', { name: 'Model breakdown', exact: true }).getByRole('row').filter({ hasText: 'gpt-5.3-codex' });
-    await row.waitFor();
-    const cells = row.locator('td');
-    assert.match(await cells.nth(1).innerText(), /^1,?000/);
-    assert.match(await cells.nth(2).innerText(), /^80/);
-    assert.match(await cells.nth(3).innerText(), /^600/);
-    assert.equal(await cells.nth(5).innerText(), '60%');
-    assert.match(await cells.nth(6).innerText(), /^\$0\.001925/);
+    // D replaced the Model breakdown table with a model list, totals and a dated chart (UsageDashboard.tsx).
+    const model = dashboard.getByRole('button', { name: /^gpt-5\.3-codex\b/ });
+    await model.waitFor();
+    await model.click();
+    const totals = Object.fromEntries(await dashboard.locator('.new-usage-totals > span').evaluateAll(cells =>
+      cells.map(cell => [cell.querySelector('small').textContent, cell.querySelector('strong').textContent])));
+    const titles = await dashboard.getByRole('img', { name: /^Reported input by date/ }).locator('title')
+      .evaluateAll(items => items.map(item => item.textContent));
+    assert.ok(titles.some(title => /: 1,?000 input tokens$/.test(title)), JSON.stringify(titles));
+    assert.equal(totals.OUTPUT, '80');
+    assert.equal(totals['CACHE READ'], '600');
+    assert.equal(totals['KNOWN INPUT HIT RATE'], '60.0%');
+    assert.match(await model.locator('strong').innerText(), /^\$0\.001925/);
     facts.steps.push('Controlled 1000 input / 600 cache / 80 output gives 60% cache and $0.001925 at the bundled C snapshot; reasoning is not added twice');
   }
   await capture('dashboard');
   facts.steps.push('Installed Dashboard renders; quantity algorithms reuse accepted C evidence');
-  await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
-  await page.getByLabel('Model', { exact: true }).fill('controlled-denied');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await native('deny');
-  await page.getByRole('alert').filter({ hasText: 'did not approve' }).waitFor();
+  await button('Teams & roles').click();
+  // The legacy role's Model field is in 'Saved project model settings' (Settings.tsx).
+  const savedModel = page.locator('summary').filter({ hasText: /^Saved project model settings$/ }).filter({ visible: true });
+  if (await savedModel.locator('..').getAttribute('open') === null) await savedModel.click();
+  // Declining is Cancel in D (no approval dialog since 045ef3a4): the draft is discarded.
+  await modelField().fill('controlled-denied');
+  await page.getByText('1 unsaved changes', { exact: true }).filter({ visible: true }).waitFor();
+  await button('Cancel').click();
+  await allSaved();
   assert.deepEqual(await fs.readFile(firstRoles), original);
+  assert.equal(await modelField().inputValue(), 'controlled-original');
+  await checkSave('cancelled');
   await capture('settings-denied');
-  await page.getByLabel('Model', { exact: true }).fill('controlled-approved');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await native('approve');
-  await page.getByRole('status').getByText('Settings saved.', { exact: true }).waitFor();
+  await modelField().fill('controlled-approved');
+  await button('Save').click();
+  await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
   assert.match(await fs.readFile(firstRoles, 'utf8'), /model: controlled-approved/);
   assert.deepEqual(await fs.readFile(secondRoles), secondBefore);
+  await checkSave('saved');
   await capture('settings-approved');
   // An external edit is an ordinary config edit, not a private-state mutation.
   await fs.appendFile(firstRoles, '\n# Controlled concurrent edit\n');
   const concurrent = await fs.readFile(firstRoles);
-  await page.getByLabel('Model', { exact: true }).fill('controlled-stale');
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await modelField().fill('controlled-stale');
+  await button('Save').click();
   await page.getByRole('alert').filter({ hasText: 'changed while editing' }).waitFor();
   assert.deepEqual(await fs.readFile(firstRoles), concurrent);
   assert.deepEqual(await fs.readFile(secondRoles), secondBefore);
   await capture('settings-conflict');
+  // D keeps the stale draft after a conflict; Reload discards it before the shared settings checks.
+  await button('Reload').click();
+  await page.getByRole('status').filter({ hasText: 'Loaded current configuration.' }).waitFor();
+  assert.equal(await modelField().inputValue(), 'controlled-approved');
   await datedUsage({ page, first, second, agent: historical.alias, date: usageDate, shot: capture });
   const projects = await page.evaluate(() => window.graphtraj.projects());
   const storedIndex = JSON.parse(await fs.readFile(path.join(os.homedir(), '.graphtraj/projects.json'), 'utf8'));
@@ -358,25 +414,23 @@ try {
   facts.index = { path: path.join(os.homedir(), '.graphtraj/projects.json'), projects: storedIndex.projects };
   const firstId = projects.projects.find(project => project.root === first).id;
   const secondId = projects.projects.find(project => project.root === second).id;
-  let decision = 1;
   const settings = await settingsAdoption({ page, firstId, secondId,
     legacyRole: 'observation.reader', runtimeHome: path.join(root, 'runtime-home'),
-    decide: async response => { decision = response; },
-    review: action => Promise.all([action(), native(decision ? 'approve' : 'deny')]),
-    shot: capture, step: text => facts.steps.push(text),
+    checkSave, shot: capture, step: text => facts.steps.push(text),
   });
   facts.settings = settings;
-  facts.steps.push('D navigation/current-history parallel readers, global/project dates and multi-team settings checked through installed native bridge and real OS approvals.');
+  facts.steps.push('D navigation/current-history parallel readers, global/project dates and multi-team settings checked through installed native bridge; direct Save/Cancel with zero approval dialogs; real OS Add and Relocate dialogs.');
   facts.phase = 'normal-close';
   await persist();
   await bounded('Normal GUI close', app.close()); app = null;
   assert.deepEqual(operate(first, 'task_graph'), before);
   await launch();
-  await page.locator('.project-button.current').filter({ hasText: first }).waitFor();
+  await page.locator('.project-button[aria-current="true"]').filter({ hasText: first }).waitFor();
   assert.deepEqual(await page.evaluate(id => window.graphtraj.settings(id), firstId), settings.roles);
   assert.deepEqual((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), firstId)).catalog, settings.global.catalog);
   await datedUsage({ page, first, second, agent: historical.alias, date: usageDate, shot: name => capture(`reopened-${name}`) });
-  await page.getByRole('button', { name: `Remove ${second}`, exact: true }).click();
+  await removeIndexEntry(page, second);
+  await page.locator('.project-button').filter({ hasText: second }).waitFor({ state: 'detached' });
   assert.equal(await page.locator('.project-button').count(), 1);
   assert.equal(operate(second, 'task_graph').tasks.length, 2);
   await capture('restart-removal');

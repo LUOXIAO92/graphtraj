@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Description, Input, Label, TextField } from '@heroui/react';
 import type { ArchiveChoices, Connections, RoleFields, RoleTree, Settings } from '../electron/types';
 import { branchRoles, treeEdges, moveNode, removeNodes, fieldLabels as labels, ownRole, roleChanges, roleName, runtimeLabel } from './settings-draft';
-import { Dialog, Field, Icon } from './ui';
+import { Dialog, Field, Icon, StateMessage } from './ui';
 import { TeamGraph } from './TeamGraph';
 
 /** Edit project settings; only the native save entry can persist it. */
@@ -232,29 +232,24 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
     setDeleting(null);
   }
   return <section className="d-team-editor" aria-label="Project settings"><header className="d-config-heading"><div><h1>Teams &amp; roles</h1><p>Configure this project’s organization. Running agents are unchanged.</p></div><span className="memory-badge"><Icon name="shield" size={15}/>Project configuration</span></header>
-    {error && !adding && !deleting && <div className="native-notice error" role="alert">{error}<p>Your unsaved changes are retained.</p></div>}
-    {busy && <p className="native-notice" role="status">Loading or saving settings…</p>}{message && <div className="toast" role="status"><Icon name="check"/>{message}</div>}
-    {saved?.archive && <fieldset className="d-archive-settings" disabled={busy}><legend>Session archive · subagents tool (.graphtraj/swarm/config.yml)</legend>
+    {error && !adding && !deleting && <StateMessage kind="error">{error}<p>Your unsaved changes are retained.</p></StateMessage>}
+    {busy && <StateMessage kind="loading">Loading or saving settings…</StateMessage>}{message && <div className="toast" role="status"><Icon name="check"/>{message}</div>}
+    {/* V8: one option-card row; the file path moves from the legend to the note. */}
+    {saved?.archive && <fieldset className="d-archive-settings" disabled={busy}><legend>Session archive · subagents tool</legend>
       {([['save_normalized_sessions', 'Save normalized Sessions'], ['backfill_history', 'Backfill history of associated Sessions']] as const).map(([name, label]) =>
         <label key={name}><input type="checkbox" checked={saved.archive![name]} onChange={event => void saveArchive({ [name]: event.target.checked })}/><span>{label}</span></label>)}
-      <small>Saved immediately. Turning saving off keeps saved history and never affects native Sessions, messages, stopping or continuing.</small></fieldset>}
+      <small>Saved immediately to .graphtraj/swarm/config.yml. Turning saving off keeps saved history and never affects native Sessions, messages, stopping or continuing.</small></fieldset>}
     <nav className="d-team-tabs" aria-label="Project teams">{teams.map(name => <button key={name} aria-current={team === name ? 'true' : undefined} onClick={() => { setError(''); setTeam(name); setSelected(Object.keys(roles).find(ref => group(ref) === name) ?? ''); }}><Icon name="branch" size={15}/><span>{ownRole(teamRenames, name) ?? (name || 'Ungrouped roles')}</span><small>{Object.keys(roles).filter(ref => group(ref) === name).length}</small></button>)}<Button variant="ghost" isDisabled={busy || !saved} onPress={() => { setError(''); setAdding('team'); setTeamName(''); }}><Icon name="plus" size={15}/>Add team</Button>{teamRoles.length > 0 && <Button variant="ghost" className="d-delete-team" isDisabled={busy} onPress={() => setDeleting('team')}><Icon name="trash" size={15}/>Delete team</Button>}</nav>
-    {!teams.length ? <div className="d-empty-configuration"><Icon name="branch" size={30}/><h2>{busy ? 'Loading teams…' : 'No teams configured'}</h2><p>Add a team and start with one root agent. Build its organization one child at a time.</p><Button variant="primary" isDisabled={busy || !saved} onPress={() => setAdding('team')}>Add first team</Button></div> : <div className="d-team-editor-body"><div className="d-org-workspace"><header><div><label>Team name<input aria-label="Team name" disabled={busy || !team} value={ownRole(teamRenames, team) ?? (team || 'Ungrouped roles')} onChange={event => {
+    {!teams.length ? <StateMessage kind={busy ? 'loading' : 'empty'} layout="block" role={null} icon="branch" className="d-empty-configuration" title={busy ? 'Loading teams…' : 'No teams configured'}
+      action={<Button variant="primary" isDisabled={busy || !saved} onPress={() => setAdding('team')}>Add first team</Button>}><p>Add a team and start with one root agent. Build its organization one child at a time.</p></StateMessage> : <div className="d-team-editor-body"><div className="d-org-workspace"><header><div><label>Team name<input aria-label="Team name" disabled={busy || !team} value={ownRole(teamRenames, team) ?? (team || 'Ungrouped roles')} onChange={event => {
       const value = event.target.value; setTeamRenames(current => ({ ...current, [team]: value }));
       setRenames(current => ({ ...current, ...Object.fromEntries(teamRoles.map(ref => [ref, `${value}.${roleName(renames, ref).split('.').pop()}`])) }));
     }}/></label></div><Button variant="secondary" isDisabled={busy} onPress={() => setAdding(selectedRole ? 'child' : 'root')}><Icon name="plus" size={15}/>{selectedRole ? 'Add child agent' : 'Add root agent'}</Button>{selectedRole && <Button variant="ghost" isDisabled={busy} onPress={() => setAdding('root')}>Add root agent</Button>}</header><TeamGraph key={team} tree={tree} references={teamRoles} roles={roles} renames={renames} selected={selected} busy={busy}
           onSelect={ref => { setSelected(ref); setError(''); }} onChange={next => { setTree(next); setError(''); setMessage(''); }} onError={setError} modelLabel={graphModel}/>
-        <footer><Icon name="info" size={15}/><span>Drag from a parent’s lower handle to a child’s upper handle. Drag the parent end of an existing line to reconnect it. Select a line to disconnect its parent. Self-connections and cycles are rejected.</span></footer></div>
+        <footer className="d-org-hint"><Icon name="info" size={14}/><span>Drag from a parent’s lower handle to a child’s upper handle. Drag the parent end of an existing line to reconnect it. Select a line to disconnect its parent. Self-connections and cycles are rejected.</span></footer></div>
       {selectedRole ? <aside className="d-agent-properties"><header><div><h2>{roleName(renames, selected).split('.').at(-1)}</h2><span>{isTeamRoot(selected) ? 'Root agent configuration' : 'Child agent configuration'}</span></div><Button isIconOnly variant="ghost" aria-label="Delete selected agent configuration" isDisabled={busy} onPress={() => { setDeleting('agent'); setDeleteMode('branch'); setPromoted(edges.find(([parent]) => parent === selected)?.[1] ?? ''); }}><Icon name="trash" size={16}/></Button></header><fieldset disabled={busy} className="config-property-scroll"><div className="new-config-fields"><TextField className="settings-field" value={roleName(renames, selected).split('.').at(-1)} onChange={name => setRenames(current => ({ ...current, [selected]: group(roleName(renames, selected)) ? `${group(roleName(renames, selected))}.${name}` : name }))}><Label>Agent name</Label><Input/><Description>Renaming updates this team’s dispatch references.</Description></TextField>
-        <fieldset className="d-agent-prompts"><legend>Prompts</legend>
-          <p>Leave text and file references blank to keep Runtime defaults and the existing Harness instructions.</p>
-          {field('system_prompt', true)}
-          <small>{selectedRuntime === 'codex' ? 'Optional inline override of the native system prompt. Blank keeps the Codex default.' : 'Appended to the Runtime system prompt; its defaults remain.'}</small>
-          {selectedRuntime !== 'codex' && field('instructions')}
-          {field('developer_prompt', true)}
-          {selectedRuntime === 'codex' ? field('instructions') : <small>This Runtime has no separate developer layer. The Adapter merges this text into its system prompt, without separate priority.</small>}
-        </fieldset>
-        <fieldset className="d-agent-model-fields"><legend>Model for this agent</legend>
+        {/* V8: sections Model, Prompts, Codex approval; each fieldset legend is styled as a heading. */}
+        <fieldset className="d-agent-model-fields d-config-section"><legend>Model for this agent</legend>
           {modelFields(selectedRole.connection ?? '', chooseConnection, 'Agent', selectedRole.connection ? undefined : selectedRole)}
           {!selectedRole.connection && <details className="d-prompt-layers"><summary>Saved project model settings</summary><p>These existing settings are preserved. Selecting a global model replaces this role’s Runtime, model and provider settings when saved.</p>{field('runtime')}{field('model')}{field('base_url')}{field('api_key_env')}</details>}
           <label className="native-field"><span>This agent’s effort</span><select aria-label="This agent's effort" value={selectedRole.reasoning_effort || ''} onChange={event => setRoles(current => ({ ...current, [selected]: { ...ownRole(current, selected), reasoning_effort: event.target.value || null } }))}>
@@ -263,7 +258,15 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
             {selectedEfforts.map(effort => <option key={effort} value={effort}>{effort}</option>)}
           </select><small>{selectedModel?.supported_efforts !== undefined ? 'Source: saved model capabilities. Changing models retains an available effort.' : selectedEfforts.length ? 'Source: native Runtime configuration options. Model support is not reported; the provider may restrict these values.' : 'Model capabilities and Runtime options unavailable. Saved effort is retained.'}</small></label>
         </fieldset>
-        {selectedRuntime === 'codex' && <details className="d-prompt-layers"><summary>Codex approval model</summary>
+        <fieldset className="d-agent-prompts d-config-section"><legend>Prompts</legend>
+          <p>Leave text and file references blank to keep Runtime defaults and the existing Harness instructions.</p>
+          {field('system_prompt', true)}
+          <small>{selectedRuntime === 'codex' ? 'Optional inline override of the native system prompt. Blank keeps the Codex default.' : 'Appended to the Runtime system prompt; its defaults remain.'}</small>
+          {selectedRuntime !== 'codex' && field('instructions')}
+          {field('developer_prompt', true)}
+          {selectedRuntime === 'codex' ? field('instructions') : <small>This Runtime has no separate developer layer. The Adapter merges this text into its system prompt, without separate priority.</small>}
+        </fieldset>
+        {selectedRuntime === 'codex' && <details className="d-prompt-layers d-config-section"><summary>Codex approval model</summary>
           <p>Inherit the existing project review settings unless you select a model. Custom work providers require a review route before an Agent can start.</p>
           <label className="native-field"><span>Approval model</span><select aria-label="Codex approval model" value={selectedRole.approval_connection || (selectedRole.approval_model ? '__saved__' : '')} onChange={event => {
             const connection = event.target.value || null;
@@ -277,7 +280,7 @@ export function SettingsView({ projectId, active = true, onModels }: { projectId
           {selectedRole.approval_model && <p>The saved explicit approval route is retained until you choose a replacement.</p>}
           {!approvalConnections.length && <p>No compatible global review models. Configure a Chat Completions provider with HTTPS and an API-key environment variable in Agents &amp; models.</p>}
         </details>}
-      </div></fieldset></aside> : <aside className="d-agent-properties d-empty-properties"><Icon name="terminal" size={26}/><p>Select an agent to edit its role and model.</p></aside>}
+      </div></fieldset></aside> : <aside className="d-agent-properties d-empty-properties"><StateMessage kind="empty" layout="block" role={null} icon="terminal"><p>Select an agent to edit its role and model.</p></StateMessage></aside>}
     </div>}
     <footer className="new-draft-footer"><div><span className={`draft-dot ${changes.length ? 'dirty' : ''}`}/><strong>{changes.length ? `${changes.length} unsaved changes` : 'All changes saved'}</strong><span>Running agents are unchanged</span></div><div><Button variant="ghost" isDisabled={busy} onPress={() => void reload()}>Reload</Button><Button variant="ghost" isDisabled={busy || !changes.length} onPress={() => { if (saved) reset(saved); setError(''); }}>Cancel</Button><Button variant="primary" isDisabled={busy || !changes.length} onPress={() => void save()}>Save</Button></div></footer>
     {adding && <Dialog title={adding === 'team' ? 'Add team' : 'Add Agent'} onClose={() => { setAdding(null); setError(''); }}><div className="new-config-fields">{adding === 'team' && <Field label="Team name for new team" value={teamName} onChange={setTeamName}/>}<Field label="New Agent name" value={nodeName} onChange={setNodeName}/>{modelFields(newConnection, setNewConnection, 'New Agent')}{error && <p role="alert">{error}</p>}</div><div className="dialog-footer"><Button variant="secondary" onPress={() => { setAdding(null); setError(''); }}>Keep editing</Button><Button variant="primary" isDisabled={busy || !availableConnections.some(item => item.reference === newConnection)} onPress={() => attempt(() => { addNode(adding === 'team', adding === 'child'); setAdding(null); })}>{adding === 'team' ? 'Add team with root' : 'Add Agent'}</Button></div></Dialog>}

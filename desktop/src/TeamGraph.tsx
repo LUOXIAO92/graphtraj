@@ -6,13 +6,13 @@ import { connectTeamNode, ownRole, roleName, treeEdges } from './settings-draft'
 
 type AgentNode = Node<{ name: string; model: string; effort: string; external: boolean }, 'agent'>;
 
-/** Keep the established D agent card, with native connection handles. */
+/** V8 agent card: name, then 'Runtime · model', then tags (effort; a preserved cross-team parent).
+ * The handles and their accessible names are unchanged. */
 function AgentCard({ data, selected }: NodeProps<AgentNode>) {
   return <div className={`d-org-node ${selected ? 'selected' : ''}`}>
     <Handle type="target" position={Position.Top} aria-label="Parent connection" />
-    <span className="d-org-role">{data.external ? 'Cross-team parent · preserved' : 'Agent'}</span>
-    <strong>{data.name}</strong><small>{data.model}</small>
-    <span className="d-org-child-count">{data.effort} effort</span>
+    <strong>{data.name}</strong><small title={data.model}>{data.model}</small>
+    <span className="d-org-tags"><span className="d-org-tag d-org-child-count">{data.effort} effort</span>{data.external && <span className="d-org-tag d-org-role">Cross-team parent · preserved</span>}</span>
     <Handle type="source" position={Position.Bottom} aria-label="Connect a child" />
   </div>;
 }

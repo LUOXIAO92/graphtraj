@@ -1,0 +1,17 @@
+CHECK 616 Pr the raw result is a JSON document: PASS
+CHECK 616 Pr not an error: PASS
+CHECK 616 Pr runtime claude, status available: PASS (claude available)
+result groups (provider -> roles): {'anthropic': ['claude'], 'None': ['inline'], 'gw616': ['routed']}
+result api_key_env: {'claude': None, 'inline': None, 'routed': 'FIXTURE616_KEY'}
+CHECK 616 Pr grouped by provider (unique providers; each model in its provider group; groups == models): PASS
+CHECK 616 Pr the same groups as P's role_models on the installed code: PASS (expected {'None': ['inline'], 'anthropic': ['claude'], 'gw616': ['routed']})
+CHECK 616 Pr every api_key_env is a variable NAME (or none), as expected: PASS (expected {'claude': None, 'inline': None, 'routed': 'FIXTURE616_KEY'})
+CHECK 616 Pr no credential-like value in the result: PASS (patterns hit: [])
+counts at P: agents 1 sessions 2 members 1 | now: agents 1 sessions 2 members 1
+CHECK 616 Pr nothing created (Agent records, Session archives, member Sessions unchanged): PASS
+CHECK 616 Pr checks above (grouped by provider, key names only, no credential-like value, nothing created): PASS
+Main transcripts read: /private/tmp/claude-501/r616/projects/-fake/11111111-2222-3333-4444-555555555616.jsonl
+[Pr] tool calls after the split (2): ['ToolSearch', 'mcp__graphtraj__subagents']
+INFO 616 [Pr] ToolSearch {"query": "select:mcp__graphtraj__subagents", "max_results": 1}: ALLOWED (Claude Code loads the deferred schema of the same mcp__graphtraj tool; 614)
+[Pr] mcp__graphtraj__subagents execute models {"runtime": "claude"}: is_error False
+CHECK 616 Pr Main called mcp__graphtraj__subagents execute models after P, answered without error: PASS (1 call(s), 1 without error)

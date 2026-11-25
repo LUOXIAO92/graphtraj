@@ -1,0 +1,1 @@
+{"groups": {"None": ["inline"], "anthropic": ["claude"], "gw616": ["routed"]}, "keys": {"claude": null, "inline": null, "routed": "FIXTURE616_KEY"}}

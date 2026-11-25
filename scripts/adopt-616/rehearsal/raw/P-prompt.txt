@@ -1,0 +1,4 @@
+
+[P] Paste in the Claude Main (ONE call; arguments INLINE, never arguments_file). It lists the project roles create can select for the Claude Runtime, grouped by catalog provider: files only, no native query, no child, no key (Claude Code may first load the tool's schema with ToolSearch select:mcp__graphtraj__subagents; that is allowed).
+Using only mcp__graphtraj__subagents: execute models with arguments {"runtime":"claude"} given inline in the "arguments" field (no arguments_file). Print the raw result exactly and whether it was an error. Then, with Bash, save that raw result exactly (the whole document) as /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/616-graphtraj-614-production-adoption/scripts/adopt-616/rehearsal/raw/P.txt.
+  Success: no error; result.runtime claude, status available, and result.groups [{provider, models: [...]}] as P printed above (expected groups), every api_key_env a variable name or null.

@@ -1,0 +1,20 @@
+production graphtraj graftling: 0.1.0 0.10.0
+graphtraj direct_url: {"archive_info": {"hash": "sha256=c76dc439b9aab15ab311ee9d511c9cf1a702ed34d813d9449f91a278784ec6db", "hashes": {"sha256": "c76dc439b9aab15ab311ee9d511c9cf1a702ed34d813d9449f91a278784ec6db"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+CHECK 616 P production graphtraj is wheels-4ef36426 (installed by I): PASS
+installed: graphtraj /private/tmp/claude-501/r616/project/.venv-runtime/lib/python3.13/site-packages/graphtraj | graftling 0.10.0
+graftling ACTION_FIELDS['models']: required ['runtime'] optional ['provider']
+CHECK 616 P the installed contract: models requires runtime, offers provider: PASS
+CHECK 616 P the installed agents.py models branch serves role_models(self.root, runtime, provider): PASS
+models code read: role_models, _candidates, _with_provider, load_project_roles, resolve_preset, resolve_connection, read_catalog | process, network, discovery or other environment reads: none
+CHECK 616 P models reads only project roles and the user catalog (no process, network or key value): PASS ([])
+LOGIN-OR-KEY none: models reads files only; the call is carried by the running Main (Claude login, approved)
+user catalog (names only; revision ad626395a760):
+  claude-main: runtime claude | provider anthropic | base_url none | api_key_env none | models 1
+  claude-main: runtime claude | provider gw616 | base_url set | api_key_env FIXTURE616_KEY | models 1
+expected groups (provider -> roles): {'anthropic': ['claude'], 'None': ['inline'], 'gw616': ['routed']}
+expected api_key_env names: {'claude': None, 'inline': None, 'routed': 'FIXTURE616_KEY'}
+CHECK 616 P role_models(<Harness>, claude) lists at least one role: PASS (3 roles)
+ARGS {"runtime":"claude"}
+CHECK 616 P p616.py expect (contract, code, catalog names, expected groups): PASS
+COUNTS agents 1 sessions 2 members 1

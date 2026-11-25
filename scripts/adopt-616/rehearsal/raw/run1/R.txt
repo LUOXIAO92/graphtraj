@@ -1,0 +1,19 @@
+members_idle [R]: Task 616's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r616/project/.venv-runtime)
+members_idle [R]: no member execution is active: PASS
+
+SAME entries=1008 differences=0 (/private/tmp/claude-501/r616/project/.venv-runtime)
+CHECK 616 R venv equals the pre-install bytes: PASS
+
+SAME entries=5 differences=0 (/private/tmp/claude-501/r616/project/.claude/skills/graphtraj-claude-host)
+CHECK 616 R hook copy restored: PASS
+/private/tmp/claude-501/r616/project/.mcp.json: OK
+/private/tmp/claude-501/r616/project/.claude/settings.local.json: OK
+/private/tmp/claude-501/r616/project/.graphtraj/claude-host/config.json: OK
+CHECK 616 R entry files restored: PASS
+graphtraj direct_url: {"archive_info": {"hash": "sha256=7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525", "hashes": {"sha256": "7db7355ad10a687fb86603f4c75f09e3ca2ad90a8a2086acd5af7450631e3525"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-78f929ee/graphtraj-0.1.0-py3-none-any.whl"}
+graftling direct_url: {"archive_info": {"hash": "sha256=6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51", "hashes": {"sha256": "6ae3e26efd9023e04e0b8a4fccf7eab65d7088bc5cae50eebd3482dd9b384a51"}}, "url": "file:///private/tmp/claude-501/r616/project/.graphtraj/core/state/tasks/612-graftling-provider-release-and-production-adoption/adoption/wheels-0.10.0/graftling-0.10.0-py3-none-any.whl"}
+CHECK 616 R graphtraj from wheels-78f929ee and graftling 0.10.0 from 612's wheel again: PASS
+CHECK 616 R pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)

@@ -1,0 +1,27 @@
+$ VERIFY620_REMOTE=/tmp/claude-501/r620/failure/remote.git VERIFY620_GH=/tmp/claude-501/r620/failure/gh/gh VERIFY620_OUT=/tmp/claude-501/r620/failure/out VERIFY620_POLL_S=1 VERIFY620_APPEAR_S=10 VERIFY620_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push and wait. OUTWARD-FACING: git push <scratch>/failure/remote.git agent/620-linux-adoption-codex-fixture (fast-forward only, never force). Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: HEAD scenario reads the peer's rollout (codex-home beside the scenario, FAKE_CODEX_SESSION_ID)
+PASS: .github/workflows/desktop-linux-adoption.yml push branches list agent/620-linux-adoption-codex-fixture
+PASS: no other desktop workflow lists agent/620-linux-adoption-codex-fixture
+$ git push <scratch>/failure/remote.git refs/heads/agent/620-linux-adoption-codex-fixture:refs/heads/agent/620-linux-adoption-codex-fixture   (HEAD 631f1fb6f514e6884cebfdb782ebe55b15e54f12)
+  To <scratch>/failure/remote.git
+   * [new branch]        agent/620-linux-adoption-codex-fixture -> agent/620-linux-adoption-codex-fixture
+PASS: <scratch>/failure/remote.git agent/620-linux-adoption-codex-fixture = 631f1fb6f514e6884cebfdb782ebe55b15e54f12
+observing .github/workflows/desktop-linux-adoption.yml for 631f1fb6f514e6884cebfdb782ebe55b15e54f12 on LUOXIAO92/graphtraj (appearance bound 10s, completion bound 30s, poll 1s)
+run present after 1s
+  [14:32:12] 46100000000 queued -;
+  [14:32:13] 46100000000 completed failure;
+--- result for 631f1fb6f514e6884cebfdb782ebe55b15e54f12
+RUN .github/workflows/desktop-linux-adoption.yml | id 46100000000 | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000
+    job: installed-desktop | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000/job/47100000000
+OTHER workflows triggered for this SHA:
+  OTHER	.github/workflows/other.yml	46100000009	push	completed	success	https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000009
+full log: <scratch>/failure/out/run-46100000000.log (119 bytes, 1 lines)
+--- tail of: gh run view 46100000000 --repo LUOXIAO92/graphtraj --log-failed
+installed-desktop	Exercise the installed desktop under Xvfb	2026-11-25T00:00:00Z ERROR: stand-in failed log for run 46100000000
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/620-linux-adoption-codex-fixture/scripts/verify-620/steps.zsh W 631f1fb6f514e6884cebfdb782ebe55b15e54f12    (re-observe; no push)
+next: gh run view 46100000000 --repo LUOXIAO92/graphtraj --log > <scratch>/failure/out/run-46100000000.log
+next: gh run rerun 46100000000 --repo LUOXIAO92/graphtraj --failed    (only if the failure is transient; not run by this step)
+VERDICT 620 P: FAIL (run 46100000000 completed/failure, https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000)
+[exit 1]

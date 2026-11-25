@@ -1,0 +1,16 @@
+$ VERIFY620_REMOTE=/tmp/claude-501/r620/success/remote.git VERIFY620_GH=/tmp/claude-501/r620/success/gh/gh VERIFY620_OUT=/tmp/claude-501/r620/success/out VERIFY620_POLL_S=1 VERIFY620_APPEAR_S=10 VERIFY620_DONE_S=30 zsh steps.zsh W
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [W] Observe only (no push) the run for 631f1fb6f514e6884cebfdb782ebe55b15e54f12. Login: gh login. Dialog: none. Network: GitHub (read).
+observing .github/workflows/desktop-linux-adoption.yml for 631f1fb6f514e6884cebfdb782ebe55b15e54f12 on LUOXIAO92/graphtraj (appearance bound 10s, completion bound 30s, poll 1s)
+run present after 1s
+  [14:32:09] 46100000000 in_progress -;
+  [14:32:10] 46100000000 completed success;
+--- result for 631f1fb6f514e6884cebfdb782ebe55b15e54f12
+RUN .github/workflows/desktop-linux-adoption.yml | id 46100000000 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000
+    job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000/job/47100000000
+no other workflow triggered for this SHA
+full log: <scratch>/success/out/run-46100000000.log (119 bytes, 1 lines)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/620-linux-adoption-codex-fixture/scripts/verify-620/steps.zsh W 631f1fb6f514e6884cebfdb782ebe55b15e54f12    (re-observe; no push)
+next: gh run view 46100000000 --repo LUOXIAO92/graphtraj --log > <scratch>/success/out/run-46100000000.log
+VERDICT 620 W: PASS (run 46100000000 success, https://github.com/LUOXIAO92/graphtraj/actions/runs/46100000000)
+[exit 0]

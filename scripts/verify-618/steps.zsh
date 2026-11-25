@@ -200,8 +200,8 @@ P)
   local head=$(g rev-parse HEAD) rsha=$(remote_sha)
   [[ -z $rsha ]] || g merge-base --is-ancestor $rsha $head 2> /dev/null || stop "$REMOTE has $BRANCH at $rsha, not an ancestor of HEAD; run: zsh $THIS 00"
   [[ $rsha == $head ]] && stop "$REMOTE already has $BRANCH at $head; run: zsh $THIS W $head"
-  print -r -- "\$ git push $REMOTE refs/heads/$BRANCH:refs/heads/$BRANCH   (HEAD $head)"
-  g push $REMOTE refs/heads/$BRANCH:refs/heads/$BRANCH 2>&1 | sed 's/^/  /'
+  print -r -- "\$ git push $REMOTE refs/heads/${BRANCH}:refs/heads/${BRANCH}   (HEAD $head)"
+  g push $REMOTE refs/heads/${BRANCH}:refs/heads/${BRANCH} 2>&1 | sed 's/^/  /'
   (( ${pipestatus[1]} == 0 )) || stop "push failed; nothing was forced. Run: zsh $THIS 00"
   [[ $(remote_sha) == $head ]] || stop "after the push $REMOTE does not show $head; run: zsh $THIS 00"
   print -r -- "PASS: $REMOTE $BRANCH = $head"

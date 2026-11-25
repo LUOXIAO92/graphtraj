@@ -75,6 +75,7 @@ PYTMP=${TMPDIR:-/tmp}
 FROZEN=(desktop/src desktop/electron src)
 # The two workflows the push triggers, and their evidence artifact names (Linux names it per SHA).
 WORKFLOWS=(.github/workflows/desktop-macos-adoption.yml .github/workflows/desktop-linux-adoption.yml)
+WFNAMES="desktop-macos-adoption.yml and desktop-linux-adoption.yml"
 artifact_for() { [[ $1 == *macos* ]] && print -r -- $ARTIFACT || print -r -- linux-desktop-$2; }
 prefix_for() { [[ $1 == *macos* ]] && print -r -- mac-evidence || print -r -- linux-evidence; }
 RUNS_API="repos/$REPO/actions/workflows/$WF/runs?branch=$BRANCH&event=workflow_dispatch&per_page=30"
@@ -227,7 +228,7 @@ observe_push() {
     else rows=(${WORKFLOWS/#/MISSING$'\t'}); fi
     missing=(${(M)rows:#MISSING*}); others=(${(M)rows:#OTHER*})
   }
-  print -r -- "observing push runs of ${WORKFLOWS:t} for $sha (appearance bound ${APPEAR_S}s, completion bound ${DONE_S}s, poll ${POLL_S}s)"
+  print -r -- "observing push runs of $WFNAMES for $sha (appearance bound ${APPEAR_S}s, completion bound ${DONE_S}s, poll ${POLL_S}s)"
   while true; do
     summ
     (( ${#missing} == 0 )) && break
@@ -368,7 +369,7 @@ E)
   ;;
 P|D)
   if [[ $STEP == P ]]; then
-    say "[P] Push and wait. OUTWARD-FACING: git push $REMOTE $BRANCH (fast-forward only, never force); the push starts ${WORKFLOWS:t}. Login: ssh key, gh login. Dialog: none. Network: GitHub."
+    say "[P] Push and wait. OUTWARD-FACING: git push $REMOTE $BRANCH (fast-forward only, never force); the push starts $WFNAMES. Login: ssh key, gh login. Dialog: none. Network: GitHub."
   else
     say "[D] macOS-only re-run (no push). OUTWARD-FACING: gh workflow run $WF. Login: gh login, ssh key. Dialog: none. Network: GitHub."
   fi

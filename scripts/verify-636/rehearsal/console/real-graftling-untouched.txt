@@ -27,7 +27,7 @@ refs/heads/agent/632-graftling-windows-ci defad1db083e911900cbea1cb0ef165e6a66d3
 refs/heads/agent/633-graftling-windows-process bc4298b611afce70dd876c5fe79f764c9f966d8a
 refs/heads/agent/634-graftling-windows-durable-writes 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
 refs/heads/agent/635-graftling-windows-process-tree 7609e52089e638c963cc54c28438c99ea3964f99
-refs/heads/agent/636-graftling-windows-named-pipe 03d67a3b1c302163ed315a9451698840f14cf9a0
+refs/heads/agent/636-graftling-windows-named-pipe 1b3f95ec198e5b105b02ffe052d490b3ccdec616
 refs/heads/agent/637-graftling-windows-process-listing 25bd396874b01a648fba021fe1e0807d3cded5ba
 refs/heads/agent/638-graftling-windows-paths-encoding d5fb80c7cf5d85a19971c434e7f247568ad22bef
 refs/heads/dev 7609e52089e638c963cc54c28438c99ea3964f99
@@ -61,7 +61,7 @@ refs/heads/agent/632-graftling-windows-ci defad1db083e911900cbea1cb0ef165e6a66d3
 refs/heads/agent/633-graftling-windows-process bc4298b611afce70dd876c5fe79f764c9f966d8a
 refs/heads/agent/634-graftling-windows-durable-writes 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
 refs/heads/agent/635-graftling-windows-process-tree 7609e52089e638c963cc54c28438c99ea3964f99
-refs/heads/agent/636-graftling-windows-named-pipe 03d67a3b1c302163ed315a9451698840f14cf9a0
+refs/heads/agent/636-graftling-windows-named-pipe 1b3f95ec198e5b105b02ffe052d490b3ccdec616
 refs/heads/agent/637-graftling-windows-process-listing 25bd396874b01a648fba021fe1e0807d3cded5ba
 refs/heads/agent/638-graftling-windows-paths-encoding d5fb80c7cf5d85a19971c434e7f247568ad22bef
 refs/heads/dev 7609e52089e638c963cc54c28438c99ea3964f99

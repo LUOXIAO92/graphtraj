@@ -1,0 +1,25 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 7 items
+
+tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[None] PASSED [ 14%]
+tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[graphtraj] PASSED [ 28%]
+tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graftling] PASSED [ 42%]
+tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graphtraj] PASSED [ 57%]
+tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[None] PASSED [ 71%]
+tests/test_agents_server_name.py::test_dsh_review_row_names_the_server_the_plugin_row_registers[True] PASSED [ 85%]
+tests/test_agents_server_name.py::test_dsh_review_row_names_the_server_the_plugin_row_registers[False] PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=014abe979a704eefb1be664a5bc67dfb: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_agents_server_name.xml -
+============================ slowest 10 durations =============================
+0.04s call     tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[None]
+0.04s call     tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graphtraj]
+0.04s call     tests/test_agents_server_name.py::test_pi_registers_its_server_and_reviews_every_other_agents_tool[graphtraj]
+0.04s call     tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[graftling]
+0.04s call     tests/test_agents_server_name.py::test_dsh_review_row_lets_through_only_the_registered_servers_agents_tool[None]
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 7 passed in 0.34s ==============================

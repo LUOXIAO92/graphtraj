@@ -9,9 +9,10 @@ $ gh auth status --hostname github.com   (token lines removed)
     - Active account: true
 PASS: /tmp/claude-501/rh636/badwf/graftling origin is https://github.com/LUOXIAO92/graftling.git
 NOTE: rehearsal remote /tmp/claude-501/rh636/badwf/gremote.git is used instead of graftling origin
-PASS: bundle verifies against /tmp/claude-501/rh636/badwf/graftling; head 5e31dc7a94f03fe3cd424c0bfa2e6c0f4575e333 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh636/badwf/graftling; head e32c7279cdb67d8ae8865621b4a70f4cc075c8bd on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
 --- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
-  5e31dc7 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+  e32c727 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+  75cb93b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the squatter's data check matches "read <n>", not its own "ready" marker (636 correction 4)
   1b3f95e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account squatter runs from a file, within CreateProcessWithLogonW's 1024-character command line (636 correction 3)
   03d67a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account test never shows the temporary password in an assertion (636)
   61576b3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows pipe: a caller talks only to its own user's pipe; every pipe wait is bounded (636 corrections 1, 2)
@@ -52,5 +53,5 @@ W4 (636) entries left in the list: 0
 PASS: /tmp/claude-501/rh636/badwf/graftling has no local agent/636-graftling-windows-named-pipe (P creates it from the bundle)
 PASS: agent/636-graftling-windows-named-pipe is absent on graftling /tmp/claude-501/rh636/badwf/gremote.git
 next: fix the FAIL lines above (new bundle from the Engineer), then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh 00
-VERDICT 636 00: PASS (P ready: no; remote branch absent; candidate graftling 5e31dc7a94f03fe3cd424c0bfa2e6c0f4575e333)
+VERDICT 636 00: PASS (P ready: no; remote branch absent; candidate graftling e32c7279cdb67d8ae8865621b4a70f4cc075c8bd)
 [exit 0]

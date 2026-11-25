@@ -1,0 +1,27 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 8 items
+
+tests/test_child_server_name_551.py::test_default_server_name_is_unchanged PASSED [ 12%]
+tests/test_child_server_name_551.py::test_pi_names_its_server_only_when_the_owner_chose_one PASSED [ 25%]
+tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server PASSED [ 37%]
+tests/test_child_server_name_551.py::test_codex_child_server_replaces_a_captured_entry_of_that_name SKIPPED [ 50%]
+tests/test_child_server_name_551.py::test_codex_child_host_tools_need_no_approval SKIPPED [ 62%]
+tests/test_child_server_name_551.py::test_codex_disallowed_owner_tool_is_dropped_not_refused SKIPPED [ 75%]
+tests/test_child_server_name_551.py::test_codex_tool_choice_keeps_the_owner_server SKIPPED [ 87%]
+tests/test_child_server_name_551.py::test_codex_unknown_server_is_still_refused PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=ee5e9a045b624d5baa36ab78efe8211d: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_child_server_name_551.xml -
+============================ slowest 10 durations =============================
+0.04s call     tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_child_server_name_551.py:66: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_child_server_name_551.py:92: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_child_server_name_551.py:124: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_child_server_name_551.py:131: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+======================== 4 passed, 4 skipped in 0.14s =========================

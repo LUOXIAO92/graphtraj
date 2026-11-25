@@ -1,0 +1,14 @@
+{
+  "commit": "1b3f95ec198e5b105b02ffe052d490b3ccdec616",
+  "run": "45647870358",
+  "attempt": "1",
+  "os": "Microsoft Windows NT 10.0.26100.0",
+  "image": "win25-vs2026",
+  "image_version": "20261123.321.1",
+  "arch": "AMD64",
+  "python": "Python 3.13.7",
+  "pytest": "pytest 8.3.5",
+  "node": "v22.18.0",
+  "git": "git version 2.56.1.windows.1",
+  "codepage": 1252
+}

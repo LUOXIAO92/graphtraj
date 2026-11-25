@@ -1,8 +1,9 @@
 $ VERIFY636_GRAFTLING=/tmp/claude-501/rh636/rerun/graftling VERIFY636_GREMOTE=/tmp/claude-501/rh636/rerun/gremote.git VERIFY636_GH=/tmp/claude-501/rh636/rerun/gh/gh VERIFY636_EVIDENCE=/tmp/claude-501/rh636/rerun/runs VERIFY636_POLL_S=1 VERIFY636_APPEAR_S=10 VERIFY636_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/636-graftling-windows-named-pipe to graftling /tmp/claude-501/rh636/rerun/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh636/rerun/graftling; head 1b3f95ec198e5b105b02ffe052d490b3ccdec616 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh636/rerun/graftling; head 75cb93b2d6515f95e949a01eaf63a15944722e44 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
 --- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
+  75cb93b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the squatter's data check matches "read <n>", not its own "ready" marker (636 correction 4)
   1b3f95e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account squatter runs from a file, within CreateProcessWithLogonW's 1024-character command line (636 correction 3)
   03d67a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account test never shows the temporary password in an assertion (636)
   61576b3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows pipe: a caller talks only to its own user's pipe; every pipe wait is bounded (636 corrections 1, 2)
@@ -41,16 +42,16 @@ PASS: /tmp/claude-501/rh636/rerun/graftling has no local agent/636-graftling-win
 $ git -C /tmp/claude-501/rh636/rerun/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/graftling-636.bundle refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe
   From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/graftling-636.bundle
    * [new branch]      agent/636-graftling-windows-named-pipe -> agent/636-graftling-windows-named-pipe
-PASS: /tmp/claude-501/rh636/rerun/graftling local agent/636-graftling-windows-named-pipe = 1b3f95ec198e5b105b02ffe052d490b3ccdec616
-$ git -C /tmp/claude-501/rh636/rerun/graftling push /tmp/claude-501/rh636/rerun/gremote.git refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe   (1b3f95ec198e5b105b02ffe052d490b3ccdec616)
+PASS: /tmp/claude-501/rh636/rerun/graftling local agent/636-graftling-windows-named-pipe = 75cb93b2d6515f95e949a01eaf63a15944722e44
+$ git -C /tmp/claude-501/rh636/rerun/graftling push /tmp/claude-501/rh636/rerun/gremote.git refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe   (75cb93b2d6515f95e949a01eaf63a15944722e44)
   To /tmp/claude-501/rh636/rerun/gremote.git
    * [new branch]      agent/636-graftling-windows-named-pipe -> agent/636-graftling-windows-named-pipe
-PASS: graftling /tmp/claude-501/rh636/rerun/gremote.git agent/636-graftling-windows-named-pipe = 1b3f95ec198e5b105b02ffe052d490b3ccdec616
-looking for the .github/workflows/windows.yml run (event push) of 1b3f95ec198e5b105b02ffe052d490b3ccdec616 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+PASS: graftling /tmp/claude-501/rh636/rerun/gremote.git agent/636-graftling-windows-named-pipe = 75cb93b2d6515f95e949a01eaf63a15944722e44
+looking for the .github/workflows/windows.yml run (event push) of 75cb93b2d6515f95e949a01eaf63a15944722e44 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
 run 51000000636 present after 2s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000636
 waiting for run 51000000636 (completion bound 30s, poll 1s)
-  [00:38:36] run 51000000636: completed failure
---- run 51000000636 | attempt 1 | push | conclusion failure (information only) | head 1b3f95ec198e5b105b02ffe052d490b3ccdec616 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000636
+  [00:50:12] run 51000000636: completed failure
+--- run 51000000636 | attempt 1 | push | conclusion failure (information only) | head 75cb93b2d6515f95e949a01eaf63a15944722e44 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000636
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000636/job/52000000636
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed
@@ -66,11 +67,11 @@ JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling
   step 12 | skipped   | Post Set up Node 22.18.0 x64 | other: success or skipped
   step 13 | success   | Post Check out the commit under test | other: success or skipped
   step 14 | success   | Complete job | other: success or skipped
---- job log saved: /tmp/claude-501/rh636/rerun/runs/20261125T153837Z-P-run-51000000636-a1/job.log; files ended, hangs, driver exit:
+--- job log saved: /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/job.log; files ended, hangs, driver exit:
   per-file pytest summaries: 1
   2026-11-25T00:10:00Z run_test_files exit code: 1
-$ gh run download 51000000636 --repo LUOXIAO92/graftling -n graftling-windows-junit-1b3f95ec198e5b105b02ffe052d490b3ccdec616-1 -D /tmp/claude-501/rh636/rerun/runs/20261125T153837Z-P-run-51000000636-a1/junit
-test files in 1b3f95ec198e5b105b02ffe052d490b3ccdec616: 64
+$ gh run download 51000000636 --repo LUOXIAO92/graftling -n graftling-windows-junit-75cb93b2d6515f95e949a01eaf63a15944722e44-1 -D /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/junit
+test files in 75cb93b2d6515f95e949a01eaf63a15944722e44: 64
 --- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-632/windows-expected.txt
 runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
 run_test_files exit code: 1
@@ -134,10 +135,10 @@ collected in JUnit: 1020 | passed 767 | failed 2 | errors 0 | skipped 251
 --- unexpected passes (listed as failing, passed): 1
   PASS tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns | listed origin tests/test_codex_child_interpreter_shutdown_473.py:46 W5 (637)
 --- listed failures that were skipped or not collected: 0
-observed list written: /tmp/claude-501/rh636/rerun/runs/20261125T153837Z-P-run-51000000636-a1/observed-expected.txt
-evidence (new directory, gitignored): /tmp/claude-501/rh636/rerun/runs/20261125T153837Z-P-run-51000000636-a1
+observed list written: /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/observed-expected.txt
+evidence (new directory, gitignored): /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh W 51000000636    (observe again; no push, no re-run)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh X 51000000636    (re-run its failed jobs; only if the failure is transient, not a test result)
-next: correction round: compare /tmp/claude-501/rh636/rerun/runs/20261125T153837Z-P-run-51000000636-a1/observed-expected.txt with /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-632/windows-expected.txt; after a new bundle: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh 00 then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh P
-VERDICT 636 P: FAIL (run 51000000636 attempt 1 on 1b3f95ec198e5b105b02ffe052d490b3ccdec616; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; 1 unexpected passes; https://github.com/LUOXIAO92/graftling/actions/runs/51000000636)
+next: correction round: compare /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/observed-expected.txt with /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-632/windows-expected.txt; after a new bundle: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh 00 then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh P
+VERDICT 636 P: FAIL (run 51000000636 attempt 1 on 75cb93b2d6515f95e949a01eaf63a15944722e44; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; 1 unexpected passes; https://github.com/LUOXIAO92/graftling/actions/runs/51000000636)
 [exit 1]

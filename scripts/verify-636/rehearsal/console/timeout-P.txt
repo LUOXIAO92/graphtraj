@@ -1,8 +1,9 @@
 $ VERIFY636_GRAFTLING=/tmp/claude-501/rh636/timeout/graftling VERIFY636_GREMOTE=/tmp/claude-501/rh636/timeout/gremote.git VERIFY636_GH=/tmp/claude-501/rh636/timeout/gh/gh VERIFY636_EVIDENCE=/tmp/claude-501/rh636/timeout/runs VERIFY636_POLL_S=1 VERIFY636_APPEAR_S=4 VERIFY636_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/636-graftling-windows-named-pipe to graftling /tmp/claude-501/rh636/timeout/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh636/timeout/graftling; head 1b3f95ec198e5b105b02ffe052d490b3ccdec616 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh636/timeout/graftling; head 75cb93b2d6515f95e949a01eaf63a15944722e44 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
 --- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
+  75cb93b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the squatter's data check matches "read <n>", not its own "ready" marker (636 correction 4)
   1b3f95e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account squatter runs from a file, within CreateProcessWithLogonW's 1024-character command line (636 correction 3)
   03d67a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account test never shows the temporary password in an assertion (636)
   61576b3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows pipe: a caller talks only to its own user's pipe; every pipe wait is bounded (636 corrections 1, 2)
@@ -41,15 +42,15 @@ PASS: /tmp/claude-501/rh636/timeout/graftling has no local agent/636-graftling-w
 $ git -C /tmp/claude-501/rh636/timeout/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/graftling-636.bundle refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe
   From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/graftling-636.bundle
    * [new branch]      agent/636-graftling-windows-named-pipe -> agent/636-graftling-windows-named-pipe
-PASS: /tmp/claude-501/rh636/timeout/graftling local agent/636-graftling-windows-named-pipe = 1b3f95ec198e5b105b02ffe052d490b3ccdec616
-$ git -C /tmp/claude-501/rh636/timeout/graftling push /tmp/claude-501/rh636/timeout/gremote.git refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe   (1b3f95ec198e5b105b02ffe052d490b3ccdec616)
+PASS: /tmp/claude-501/rh636/timeout/graftling local agent/636-graftling-windows-named-pipe = 75cb93b2d6515f95e949a01eaf63a15944722e44
+$ git -C /tmp/claude-501/rh636/timeout/graftling push /tmp/claude-501/rh636/timeout/gremote.git refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe   (75cb93b2d6515f95e949a01eaf63a15944722e44)
   To /tmp/claude-501/rh636/timeout/gremote.git
    * [new branch]      agent/636-graftling-windows-named-pipe -> agent/636-graftling-windows-named-pipe
-PASS: graftling /tmp/claude-501/rh636/timeout/gremote.git agent/636-graftling-windows-named-pipe = 1b3f95ec198e5b105b02ffe052d490b3ccdec616
-looking for the .github/workflows/windows.yml run (event push) of 1b3f95ec198e5b105b02ffe052d490b3ccdec616 on LUOXIAO92/graftling (appearance bound 4s, poll 1s)
-appearance timeout after 4s: no .github/workflows/windows.yml run for 1b3f95ec198e5b105b02ffe052d490b3ccdec616
+PASS: graftling /tmp/claude-501/rh636/timeout/gremote.git agent/636-graftling-windows-named-pipe = 75cb93b2d6515f95e949a01eaf63a15944722e44
+looking for the .github/workflows/windows.yml run (event push) of 75cb93b2d6515f95e949a01eaf63a15944722e44 on LUOXIAO92/graftling (appearance bound 4s, poll 1s)
+appearance timeout after 4s: no .github/workflows/windows.yml run for 75cb93b2d6515f95e949a01eaf63a15944722e44
 other workflows for this SHA:
   OTHER	.github/workflows/other.yml	51000000645	push	completed	success	https://github.com/LUOXIAO92/graftling/actions/runs/51000000645
-next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh W 1b3f95ec198e5b105b02ffe052d490b3ccdec616    (re-observe; no push)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh W 75cb93b2d6515f95e949a01eaf63a15944722e44    (re-observe; no push)
 VERDICT 636 P: FAIL (the .github/workflows/windows.yml run never appeared within 4s)
 [exit 1]

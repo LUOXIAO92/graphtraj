@@ -1,0 +1,30 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 8 items
+
+tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key PASSED [ 12%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[openrouter-False-needs api_key_env] PASSED [ 25%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider'] PASSED [ 37%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only'] PASSED [ 50%]
+tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog PASSED [ 62%]
+tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child PASSED [ 75%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers SKIPPED [ 87%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=ccc74243cc2942c296ed46693d6ea7b7: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_providers_608.xml -
+============================ slowest 10 durations =============================
+0.12s call     tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key
+0.04s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider']
+0.04s call     tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog
+0.04s call     tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child
+0.04s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only']
+0.01s setup    tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route
+
+(4 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_dsh_providers_608.py:175: The installed DSH is required for native provider evidence.
+SKIPPED [1] tests\test_dsh_providers_608.py:181: The installed DSH is required for native provider evidence.
+======================== 6 passed, 2 skipped in 0.39s =========================

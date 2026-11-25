@@ -9,8 +9,9 @@ $ gh auth status --hostname github.com   (token lines removed)
     - Active account: true
 PASS: /tmp/claude-501/rh636/matched/graftling origin is https://github.com/LUOXIAO92/graftling.git
 NOTE: rehearsal remote /tmp/claude-501/rh636/matched/gremote.git is used instead of graftling origin
-PASS: bundle verifies against /tmp/claude-501/rh636/matched/graftling; head 1b3f95ec198e5b105b02ffe052d490b3ccdec616 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh636/matched/graftling; head 75cb93b2d6515f95e949a01eaf63a15944722e44 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
 --- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
+  75cb93b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the squatter's data check matches "read <n>", not its own "ready" marker (636 correction 4)
   1b3f95e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account squatter runs from a file, within CreateProcessWithLogonW's 1024-character command line (636 correction 3)
   03d67a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account test never shows the temporary password in an assertion (636)
   61576b3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows pipe: a caller talks only to its own user's pipe; every pipe wait is bounded (636 corrections 1, 2)
@@ -47,5 +48,5 @@ W4 (636) entries left in the list: 0
 PASS: /tmp/claude-501/rh636/matched/graftling local agent/636-graftling-windows-named-pipe = bundle head
 PASS: graftling /tmp/claude-501/rh636/matched/gremote.git already has agent/636-graftling-windows-named-pipe at the bundle head
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh W    (the branch is already at the bundle head; observes its push run, no push)
-VERDICT 636 00: PASS (P ready: yes; remote branch equal; candidate graftling 1b3f95ec198e5b105b02ffe052d490b3ccdec616)
+VERDICT 636 00: PASS (P ready: yes; remote branch equal; candidate graftling 75cb93b2d6515f95e949a01eaf63a15944722e44)
 [exit 0]

@@ -1,0 +1,125 @@
+$ python -I scripts/verify-632/wincheck.py junit scripts/verify-635/evidence/run-45633403789-a1/junit scripts/verify-632/windows-expected.txt scripts/verify-637/rehearsal/retained-run-45633403789/observed-expected.txt
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25-vs2026 | image_version=20261116.315.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+run_test_files exit code: 1
+--- test files: 61 recorded | ended 61 | hung 0 | not run 0
+  slowest ended files: tests/test_process_tree_635.py 123.9 s, tests/test_dsh_standalone_child.py 41.9 s, tests/test_agent_control.py 31.9 s, tests/test_host_shutdown_stop.py 23.1 s, tests/test_locks_durable_634.py 16.3 s
+FILES PASS every test file ended or was stopped and recorded as hung
+merged JUnit files: 61
+collected in JUnit: 987 | passed 629 | failed 82 | errors 0 | skipped 276
+--- POSIX-only skips: 235 in 27 modules
+     8  tests/test_agents_connections_presets.py
+     1  tests/test_approval_integration.py
+     4  tests/test_child_server_name_551.py
+     9  tests/test_claude_default_tools_576.py
+     4  tests/test_claude_gateway_login_613.py
+     9  tests/test_claude_marketplace_plugin.py
+     1  tests/test_claude_model_alias_574.py
+     8  tests/test_claude_permission_mode_578.py
+    39  tests/test_claude_review.py
+     1  tests/test_claude_send_closing_546.py
+     4  tests/test_codex_independent_control.py
+     8  tests/test_codex_review_relay.py
+     5  tests/test_codex_tool_reclaim_462.py
+     2  tests/test_dsh_plugin_install_python.py
+     4  tests/test_dsh_standalone_child.py
+     9  tests/test_dsh_standalone_host.py
+     1  tests/test_dsh_startup.py
+     2  tests/test_extra_tools_551.py
+    28  tests/test_host_shutdown_stop.py
+    11  tests/test_pi_default_host_572.py
+     9  tests/test_pi_dsh_notice_holding.py
+     2  tests/test_pi_standalone_host.py
+    31  tests/test_pi_subagent_child_585.py
+     1  tests/test_process_tree_635.py
+    16  tests/test_provider_listing_609.py
+    14  tests/test_unified_data_root_577.py
+     4  tests/test_windows_emulation_619.py
+  reason x124: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+  reason x49: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sess
+  reason x26: the host runs in its own process group (start_new_session) stopped with os.killpg and SIGKILL; its lock holder uses fcntl
+  reason x22: the stand-in executable is a '#!/bin/sh' script
+  reason x5: macOS and Linux process tables; tools in their own session killed by SIGKILL and os.killpg
+  reason x4: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+  reason x3: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+  reason x1: a read-only directory made with chmod 0o555 and checked with os.geteuid
+  reason x1: checks the process group (os.getpgid) and its POSIX signals
+--- allowed environment skips (not Windows-specific): 41
+  x12: Explicit pinned official SDK comparison
+  x7: Installed DSH and Node are required for native search evidence.
+  x3: Installed DSH is required for its own preset.
+  x2: Installed DSH and Node are required for native MCP evidence.
+  x2: Installed DSH slots and Node are required for the browser projection fixture.
+  x2: Requires one explicitly retained native trace.
+  x2: The installed DSH is required for native provider evidence.
+  x2: Installed DSH and Node are required for native endpoint evidence.
+  x1: Installed DSH and Node are required.
+  x1: Installed native DSH package metadata is required.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Installed DSH and Node are required for native plugin evidence.
+  x1: Requires assigned native startup diagnosis.
+  x1: Node and an installed Pi are required
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 43; observed failures and errors: 82 (43 as expected)
+--- unexpected failures: 39
+  FAIL tests/test_agents_connections_presets.py::test_a_declared_runtime_without_a_driver_is_refused_at_host_start | origin tests/test_agents_connections_presets.py:354 (?; from test assertion, no graftling frame) | AssertionError: assert ('invalid-config' == 'unsupported-runtime'
+  FAIL tests/test_agents_connections_presets.py::test_a_model_discovery_cannot_verify_is_refused | origin tests/test_agents_connections_presets.py:271 (?; from test assertion, no graftling frame) | AssertionError: assert (True and 'invalid-config' == 'invalid-model'
+  FAIL tests/test_agents_connections_presets.py::test_an_unavailable_runtime_fails_create_without_an_agent | origin tests/test_agents_connections_presets.py:361 (?; from test assertion, no graftling frame) | AssertionError: assert (True and 'invalid-config' == 'runtime-unavailable'
+  FAIL tests/test_agents_connections_presets.py::test_connections_and_presets_are_read_with_their_names | origin src/graftling/config.py:353 (?; from junit) | ValueError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_connections_and_presets_a0\config.yml:5: connections.work-claude.home: expected an absolute path
+  FAIL tests/test_agents_connections_presets.py::test_discovery_supplies_candidates_and_efforts | origin tests/test_agents_connections_presets.py:279 (?; from test assertion, no graftling frame) | assert not True
+  FAIL tests/test_agents_connections_presets.py::test_explicit_values_equal_to_the_preset_are_accepted | origin tests/test_agents_connections_presets.py:235 (?; from test assertion, no graftling frame) | assert not True
+  FAIL tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments0-invalid-preset-Preset 'missing' is not declared] | origin tests/test_agents_connections_presets.py:258 (?; from test assertion, no graftling frame) | AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with0\\con
+  FAIL tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments1-invalid-preset-uses Runtime 'claude'] | origin tests/test_agents_connections_presets.py:258 (?; from test assertion, no graftling frame) | AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with1\\con
+  FAIL tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments2-invalid-model-contradicts preset 'reviewer'] | origin tests/test_agents_connections_presets.py:258 (?; from test assertion, no graftling frame) | AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with2\\con
+  FAIL tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments3-invalid-reasoning-effort-contradicts preset 'reviewer'] | origin tests/test_agents_connections_presets.py:258 (?; from test assertion, no graftling frame) | AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with3\\con
+  FAIL tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments4-invalid-model-is not a candidate] | origin tests/test_agents_connections_presets.py:258 (?; from test assertion, no graftling frame) | AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with4\\con
+  FAIL tests/test_agents_connections_presets.py::test_invalid_choices_fail_with_a_code_naming_the_field[arguments5-invalid-reasoning-effort-supports reasoning_effort ['low', 'high']] | origin tests/test_agents_connections_presets.py:258 (?; from test assertion, no graftling frame) | AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_invalid_choices_fail_with5\\con
+  FAIL tests/test_agents_connections_presets.py::test_one_host_registers_drivers_for_several_runtimes | origin src/graftling/control.py:1177 (W1?; from junit) | graftling.tool.AgentsError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_one_host_registers_driver0\config.yml:5: connections.work-claude.home: expected an absolute path
+  FAIL tests/test_agents_connections_presets.py::test_preset_fills_model_and_effort_and_the_document_reports_them | origin tests/test_agents_connections_presets.py:215 (?; from test assertion, no graftling frame) | AssertionError: {'action': 'create', 'error': {'code': 'invalid-config', 'message': 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-2\\test_preset_fills_model_and_ef0\\con
+  FAIL tests/test_agents_connections_presets.py::test_reading_is_strict_and_names_file_and_line[connections:\n  a:\n    home: /x\n-2-connections.a.runtime: required] | origin tests/test_agents_connections_presets.py:181 (?; from test assertion, no graftling frame) | AssertionError: assert False
+  FAIL tests/test_agents_connections_presets.py::test_several_connections_for_one_runtime_need_a_preset | origin tests/test_agents_connections_presets.py:305 (?; from test assertion, no graftling frame) | AssertionError: assert (True and 'invalid-config' == 'ambiguous-connection'
+  FAIL tests/test_agents_connections_presets.py::test_writing_a_choice_keeps_connections_presets_and_comments | origin src/graftling/config.py:353 (?; from junit) | ValueError: C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-2\test_writing_a_choice_keeps_co0\config.yml:5: connections.work-claude.home: expected an absolute path
+  FAIL tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server | origin tests/test_child_server_name_551.py:51 (?; from test assertion, no graftling frame) | AssertionError: node:internal/modules/esm/load:184
+  FAIL tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open | origin tests/test_claude_archive_batches_468.py:97 (?; from test assertion, no graftling frame) | FileNotFoundError: [WinError 3] The system cannot find the path specified: '/dev/fd'
+  FAIL tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns | origin tests/test_codex_child_interpreter_shutdown_473.py:46 (?; from test assertion, no graftling frame) | AttributeError: 'NoneType' object has no attribute 'start'
+  FAIL tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation | origin tests/test_dsh_plugin_install_python.py:134 (?; from test assertion, no graftling frame) | AssertionError: graftling-dsh: no Python that imports this graftling (C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\graftling\Lib\site-p
+  FAIL tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child | origin tests/test_dsh_providers_608.py:154 (?; from test assertion, no graftling frame) | AssertionError: assert [] == [{'config': {... 'llm-pi-ai'}]
+  FAIL tests/test_dsh_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings | origin src/graftling/dsh/host.py:102 (W3?; from junit) | ValueError: The DSH host configuration needs an absolute data root "root".
+  FAIL tests/test_dsh_standalone_host.py::test_configuration_refusals[document4-"claude" must be an object] | origin src/graftling/dsh/host.py:102 (W3?; from junit) | AssertionError: Regex pattern did not match.
+  FAIL tests/test_envelope_validation_555.py::test_arguments_file_content_is_validated_with_the_envelope | origin src/graftling/discovery.py:150 (?; from junit) | AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+  FAIL tests/test_envelope_validation_555.py::test_arguments_file_outside_the_boundary_is_refused | origin src/graftling/discovery.py:150 (?; from junit) | AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+  FAIL tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[None-does not exist] | origin src/graftling/discovery.py:150 (?; from junit) | AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+  FAIL tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[["do-not-echo-7f3a"]-must hold a JSON object] | origin src/graftling/discovery.py:150 (?; from junit) | AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+  FAIL tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[{"runtime": "do-not-echo-7f3a",-is not valid JSON (line 1, column] | origin src/graftling/discovery.py:150 (?; from junit) | AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+  FAIL tests/test_envelope_validation_555.py::test_arguments_file_supplies_and_inline_overrides | origin src/graftling/discovery.py:150 (?; from junit) | AttributeError: module 'os' has no attribute 'O_NOFOLLOW'
+  FAIL tests/test_pi_standalone_host.py::test_configuration_accepts_root_and_per_runtime_settings | origin src/graftling/pi/host.py:125 (?; from junit) | ValueError: The Pi host configuration needs an absolute data root "root".
+  FAIL tests/test_pi_standalone_host.py::test_configuration_refusals[document10-'read' or 'write'] | origin src/graftling/pi/host.py:125 (?; from junit) | AssertionError: Regex pattern did not match.
+  FAIL tests/test_pi_standalone_host.py::test_configuration_refusals[document5-"claude" must be an object] | origin src/graftling/pi/host.py:125 (?; from junit) | AssertionError: Regex pattern did not match.
+  FAIL tests/test_pi_standalone_host.py::test_configuration_refusals[document6-worktree_path is always the cwd] | origin src/graftling/pi/host.py:125 (?; from junit) | AssertionError: Regex pattern did not match.
+  FAIL tests/test_pi_standalone_host.py::test_configuration_refusals[document7-Unknown or fixed Pi settings] | origin src/graftling/pi/host.py:125 (?; from junit) | AssertionError: Regex pattern did not match.
+  FAIL tests/test_pi_standalone_host.py::test_configuration_refusals[document8-non-empty string] | origin src/graftling/pi/host.py:125 (?; from junit) | AssertionError: Regex pattern did not match.
+  FAIL tests/test_pi_standalone_host.py::test_configuration_refusals[document9-absolute paths] | origin src/graftling/pi/host.py:125 (?; from junit) | AssertionError: Regex pattern did not match.
+  FAIL tests/test_process_tree_635.py::test_windows_a_breakaway_attempt_stays_in_the_job | origin tests/test_process_tree_635.py:142 (?; from test assertion, no graftling frame) | ValueError: invalid literal for int() with base 10: '{"breakaway": "refused", "winerror": 5}'
+  FAIL tests/test_tool_name_591.py::test_the_hook_rewrite_refuses_a_template_it_would_not_change | origin tests/test_tool_name_591.py:199 (?; from test assertion, no graftling frame) | KeyError: '/p/hooks/host_context.mjs'
+    origins of the unexpected failures: test assertion, no graftling frame 21, junit 18
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 0
+observed list written: scripts/verify-637/rehearsal/retained-run-45633403789/observed-expected.txt
+JUDGE FAIL 39 unexpected failures
+[exit 0]
+$ python -I scripts/verify-637/wincheck637.py newtests scripts/verify-635/evidence/run-45633403789-a1/junit scripts/verify-637/new-tests.txt
+--- the W5 tests (637) in this run: 6 expected to pass
+  ABSENT tests/test_process_listing_637.py::test_a_marker_lists_and_stops_its_tree_with_grandchildren_that_left_the_group
+  ABSENT tests/test_process_listing_637.py::test_stop_tool_processes_ends_what_a_runtime_left_and_spares_the_excluded
+  ABSENT tests/test_process_listing_637.py::test_reconciling_an_execution_stops_the_tools_its_dead_owner_and_runtime_left
+  ABSENT tests/test_process_listing_637.py::test_a_marker_whose_tree_was_not_started_through_owned_tree_has_no_job
+  ABSENT tests/test_process_listing_637.py::test_the_windows_listing_with_a_stand_in_job_api
+  FAILED tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns
+NEWTESTS FAIL 0 of 6 W5 tests passed
+[exit 0]

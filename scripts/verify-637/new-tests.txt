@@ -1,0 +1,9 @@
+# The tests Task 637 (W5) adds (graftling tests/test_process_listing_637.py) and the one it opens to Windows (the W5
+# (637) entry it deleted from scripts/verify-632/windows-expected.txt). On the Windows runner each must PASS.
+# Real Job Objects for all but the stand-in test; fake Runtimes are Python scripts started through sys.executable.
+tests/test_process_listing_637.py::test_a_marker_lists_and_stops_its_tree_with_grandchildren_that_left_the_group
+tests/test_process_listing_637.py::test_stop_tool_processes_ends_what_a_runtime_left_and_spares_the_excluded
+tests/test_process_listing_637.py::test_reconciling_an_execution_stops_the_tools_its_dead_owner_and_runtime_left
+tests/test_process_listing_637.py::test_a_marker_whose_tree_was_not_started_through_owned_tree_has_no_job
+tests/test_process_listing_637.py::test_the_windows_listing_with_a_stand_in_job_api
+tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns

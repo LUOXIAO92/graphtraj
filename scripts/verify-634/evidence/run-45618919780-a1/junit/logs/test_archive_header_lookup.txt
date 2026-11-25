@@ -1,0 +1,18 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 2 items
+
+tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened PASSED [ 50%]
+tests/test_archive_header_lookup.py::test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=aa81a0c25f3c4d6198e8fd2b4274421d: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_archive_header_lookup.xml -
+============================ slowest 10 durations =============================
+0.83s call     tests/test_archive_header_lookup.py::test_lookup_keeps_conflicts_versions_large_headers_and_other_line_shapes
+0.52s call     tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened
+0.01s setup    tests/test_archive_header_lookup.py::test_lookup_reads_headers_only_and_a_damaged_archive_still_refuses_when_opened
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 2 passed in 1.42s ==============================

@@ -1,30 +1,32 @@
 $ VERIFY634_GRAFTLING=/tmp/claude-501/rh634/diverged/graftling VERIFY634_GREMOTE=/tmp/claude-501/rh634/diverged/gremote.git VERIFY634_GH=/tmp/claude-501/rh634/diverged/gh/gh VERIFY634_EVIDENCE=/tmp/claude-501/rh634/diverged/runs VERIFY634_POLL_S=1 VERIFY634_APPEAR_S=10 VERIFY634_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/634-graftling-windows-durable-writes to graftling /tmp/claude-501/rh634/diverged/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh634/diverged/graftling; head 2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6 on base defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: bundle verifies against /tmp/claude-501/rh634/diverged/graftling; head f64509dfae441fb875c45d85a2e0055c90492d2d on base defad1db083e911900cbea1cb0ef165e6a66d322
 --- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
+  f64509d LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: lock-free readers of published files retry a transient open refusal (634 correction 1)
   2fadc6c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: locks without the 10 s limit, try_exclusive, durable replacement (634)
 PASS: author and committer are the noreply identity
 --- files changed since defad1db083e911900cbea1cb0ef165e6a66d322:
    .github/workflows/windows.yml          |   2 +-
-   src/graftling/_win32.py                | 146 +++++++++++++++++++++
-   src/graftling/claude/support.py        |  14 +--
-   src/graftling/codex/managed_session.py |  22 +---
-   src/graftling/config.py                |   7 +-
-   src/graftling/control.py               |  13 +-
-   src/graftling/durable.py               | 128 +++++++++++++++++++
-   src/graftling/locks.py                 |  73 ++++++++---
-   src/graftling/pi/execution.py          |  14 +--
-   src/graftling/sessions/archive.py      |  39 +++---
-   src/graftling/tool_descendants.py      |  12 +-
-   tests/test_locks_durable_634.py        | 223 +++++++++++++++++++++++++++++++++
+   src/graftling/_win32.py                | 146 +++++++++++++++++++
+   src/graftling/claude/support.py        |  14 +-
+   src/graftling/codex/managed_session.py |  22 +--
+   src/graftling/config.py                |   9 +-
+   src/graftling/control.py               |  21 ++-
+   src/graftling/durable.py               | 169 ++++++++++++++++++++++
+   src/graftling/locks.py                 |  73 ++++++++--
+   src/graftling/pi/execution.py          |  14 +-
+   src/graftling/sessions/archive.py      |  46 +++---
+   src/graftling/tool_descendants.py      |  14 +-
+   tests/test_agent_control.py            |   8 +-
+   tests/test_locks_durable_634.py        | 255 +++++++++++++++++++++++++++++++++
    tests/test_windows_emulation_619.py    |  24 ++--
-   13 files changed, 607 insertions(+), 110 deletions(-)
+   14 files changed, 696 insertions(+), 121 deletions(-)
 PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml
 PASS: .github/workflows/windows.yml differs from defad1db083e911900cbea1cb0ef165e6a66d322 only in on.push.branches, which adds agent/634-graftling-windows-durable-writes
 PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged
 PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-632/windows-expected.txt parses: 89 expected Windows failures and 0 expected hangs (W1 (633) 23, W3 (635) 6, W4 (636) 22, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
 W2 (634) entries left in the list: 0
-STOP: graftling /tmp/claude-501/rh634/diverged/gremote.git has agent/634-graftling-windows-durable-writes at b973916a0f40015a5914824cb3465afadcaa4737, not an ancestor of the bundle head; never force. Inspect: git -C /tmp/claude-501/rh634/diverged/graftling fetch /tmp/claude-501/rh634/diverged/gremote.git agent/634-graftling-windows-durable-writes && git -C /tmp/claude-501/rh634/diverged/graftling log --oneline -5 FETCH_HEAD
+STOP: graftling /tmp/claude-501/rh634/diverged/gremote.git has agent/634-graftling-windows-durable-writes at e41d416b5a2a5e030b2d1cee7765d8d32650e172, not an ancestor of the bundle head; never force. Inspect: git -C /tmp/claude-501/rh634/diverged/graftling fetch /tmp/claude-501/rh634/diverged/gremote.git agent/634-graftling-windows-durable-writes && git -C /tmp/claude-501/rh634/diverged/graftling log --oneline -5 FETCH_HEAD
 VERDICT 634 P: STOP
 [exit 1]

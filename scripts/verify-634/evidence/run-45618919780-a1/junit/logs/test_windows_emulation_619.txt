@@ -1,0 +1,22 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 4 items
+
+tests/test_windows_emulation_619.py::test_graftling_imports_under_windows_emulation SKIPPED [ 25%]
+tests/test_windows_emulation_619.py::test_archive_lock_goes_through_windows_lock_under_emulation SKIPPED [ 50%]
+tests/test_windows_emulation_619.py::test_process_listing_refuses_clearly_under_windows_emulation SKIPPED [ 75%]
+tests/test_windows_emulation_619.py::test_codex_parent_host_refuses_clearly_under_windows_emulation SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=34ad03ed8899471d9aebc72c1876c3d8: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_windows_emulation_619.xml -
+============================ slowest 10 durations =============================
+
+(8 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_windows_emulation_619.py:106: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+SKIPPED [1] tests\test_windows_emulation_619.py:117: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+SKIPPED [1] tests\test_windows_emulation_619.py:137: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+SKIPPED [1] tests\test_windows_emulation_619.py:155: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+============================= 4 skipped in 0.06s ==============================

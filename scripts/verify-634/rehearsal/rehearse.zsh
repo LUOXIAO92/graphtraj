@@ -49,6 +49,12 @@ fresh matched; step matched matched-00.txt 00; step matched matched-P.txt P; ste
 step matched matched-W-sha.txt W $HEAD_SHA
 step matched matched-W-run.txt W 51000000634
 print -r -- "--- after P: clone $(git -C $S/matched/graftling rev-parse $BRANCH), remote $(git -C $S/matched/gremote.git rev-parse $BRANCH)" >> $OUT/matched-P.txt
+# Round 2: <Harness>/graftling and the remote hold the round-1 candidate 2fadc6c8, as after Main's first P; 00 sees an
+# ancestor, P fast-forwards both.
+PREV=2fadc6c8087a9c2bfb3eb1d3832f3ef101ea02f6
+fresh ff; git -C $S/ff/gremote.git update-ref refs/heads/$BRANCH $PREV; git -C $S/ff/graftling branch -q $BRANCH $PREV
+step ff ff-00.txt 00; step ff ff-P.txt P
+print -r -- "--- after P: clone $(git -C $S/ff/graftling rev-parse $BRANCH), remote $(git -C $S/ff/gremote.git rev-parse $BRANCH)" >> $OUT/ff-P.txt
 # FAIL path: a removed W2 test still fails at another Task's point, and a listed failure passes.
 fresh residual; step residual residual-P.txt P
 cp $S/residual/runs/*/observed-expected.txt $OUT/residual-observed-expected.txt

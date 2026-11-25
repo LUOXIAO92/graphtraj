@@ -1,0 +1,3 @@
+$ pytest -k stand_in tests/test_process_listing_637.py, with control.py of 25bd3968 (round 1)
+E           AssertionError: assert ('escaped_processes' not in {'process': {'runtime_pid': 4000001, 'runtime_job': 'graftling-m637'}, 'escaped_processes': {'found': [{'pid': 4000002, 'command': 'tool 4000002'}], 'stopped': [], 'remaining': [{'pid': 4000002, 'command': 'tool 4000002'}]}})
+1 failed, 4 deselected in 5.25s

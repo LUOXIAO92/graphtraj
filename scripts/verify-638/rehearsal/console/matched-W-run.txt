@@ -1,10 +1,10 @@
 $ VERIFY638_GRAFTLING=/tmp/claude-501/w638/rehearsal/matched/graftling VERIFY638_GREMOTE=/tmp/claude-501/w638/rehearsal/matched/gremote.git VERIFY638_GH=/tmp/claude-501/w638/rehearsal/matched/gh/gh VERIFY638_EXPECTED=/tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt VERIFY638_EVIDENCE=/tmp/claude-501/w638/rehearsal/matched/evidence VERIFY638_POLL_S=1 VERIFY638_APPEAR_S=10 VERIFY638_DONE_S=30 zsh steps.zsh W 51000000000
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
-PASS: bundle verifies against /tmp/claude-501/w638/rehearsal/matched/graftling; head 6ac51d89039aa742c8870e7a71596903ae424b71 on base defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: bundle verifies against /tmp/claude-501/w638/rehearsal/matched/graftling; head df09100421e56d8c02a8c49a50664e601244eb17 on base defad1db083e911900cbea1cb0ef165e6a66d322
 == [W] Observe only (no push, no re-run) run 51000000000. Login: gh login. Dialog: none. Network: GitHub.
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [21:47:53] run 51000000000: completed failure
---- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head 6ac51d89039aa742c8870e7a71596903ae424b71 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+  [22:21:31] run 51000000000: completed failure
+--- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head df09100421e56d8c02a8c49a50664e601244eb17 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed
@@ -23,14 +23,14 @@ JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling
 --- job log saved: /tmp/claude-501/w638/rehearsal/matched/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
   per-file pytest summaries: 1
 already present, not downloaded again: /tmp/claude-501/w638/rehearsal/matched/evidence/run-51000000000-a1/junit
-test files in 6ac51d89039aa742c8870e7a71596903ae424b71: 59
+test files in df09100421e56d8c02a8c49a50664e601244eb17: 59
 --- per-file records and results against /tmp/claude-501/w638/rehearsal/windows-expected-rehearsal.txt
 runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
 run_test_files exit code: 1
 --- test files: 59 recorded | ended 59 | hung 0 | not run 0 | in the commit: 59
   slowest ended files: tests/test_agent_completion.py 2.5 s, tests/test_agent_control.py 2.5 s, tests/test_agents_connections_presets.py 2.5 s, tests/test_agents_request_notices.py 2.5 s, tests/test_agents_server_name.py 2.5 s
 merged JUnit files: 59
-collected in JUnit: 950 | passed 927 | failed 2 | errors 0 | skipped 21
+collected in JUnit: 952 | passed 929 | failed 2 | errors 0 | skipped 21
 --- POSIX-only skips: 0 in 0 modules
 --- allowed environment skips (not Windows-specific): 21
   x12: Explicit pinned official SDK comparison
@@ -59,5 +59,5 @@ TEMP PASS the suite ran under 'D:\\a\\_temp\\graftling-\u6d4b\u8bd5-\xfc' (non-A
 evidence: /tmp/claude-501/w638/rehearsal/matched/evidence/run-51000000000-a1
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/steps.zsh W 51000000000    (observe again; no push, no re-run)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/638-graftling-windows-paths-encoding/scripts/verify-638/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
-VERDICT 638 W: PASS (run 51000000000 attempt 1 on 6ac51d89039aa742c8870e7a71596903ae424b71; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; non-ASCII temporary directory; results: 950 tests: 927 passed, 2 failed as listed, 0 hangs as listed, 0 POSIX-only skips, 21 environment skips; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 638 W: PASS (run 51000000000 attempt 1 on df09100421e56d8c02a8c49a50664e601244eb17; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; non-ASCII temporary directory; results: 952 tests: 929 passed, 2 failed as listed, 0 hangs as listed, 0 POSIX-only skips, 21 environment skips; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]

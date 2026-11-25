@@ -10,6 +10,8 @@ PY=/Users/luoxiao/miniconda3/bin/python3.13
 REAL=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
 BRANCH=agent/638-graftling-windows-paths-encoding
 BASE=defad1db083e911900cbea1cb0ef165e6a66d322
+# Round 1's candidate, which Main's P pushed: the real remote branch holds it (correction round 1).
+PREV=6ac51d89039aa742c8870e7a71596903ae424b71
 OUT=$HERE/console; mkdir -p $OUT; rm -f $OUT/*.txt(N)
 # Two tests that pass on macOS stand for the listed Windows failures (one in-process, one with a subprocess).
 FAILS=(tests/test_connection_serve.py::test_removed_control_directory_stops_the_service
@@ -21,10 +23,10 @@ mkdir -p $S
 EXPECTED_HANG=$S/windows-expected-rehearsal-hang.txt
 { cat $EXPECTED
   print -r -- "hang	tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice	src/graftling/control.py:2140	W1 (633)	rehearsal stand-in" } > $EXPECTED_HANG
-fresh() {  # fresh <scenario>: a new bare remote (no 638 branch), scratch graftling clone and fake gh state
+fresh() {  # fresh <scenario>: a new bare remote (638 branch at PREV, as now on GitHub), scratch graftling clone and fake gh state
   rm -rf $S/$1; mkdir -p $S/$1/gh
   git clone -q --bare --no-hardlinks $REAL $S/$1/gremote.git
-  git -C $S/$1/gremote.git update-ref -d refs/heads/$BRANCH 2> /dev/null
+  git -C $S/$1/gremote.git update-ref refs/heads/$BRANCH $PREV
   git clone -q --no-hardlinks --no-checkout $REAL $S/$1/graftling
   git -C $S/$1/graftling remote set-url origin https://github.com/LUOXIAO92/graftling.git
   print -r -- $1 > $S/$1/gh/scenario; cp $JUNIT $S/$1/gh/junit; print -lr -- $FAILS > $S/$1/gh/fails
@@ -67,6 +69,12 @@ step guard guard-local-00.txt 00
 fresh diverged
 git -C $S/diverged/gremote.git update-ref refs/heads/$BRANCH $(git -C $S/diverged/gremote.git commit-tree -p $BASE -m diverged "$BASE^{tree}")
 step diverged diverged-P.txt P
+# Correction round 1: <Harness>/graftling (local) and the remote both hold PREV; 00 accepts both as ancestors and
+# P fast-forwards both to the new head. And a first publication (remote branch absent) still works.
+fresh ff-local; git -C $S/ff-local/graftling branch -q $BRANCH $PREV
+step ff-local ff-local-00.txt 00; step ff-local ff-local-P.txt P
+print -r -- "--- after P: clone $(git -C $S/ff-local/graftling rev-parse $BRANCH), remote $(git -C $S/ff-local/gremote.git rev-parse $BRANCH)" >> $OUT/ff-local-P.txt
+fresh absent; git -C $S/absent/gremote.git update-ref -d refs/heads/$BRANCH; step absent absent-P.txt P
 # The workflow diff check refuses any change beyond the trigger line and the non-ASCII setup.
 git -C $S/matched/graftling show $BASE:.github/workflows/windows.yml > $S/windows-base.yml
 git -C $S/matched/graftling show $HEAD_SHA:.github/workflows/windows.yml > $S/windows-head.yml

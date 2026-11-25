@@ -8,7 +8,7 @@ mcp    Starts the plain MCP entry in the isolated project and sends initialize, 
        calls (newline-delimited JSON-RPC): query 'start an agent' and query 'list models'. CHECKs: 'start an agent'
        answers without error with features exactly [create]; 'list models' still finds models. The server is closed
        by closing its stdin, and killed only if it ignores that for 20 s (this probe's own child).
-judge  Main's saved raw discover result (Q.txt): a JSON document, not an error, features exactly [create].
+judge  Main's saved raw discover result (Q.txt): a JSON or YAML document (GraphTraj's MCP text is YAML), not an error, features exactly [create].
 calls  Main's transcript after <after epoch>: an mcp__graphtraj__subagents call with action discover and query
        'start an agent' (case and spaces as Main typed them are compared lower-cased and collapsed), answered without
        error, whose result lists the same features as the raw result file. ToolSearch calls are INFO: `select:` of an
@@ -42,10 +42,18 @@ def features_of(value) -> list | None:
 
 
 def document(text: str):
-    """The whole text as JSON, else the first JSON object in it that holds `features` or `error`."""
+    """The whole text as JSON, else as YAML (GraphTraj's MCP text content is YAML), else the first JSON object in it
+    that holds `features` or `error`."""
     try:
         return json.loads(text)
     except ValueError:
+        pass
+    try:
+        import yaml
+        value = yaml.safe_load(text)
+        if isinstance(value, dict) and (features_of(value) is not None or 'error' in value):
+            return value
+    except Exception:                                   # noqa: BLE001 - not YAML either; try embedded JSON below
         pass
     decoder = json.JSONDecoder()
     for match in re.finditer(r'\{', text):
@@ -119,7 +127,7 @@ def mcp(label: str, project: str, command: list[str]) -> None:
 def judge(raw: str) -> None:
     text = Path(raw).read_text(errors='replace')
     doc = document(text)
-    check('Qr the raw result is a JSON document', isinstance(doc, dict), '' if isinstance(doc, dict) else text[:120])
+    check('Qr the raw result is a JSON or YAML discover document', isinstance(doc, dict), '' if isinstance(doc, dict) else text[:120])
     doc = doc if isinstance(doc, dict) else {}
     error = doc.get('error') or doc.get('is_error') or doc.get('isError')
     features = features_of(doc)

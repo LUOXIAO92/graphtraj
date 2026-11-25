@@ -185,7 +185,7 @@ for line in out.splitlines():
   tl ts2 ToolSearch '{"query":"select:mcp__graphtraj__subagents","max_results":1}' '"(fixture)"'
   tl q1 mcp__graphtraj__subagents '{"action":"discover","query":"start an agent"}' "$($CONDA -I -c 'import json,sys; print(json.dumps(open(sys.argv[1]).read()))' $RAW/Q.txt)"
   print "\n## STOP: Qr with a Q.txt listing create AND models (FIXTURE: production 0.10.0's answer), in raw-stop/ (copies of Q-pre.txt and Q.epoch)"
-  cp -p $RAW/Q-pre.txt $RAW/Q.epoch $STOPS/ && print -r -- '{"features":[{"feature":"create","description":"Create a child Agent on a Runtime; returns before its work finishes."},{"feature":"models","description":"... read only, starts no Agent. (FIXTURE)"}],"describe":{}}' > $STOPS/Q.txt
+  cp -p $RAW/Q-pre.txt $RAW/Q.epoch $STOPS/ && print -l 'features:' '- feature: create' '  description: Create a child Agent on a Runtime; returns before its work finishes.' '- feature: models' "  description: List a Runtime's configured connections ...; read only, starts no Agent. (FIXTURE, YAML as GraphTraj's MCP text)" > $STOPS/Q.txt
   run $STOPS "STOP: Qr with create+models (fixture)" zsh $S Qr
   run $RAW Qr zsh $S Qr
   run $RAW done zsh $S done

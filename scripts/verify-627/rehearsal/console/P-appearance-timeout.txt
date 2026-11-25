@@ -1,0 +1,23 @@
+$ VERIFY627_REMOTE=/tmp/claude-501/r627/push-timeout/remote.git VERIFY627_GH=/tmp/claude-501/r627/push-timeout/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627/push-timeout/htmp VERIFY627_PTMP=/tmp/claude-501/r627/push-timeout/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/r627/push-timeout/remote.git agent/627-desktop-ui-structure-redesign (fast-forward only, never force); starts desktop-macos-adoption.yml and desktop-linux-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: on agent/627-desktop-ui-structure-redesign
+PASS: tracked tree clean
+PASS: base 4fa79a8d is an ancestor of HEAD
+PASS: only desktop-macos-adoption.yml and desktop-linux-adoption.yml changed under .github/workflows (Windows and repair untouched)
+PASS: .github/workflows/desktop-linux-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
+PASS: .github/workflows/desktop-macos-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
+PASS: desktop-linux-adoption.yml changes only its push branches line
+PASS: desktop-macos-adoption.yml has the 627 window-test step
+NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-7b488184fd77f1661acb9273599d0ebf71727c26 (not required for P)
+NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627/repo/scripts/verify-627/evidence/7b488184fd77f1661acb9273599d0ebf71727c26
+$ git push /tmp/claude-501/r627/push-timeout/remote.git refs/heads/agent/627-desktop-ui-structure-redesign:refs/heads/agent/627-desktop-ui-structure-redesign   (HEAD 7b488184fd77f1661acb9273599d0ebf71727c26)
+  To /tmp/claude-501/r627/push-timeout/remote.git
+   * [new branch]        agent/627-desktop-ui-structure-redesign -> agent/627-desktop-ui-structure-redesign
+PASS: /tmp/claude-501/r627/push-timeout/remote.git agent/627-desktop-ui-structure-redesign = 7b488184fd77f1661acb9273599d0ebf71727c26
+observing push runs of desktop-macos-adoption.yml and desktop-linux-adoption.yml for 7b488184fd77f1661acb9273599d0ebf71727c26 (appearance bound 4s, completion bound 30s, poll 1s)
+appearance timeout after 4s; missing:
+  MISSING	.github/workflows/desktop-linux-adoption.yml
+NEXT: zsh /private/tmp/claude-501/r627/repo/scripts/verify-627/steps.zsh W 7b488184fd77f1661acb9273599d0ebf71727c26    (re-observe; no push)
+VERDICT 627 P: FAIL (0/2 success; 1 of 2 workflows never appeared within 4s)
+[exit 1]

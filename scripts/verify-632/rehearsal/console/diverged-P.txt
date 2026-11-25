@@ -72,6 +72,6 @@ PASS: .github/run_test_files.py has 'files.json'
 PASS: .github/run_test_files.py has last_started
 PASS: .github/run_test_files.py imports only the standard library (no yaml/psutil/pytest_timeout/requests)
 PASS: /tmp/claude-501/rh632/windows-expected-rehearsal.txt parses: 2 expected Windows failures and 0 expected hangs (W4 2), 19 allowed environment skips
-STOP: graftling /tmp/claude-501/rh632/diverged/gremote.git has agent/632-graftling-windows-ci at a16dac9b22e6e40546c855ff4bae5526161d011d, not an ancestor of the bundle head; never force. Inspect: git -C /tmp/claude-501/rh632/diverged/graftling fetch /tmp/claude-501/rh632/diverged/gremote.git agent/632-graftling-windows-ci && git -C /tmp/claude-501/rh632/diverged/graftling log --oneline -5 FETCH_HEAD
+STOP: graftling /tmp/claude-501/rh632/diverged/gremote.git has agent/632-graftling-windows-ci at 51f3a7419815edca9fafc1abfed3cee5aedcba07, not an ancestor of the bundle head; never force. Inspect: git -C /tmp/claude-501/rh632/diverged/graftling fetch /tmp/claude-501/rh632/diverged/gremote.git agent/632-graftling-windows-ci && git -C /tmp/claude-501/rh632/diverged/graftling log --oneline -5 FETCH_HEAD
 VERDICT 632 P: STOP
 [exit 1]

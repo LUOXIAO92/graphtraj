@@ -279,7 +279,8 @@ def origin(text, case, log_section=""):
             "test line, no frame")
 
 
-HEADER = re.compile(r"^_{3,} (.+?) _{3,}\s*$")
+# pytest centres a section title in underscores; a long title gets a single one on each side.
+HEADER = re.compile(r"^_+ (.+?) _+\s*$")
 
 
 def log_sections(text):

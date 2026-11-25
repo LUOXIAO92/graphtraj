@@ -8,7 +8,7 @@ $ gh run rerun 51000000000 --repo LUOXIAO92/graftling --failed
 waiting for attempt > 1 to appear (bound 10s, poll 1s)
 attempt 2 appeared after 0s
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [21:05:56] run 51000000000: completed failure
+  [21:13:12] run 51000000000: completed failure
 --- run 51000000000 | attempt 2 | push | conclusion failure (information only) | head defad1db083e911900cbea1cb0ef165e6a66d322 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped

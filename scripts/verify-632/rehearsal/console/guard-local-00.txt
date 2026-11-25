@@ -80,6 +80,6 @@ PASS: .github/run_test_files.py has 'files.json'
 PASS: .github/run_test_files.py has last_started
 PASS: .github/run_test_files.py imports only the standard library (no yaml/psutil/pytest_timeout/requests)
 PASS: /tmp/claude-501/rh632/windows-expected-rehearsal.txt parses: 2 expected Windows failures and 0 expected hangs (W4 2), 19 allowed environment skips
-STOP: /tmp/claude-501/rh632/guard/graftling has local agent/632-graftling-windows-ci at 159c357d217f14ecd708c34a404fd4e59d006ee3, not an ancestor of the bundle head defad1db083e911900cbea1cb0ef165e6a66d322; never overwrite. Inspect: git -C /tmp/claude-501/rh632/guard/graftling log --oneline -3 agent/632-graftling-windows-ci
+STOP: /tmp/claude-501/rh632/guard/graftling has local agent/632-graftling-windows-ci at 1576475de73d835f95f0ec4e4ab6fddd04737cf1, not an ancestor of the bundle head defad1db083e911900cbea1cb0ef165e6a66d322; never overwrite. Inspect: git -C /tmp/claude-501/rh632/guard/graftling log --oneline -3 agent/632-graftling-windows-ci
 VERDICT 632 00: STOP
 [exit 1]

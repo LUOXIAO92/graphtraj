@@ -1,63 +1,71 @@
-$ VERIFY627_REMOTE=/tmp/claude-501/r627b/push-success/remote.git VERIFY627_GH=/tmp/claude-501/r627b/push-success/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627b/push-success/htmp VERIFY627_PTMP=/tmp/claude-501/r627b/push-success/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P
+$ VERIFY627_REMOTE=/tmp/claude-501/r627d/push-success/remote.git VERIFY627_GH=/tmp/claude-501/r627d/push-success/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627d/push-success/htmp VERIFY627_PTMP=/tmp/claude-501/r627d/push-success/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
-== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/r627b/push-success/remote.git agent/627-desktop-ui-structure-redesign (fast-forward only, never force); starts desktop-macos-adoption.yml and desktop-linux-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
+== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/r627d/push-success/remote.git agent/627-desktop-ui-structure-redesign (fast-forward only, never force); starts desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
 PASS: on agent/627-desktop-ui-structure-redesign
 PASS: tracked tree clean
-PASS: base 4fa79a8d is an ancestor of HEAD
-PASS: only desktop-macos-adoption.yml and desktop-linux-adoption.yml changed under .github/workflows (Windows and repair untouched)
+PASS: base 626f9301 is an ancestor of HEAD
+PASS: only desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml changed under .github/workflows (desktop-repair-package.yml untouched)
 PASS: .github/workflows/desktop-linux-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
 PASS: .github/workflows/desktop-macos-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
-PASS: desktop-linux-adoption.yml changes only its push branches line
+PASS: .github/workflows/desktop-win-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
+PASS: desktop-linux-adoption.yml changes only its push branches line, adding agent/627-desktop-ui-structure-redesign
+PASS: desktop-win-adoption.yml changes only its push branches line, adding agent/627-desktop-ui-structure-redesign
 PASS: desktop-macos-adoption.yml has the 627 window-test step
-NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-f6fd59929729679d7ad6b84f60af69e54ed04c53 (not required for P)
-NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627b/repo/scripts/verify-627/evidence/f6fd59929729679d7ad6b84f60af69e54ed04c53
-$ git push /tmp/claude-501/r627b/push-success/remote.git refs/heads/agent/627-desktop-ui-structure-redesign:refs/heads/agent/627-desktop-ui-structure-redesign   (HEAD f6fd59929729679d7ad6b84f60af69e54ed04c53)
-  To /tmp/claude-501/r627b/push-success/remote.git
+NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-64750093efdee7a512b7585644e452198300fde3 (not required for P)
+NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627d/repo/scripts/verify-627/evidence/64750093efdee7a512b7585644e452198300fde3
+$ git push /tmp/claude-501/r627d/push-success/remote.git refs/heads/agent/627-desktop-ui-structure-redesign:refs/heads/agent/627-desktop-ui-structure-redesign   (HEAD 64750093efdee7a512b7585644e452198300fde3)
+  To /tmp/claude-501/r627d/push-success/remote.git
    * [new branch]        agent/627-desktop-ui-structure-redesign -> agent/627-desktop-ui-structure-redesign
-PASS: /tmp/claude-501/r627b/push-success/remote.git agent/627-desktop-ui-structure-redesign = f6fd59929729679d7ad6b84f60af69e54ed04c53
-observing push runs of desktop-macos-adoption.yml and desktop-linux-adoption.yml for f6fd59929729679d7ad6b84f60af69e54ed04c53 (appearance bound 10s, completion bound 30s, poll 1s)
+PASS: /tmp/claude-501/r627d/push-success/remote.git agent/627-desktop-ui-structure-redesign = 64750093efdee7a512b7585644e452198300fde3
+observing push runs of desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml for 64750093efdee7a512b7585644e452198300fde3 (appearance bound 10s, completion bound 30s, poll 1s)
 both push runs present after 1s
-  [18:32:52] .github/workflows/desktop-linux-adoption.yml in_progress -;.github/workflows/desktop-macos-adoption.yml in_progress -;
-  [18:32:53] .github/workflows/desktop-linux-adoption.yml completed success;.github/workflows/desktop-macos-adoption.yml completed success;
---- results for f6fd59929729679d7ad6b84f60af69e54ed04c53
-RUN desktop-linux-adoption.yml | id 46200000001 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000001
-  job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000001/job/2
-RUN desktop-macos-adoption.yml | id 46200000000 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000000
-  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000000/job/2
+  [18:44:22] .github/workflows/desktop-linux-adoption.yml in_progress -;.github/workflows/desktop-macos-adoption.yml in_progress -;.github/workflows/desktop-win-adoption.yml in_progress -;
+  [18:44:24] .github/workflows/desktop-linux-adoption.yml completed success;.github/workflows/desktop-macos-adoption.yml completed success;.github/workflows/desktop-win-adoption.yml completed success;
+--- results for 64750093efdee7a512b7585644e452198300fde3
+RUN desktop-linux-adoption.yml | id 46300000002 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002
+  job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002/job/2
+RUN desktop-macos-adoption.yml | id 46300000001 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001
+  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001/job/2
+RUN desktop-win-adoption.yml | id 46300000000 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000
+  job: windows-adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000/job/2
 no other workflow triggered for this SHA
---- evidence of desktop-linux-adoption.yml run 46200000001
-$ gh run download 46200000001 --repo LUOXIAO92/graphtraj -n linux-desktop-f6fd59929729679d7ad6b84f60af69e54ed04c53 -D /tmp/claude-501/r627b/push-success/htmp/linux-evidence-46200000001
-copied to: /tmp/claude-501/r627b/push-success/ptmp/linux-evidence-46200000001
---- files (bytes, path under /tmp/claude-501/r627b/push-success/htmp/linux-evidence-46200000001)
-          36  evidence/result.json
-         133  evidence/ui-result.json
---- evidence/result.json
-  passed: True | stage: -
-  steps: 0 recorded; last 0:
-  screenshots: none
+--- evidence of desktop-linux-adoption.yml run 46300000002
+$ gh run download 46300000002 --repo LUOXIAO92/graphtraj -n linux-desktop-64750093efdee7a512b7585644e452198300fde3 -D /tmp/claude-501/r627d/push-success/htmp/linux-evidence-46300000002
+copied to: /tmp/claude-501/r627d/push-success/ptmp/linux-evidence-46300000002
+--- files (bytes, path under /tmp/claude-501/r627d/push-success/htmp/linux-evidence-46300000002)
+          48  evidence/ui-result.json
 --- evidence/ui-result.json
-  passed: True | stage: controlled Dashboard
-  steps: 2 recorded; last 2:
-    - stand-in linux step 1
-    - stand-in linux step 2
+  passed: True | stage: -
+  steps: 1 recorded; last 1:
+    - stand-in linux
   screenshots: none
---- evidence of desktop-macos-adoption.yml run 46200000000
-$ gh run download 46200000000 --repo LUOXIAO92/graphtraj -n graphtraj-macos-adoption-evidence -D /tmp/claude-501/r627b/push-success/htmp/mac-evidence-46200000000
-copied to: /tmp/claude-501/r627b/push-success/ptmp/mac-evidence-46200000000
---- files (bytes, path under /tmp/claude-501/r627b/push-success/htmp/mac-evidence-46200000000)
-          21  environment.txt
-         273  evidence.json
-          13  screens/00-start.png
+--- evidence of desktop-macos-adoption.yml run 46300000001
+$ gh run download 46300000001 --repo LUOXIAO92/graphtraj -n graphtraj-macos-adoption-evidence -D /tmp/claude-501/r627d/push-success/htmp/mac-evidence-46300000001
+copied to: /tmp/claude-501/r627d/push-success/ptmp/mac-evidence-46300000001
+--- files (bytes, path under /tmp/claude-501/r627d/push-success/htmp/mac-evidence-46300000001)
+          63  evidence.json
 --- evidence.json
   passed: True | stage: -
-  steps: 8 recorded; last 6:
-    - stand-in step 3
-    - stand-in step 4
-    - stand-in step 5
-    - stand-in step 6
-    - stand-in step 7
-    - stand-in step 8
-  screenshots: screens/00-start.png
-NEXT: zsh /private/tmp/claude-501/r627b/repo/scripts/verify-627/steps.zsh W f6fd59929729679d7ad6b84f60af69e54ed04c53    (re-observe; no push)
-VERDICT 627 P: PASS (2/2 success; desktop-linux-adoption.yml evidence ok; desktop-macos-adoption.yml evidence ok)
+  steps: 1 recorded; last 1:
+    - stand-in mac step
+  screenshots: none
+--- evidence of desktop-win-adoption.yml run 46300000000
+$ gh run download 46300000000 --repo LUOXIAO92/graphtraj -n GraphTraj-windows-evidence-64750093efdee7a512b7585644e452198300fde3 -D /tmp/claude-501/r627d/push-success/htmp/win-evidence-46300000000
+copied to: /tmp/claude-501/r627d/push-success/ptmp/win-evidence-46300000000
+--- files (bytes, path under /tmp/claude-501/r627d/push-success/htmp/win-evidence-46300000000)
+         278  adoption.json
+           3  environment.json
+          13  native-1-pick.png
+--- adoption.json
+  passed: True | stage: -
+  steps: 7 recorded; last 6:
+    - stand-in windows step 2
+    - stand-in windows step 3
+    - stand-in windows step 4
+    - stand-in windows step 5
+    - stand-in windows step 6
+    - stand-in windows step 7
+  screenshots: none
+NEXT: zsh /private/tmp/claude-501/r627d/repo/scripts/verify-627/steps.zsh W 64750093efdee7a512b7585644e452198300fde3    (re-observe; no push)
+VERDICT 627 P: PASS (3/3 success; desktop-linux-adoption.yml evidence ok; desktop-macos-adoption.yml evidence ok; desktop-win-adoption.yml evidence ok)
 [exit 0]

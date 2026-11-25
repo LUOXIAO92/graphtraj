@@ -1,49 +1,55 @@
-$ VERIFY627_REMOTE=/tmp/claude-501/r627b/push-success/remote.git VERIFY627_GH=/tmp/claude-501/r627b/push-success/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627b/push-success/htmp VERIFY627_PTMP=/tmp/claude-501/r627b/push-success/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh W
+$ VERIFY627_REMOTE=/tmp/claude-501/r627d/push-success/remote.git VERIFY627_GH=/tmp/claude-501/r627d/push-success/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627d/push-success/htmp VERIFY627_PTMP=/tmp/claude-501/r627d/push-success/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh W
 scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [W] Observe only (no push). Login: gh login. Dialog: none. Network: GitHub.
-observing push runs of desktop-macos-adoption.yml and desktop-linux-adoption.yml for f6fd59929729679d7ad6b84f60af69e54ed04c53 (appearance bound 10s, completion bound 30s, poll 1s)
+observing push runs of desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml for 64750093efdee7a512b7585644e452198300fde3 (appearance bound 10s, completion bound 30s, poll 1s)
 both push runs present after 1s
-  [18:32:55] .github/workflows/desktop-linux-adoption.yml in_progress -;.github/workflows/desktop-macos-adoption.yml in_progress -;
-  [18:32:56] .github/workflows/desktop-linux-adoption.yml completed success;.github/workflows/desktop-macos-adoption.yml completed success;
---- results for f6fd59929729679d7ad6b84f60af69e54ed04c53
-RUN desktop-linux-adoption.yml | id 46200000001 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000001
-  job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000001/job/2
-RUN desktop-macos-adoption.yml | id 46200000000 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000000
-  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000000/job/2
+  [18:44:26] .github/workflows/desktop-linux-adoption.yml in_progress -;.github/workflows/desktop-macos-adoption.yml in_progress -;.github/workflows/desktop-win-adoption.yml in_progress -;
+  [18:44:27] .github/workflows/desktop-linux-adoption.yml completed success;.github/workflows/desktop-macos-adoption.yml completed success;.github/workflows/desktop-win-adoption.yml completed success;
+--- results for 64750093efdee7a512b7585644e452198300fde3
+RUN desktop-linux-adoption.yml | id 46300000002 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002
+  job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002/job/2
+RUN desktop-macos-adoption.yml | id 46300000001 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001
+  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001/job/2
+RUN desktop-win-adoption.yml | id 46300000000 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000
+  job: windows-adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000/job/2
 no other workflow triggered for this SHA
---- evidence of desktop-linux-adoption.yml run 46200000001
-already present, not downloaded again: /tmp/claude-501/r627b/push-success/htmp/linux-evidence-46200000001
-copy already present: /tmp/claude-501/r627b/push-success/ptmp/linux-evidence-46200000001
---- files (bytes, path under /tmp/claude-501/r627b/push-success/htmp/linux-evidence-46200000001)
-          36  evidence/result.json
-         133  evidence/ui-result.json
---- evidence/result.json
-  passed: True | stage: -
-  steps: 0 recorded; last 0:
-  screenshots: none
+--- evidence of desktop-linux-adoption.yml run 46300000002
+already present, not downloaded again: /tmp/claude-501/r627d/push-success/htmp/linux-evidence-46300000002
+copy already present: /tmp/claude-501/r627d/push-success/ptmp/linux-evidence-46300000002
+--- files (bytes, path under /tmp/claude-501/r627d/push-success/htmp/linux-evidence-46300000002)
+          48  evidence/ui-result.json
 --- evidence/ui-result.json
-  passed: True | stage: controlled Dashboard
-  steps: 2 recorded; last 2:
-    - stand-in linux step 1
-    - stand-in linux step 2
+  passed: True | stage: -
+  steps: 1 recorded; last 1:
+    - stand-in linux
   screenshots: none
---- evidence of desktop-macos-adoption.yml run 46200000000
-already present, not downloaded again: /tmp/claude-501/r627b/push-success/htmp/mac-evidence-46200000000
-copy already present: /tmp/claude-501/r627b/push-success/ptmp/mac-evidence-46200000000
---- files (bytes, path under /tmp/claude-501/r627b/push-success/htmp/mac-evidence-46200000000)
-          21  environment.txt
-         273  evidence.json
-          13  screens/00-start.png
+--- evidence of desktop-macos-adoption.yml run 46300000001
+already present, not downloaded again: /tmp/claude-501/r627d/push-success/htmp/mac-evidence-46300000001
+copy already present: /tmp/claude-501/r627d/push-success/ptmp/mac-evidence-46300000001
+--- files (bytes, path under /tmp/claude-501/r627d/push-success/htmp/mac-evidence-46300000001)
+          63  evidence.json
 --- evidence.json
   passed: True | stage: -
-  steps: 8 recorded; last 6:
-    - stand-in step 3
-    - stand-in step 4
-    - stand-in step 5
-    - stand-in step 6
-    - stand-in step 7
-    - stand-in step 8
-  screenshots: screens/00-start.png
-NEXT: zsh /private/tmp/claude-501/r627b/repo/scripts/verify-627/steps.zsh W f6fd59929729679d7ad6b84f60af69e54ed04c53    (re-observe; no push)
-VERDICT 627 W: PASS (2/2 success; desktop-linux-adoption.yml evidence ok; desktop-macos-adoption.yml evidence ok)
+  steps: 1 recorded; last 1:
+    - stand-in mac step
+  screenshots: none
+--- evidence of desktop-win-adoption.yml run 46300000000
+already present, not downloaded again: /tmp/claude-501/r627d/push-success/htmp/win-evidence-46300000000
+copy already present: /tmp/claude-501/r627d/push-success/ptmp/win-evidence-46300000000
+--- files (bytes, path under /tmp/claude-501/r627d/push-success/htmp/win-evidence-46300000000)
+         278  adoption.json
+           3  environment.json
+          13  native-1-pick.png
+--- adoption.json
+  passed: True | stage: -
+  steps: 7 recorded; last 6:
+    - stand-in windows step 2
+    - stand-in windows step 3
+    - stand-in windows step 4
+    - stand-in windows step 5
+    - stand-in windows step 6
+    - stand-in windows step 7
+  screenshots: none
+NEXT: zsh /private/tmp/claude-501/r627d/repo/scripts/verify-627/steps.zsh W 64750093efdee7a512b7585644e452198300fde3    (re-observe; no push)
+VERDICT 627 W: PASS (3/3 success; desktop-linux-adoption.yml evidence ok; desktop-macos-adoption.yml evidence ok; desktop-win-adoption.yml evidence ok)
 [exit 0]

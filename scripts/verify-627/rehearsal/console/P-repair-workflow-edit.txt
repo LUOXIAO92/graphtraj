@@ -1,0 +1,12 @@
+$ VERIFY627_REMOTE=/tmp/claude-501/r627d/push-extra/remote.git VERIFY627_GH=/tmp/claude-501/r627d/push-extra/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627d/push-extra/htmp VERIFY627_PTMP=/tmp/claude-501/r627d/push-extra/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/r627d/push-extra/remote.git agent/627-desktop-ui-structure-redesign (fast-forward only, never force); starts desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: on agent/627-desktop-ui-structure-redesign
+PASS: tracked tree clean
+PASS: base 626f9301 is an ancestor of HEAD
+FAIL: workflow files changed since base must be exactly .github/workflows/desktop-linux-adoption.yml .github/workflows/desktop-macos-adoption.yml .github/workflows/desktop-win-adoption.yml; saw: .github/workflows/desktop-linux-adoption.yml .github/workflows/desktop-macos-adoption.yml .github/workflows/desktop-repair-package.yml .github/workflows/desktop-win-adoption.yml
+NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-5cec5329f201c9e047cfd9fa414b3181bdf65fdf (not required for P)
+NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627d/repo/scripts/verify-627/evidence/5cec5329f201c9e047cfd9fa414b3181bdf65fdf
+NEXT: zsh /private/tmp/claude-501/r627d/repo/scripts/verify-627/steps.zsh P0
+VERDICT 627 P: STOP (HEAD does not meet the preconditions above)
+[exit 1]

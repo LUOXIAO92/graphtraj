@@ -1,0 +1,31 @@
+$ VERIFY627_REMOTE=/tmp/claude-501/r627d/push-extra-win/remote.git VERIFY627_GH=/tmp/claude-501/r627d/push-extra-win/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627d/push-extra-win/htmp VERIFY627_PTMP=/tmp/claude-501/r627d/push-extra-win/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P0
+scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P0] Push preflight, read only. Login: your gh login (account shown, no token) and ssh key (git ls-remote). Dialog: none. Network: GitHub.
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify627-stand-in | gh path: /tmp/claude-501/r627d/push-extra-win/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-627 fake)
+    - Active account: true
+PASS: origin is git@github.com:LUOXIAO92/graphtraj.git
+NOTE: rehearsal remote /tmp/claude-501/r627d/push-extra-win/remote.git is used instead of origin for ls-remote/push
+current branch: agent/627-desktop-ui-structure-redesign | HEAD 1b5ba15b3ef85d0e3eb93db114455c79f3fe8126
+PASS: agent/627-desktop-ui-structure-redesign is absent on /tmp/claude-501/r627d/push-extra-win/remote.git (P creates it)
+--- P preconditions
+PASS: on agent/627-desktop-ui-structure-redesign
+PASS: tracked tree clean
+PASS: base 626f9301 is an ancestor of HEAD
+PASS: only desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml changed under .github/workflows (desktop-repair-package.yml untouched)
+PASS: .github/workflows/desktop-linux-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
+PASS: .github/workflows/desktop-macos-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
+PASS: .github/workflows/desktop-win-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
+PASS: desktop-linux-adoption.yml changes only its push branches line, adding agent/627-desktop-ui-structure-redesign
+FAIL: desktop-win-adoption.yml has changes other than its push branches line:
+  -    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref, agent/622-process-reclaim-windows-noise, agent/619-graftling-windows-import, agent/623-windows-desktop-adoption-green]
+  +    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref, agent/622-process-reclaim-windows-noise, agent/619-graftling-windows-import, agent/623-windows-desktop-adoption-green, agent/627-desktop-ui-structure-redesign]
+  +# rehearsal-only extra edit
+PASS: desktop-macos-adoption.yml has the 627 window-test step
+NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-1b5ba15b3ef85d0e3eb93db114455c79f3fe8126 (not required for P)
+NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627d/repo/scripts/verify-627/evidence/1b5ba15b3ef85d0e3eb93db114455c79f3fe8126
+NEXT: fix the reported cause, then re-run: zsh /private/tmp/claude-501/r627d/repo/scripts/verify-627/steps.zsh P0
+VERDICT 627 P0: FAIL (P preconditions not met (above); remote branch absent)
+[exit 1]

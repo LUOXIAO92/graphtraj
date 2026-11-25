@@ -85,6 +85,31 @@ test('real TeamGraph handles connect, reconnect and disconnect encoded occurrenc
     assert.deepEqual(JSON.parse(await page.locator('#tree').textContent()), expected);
     assert.deepEqual(errors, []);
   }
+  const edgeById = id => page.locator('.react-flow__edge').locator(`xpath=self::*[@data-id='${id}']`);
+  const disconnect = page.getByRole('button', { name: 'Disconnect parent · make root', exact: true });
+  /** Click the edge's own path at its midpoint, as a user would. A straight edge's path has a zero-width
+   * box, which Playwright treats as invisible, but its 20 px interaction stroke is clickable; so the point
+   * is taken on the path (getPointAtLength at half length, mapped by getScreenCTM) once it stops moving.
+   * Selection is proven by TeamGraph's Disconnect control appearing enabled for that edge. */
+  async function selectEdge(id) {
+    const path = edgeById(id).locator('.react-flow__edge-interaction');
+    await path.waitFor({ state: 'attached' });
+    const midpoint = () => path.evaluate(element => {
+      const point = element.getPointAtLength(element.getTotalLength() / 2), matrix = element.getScreenCTM();
+      return { x: matrix.a * point.x + matrix.c * point.y + matrix.e, y: matrix.b * point.x + matrix.d * point.y + matrix.f };
+    });
+    let previous = null, point = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      point = await midpoint();
+      if (previous && point.x === previous.x && point.y === previous.y) break;
+      previous = point;
+    }
+    assert.ok(point && previous && point.x === previous.x && point.y === previous.y, 'edge position did not settle');
+    await page.mouse.click(point.x, point.y);
+    await disconnect.waitFor({ state: 'visible' });
+    assert.equal(await disconnect.isEnabled(), true, 'selecting the edge offers an enabled Disconnect');
+  }
   await drag(handle('lead', 'source'), handle('leaf', 'target'));
   await expectTree({ 'studio.lead': { 'studio.worker': {}, 'studio.leaf': {} }, 'other.lead': initial['other.lead'] });
   await node('leaf').click();
@@ -92,14 +117,13 @@ test('real TeamGraph handles connect, reconnect and disconnect encoded occurrenc
   // Select the incoming leaf edge, then drag its source endpoint to worker.
   // Distinguish the leaf edge by its target data ID, read from the real node.
   const leafId = await node('leaf').getAttribute('data-id');
-  const edge = page.locator('.react-flow__edge').filter({ has: page.locator('.react-flow__edgeupdater-source') });
-  const leafEdge = edge.locator(`xpath=self::*[@data-id='${leafId}']`);
-  await leafEdge.locator('.react-flow__edge-interaction').click();
+  const leafEdge = edgeById(leafId);
+  await selectEdge(leafId);
   await drag(leafEdge.locator('.react-flow__edgeupdater-source'), handle('worker', 'source'));
   await expectTree({ 'studio.lead': { 'studio.worker': { 'studio.leaf': {} } }, 'other.lead': initial['other.lead'] });
   const movedId = await node('leaf').getAttribute('data-id');
-  await page.locator('.react-flow__edge').locator(`xpath=self::*[@data-id='${movedId}']`).locator('.react-flow__edge-interaction').click();
-  await page.getByRole('button', { name: 'Disconnect parent · make root' }).click();
+  await selectEdge(movedId);
+  await disconnect.click();
   await expectTree(initial);
   // Actual handle lookup must also reach, and preserve state on, cycle validation.
   await drag(handle('worker', 'source'), handle('lead', 'target'));

@@ -1,0 +1,44 @@
+# Task 632 (W0): what graftling's test suite is expected to do on the GitHub-hosted Windows x64 runner
+# (.github/workflows/windows.yml, job windows-tests). Read by steps.zsh through wincheck.py; tab-separated.
+#
+#   fail<TAB><pytest node id><TAB><origin file:line><TAB><Task><TAB><note>
+#       a test that is not POSIX-only and fails (or errors) on Windows; origin is the graftling line that
+#       makes it fail, Task the Windows Task (629 advice, section 5) that owns the fix.
+#   skip-allowed<TAB><exact skip reason><TAB><note>
+#       a skip that is not Windows-specific: the reason is the same on any host without the named
+#       installation or opt-in variable. Skips starting "POSIX-only: " (tests/posix_only.py) need no entry.
+#
+# Every other skip, every failure not listed and every listed test that passes makes the verdict FAIL.
+#
+# STATE: pre-discovery. No `fail` entry is recorded yet. The suite has never run on Windows (629 M19), and
+# graftling's product code reaches POSIX-only calls on most Runtime paths (os.killpg in every Runtime
+# execution and calls.py, directory fsync in sessions/archive.py, fcntl in connection.py and claude/host.py,
+# the authority-denied refusal of the control pipe), so a per-test prediction from macOS would be a guess.
+# The engineer report lists the predicted failing modules and their origins. The first real run is
+# discovery: steps.zsh P/W writes the observed list (evidence/run-<id>-a<n>/observed-expected.txt) with an
+# origin per failure and a suggested Task ending in '?'; the correction round decides each Task, replaces
+# the `fail` section below with it, and Main runs 00 then P again (fast-forward).
+
+# --- Environment skips: no native DSH, Pi or Claude SDK is installed on the runner, and no opt-in variable
+# --- of a retained official host is set. The same skips happen on macOS without those installations.
+skip-allowed	Explicit pinned official SDK comparison	test_claude_jsonl.py: CLAUDE_SDK_MODULE unset (12 tests; also on macOS)
+skip-allowed	Requires assigned official host slot.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires one explicitly retained native trace.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires final assigned host slot.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires retained interrupted official Session.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires fixed Pi combination and final host slot.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires assigned native startup diagnosis.	test_dsh_startup.py: opt-in variable unset (also on macOS)
+skip-allowed	Installed DSH and Node are required.	conftest.unsupported_dsh / test_dsh_live.py: no DSH on the runner
+skip-allowed	Installed DSH and Node are required for native MCP evidence.	test_dsh_mcp.py: no DSH on the runner
+skip-allowed	Installed DSH slots and Node are required for the browser projection fixture.	test_dsh_mcp.py: no DSH on the runner
+skip-allowed	Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.	test_dsh_mcp.py: also on macOS
+skip-allowed	Installed native DSH package metadata is required.	test_dsh_live.py: no DSH on the runner
+skip-allowed	The installed DSH is required for native provider evidence.	test_dsh_providers_608.py: no DSH on the runner
+skip-allowed	Installed DSH and Node are required for native plugin evidence.	test_dsh_standalone_child.py: no DSH on the runner
+skip-allowed	Installed DSH and Node are required for native search evidence.	test_dsh_standalone_child.py: no DSH on the runner
+skip-allowed	Installed DSH and Node are required for native endpoint evidence.	test_dsh_standalone_child.py: no DSH on the runner
+skip-allowed	Installed DSH is required for its own preset.	test_pi_dsh_*_551.py: no DSH on the runner
+skip-allowed	This DSH has no readable web-app preset.	test_pi_dsh_child_tools_551.py: depends on the installed DSH
+skip-allowed	Node and an installed Pi are required	test_pi_notice_display_536.py: no Pi on the runner
+
+# --- Expected Windows failures: none recorded before the first run (see STATE above).

@@ -1,0 +1,10 @@
+$ cd base-82e9d12 && venv-base/bin/python -m pytest -p no:cacheprovider -q tests/test_windows_emulation_619.py   # base 82e9d12 (git archive), editable in venv-base
+graftling from /private/tmp/claude-501/619/base/src/graftling/__init__.py
+   1 4 failed in 0.45s
+   4 E             raise ModuleNotFoundError("No module named 'fcntl'", name='fcntl')
+   4 E         ModuleNotFoundError: No module named 'fcntl'
+   4 E        +  where 1 = CompletedProcess(args=['/tmp/claude-501/619/venv-base/bin/python', '-c', 'SOURCE = \'/private/tmp/claude-501/619/base/...se ModuleNotFoundError("No module named \'fcntl\'", name=\'fcntl\')\nModuleNotFoundError: No module named \'fcntl\'\n').returncode
+   1 FAILED tests/test_windows_emulation_619.py::test_archive_lock_goes_through_windows_lock_under_emulation
+   1 FAILED tests/test_windows_emulation_619.py::test_codex_parent_host_refuses_clearly_under_windows_emulation
+   1 FAILED tests/test_windows_emulation_619.py::test_graftling_imports_under_windows_emulation
+   1 FAILED tests/test_windows_emulation_619.py::test_process_listing_refuses_clearly_under_windows_emulation

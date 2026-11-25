@@ -1,0 +1,8 @@
+$ PYTHONPATH=mid/src venv-base/bin/python -m pytest --noconftest -p no:cacheprovider -q tests/test_windows_emulation_619.py   # base 82e9d12 + only the archive lock change: shows tests 3 and 4 fail for their own reasons
+E       AssertionError: assert None == 'Listing marked processes is not supported on Windows.'
+E       AssertionError: {'raised': ['ModuleNotFoundError', None, "No module named 'fcntl'"]}
+E       assert ['ModuleNotFoundError', None] == ['AgentsError...ority-denied']
+E         At index 0 diff: 'ModuleNotFoundError' != 'AgentsError'
+FAILED tests/test_windows_emulation_619.py::test_process_listing_refuses_clearly_under_windows_emulation
+FAILED tests/test_windows_emulation_619.py::test_codex_parent_host_refuses_clearly_under_windows_emulation
+2 failed, 2 passed in 0.79s

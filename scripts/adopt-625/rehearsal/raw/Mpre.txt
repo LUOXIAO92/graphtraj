@@ -1,0 +1,8 @@
+CHECK 625 Mpre G/GR passed (RESULT 625 G/GR: PASS | 10 passed, 3767 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | test interpreter graftling: 0.10.2): PASS
+CHECK 625 Mpre V passed: PASS
+CHECK 625 Mpre rp passed: PASS
+CHECK 625 Mpre gh passed: PASS
+CHECK 625 Mpre C5 passed: PASS
+members_idle [Mpre]: Task 625's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [Mpre]: no member execution is active: PASS
+CHECK 625 Mpre no member Worker or swarm batch runs: PASS

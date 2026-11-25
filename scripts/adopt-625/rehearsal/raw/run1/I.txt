@@ -1,0 +1,90 @@
+members_idle [I]: Task 625's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r625/project/.venv-runtime)
+members_idle [I]: no member execution is active: PASS
+I start 2026-11-25 15:57:06
+older rollbacks before the install (never written):
+  I kept backup /private/tmp/claude-501/r625/project/tmp/600/backup: absent
+  I kept backup /private/tmp/claude-501/r625/project/tmp/604/backup: absent
+  I kept backup /private/tmp/claude-501/r625/project/tmp/612/backup: absent
+  I kept backup /private/tmp/claude-501/r625/project/tmp/616/backup: COMPLETE | top-level mtime 1795589768 | entries 3
+  I kept backup /private/tmp/claude-501/r625/project/tmp/617/backup: COMPLETE | top-level mtime 1795589768 | entries 3
+
+### backup: venv (manifest + cp -Rp), hook copy, entry files (mode 600), the tools R needs; COMPLETE marker
+manifest /private/tmp/claude-501/r625/scr/backup/venv.manifest: 1002 entries
+
+SAME entries=1002 differences=0 (/private/tmp/claude-501/r625/scr/backup/venv)
+manifest /private/tmp/claude-501/r625/scr/backup/plugin.manifest: 5 entries
+backup COMPLETE: /private/tmp/claude-501/r625/scr/backup
+CHECK 625 I entry files unchanged since V: PASS
+members_idle [I-before-pip]: Task 625's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses /private/tmp/claude-501/r625/project/.venv-runtime)
+members_idle [I-before-pip]: no member execution is active: PASS
+graftling-0.10.2-py3-none-any.whl: OK
+
+### pip install --force-reinstall --no-deps --no-index graftling-0.10.2-py3-none-any.whl (graftling only; graphtraj not reinstalled)
+Processing /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2/graftling-0.10.2-py3-none-any.whl
+Installing collected packages: graftling
+  Attempting uninstall: graftling
+    Found existing installation: graftling 0.10.1
+    Uninstalling graftling-0.10.1:
+      Successfully uninstalled graftling-0.10.1
+Successfully installed graftling-0.10.2
+CHECK 625 I pip install of the v0.10.2 graftling wheel: PASS
+CHECK 625 I graphtraj unchanged (installed vs backup, package and dist-info): PASS
+CHECK 625 I graphtraj package and dist-info unchanged vs the backup: PASS
+graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473", "hashes": {"sha256": "ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473"}}, "url": "file:///private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.10.2 direct_url: {"archive_info": {"hash": "sha256=ea9d68823667945d4bdc8f66a47e32d7b7a2aa073a2323b42b89f6b0f95c2191", "hashes": {"sha256": "ea9d68823667945d4bdc8f66a47e32d7b7a2aa073a2323b42b89f6b0f95c2191"}}, "url": "file:///private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2/graftling-0.10.2-py3-none-any.whl"}
+CHECK 625 I graphtraj direct_url is still 616's wheels-4ef36426: PASS
+CHECK 625 I graftling direct_url is wheels-0.10.2: PASS
+CHECK 625 I graftling 0.10.1 dist-info gone: PASS
+CHECK 625 I installed graftling equals the v0.10.2 wheel: PASS
+CHECK 625 I installed graftling files equal the wheel: PASS
+diff -r archive manuals vs /private/tmp/claude-501/r625/project/.venv-runtime/share/graphtraj/manuals (the marker excepted): none
+CHECK 625 I share/graphtraj/manuals equals git archive 4ef36426's manuals (7 product files): PASS
+CHECK 625 I production pip check: PASS (WARNING: The directory '/Users/luoxiao/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 625 I production bin subagents, subagents-mcp, graphtraj-mcp (this venv's python): PASS
+CHECK 503 layout python is the venv: PASS (/private/tmp/claude-501/r625/project/.venv-runtime vs /private/tmp/claude-501/r625/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.10.2', '/private/tmp/claude-501/r625/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.10.2.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.10.2.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file:///private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2/graftling-0.10.2-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (/private/tmp/claude-501/r625/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.10.2)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+503 layout: PASS (0 failed)
+CHECK 625 I one graftling 0.10.2 in production (onegraft.py): PASS
+production graphtraj graftling: 0.1.0 0.10.2
+CHECK 625 I production reports graphtraj 0.1.0 and graftling 0.10.2: PASS
+  619 marker in /private/tmp/claude-501/r625/project/.venv-runtime/lib/python3.13/site-packages/graftling: sessions/archive.py 'import fcntl' x0, 'from graftling.locks import exclusive, ignore_in_git' x1, 'with exclusive(' x2 | member_processes.py Windows OSError x1 | codex/host.py Windows authority-denied x1
+CHECK 625 I production 619's fix is in /private/tmp/claude-501/r625/project/.venv-runtime/lib/python3.13/site-packages/graftling (archive.py: no 'import fcntl', locks.exclusive x2; Windows errors in member_processes.py and codex/host.py): PASS
+
+### real entries of production (run in the isolated /private/tmp/claude-501/r625/vproject) and the files that must not change
+I-production server: /private/tmp/claude-501/r625/project/.venv-runtime/bin/graphtraj-mcp | serverInfo: {'name': 'graphtraj', 'version': '0.1.0'} | tools: ['subagents', 'tasks']
+I-production tools/call agents: {"jsonrpc": "2.0", "id": 3, "error": {"code": -32602, "message": "Unknown tool: agents"}}
+CHECK 593 I-production MCP tools/list is exactly subagents, tasks: PASS
+CHECK 593 I-production MCP tool agents is unknown (error answer, no alias): PASS
+CHECK 625 I-production graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (mcp593.py above): PASS
+I-production server: /private/tmp/claude-501/r625/project/.venv-runtime/bin/graphtraj-mcp | tools: ['subagents', 'tasks']
+I-production subagents discover query 'start an agent': error False | features ['create']
+CHECK 617 I-production subagents discover 'start an agent' answers exactly [create] (615): PASS (['create'])
+I-production subagents discover query 'list models': error False | features ['models']
+CHECK 617 I-production subagents discover 'list models' still finds models: PASS (['models'])
+CHECK 625 I-production 617's q617.py mcp (still holds on 0.10.2): discover 'start an agent' = [create], 'list models' finds models: PASS
+Codex hooks entry configuration: ['/private/tmp/claude-501/r625/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook'] ['SessionEnd', 'SessionStart', 'Stop']
+CHECK 625 Codex hooks entry of /private/tmp/claude-501/r625/project/.venv-runtime names its python for SessionStart/Stop/SessionEnd: PASS
+CHECK 625 Codex hooks entry of /private/tmp/claude-501/r625/project/.venv-runtime runs (neutral event answers {}): PASS ({})
+CHECK 625 I hook copy byte-identical to the backup (no configuration --write: V proved no change): PASS
+CHECK 625 I .mcp.json byte-identical to the backup: PASS
+CHECK 625 I .claude/settings.local.json byte-identical to the backup: PASS
+CHECK 625 I .graphtraj/claude-host/config.json byte-identical to the backup: PASS
+CHECK 625 I no process started on /private/tmp/claude-501/r625/project/.venv-runtime during the install: PASS
+older rollbacks after the install:
+  I kept backup /private/tmp/claude-501/r625/project/tmp/600/backup: absent
+  I kept backup /private/tmp/claude-501/r625/project/tmp/604/backup: absent
+  I kept backup /private/tmp/claude-501/r625/project/tmp/612/backup: absent
+  I kept backup /private/tmp/claude-501/r625/project/tmp/616/backup: COMPLETE | top-level mtime 1795589768 | entries 3
+  I kept backup /private/tmp/claude-501/r625/project/tmp/617/backup: COMPLETE | top-level mtime 1795589768 | entries 3
+CHECK 625 I older rollbacks (tmp/600, 604, 612, 616, 617 backups) untouched: same presence, COMPLETE, mtime and entry count before and after: PASS

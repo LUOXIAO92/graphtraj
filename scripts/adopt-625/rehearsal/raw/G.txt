@@ -1,0 +1,13 @@
+TMPDIR=/tmp/claude-501 (outside the Harness)
+product guard: HEAD 2c863655d346b404c31115db2d9a0c3143afd678 | git diff 4ef36426 HEAD -- src desktop/src pyproject.toml manuals skills plugins: empty | changes since GraphTraj dev 4b71012c outside scripts/adopt-625/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+pytest temp root: /private/tmp/claude-501/adopt-625-G-20261125T155615 (TMPDIR=/tmp/claude-501, outside the Harness)
+launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+candidate: 2c863655d346b404c31115db2d9a0c3143afd678 | graftling wheel from git archive 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2, graftling-0.10.2-py3-none-any.whl)
+python: /private/tmp/claude-501/r625/scr/gvenv-625/bin/python
+test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.2 | graphtraj 0.1.0
+test interpreter graftling: 0.10.2 /private/tmp/claude-501/r625/scr/gvenv-625/lib/python3.13/site-packages/graftling
+REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_intent_queries_find_create or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document
+record: /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/G-20261125T155615
+15:56:19 waiting for another suite: 88 
+15:56:21 started (6 shards; this step waits for them)
+15:56:27 ended (all shards ended: exit=1)

@@ -151,8 +151,10 @@ verdict() {
 stop() { NEXT="${2:-zsh $SELF P0}"; verdict STOP "$1" 1; }
 
 # ---- GitHub helpers (P0/P/W), as in verify-621 ----
-GHW=
-ghwork() { [[ -n $GHW ]] || { GHW=$(mktemp -d ${TMPDIR:-/tmp}/verify627.XXXXXX); trap 'rm -rf $GHW' EXIT; }; }
+# Scratch for gh responses. Created at top level: in zsh an EXIT trap set inside a function fires when it returns.
+GHW=$(mktemp -d ${TMPDIR:-/tmp}/verify627.XXXXXX)
+trap 'rm -rf $GHW' EXIT
+ghwork() { [[ -d $GHW ]] || verdict FAIL "scratch $GHW missing" 1; }
 api() {
   LOGIN=1 allow $GH api $2 > $1 2> $GHW/api-err && return 0
   print -r -- "  gh api $2 failed: $(<$GHW/api-err)"; return 1

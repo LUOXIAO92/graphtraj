@@ -20,12 +20,15 @@
 # never changes a tracked file of this Worktree.
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
-#       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its only
-#       prerequisite is graftling dev defad1db and its head is shown; read through a temporary repository that
-#       borrows <Harness>/graftling's objects (nothing is written there): the noreply identity on every bundle commit;
+#       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, every
+#       prerequisite is graftling dev 478dfd7f or one of its ancestors (the branch's first commits sit on defad1db,
+#       an ancestor of 478dfd7f, so the bundle also names defad1db) and its head is shown; read through a temporary
+#       repository that borrows <Harness>/graftling's objects (nothing is written there): the head descends from
+#       478dfd7f; the noreply identity on every bundle commit since 478dfd7f;
 #       pyproject.toml, pytest.ini, .github/run_test_files.py, tests/posix_only.py and tests/conftest.py unchanged
-#       since defad1db; windows.yml differs from defad1db's (accepted by 632's checks) only by this branch appended
-#       to the push branches and the non-ASCII temporary directory lines in the suite step, with every step name
+#       since 478dfd7f; windows.yml differs from 478dfd7f's (632's accepted workflow with W1/W2's branches added)
+#       only by this branch appended to the push branches and the non-ASCII temporary directory lines in the
+#       suite step, with every step name
 #       unchanged and PYTHONUTF8=1 kept; the expected list parses; the local branch in <Harness>/graftling and the
 #       remote branch are each absent, the bundle head, or an ancestor of it (else STOP).
 #       Login: gh login, git credential helper (ls-remote). Dialog: none. Network: GitHub. ~10 s.
@@ -78,8 +81,9 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/638-graftling-windows-paths-encoding
-# graftling dev defad1db (W0 integrated), the bundle's only prerequisite.
-BASE=defad1db083e911900cbea1cb0ef165e6a66d322
+# graftling dev 478dfd7f (W0, W1 and W2 integrated; defad1db is an ancestor). The bundle's prerequisites are
+# this commit and, through the branch's first commits, defad1db; only BASE and its ancestors are accepted.
+BASE=478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
 REPO=LUOXIAO92/graftling
 GURL=https://github.com/LUOXIAO92/graftling.git
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
@@ -153,14 +157,22 @@ api() {
 
 GSHA=
 bundle_head() { allow $GIT bundle list-heads $BUNDLE refs/heads/$BRANCH | cut -d' ' -f1; }
-bundle_prereq() { gg bundle verify $BUNDLE 2>&1 | awk '/requires this ref/ {getline; print $1}'; }
-check_bundle() {  # the bundle verifies against $GRAFT, needs only BASE; sets GSHA
+# Every prerequisite the bundle names ("requires this ref:" or "requires these N refs:"), one per line.
+bundle_prereq() { gg bundle verify $BUNDLE 2>&1 | awk '/requires (this ref|these [0-9]+ refs)/ {f=1; next} /hash algorithm/ {f=0} f && NF {print $1}'; }
+check_bundle() {  # the bundle verifies against $GRAFT; every prerequisite is BASE or an ancestor of it; sets GSHA
+  local prereq; local -a prereqs
   [[ -f $BUNDLE ]] || stop "no bundle at $BUNDLE"
   gg bundle verify $BUNDLE > /dev/null 2>&1 || { gg bundle verify $BUNDLE 2>&1 | sed 's/^/  /'; stop "the bundle does not verify against $GRAFT"; }
   GSHA=$(bundle_head)
   [[ $GSHA == [0-9a-f](#c40) ]] || stop "the bundle has no refs/heads/$BRANCH"
-  [[ $(bundle_prereq) == $BASE ]] || stop "the bundle's prerequisite is $(bundle_prereq), not graftling dev $BASE"
-  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA on base $BASE"
+  prereqs=(${(f)"$(bundle_prereq)"})
+  (( ${#prereqs} )) || stop "the bundle names no prerequisite; expected graftling dev $BASE"
+  (( ${prereqs[(Ie)$BASE]} )) || stop "the bundle's prerequisites ${prereqs} do not include graftling dev $BASE"
+  for prereq in $prereqs; do
+    [[ $prereq == [0-9a-f](#c40) ]] && gg merge-base --is-ancestor $prereq $BASE 2> /dev/null \
+      || stop "the bundle's prerequisite $prereq is not graftling dev $BASE or an ancestor of it"
+  done
+  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA; prerequisites ${prereqs} are $BASE or its ancestors"
 }
 # check_head: read the bundle head through a temporary repository borrowing $GRAFT's objects (read only there);
 # returns the number of FAILs.
@@ -181,6 +193,9 @@ test_files() {
 check_head() {
   local peek=$PEEK bad=0 changed
   peek_repo
+  allow $GIT -C $peek merge-base --is-ancestor $BASE peek 2> /dev/null \
+    && print -r -- "PASS: the bundle head descends from graftling dev $BASE (dev takes it fast-forward)" \
+    || { print -r -- "FAIL: the bundle head does not descend from graftling dev $BASE"; (( bad++ )); }
   print -r -- "--- bundle commits on $BASE:"
   allow $GIT -C $peek log --format='  %h %an <%ae> | %cn <%ce> | %s' $BASE..peek
   local idents=$(allow $GIT -C $peek log --format='%ae%n%ce' $BASE..peek | sort -u)

@@ -1,8 +1,8 @@
 """Task 638 step helper, beside scripts/verify-632/wincheck.py (which judges jobs and JUnit results).
 
 Run as: python -I check638.py <command> <args...>. Standard library only. Prints plain lines.
-  wfdiff BASE HEAD BRANCH STEP...  HEAD (windows.yml at the bundle head) differs from BASE (at graftling dev defad1db,
-                                   which 632's wfcheck accepted) only by BRANCH appended to the push branches and the
+  wfdiff BASE HEAD BRANCH STEP...  HEAD (windows.yml at the bundle head) differs from BASE (at graftling dev 478dfd7f:
+                                   632's accepted workflow with W1/W2's push branches) only by BRANCH appended to the push branches and the
                                    non-ASCII temporary directory lines added to the suite step; the step names are
                                    the same and include every STEP. Exit 1 on any FAIL.
   tempdir DIR                      DIR is the run's artifact: temp-directory.txt names the directory Python's tempfile

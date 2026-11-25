@@ -9,9 +9,10 @@ S=${1:?scratch dir}; JUNIT=${2:?junit file}; HERE=${0:A:h}; STEPS=$HERE/../steps
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 REAL=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
 BRANCH=agent/638-graftling-windows-paths-encoding
-BASE=defad1db083e911900cbea1cb0ef165e6a66d322
-# Round 1's candidate, which Main's P pushed: the real remote branch holds it (correction round 1).
-PREV=6ac51d89039aa742c8870e7a71596903ae424b71
+# Correction round 2: graftling dev 478dfd7f (W1, W2 integrated) is the base; the remote and
+# <Harness>/graftling branch hold the round-1 correction candidate df091004, which Main's P pushed.
+BASE=478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+PREV=df09100421e56d8c02a8c49a50664e601244eb17
 OUT=$HERE/console; mkdir -p $OUT; rm -f $OUT/*.txt(N)
 # Two tests that pass on macOS stand for the listed Windows failures (one in-process, one with a subprocess).
 FAILS=(tests/test_connection_serve.py::test_removed_control_directory_stops_the_service
@@ -69,7 +70,7 @@ step guard guard-local-00.txt 00
 fresh diverged
 git -C $S/diverged/gremote.git update-ref refs/heads/$BRANCH $(git -C $S/diverged/gremote.git commit-tree -p $BASE -m diverged "$BASE^{tree}")
 step diverged diverged-P.txt P
-# Correction round 1: <Harness>/graftling (local) and the remote both hold PREV; 00 accepts both as ancestors and
+# <Harness>/graftling (local) and the remote both hold PREV; 00 accepts both as ancestors and
 # P fast-forwards both to the new head. And a first publication (remote branch absent) still works.
 fresh ff-local; git -C $S/ff-local/graftling branch -q $BRANCH $PREV
 step ff-local ff-local-00.txt 00; step ff-local ff-local-P.txt P

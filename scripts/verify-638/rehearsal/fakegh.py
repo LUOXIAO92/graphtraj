@@ -145,6 +145,10 @@ def artifact(run_id: int, directory: Path) -> None:
     for case in cases.values():   # the macOS run's own failures, if any, do not count: only the scenario decides
         for child in [c for c in case if c.tag in ("failure", "error")]:
             case.remove(child)
+        # W1/W2's Windows-only tests skip on macOS ("Windows-only: ...", "Windows only: ...") and run on the
+        # Windows runner: shown as passed here (638 correction 2).
+        for child in [c for c in case if c.tag == "skipped" and (c.get("message") or "").startswith("Windows")]:
+            case.remove(child)
     failing = set(fails)
     if shown == "mismatch":
         failing.discard(fails[0])                      # a listed failure passes

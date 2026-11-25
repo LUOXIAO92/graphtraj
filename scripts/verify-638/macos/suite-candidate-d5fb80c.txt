@@ -1,0 +1,32 @@
+........................................................................ [  7%]
+........................................................................ [ 14%]
+........................................................................ [ 22%]
+.....................................ssssssssssss....................... [ 29%]
+........................................................................ [ 36%]
+...................................................ssssssss............. [ 44%]
+........................................................................ [ 51%]
+.................................s...................................... [ 59%]
+........................................................................ [ 66%]
+......sssss............................................................. [ 73%]
+........................................................................ [ 81%]
+.............................................................ss......... [ 88%]
+........................................................................ [ 96%]
+.......................................                                  [100%]
+=========================== short test summary info ============================
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [1] tests/test_locks_durable_634.py:162: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:190: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:216: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:233: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_process_windows_633.py:141: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+947 passed, 28 skipped in 249.02s (0:04:09)
+exit 0

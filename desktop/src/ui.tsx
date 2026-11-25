@@ -33,6 +33,9 @@ export function Icon({ name, size = 18 }: { name: string; size?: number }) {
     sidebar: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M5.5 8h1M5.5 11h1"/></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/></>,
     refresh: <><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 6a8 8 0 0 1 14 6M18 18A8 8 0 0 1 4 12"/></>,
+    alert: <><path d="M12 3 2.5 20h19Z"/><path d="M12 10v4m0 3v.5"/></>,
+    minus: <path d="M5 12h14"/>,
+    index: <><path d="M4 6h3M4 12h3M4 18h3M10 6h10M10 12h10M10 18h10"/></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] ?? paths.graph}</svg>;
 }
@@ -41,6 +44,22 @@ const statusClass = (status: string) => status.toLowerCase().replaceAll(' ', '-'
 export function Status({ value }: { value: string }) { return <span className={`status status-${statusClass(value)}`}><span className="status-dot"/>{value}</span>; }
 export function Avatar({ name, small = false }: { name: string; small?: boolean }) { return <span className={`avatar avatar-${name.toLowerCase().split(' ')[0]} ${small ? 'small' : ''}`}>{name.slice(0, 1)}</span>; }
 export function Logo() { return <span className="logo-mark"><svg width="25" height="25" viewBox="0 0 28 28" fill="none" aria-hidden="true"><path d="M7 6v14h14M7 7h13v13" stroke="currentColor" strokeWidth="1.7"/><circle cx="7" cy="6" r="3" fill="currentColor"/><circle cx="7" cy="21" r="3" fill="currentColor"/><circle cx="21" cy="21" r="3" fill="currentColor"/><circle cx="21" cy="7" r="3" fill="currentColor"/></svg></span>; }
+
+/** V10: one presentation for empty, loading and error states (shell.css `.ui-state`).
+ * `bar` is an inline strip; `block` is a centred placeholder for an empty surface.
+ * The role defaults to alert for errors and status otherwise; pass `role={null}` for none.
+ * Texts, roles and the action slot's buttons (e.g. 'Retry now') stay the caller's. */
+export function StateMessage({ kind, title, children, action, icon, layout = 'bar', role, className = '' }: {
+  kind: 'empty' | 'loading' | 'error'; title?: ReactNode; children?: ReactNode; action?: ReactNode; icon?: string;
+  layout?: 'bar' | 'block'; role?: 'alert' | 'status' | null; className?: string }) {
+  const name = icon ?? (kind === 'error' ? 'alert' : kind === 'loading' ? 'refresh' : 'info');
+  const heading = title && (layout === 'block' ? <h2>{title}</h2> : <strong>{title}</strong>);
+  return <div className={`ui-state ui-state-${kind} ui-state-${layout} ${className}`.trim()} role={role === null ? undefined : role ?? (kind === 'error' ? 'alert' : 'status')}>
+    <span className="ui-state-icon"><Icon name={name} size={layout === 'block' ? 28 : 16}/></span>
+    <div className="ui-state-text">{heading}{children}</div>
+    {action && <div className="ui-state-action">{action}</div>}
+  </div>;
+}
 
 export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);

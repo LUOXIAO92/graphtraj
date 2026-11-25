@@ -1,0 +1,21 @@
+/* Shell surface (Task 627, advice 5.1): sidebar, top bar, page frames and the shared V10 state presentation.
+ * Owner in Task 627: E1. Imported in main.tsx after the legacy files and before tokens.css. */
+
+/* V10: empty, loading and error states (ui.tsx StateMessage). */
+.ui-state { display: flex; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--border-ui); border-radius: var(--r-md); background: var(--surface); color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.ui-state-icon { display: inline-flex; flex-shrink: 0; margin-top: 1px; color: var(--faint); }
+.ui-state-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.ui-state-text > strong { color: var(--ink); font-weight: var(--fw-medium); }
+.ui-state-text p { margin: 0; }
+.ui-state-action { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; flex-shrink: 0; align-self: center; }
+.ui-state-error { background: var(--red-soft); border-color: var(--red-border); color: var(--red); }
+.ui-state-error .ui-state-icon, .ui-state-error .ui-state-text > strong { color: var(--red); }
+.ui-state-loading .ui-state-icon svg { animation: ui-state-spin 1.2s linear infinite; }
+@keyframes ui-state-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ui-state-loading .ui-state-icon svg { animation: none; } }
+.ui-state-block { flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-6) var(--sp-5); border: 0; background: transparent; text-align: center; }
+.ui-state-block .ui-state-icon { margin: 0; color: var(--faint); }
+.ui-state-block .ui-state-text { align-items: center; gap: var(--sp-1); flex: none; max-width: 420px; }
+.ui-state-block .ui-state-text > h2 { font-size: var(--fs-xl); font-weight: var(--fw-medium); color: var(--ink); margin: 0; }
+.ui-state-block .ui-state-action { margin: 0; align-self: center; }
+.ui-state-block.ui-state-error { background: transparent; }

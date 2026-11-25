@@ -19,7 +19,11 @@
   --chart-color: #5479bd; --chart-secondary: #a9c0e4;
   --backdrop: rgb(16 27 36 / .44);
   --shadow-sm: 0 1px 2px rgb(16 24 40 / .06); --shadow-md: 0 4px 14px rgb(16 24 40 / .10); --shadow-lg: 0 18px 48px rgb(16 24 40 / .22);
-  --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-pill: 999px;
+  /* Advice 3.2 normalisation (Task 627): three weights, a 4-based spacing scale and control heights. */
+  --fw-regular: 400; --fw-medium: 550; --fw-strong: 650;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+  --control-h: 32px; --control-h-sm: 26px; --nav-h: 32px; --topbar-h: 48px;
   --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 14px; --fs-xl: 16px; --fs-2xl: 20px;
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -43,9 +47,10 @@
  * @heroui/styles 3.0.1 (dist/themes/default/variables.css) switches its own
  * variables only under `.dark` / `[data-theme="dark"]`, while its `dark:`
  * variant (dist/variants/index.css) falls back to prefers-color-scheme.
- * Every colour variable its dark block changes (its three shadow variables
- * excepted, which keep HeroUI's light values) is mapped here, so HeroUI
- * components follow the system theme through these tokens without a class.
+ * Every colour variable its dark block changes is mapped here, and its three
+ * shadow variables point at --shadow-* (Task 627; before, they kept HeroUI's
+ * light values in dark), so HeroUI components follow the system theme through
+ * these tokens without a class.
  * (--surface and --muted share our names and are defined above.) */
 :root, .desktop-d, .desktop-d :is(.light, .dark, [data-theme]) {
   --accent: var(--accent-ui); --accent-foreground: var(--on-accent);
@@ -63,6 +68,7 @@
   --danger: var(--red); --danger-foreground: var(--on-accent);
   --success: var(--green); --success-foreground: var(--on-accent);
   --warning: var(--amber); --warning-foreground: var(--on-accent);
+  --surface-shadow: var(--shadow-sm); --overlay-shadow: var(--shadow-md); --field-shadow: var(--shadow-sm);
 }
 /* React Flow (@xyflow/react 12 dist/style.css) reads var(--xy-<name>, var(--xy-<name>-default)); its defaults are
  * fixed light/dark literals chosen by colorMode. Map the colour variables onto the tokens (both themes). */

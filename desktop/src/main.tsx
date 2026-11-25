@@ -16,6 +16,11 @@ import './canvas.css';
 import './d-refinement.css';
 import './d-polish.css';
 import './native.css';
+import './shell.css';
+import './monitor.css';
+import './reader.css';
+import './config.css';
+import './usage.css';
 import './tokens.css';
 
 declare global { interface Window { graphtraj: DesktopAPI } }

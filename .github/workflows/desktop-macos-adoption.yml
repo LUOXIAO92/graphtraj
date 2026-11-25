@@ -98,8 +98,12 @@ jobs:
       # Electron, monitor-ui and team-graph a Playwright Chromium). usage-live and
       # activity-live need a live executing Agent (GRAPHTRAJ_LIVE_PROJECT/TASK, model
       # credentials), so their own skip guards report them as skipped here.
+      # continue-on-error: one push yields both the window-test and the adoption results; the job is
+      # still failed at the end ("Fail the job when the Task 627 window tests failed").
       - name: Desktop window tests for the Task 627 surfaces
+        id: window627
         if: github.ref_name == 'agent/627-desktop-ui-structure-redesign'
+        continue-on-error: true
         env:
           GRAPHTRAJ_SETTINGS_EVIDENCE: dist-package/adoption-evidence/window-tests/settings
         run: |
@@ -216,3 +220,11 @@ jobs:
           path: desktop/dist-package/GraphTraj-darwin-*.zip
           if-no-files-found: error
           retention-days: 7
+
+      # After both uploads, so the evidence of the adoption run is kept either way.
+      - name: Fail the job when the Task 627 window tests failed
+        if: always() && steps.window627.outcome == 'failure'
+        run: |
+          echo "The Task 627 desktop window tests failed (step 'Desktop window tests for the Task 627 surfaces'); log tail:"
+          tail -n 80 dist-package/adoption-evidence/window-tests/window-tests.log || echo "(no window-tests.log)"
+          exit 1

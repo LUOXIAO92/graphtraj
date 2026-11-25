@@ -1,0 +1,12 @@
+$ (clone 5c9aa546) venv-win python -m pytest -p no:cacheprovider -q -rs tests/test_suite_environment.py   TMPDIR=/tmp/claude-501
+......ss..                                                               [100%]
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_suite_environment.py:119: the base interpreter already carries graphtraj metadata
+8 passed, 2 skipped in 2.23s
+exit=0
+$ (clone e96adbb2, base conftest, for comparison) same command
+......ss..                                                               [100%]
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_suite_environment.py:119: the base interpreter already carries graphtraj metadata
+8 passed, 2 skipped in 1.65s
+exit=0

@@ -1,0 +1,8 @@
+$ (clone at e96adbb2: base conftest) venv-win/bin/python winlayout.py
+this interpreter, default call: None
+fake Windows layout /tmp/claude-501/618/fakewin-base/prefix/python.exe with Scripts\graphtraj-session.exe: The test interpreter /tmp/claude-501/618/fakewin-base/prefix/python.exe lacks the graphtraj-session command in /tmp/claude-501/618/fakewin-base/prefix. Install this checkout editable in a dedicated venv that has graftling: pip install -e /private/tmp/claude-501/618/graphtraj; a .pth alone gives neither.
+exit=0
+$ (clone at 5c9aa546: fixed conftest) venv-win/bin/python winlayout.py
+this interpreter, default call: None
+fake Windows layout /tmp/claude-501/618/fakewin-fix/prefix/python.exe with Scripts\graphtraj-session.exe: None
+exit=0

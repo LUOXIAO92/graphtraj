@@ -1,0 +1,28 @@
+clone HEAD: 5c9aa546e7948caed954222ea825c2e9385d5ea7
+click==8.1.8
+colorama==0.4.6
+graftling @ file:///private/tmp/claude-501/618/graphtraj/graftling
+-e git+file:///Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/618-desktop-workflows-graftling-ref@5c9aa546e7948caed954222ea825c2e9385d5ea7#egg=graphtraj
+iniconfig==2.1.0
+packaging==25.0
+pluggy==1.6.0
+pytest==8.3.5
+PyYAML==6.0.2
+setuptools==80.9.0
+websockets==15.0.1
+wheel==0.45.1
+......................................                                   [100%]
+38 passed in 5.90s
+pytest-exit=0
+tracked-clean:        0 changed
+!! build/lib/
+!! desktop/dist-electron/
+!! desktop/dist-package/
+!! desktop/dist/
+!! desktop/node_modules/
+!! graftling/build/
+!! graftling/src/graftling.egg-info/
+!! src/graphtraj.egg-info/
+!! src/graphtraj/__pycache__/
+!! src/graphtraj/configuration/__pycache__/
+R4-EXIT=0

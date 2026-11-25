@@ -928,8 +928,13 @@ async function main() {
     const toolCall = chatEvents.find(event => event.kind === 'tool' && event.phase === 'call');
     assert.ok(message && message.text && toolCall && toolCall.name,
       'the public boundary must return the controlled message and tool call');
-    await openTask(page.locator('.monitor-page:visible'), '1');
+    // With a query set, D floats 'Search results' over the canvas (main.tsx:101) and offers a
+    // button per match, '#<id> <title>', that selects and reveals the task (locate, main.tsx:74-82).
+    // Select task 1 there; the plain card click that opens Task details is covered for task 2 above.
+    await page.locator('.monitor-page:visible').getByLabel('Search results', { exact: true })
+      .getByRole('button', { name: '#1 first project', exact: true }).click();
     await page.getByRole('complementary', { name: 'Task details' }).waitFor();
+    assert.equal(await selectedTask(page.locator('.monitor-page:visible')), '1');
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const reader = page.getByRole('region', { name: 'Expanded agent conversations', exact: true });
     await reader.getByText(message.text).first().waitFor();

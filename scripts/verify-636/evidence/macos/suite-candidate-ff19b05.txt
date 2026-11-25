@@ -1,0 +1,41 @@
+........................................................................ [  7%]
+.................................................................sssssss [ 14%]
+ss...................................................................... [ 21%]
+............................................................ssssssssssss [ 28%]
+........................................................................ [ 36%]
+........................................................................ [ 43%]
+..ssssssss.............................................................. [ 50%]
+........................................................s............... [ 57%]
+........................................................................ [ 64%]
+.............................sssss...................................... [ 72%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+............ss.......................................................... [ 93%]
+..............................................................           [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_channel_windows_636.py:122: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:198: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:218: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:239: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:265: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:289: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:300: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:317: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:330: Windows-only: the named-pipe owner connection (636)
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [1] tests/test_locks_durable_634.py:162: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:190: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:216: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:233: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_process_windows_633.py:141: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+961 passed, 37 skipped in 253.53s (0:04:13)
+$TMPDIR/v636cand/bin/python -m pytest -p no:cacheprovider -q -rfEs  42.19s user 23.36s system 25% cpu 4:13.88 total

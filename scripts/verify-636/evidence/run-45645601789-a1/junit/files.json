@@ -1,0 +1,582 @@
+{
+ "file_limit_s": 360.0,
+ "total_limit_s": 4200.0,
+ "files": [
+  {
+   "file": "tests/test_agent_completion.py",
+   "log": "logs\\test_agent_completion.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_agent_completion.xml"
+  },
+  {
+   "file": "tests/test_agent_control.py",
+   "log": "logs\\test_agent_control.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 31.7,
+   "junit": "junit\\test_agent_control.xml"
+  },
+  {
+   "file": "tests/test_agents_connections_presets.py",
+   "log": "logs\\test_agents_connections_presets.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.1,
+   "junit": "junit\\test_agents_connections_presets.xml"
+  },
+  {
+   "file": "tests/test_agents_request_notices.py",
+   "log": "logs\\test_agents_request_notices.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_agents_request_notices.xml"
+  },
+  {
+   "file": "tests/test_agents_server_name.py",
+   "log": "logs\\test_agents_server_name.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.0,
+   "junit": "junit\\test_agents_server_name.xml"
+  },
+  {
+   "file": "tests/test_approval_integration.py",
+   "log": "logs\\test_approval_integration.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.8,
+   "junit": "junit\\test_approval_integration.xml"
+  },
+  {
+   "file": "tests/test_approval_layers.py",
+   "log": "logs\\test_approval_layers.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.2,
+   "junit": "junit\\test_approval_layers.xml"
+  },
+  {
+   "file": "tests/test_archive_header_lookup.py",
+   "log": "logs\\test_archive_header_lookup.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_archive_header_lookup.xml"
+  },
+  {
+   "file": "tests/test_channel_windows_636.py",
+   "log": "logs\\test_channel_windows_636.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 31.0,
+   "junit": "junit\\test_channel_windows_636.xml"
+  },
+  {
+   "file": "tests/test_channel_windows_emulated_636.py",
+   "log": "logs\\test_channel_windows_emulated_636.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 6.3,
+   "junit": "junit\\test_channel_windows_emulated_636.xml"
+  },
+  {
+   "file": "tests/test_child_server_name_551.py",
+   "log": "logs\\test_child_server_name_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_child_server_name_551.xml"
+  },
+  {
+   "file": "tests/test_child_tools_551.py",
+   "log": "logs\\test_child_tools_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_child_tools_551.xml"
+  },
+  {
+   "file": "tests/test_claude_archive_batches_468.py",
+   "log": "logs\\test_claude_archive_batches_468.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.8,
+   "junit": "junit\\test_claude_archive_batches_468.xml"
+  },
+  {
+   "file": "tests/test_claude_default_tools_576.py",
+   "log": "logs\\test_claude_default_tools_576.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_claude_default_tools_576.xml"
+  },
+  {
+   "file": "tests/test_claude_display.py",
+   "log": "logs\\test_claude_display.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.7,
+   "junit": "junit\\test_claude_display.xml"
+  },
+  {
+   "file": "tests/test_claude_gateway_login_613.py",
+   "log": "logs\\test_claude_gateway_login_613.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_claude_gateway_login_613.xml"
+  },
+  {
+   "file": "tests/test_claude_jsonl.py",
+   "log": "logs\\test_claude_jsonl.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 2.1,
+   "junit": "junit\\test_claude_jsonl.xml"
+  },
+  {
+   "file": "tests/test_claude_main_display.py",
+   "log": "logs\\test_claude_main_display.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_claude_main_display.xml"
+  },
+  {
+   "file": "tests/test_claude_marketplace_plugin.py",
+   "log": "logs\\test_claude_marketplace_plugin.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.1,
+   "junit": "junit\\test_claude_marketplace_plugin.xml"
+  },
+  {
+   "file": "tests/test_claude_model_alias_574.py",
+   "log": "logs\\test_claude_model_alias_574.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_claude_model_alias_574.xml"
+  },
+  {
+   "file": "tests/test_claude_permission_mode_578.py",
+   "log": "logs\\test_claude_permission_mode_578.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_claude_permission_mode_578.xml"
+  },
+  {
+   "file": "tests/test_claude_review.py",
+   "log": "logs\\test_claude_review.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_claude_review.xml"
+  },
+  {
+   "file": "tests/test_claude_send_closing_546.py",
+   "log": "logs\\test_claude_send_closing_546.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_claude_send_closing_546.xml"
+  },
+  {
+   "file": "tests/test_codex_child_interpreter_shutdown_473.py",
+   "log": "logs\\test_codex_child_interpreter_shutdown_473.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_codex_child_interpreter_shutdown_473.xml"
+  },
+  {
+   "file": "tests/test_codex_host_event_text.py",
+   "log": "logs\\test_codex_host_event_text.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_codex_host_event_text.xml"
+  },
+  {
+   "file": "tests/test_codex_independent_control.py",
+   "log": "logs\\test_codex_independent_control.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_codex_independent_control.xml"
+  },
+  {
+   "file": "tests/test_codex_review_relay.py",
+   "log": "logs\\test_codex_review_relay.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_codex_review_relay.xml"
+  },
+  {
+   "file": "tests/test_codex_tool_reclaim_462.py",
+   "log": "logs\\test_codex_tool_reclaim_462.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_codex_tool_reclaim_462.xml"
+  },
+  {
+   "file": "tests/test_connection_serve.py",
+   "log": "logs\\test_connection_serve.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_connection_serve.xml"
+  },
+  {
+   "file": "tests/test_discovery_intents_615.py",
+   "log": "logs\\test_discovery_intents_615.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.4,
+   "junit": "junit\\test_discovery_intents_615.xml"
+  },
+  {
+   "file": "tests/test_dsh_live.py",
+   "log": "logs\\test_dsh_live.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_live.xml"
+  },
+  {
+   "file": "tests/test_dsh_mcp.py",
+   "log": "logs\\test_dsh_mcp.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_mcp.xml"
+  },
+  {
+   "file": "tests/test_dsh_official.py",
+   "log": "logs\\test_dsh_official.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_official.xml"
+  },
+  {
+   "file": "tests/test_dsh_plugin_install_python.py",
+   "log": "logs\\test_dsh_plugin_install_python.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 2.4,
+   "junit": "junit\\test_dsh_plugin_install_python.xml"
+  },
+  {
+   "file": "tests/test_dsh_providers_608.py",
+   "log": "logs\\test_dsh_providers_608.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.0,
+   "junit": "junit\\test_dsh_providers_608.xml"
+  },
+  {
+   "file": "tests/test_dsh_standalone_child.py",
+   "log": "logs\\test_dsh_standalone_child.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 3.3,
+   "junit": "junit\\test_dsh_standalone_child.xml"
+  },
+  {
+   "file": "tests/test_dsh_standalone_host.py",
+   "log": "logs\\test_dsh_standalone_host.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 4.9,
+   "junit": "junit\\test_dsh_standalone_host.xml"
+  },
+  {
+   "file": "tests/test_dsh_startup.py",
+   "log": "logs\\test_dsh_startup.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_startup.xml"
+  },
+  {
+   "file": "tests/test_envelope_validation_555.py",
+   "log": "logs\\test_envelope_validation_555.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.2,
+   "junit": "junit\\test_envelope_validation_555.xml"
+  },
+  {
+   "file": "tests/test_extra_tools_551.py",
+   "log": "logs\\test_extra_tools_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.6,
+   "junit": "junit\\test_extra_tools_551.xml"
+  },
+  {
+   "file": "tests/test_host_shutdown_stop.py",
+   "log": "logs\\test_host_shutdown_stop.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 21.2,
+   "junit": "junit\\test_host_shutdown_stop.xml"
+  },
+  {
+   "file": "tests/test_jsonl_archive.py",
+   "log": "logs\\test_jsonl_archive.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.9,
+   "junit": "junit\\test_jsonl_archive.xml"
+  },
+  {
+   "file": "tests/test_locks_durable_634.py",
+   "log": "logs\\test_locks_durable_634.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 14.9,
+   "junit": "junit\\test_locks_durable_634.xml"
+  },
+  {
+   "file": "tests/test_no_graphtraj_dependency.py",
+   "log": "logs\\test_no_graphtraj_dependency.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 6.8,
+   "junit": "junit\\test_no_graphtraj_dependency.xml"
+  },
+  {
+   "file": "tests/test_notice_text.py",
+   "log": "logs\\test_notice_text.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.4,
+   "junit": "junit\\test_notice_text.xml"
+  },
+  {
+   "file": "tests/test_pi_default_host_572.py",
+   "log": "logs\\test_pi_default_host_572.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.3,
+   "junit": "junit\\test_pi_default_host_572.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_child_tools_551.py",
+   "log": "logs\\test_pi_dsh_child_tools_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.7,
+   "junit": "junit\\test_pi_dsh_child_tools_551.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_extra_tools_551.py",
+   "log": "logs\\test_pi_dsh_extra_tools_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.7,
+   "junit": "junit\\test_pi_dsh_extra_tools_551.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_notice_holding.py",
+   "log": "logs\\test_pi_dsh_notice_holding.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 25.4,
+   "junit": "junit\\test_pi_dsh_notice_holding.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_owner_tools_no_ask_551.py",
+   "log": "logs\\test_pi_dsh_owner_tools_no_ask_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.8,
+   "junit": "junit\\test_pi_dsh_owner_tools_no_ask_551.xml"
+  },
+  {
+   "file": "tests/test_pi_member_git.py",
+   "log": "logs\\test_pi_member_git.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 4.5,
+   "junit": "junit\\test_pi_member_git.xml"
+  },
+  {
+   "file": "tests/test_pi_notice_display_536.py",
+   "log": "logs\\test_pi_notice_display_536.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.4,
+   "junit": "junit\\test_pi_notice_display_536.xml"
+  },
+  {
+   "file": "tests/test_pi_standalone_host.py",
+   "log": "logs\\test_pi_standalone_host.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.7,
+   "junit": "junit\\test_pi_standalone_host.xml"
+  },
+  {
+   "file": "tests/test_pi_subagent_child_585.py",
+   "log": "logs\\test_pi_subagent_child_585.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_pi_subagent_child_585.xml"
+  },
+  {
+   "file": "tests/test_process_tree_635.py",
+   "log": "logs\\test_process_tree_635.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 124.6,
+   "junit": "junit\\test_process_tree_635.xml"
+  },
+  {
+   "file": "tests/test_process_windows_633.py",
+   "log": "logs\\test_process_windows_633.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.1,
+   "junit": "junit\\test_process_windows_633.xml"
+  },
+  {
+   "file": "tests/test_provider_listing_609.py",
+   "log": "logs\\test_provider_listing_609.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.6,
+   "junit": "junit\\test_provider_listing_609.xml"
+  },
+  {
+   "file": "tests/test_published_names_551.py",
+   "log": "logs\\test_published_names_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_published_names_551.xml"
+  },
+  {
+   "file": "tests/test_runtime_dirs_git_ignored_526.py",
+   "log": "logs\\test_runtime_dirs_git_ignored_526.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.7,
+   "junit": "junit\\test_runtime_dirs_git_ignored_526.xml"
+  },
+  {
+   "file": "tests/test_session_protocol.py",
+   "log": "logs\\test_session_protocol.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_session_protocol.xml"
+  },
+  {
+   "file": "tests/test_tool_name_591.py",
+   "log": "logs\\test_tool_name_591.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.8,
+   "junit": "junit\\test_tool_name_591.xml"
+  },
+  {
+   "file": "tests/test_unified_data_root_577.py",
+   "log": "logs\\test_unified_data_root_577.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 3.6,
+   "junit": "junit\\test_unified_data_root_577.xml"
+  },
+  {
+   "file": "tests/test_windows_emulation_619.py",
+   "log": "logs\\test_windows_emulation_619.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_windows_emulation_619.xml"
+  },
+  {
+   "file": "tests/test_windows_symbolic_links_638.py",
+   "log": "logs\\test_windows_symbolic_links_638.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_windows_symbolic_links_638.xml"
+  }
+ ]
+}

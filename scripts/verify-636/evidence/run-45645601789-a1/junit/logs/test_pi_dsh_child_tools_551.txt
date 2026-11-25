@@ -1,0 +1,35 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 16 items
+
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[None-expected0] PASSED [  6%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[settings1-expected1] PASSED [ 12%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[settings2-expected2] PASSED [ 18%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_host_default_tools_follow_its_settings[settings3-expected3] PASSED [ 25%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_without_a_choice_passes_no_flag PASSED [ 31%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_choice_maps_to_native_flags_and_names_what_is_beyond_the_host PASSED [ 37%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_driver_keeps_the_choice_only_when_given PASSED [ 43%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_refuses_provably_unknown_entries PASSED [ 50%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_reports_what_only_pi_can_resolve_at_start PASSED [ 56%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_extension_asks_the_parent_before_a_beyond_host_tool PASSED [ 62%]
+tests/test_pi_dsh_child_tools_551.py::test_pi_extension_without_beyond_host_tools_installs_nothing PASSED [ 68%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_without_a_choice_keeps_the_installed_rows PASSED [ 75%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_choice_disables_only_the_other_or_denied_rows PASSED [ 81%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_unknown_row_is_unavailable_and_naming_the_limit PASSED [ 87%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_enabling_a_host_disabled_row_needs_authorization_it_cannot_get PASSED [ 93%]
+tests/test_pi_dsh_child_tools_551.py::test_dsh_installed_preset_rows_are_selectable SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=811b5c614a3a4a52bff274fbc2b08d39: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_dsh_child_tools_551.xml -
+============================ slowest 10 durations =============================
+0.06s call     tests/test_pi_dsh_child_tools_551.py::test_pi_extension_asks_the_parent_before_a_beyond_host_tool
+0.06s call     tests/test_pi_dsh_child_tools_551.py::test_pi_extension_without_beyond_host_tools_installs_nothing
+0.01s call     tests/test_pi_dsh_child_tools_551.py::test_dsh_choice_disables_only_the_other_or_denied_rows
+0.01s call     tests/test_pi_dsh_child_tools_551.py::test_dsh_installed_preset_rows_are_selectable
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_pi_dsh_child_tools_551.py:230: Installed DSH is required for its own preset.
+======================== 15 passed, 1 skipped in 0.35s ========================

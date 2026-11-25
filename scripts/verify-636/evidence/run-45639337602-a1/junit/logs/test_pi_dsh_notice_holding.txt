@@ -1,0 +1,80 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 57 items
+
+tests/test_pi_dsh_notice_holding.py::test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host[pi] PASSED [  1%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_arriving_while_stopped_is_held_and_delivered_once_by_the_next_host[dsh] PASSED [  3%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_refused_by_the_session_stays_held_for_the_next_host[pi] PASSED [  5%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_refused_by_the_session_stays_held_for_the_next_host[dsh] PASSED [  7%]
+tests/test_pi_dsh_notice_holding.py::test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated[pi] PASSED [  8%]
+tests/test_pi_dsh_notice_holding.py::test_an_unacknowledged_notice_is_unconfirmed_and_not_repeated[dsh] PASSED [ 10%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_shown_by_status_is_not_pushed[pi] PASSED [ 12%]
+tests/test_pi_dsh_notice_holding.py::test_an_end_shown_by_status_is_not_pushed[dsh] PASSED [ 14%]
+tests/test_pi_dsh_notice_holding.py::test_a_hierarchy_status_settles_every_held_end_it_shows[pi] PASSED [ 15%]
+tests/test_pi_dsh_notice_holding.py::test_a_hierarchy_status_settles_every_held_end_it_shows[dsh] PASSED [ 17%]
+tests/test_pi_dsh_notice_holding.py::test_a_body_shown_while_the_flush_runs_is_not_pushed[pi] PASSED [ 19%]
+tests/test_pi_dsh_notice_holding.py::test_a_body_shown_while_the_flush_runs_is_not_pushed[dsh] PASSED [ 21%]
+tests/test_pi_dsh_notice_holding.py::test_a_held_end_being_flushed_is_shown_queueing_and_not_settled_as_read[pi] PASSED [ 22%]
+tests/test_pi_dsh_notice_holding.py::test_a_held_end_being_flushed_is_shown_queueing_and_not_settled_as_read[dsh] PASSED [ 24%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_flush_does_not_lose_a_body_read_during_it[pi] PASSED [ 26%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_flush_does_not_lose_a_body_read_during_it[dsh] PASSED [ 28%]
+tests/test_pi_dsh_notice_holding.py::test_shutdowns_own_wait_does_not_settle_the_ends_it_causes[pi] PASSED [ 29%]
+tests/test_pi_dsh_notice_holding.py::test_shutdowns_own_wait_does_not_settle_the_ends_it_causes[dsh] PASSED [ 31%]
+tests/test_pi_dsh_notice_holding.py::test_a_live_end_is_pushed_once_with_the_host_up[pi] PASSED [ 33%]
+tests/test_pi_dsh_notice_holding.py::test_a_live_end_is_pushed_once_with_the_host_up[dsh] PASSED [ 35%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once[pi] PASSED [ 36%]
+tests/test_pi_dsh_notice_holding.py::test_a_refused_request_stays_held_while_it_waits_and_is_flushed_once[dsh] PASSED [ 38%]
+tests/test_pi_dsh_notice_holding.py::test_each_native_request_notifies_once_with_its_own_identity[pi] PASSED [ 40%]
+tests/test_pi_dsh_notice_holding.py::test_each_native_request_notifies_once_with_its_own_identity[dsh] PASSED [ 42%]
+tests/test_pi_dsh_notice_holding.py::test_ask_parent_notifies_once_without_its_question[pi] PASSED [ 43%]
+tests/test_pi_dsh_notice_holding.py::test_ask_parent_notifies_once_without_its_question[dsh] PASSED [ 45%]
+tests/test_pi_dsh_notice_holding.py::test_dsh_flush_retries_a_refusal_within_its_bound_without_spinning PASSED [ 47%]
+tests/test_pi_dsh_notice_holding.py::test_dsh_flush_retry_stops_at_shutdown PASSED [ 49%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi] PASSED [ 50%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh] PASSED [ 52%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[pi] PASSED [ 54%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[dsh] PASSED [ 56%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_refused_notice_stays_held PASSED [ 57%]
+tests/test_pi_dsh_notice_holding.py::test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed PASSED [ 59%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_pi_took_is_delivered_only_when_it_is_in_the_session PASSED [ 61%]
+tests/test_pi_dsh_notice_holding.py::test_a_notice_pi_took_and_never_wrote_is_delivered_by_the_next_host PASSED [ 63%]
+tests/test_pi_dsh_notice_holding.py::test_a_status_while_pi_holds_the_notice_shows_the_body_and_settles_nothing PASSED [ 64%]
+tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it PASSED [ 66%]
+tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[pi] PASSED [ 68%]
+tests/test_pi_dsh_notice_holding.py::test_a_shutdown_end_stays_held_through_the_real_main[dsh] PASSED [ 70%]
+tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[pi] PASSED [ 71%]
+tests/test_pi_dsh_notice_holding.py::test_shutdown_through_the_real_main_does_not_continue_a_parent_agent[dsh] PASSED [ 73%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_deliver_once_when_pi_writes_the_notice PASSED [ 75%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it PASSED [ 77%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_waits_for_the_entry_after_message_end PASSED [ 78%]
+tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown PASSED [ 80%]
+tests/test_pi_dsh_notice_holding.py::test_extension_does_not_inject_a_replayed_notice_and_acknowledges_it SKIPPED [ 82%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry0] SKIPPED [ 84%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry1] SKIPPED [ 85%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry2] SKIPPED [ 87%]
+tests/test_pi_dsh_notice_holding.py::test_extension_dedupes_only_on_its_own_persisted_notice[entry3] SKIPPED [ 89%]
+tests/test_pi_dsh_notice_holding.py::test_extension_says_ready_once_at_the_first_turn_and_not_before SKIPPED [ 91%]
+tests/test_pi_dsh_notice_holding.py::test_extension_with_a_ui_says_ready_after_its_grace_when_no_turn_starts SKIPPED [ 92%]
+tests/test_pi_dsh_notice_holding.py::test_the_dsh_relay_admits_one_id_once_across_processes_and_refuses_an_inactive_session PASSED [ 94%]
+tests/test_pi_dsh_notice_holding.py::test_a_nested_dsh_parent_gives_each_request_its_own_relay_id PASSED [ 96%]
+tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_when_the_sessions_turn_begins_not_at_attach SKIPPED [ 98%]
+tests/test_pi_dsh_notice_holding.py::test_plugin_says_ready_after_its_grace_in_a_session_with_no_turn SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=73253593335a4da68a4c8d7c4913bcee: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_dsh_notice_holding.xml -
+============================ slowest 10 durations =============================
+3.70s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_deliver_once_when_pi_writes_the_notice
+3.70s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_keep_a_notice_quit_before_pi_wrote_it
+3.65s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_and_host_do_not_inject_twice_after_a_crash_before_shown
+2.33s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[dsh]
+2.32s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_flushes_once_after_ready_and_a_further_restart_delivers_nothing[pi]
+1.87s call     tests/test_pi_dsh_notice_holding.py::test_real_extension_waits_for_the_entry_after_message_end
+1.30s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_unacknowledged_notice_ends_as_held_at_shutdown_and_is_replayed
+1.26s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[pi]
+1.23s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_process_that_is_never_told_ready_keeps_its_notices_held[dsh]
+0.66s call     tests/test_pi_dsh_notice_holding.py::test_a_real_host_refused_notice_stays_held
+=========================== short test summary info ===========================
+SKIPPED [9] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+======================= 48 passed, 9 skipped in 25.04s ========================

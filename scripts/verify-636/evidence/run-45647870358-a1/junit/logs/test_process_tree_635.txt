@@ -1,0 +1,91 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 17 items
+
+tests/test_process_tree_635.py::test_a_tree_holds_its_descendants_and_stops_with_them PASSED [  5%]
+tests/test_process_tree_635.py::test_start_options_are_a_new_session_or_a_suspended_windowless_process PASSED [ 11%]
+tests/test_process_tree_635.py::test_utf8_text_crosses_a_tree_pipe_whatever_the_code_page PASSED [ 17%]
+tests/test_process_tree_635.py::test_the_runtime_sites_use_the_tree_and_utf8_text_pipes PASSED [ 23%]
+tests/test_process_tree_635.py::test_a_tree_left_by_an_owner_that_exited_is_probed_and_stopped_by_a_later_process PASSED [ 29%]
+tests/test_process_tree_635.py::test_run_stoppable_ends_the_whole_tree_when_the_call_stops PASSED [ 35%]
+tests/test_process_tree_635.py::test_a_reviewer_over_its_time_is_killed_with_its_tree Timeout (0:02:00)!
+Thread 0x00000764 (most recent call first):
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\subprocess.py", line 1615 in _readerthread
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 994 in run
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 1043 in _bootstrap_inner
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 1014 in _bootstrap
+
+Thread 0x000015c8 (most recent call first):
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\subprocess.py", line 1615 in _readerthread
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 994 in run
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 1043 in _bootstrap_inner
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 1014 in _bootstrap
+
+Thread 0x000004d8 (most recent call first):
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\subprocess.py", line 1156 in _stdin_write
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\subprocess.py", line 1638 in _communicate
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\subprocess.py", line 1222 in communicate
+  File "D:\a\graftling\graftling\src\graftling\review.py", line 278 in _ask_process
+  File "D:\a\graftling\graftling\tests\test_process_tree_635.py", line 289 in test_a_reviewer_over_its_time_is_killed_with_its_tree
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\python.py", line 159 in pytest_pyfunc_call
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\python.py", line 1627 in runtest
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 174 in pytest_runtest_call
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 242 in <lambda>
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 341 in from_call
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 241 in call_and_report
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 132 in runtestprotocol
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 113 in pytest_runtest_protocol
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 362 in pytest_runtestloop
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 337 in _main
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 283 in wrap_session
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 330 in pytest_cmdline_main
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\config\__init__.py", line 175 in main
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\config\__init__.py", line 201 in console_main
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pytest\__main__.py", line 9 in <module>
+  File "<frozen runpy>", line 88 in _run_code
+  File "<frozen runpy>", line 198 in _run_module_as_main
+PASSED [ 41%]
+tests/test_process_tree_635.py::test_the_claude_tool_probe_reads_init_through_threads_and_stops_the_tree PASSED [ 47%]
+tests/test_process_tree_635.py::test_the_dsh_service_tree_is_killed_on_close_and_has_no_watcher_on_windows PASSED [ 52%]
+tests/test_process_tree_635.py::test_posix_steps_are_the_group_signals SKIPPED [ 58%]
+tests/test_process_tree_635.py::test_windows_grandchildren_started_by_cmd_start_or_start_process_stop_with_the_job[start-b] PASSED [ 64%]
+tests/test_process_tree_635.py::test_windows_grandchildren_started_by_cmd_start_or_start_process_stop_with_the_job[start-process] PASSED [ 70%]
+tests/test_process_tree_635.py::test_windows_a_breakaway_attempt_stays_in_the_job PASSED [ 76%]
+tests/test_process_tree_635.py::test_windows_the_kill_on_close_tree_ends_when_its_owner_exits PASSED [ 82%]
+tests/test_process_tree_635.py::test_windows_job_names_are_not_shared_and_a_missing_job_is_an_error PASSED [ 88%]
+tests/test_process_tree_635.py::test_the_windows_branch_with_a_stand_in_job_api PASSED [ 94%]
+tests/test_process_tree_635.py::test_the_codex_service_is_killed_when_its_tree_cannot_adopt_it PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=16477c0cd8194f31a9ade090f4815f42: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_process_tree_635.xml -
+============================ slowest 10 durations =============================
+121.04s call     tests/test_process_tree_635.py::test_a_reviewer_over_its_time_is_killed_with_its_tree
+1.21s call     tests/test_process_tree_635.py::test_a_tree_left_by_an_owner_that_exited_is_probed_and_stopped_by_a_later_process
+0.31s call     tests/test_process_tree_635.py::test_windows_grandchildren_started_by_cmd_start_or_start_process_stop_with_the_job[start-process]
+0.17s call     tests/test_process_tree_635.py::test_windows_the_kill_on_close_tree_ends_when_its_owner_exits
+0.11s call     tests/test_process_tree_635.py::test_the_claude_tool_probe_reads_init_through_threads_and_stops_the_tree
+0.10s call     tests/test_process_tree_635.py::test_windows_a_breakaway_attempt_stays_in_the_job
+0.08s call     tests/test_process_tree_635.py::test_the_runtime_sites_use_the_tree_and_utf8_text_pipes
+0.05s call     tests/test_process_tree_635.py::test_a_tree_holds_its_descendants_and_stops_with_them
+0.05s call     tests/test_process_tree_635.py::test_windows_grandchildren_started_by_cmd_start_or_start_process_stop_with_the_job[start-b]
+0.05s call     tests/test_process_tree_635.py::test_run_stoppable_ends_the_whole_tree_when_the_call_stops
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_process_tree_635.py:333: POSIX-only: checks the process group (os.getpgid) and its POSIX signals
+================== 16 passed, 1 skipped in 123.39s (0:02:03) ==================

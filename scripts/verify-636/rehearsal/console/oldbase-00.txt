@@ -1,0 +1,14 @@
+$ VERIFY636_GRAFTLING=/tmp/claude-501/rh636/oldbase/graftling VERIFY636_GREMOTE=/tmp/claude-501/rh636/oldbase/gremote.git VERIFY636_GH=/tmp/claude-501/rh636/oldbase/gh/gh VERIFY636_EVIDENCE=/tmp/claude-501/rh636/oldbase/runs VERIFY636_POLL_S=1 VERIFY636_APPEAR_S=10 VERIFY636_DONE_S=30 VERIFY636_BUNDLE=/tmp/claude-501/rh636/oldbase.bundle zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify636-stand-in | gh path: /tmp/claude-501/rh636/oldbase/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-636 fake)
+    - Active account: true
+PASS: /tmp/claude-501/rh636/oldbase/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/rh636/oldbase/gremote.git is used instead of graftling origin
+STOP: the bundle's prerequisites are 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced d5fb80c7cf5d85a19971c434e7f247568ad22bef, without graftling dev 7609e52089e638c963cc54c28438c99ea3964f99
+VERDICT 636 00: STOP
+[exit 1]

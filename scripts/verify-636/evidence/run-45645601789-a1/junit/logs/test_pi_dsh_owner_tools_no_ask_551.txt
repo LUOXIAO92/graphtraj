@@ -1,0 +1,34 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 11 items
+
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[True-asked0] PASSED [  9%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[False-asked1] PASSED [ 18%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config0-asked0] PASSED [ 27%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config1-asked1] PASSED [ 36%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_names_the_owner_tools_only_when_declared PASSED [ 45%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_disallowed_owner_tool_is_not_offered PASSED [ 54%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding SKIPPED [ 63%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_disallowed_owner_tool_is_excluded_natively PASSED [ 72%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_available_set_keeps_the_owners_entries PASSED [ 81%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_launch_names_the_owner_entries_in_its_argv PASSED [ 90%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=2c568fda4a9d4ff68a0126efbb800e36: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_dsh_owner_tools_no_ask_551.xml -
+============================ slowest 10 durations =============================
+0.06s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[False-asked1]
+0.06s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[True-asked0]
+0.06s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config1-asked1]
+0.06s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config0-asked0]
+0.02s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_names_the_owner_tools_only_when_declared
+0.01s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding
+0.01s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_pi_dsh_owner_tools_no_ask_551.py:109: Installed DSH is required for its own preset.
+SKIPPED [1] tests\test_pi_dsh_owner_tools_no_ask_551.py:155: Installed DSH is required for its own preset.
+======================== 9 passed, 2 skipped in 0.45s =========================

@@ -1,0 +1,30 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 13 items
+
+tests/test_process_windows_633.py::test_executable_and_arguments_of_a_real_child PASSED [  7%]
+tests/test_process_windows_633.py::test_the_parent_of_a_real_child_is_this_process PASSED [ 15%]
+tests/test_process_windows_633.py::test_process_alive_for_a_live_an_exited_and_an_invalid_pid PASSED [ 23%]
+tests/test_process_windows_633.py::test_process_alive_never_terminates_its_target PASSED [ 30%]
+tests/test_process_windows_633.py::test_process_alive_refuses_a_process_created_after_started PASSED [ 38%]
+tests/test_process_windows_633.py::test_control_alive_tells_an_ended_process_from_a_live_one PASSED [ 46%]
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[earlier] PASSED [ 53%]
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[same-time] PASSED [ 61%]
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[later] PASSED [ 69%]
+tests/test_process_windows_633.py::test_a_windows_parent_counts_only_when_created_before_its_child[unreadable] PASSED [ 76%]
+tests/test_process_windows_633.py::test_a_windows_walk_ends_where_the_parent_is_not_older PASSED [ 84%]
+tests/test_process_windows_633.py::test_windows_command_lines_split_as_subprocess_quotes_them PASSED [ 92%]
+tests/test_process_windows_633.py::test_windows_records_this_process_as_the_older_parent PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=f2f1001452b348d7b1646b6dfe0c7e67: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_process_windows_633.xml -
+============================ slowest 10 durations =============================
+0.50s call     tests/test_process_windows_633.py::test_process_alive_never_terminates_its_target
+0.07s call     tests/test_process_windows_633.py::test_process_alive_for_a_live_an_exited_and_an_invalid_pid
+0.03s call     tests/test_process_windows_633.py::test_process_alive_refuses_a_process_created_after_started
+0.03s call     tests/test_process_windows_633.py::test_control_alive_tells_an_ended_process_from_a_live_one
+
+(6 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================= 13 passed in 0.75s ==============================

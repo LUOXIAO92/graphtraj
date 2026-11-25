@@ -1,0 +1,48 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 32 items
+
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[nicobailon: CHILD=1 with its own Session file-default] SKIPPED [  3%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[nicobailon: CHILD=1 with its own Session file---agents-config] SKIPPED [  6%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[nicobailon: CHILD=1 with its own Session file-GRAFTLING_DATA_ROOT] SKIPPED [  9%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[mjakl: DEPTH=1, no Session file-default] SKIPPED [ 12%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[mjakl: DEPTH=1, no Session file---agents-config] SKIPPED [ 15%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[mjakl: DEPTH=1, no Session file-GRAFTLING_DATA_ROOT] SKIPPED [ 18%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[DEPTH=2 with a Session file-default] SKIPPED [ 21%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[DEPTH=2 with a Session file---agents-config] SKIPPED [ 25%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[DEPTH=2 with a Session file-GRAFTLING_DATA_ROOT] SKIPPED [ 28%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[bundled example: no marker, no Session file-default] SKIPPED [ 31%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[bundled example: no marker, no Session file---agents-config] SKIPPED [ 34%]
+tests/test_pi_subagent_child_585.py::test_a_subagent_child_starts_no_host_creates_nothing_and_reports_nothing[bundled example: no marker, no Session file-GRAFTLING_DATA_ROOT] SKIPPED [ 37%]
+tests/test_pi_subagent_child_585.py::test_a_child_is_recognised_before_the_python_and_project_checks PASSED [ 40%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-unset] SKIPPED [ 43%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-DEPTH=0] SKIPPED [ 46%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-DEPTH=empty] SKIPPED [ 50%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-CHILD=empty] SKIPPED [ 53%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[default-CHILD=0] SKIPPED [ 56%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-unset] SKIPPED [ 59%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-DEPTH=0] SKIPPED [ 62%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-DEPTH=empty] SKIPPED [ 65%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-CHILD=empty] SKIPPED [ 68%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[--agents-config-CHILD=0] SKIPPED [ 71%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-unset] SKIPPED [ 75%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-DEPTH=0] SKIPPED [ 78%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-DEPTH=empty] SKIPPED [ 81%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-CHILD=empty] SKIPPED [ 84%]
+tests/test_pi_subagent_child_585.py::test_a_main_with_a_session_file_still_starts_its_host[GRAFTLING_DATA_ROOT-CHILD=0] SKIPPED [ 87%]
+tests/test_pi_subagent_child_585.py::test_graftlings_own_child_keeps_its_owner_connection[/sessions/pi-main.jsonl] SKIPPED [ 90%]
+tests/test_pi_subagent_child_585.py::test_graftlings_own_child_keeps_its_owner_connection[] SKIPPED [ 93%]
+tests/test_pi_subagent_child_585.py::test_a_managed_dsh_context_is_unchanged[/sessions/pi-main.jsonl] SKIPPED [ 96%]
+tests/test_pi_subagent_child_585.py::test_a_managed_dsh_context_is_unchanged[] SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=0e8d681b63b14b408dc3be586620a78b: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_subagent_child_585.xml -
+============================ slowest 10 durations =============================
+0.06s call     tests/test_pi_subagent_child_585.py::test_a_child_is_recognised_before_the_python_and_project_checks
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [31] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+======================== 1 passed, 31 skipped in 0.28s ========================

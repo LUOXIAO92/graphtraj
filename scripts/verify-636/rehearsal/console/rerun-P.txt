@@ -1,0 +1,144 @@
+$ VERIFY636_GRAFTLING=/tmp/claude-501/rh636/rerun/graftling VERIFY636_GREMOTE=/tmp/claude-501/rh636/rerun/gremote.git VERIFY636_GH=/tmp/claude-501/rh636/rerun/gh/gh VERIFY636_EVIDENCE=/tmp/claude-501/rh636/rerun/runs VERIFY636_POLL_S=1 VERIFY636_APPEAR_S=10 VERIFY636_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/636-graftling-windows-named-pipe to graftling /tmp/claude-501/rh636/rerun/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/rh636/rerun/graftling; head 75cb93b2d6515f95e949a01eaf63a15944722e44 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+--- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
+  75cb93b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the squatter's data check matches "read <n>", not its own "ready" marker (636 correction 4)
+  1b3f95e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account squatter runs from a file, within CreateProcessWithLogonW's 1024-character command line (636 correction 3)
+  03d67a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account test never shows the temporary password in an assertion (636)
+  61576b3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows pipe: a caller talks only to its own user's pipe; every pipe wait is bounded (636 corrections 1, 2)
+  c04b075 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: an owner-started Runtime's callers are the processes in its job (636 Phase B)
+  3692bc0 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 7609e520 (W3 635) into agent/636-graftling-windows-named-pipe
+  ff19b05 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the Windows pipe tests' children run UTF-8 under a non-ASCII TEMP (636)
+  367fbd4 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev d5fb80c7 (W6 638) into agent/636-graftling-windows-named-pipe
+  2e73bdb LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: the owner connection is a named pipe per host (636, W4)
+PASS: author and committer are the noreply identity
+--- files changed since 7609e52089e638c963cc54c28438c99ea3964f99:
+   .github/workflows/windows.yml              |   2 +-
+   README.md                                  |   9 +
+   src/graftling/_channel_posix.py            | 297 +++++++++++++++
+   src/graftling/_channel_windows.py          | 454 +++++++++++++++++++++++
+   src/graftling/_win32.py                    | 367 +++++++++++++++++-
+   src/graftling/claude/binding.py            |   2 +-
+   src/graftling/claude/host.py               |  25 +-
+   src/graftling/codex/app_server.py          |   6 +-
+   src/graftling/codex/host.py                |  10 +-
+   src/graftling/connection.py                | 270 ++------------
+   src/graftling/dsh/binding.py               |   5 +-
+   src/graftling/pi/execution.py              |   2 +-
+   src/graftling/process.py                   |  30 +-
+   src/graftling/process_tree.py              |   5 +-
+   tests/test_channel_windows_636.py          | 576 +++++++++++++++++++++++++++++
+   tests/test_channel_windows_emulated_636.py | 483 ++++++++++++++++++++++++
+   tests/test_pi_dsh_notice_holding.py        |   5 +
+   17 files changed, 2282 insertions(+), 266 deletions(-)
+PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml and README.md
+PASS: .github/workflows/windows.yml differs from 7609e52089e638c963cc54c28438c99ea3964f99 only in on.push.branches, which adds agent/636-graftling-windows-named-pipe
+PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-632/windows-expected.txt parses: 2 expected Windows failures and 0 expected hangs (W5 (637) 1, W8 (not registered; outside this round) 1), 19 allowed environment skips
+W4 (636) entries left in the list: 0
+PASS: agent/636-graftling-windows-named-pipe is absent on graftling /tmp/claude-501/rh636/rerun/gremote.git
+PASS: /tmp/claude-501/rh636/rerun/graftling has no local agent/636-graftling-windows-named-pipe (P creates it from the bundle)
+$ git -C /tmp/claude-501/rh636/rerun/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/graftling-636.bundle refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe
+  From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/graftling-636.bundle
+   * [new branch]      agent/636-graftling-windows-named-pipe -> agent/636-graftling-windows-named-pipe
+PASS: /tmp/claude-501/rh636/rerun/graftling local agent/636-graftling-windows-named-pipe = 75cb93b2d6515f95e949a01eaf63a15944722e44
+$ git -C /tmp/claude-501/rh636/rerun/graftling push /tmp/claude-501/rh636/rerun/gremote.git refs/heads/agent/636-graftling-windows-named-pipe:refs/heads/agent/636-graftling-windows-named-pipe   (75cb93b2d6515f95e949a01eaf63a15944722e44)
+  To /tmp/claude-501/rh636/rerun/gremote.git
+   * [new branch]      agent/636-graftling-windows-named-pipe -> agent/636-graftling-windows-named-pipe
+PASS: graftling /tmp/claude-501/rh636/rerun/gremote.git agent/636-graftling-windows-named-pipe = 75cb93b2d6515f95e949a01eaf63a15944722e44
+looking for the .github/workflows/windows.yml run (event push) of 75cb93b2d6515f95e949a01eaf63a15944722e44 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+run 51000000636 present after 2s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000636
+waiting for run 51000000636 (completion bound 30s, poll 1s)
+  [00:50:12] run 51000000636: completed failure
+--- run 51000000636 | attempt 1 | push | conclusion failure (information only) | head 75cb93b2d6515f95e949a01eaf63a15944722e44 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000636
+JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000636/job/52000000636
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | setup: must succeed
+  step  3 | success   | Check out the commit under test | setup: must succeed
+  step  4 | success   | Fail unless the linked package documents are symbolic links | setup: must succeed
+  step  5 | success   | Set up Node 22.18.0 x64 | setup: must succeed
+  step  6 | success   | Set up Python 3.13.7 x64 | setup: must succeed
+  step  7 | success   | Install graftling and pinned test tools | setup: must succeed
+  step  8 | success   | Show runner, Python and pytest versions | setup: must succeed
+  step  9 | failure   | Run the graftling test suite | suite: success or failure (results judged from JUnit)
+  step 10 | success   | Retain JUnit results | upload: must succeed
+  step 11 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 12 | skipped   | Post Set up Node 22.18.0 x64 | other: success or skipped
+  step 13 | success   | Post Check out the commit under test | other: success or skipped
+  step 14 | success   | Complete job | other: success or skipped
+--- job log saved: /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/job.log; files ended, hangs, driver exit:
+  per-file pytest summaries: 1
+  2026-11-25T00:10:00Z run_test_files exit code: 1
+$ gh run download 51000000636 --repo LUOXIAO92/graftling -n graftling-windows-junit-75cb93b2d6515f95e949a01eaf63a15944722e44-1 -D /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/junit
+test files in 75cb93b2d6515f95e949a01eaf63a15944722e44: 64
+--- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-632/windows-expected.txt
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+run_test_files exit code: 1
+--- test files: 64 recorded | ended 64 | hung 0 | not run 0 | in the commit: 64
+  slowest ended files: tests/test_agent_completion.py 2.5 s, tests/test_agent_control.py 2.5 s, tests/test_agents_connections_presets.py 2.5 s, tests/test_agents_request_notices.py 2.5 s, tests/test_agents_server_name.py 2.5 s
+merged JUnit files: 64
+collected in JUnit: 1020 | passed 767 | failed 2 | errors 0 | skipped 251
+--- POSIX-only skips: 230 in 26 modules
+     8  tests/test_agents_connections_presets.py
+     1  tests/test_approval_integration.py
+     4  tests/test_child_server_name_551.py
+     9  tests/test_claude_default_tools_576.py
+     4  tests/test_claude_gateway_login_613.py
+     9  tests/test_claude_marketplace_plugin.py
+     1  tests/test_claude_model_alias_574.py
+     8  tests/test_claude_permission_mode_578.py
+    39  tests/test_claude_review.py
+     1  tests/test_claude_send_closing_546.py
+     4  tests/test_codex_independent_control.py
+     8  tests/test_codex_review_relay.py
+     2  tests/test_dsh_plugin_install_python.py
+     4  tests/test_dsh_standalone_child.py
+     9  tests/test_dsh_standalone_host.py
+     1  tests/test_dsh_startup.py
+     2  tests/test_extra_tools_551.py
+    28  tests/test_host_shutdown_stop.py
+    11  tests/test_pi_default_host_572.py
+     9  tests/test_pi_dsh_notice_holding.py
+     2  tests/test_pi_standalone_host.py
+    31  tests/test_pi_subagent_child_585.py
+     1  tests/test_process_tree_635.py
+    16  tests/test_provider_listing_609.py
+    14  tests/test_unified_data_root_577.py
+     4  tests/test_windows_emulation_619.py
+  reason x124: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+  reason x49: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sess
+  reason x26: the host runs in its own process group (start_new_session) stopped with os.killpg and SIGKILL; its lock holder uses fcntl
+  reason x22: the stand-in executable is a '#!/bin/sh' script
+  reason x4: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+  reason x3: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+  reason x1: a read-only directory made with chmod 0o555 and checked with os.geteuid
+  reason x1: checks the process group (os.getpgid) and its POSIX signals
+--- allowed environment skips (not Windows-specific): 21
+  x12: Explicit pinned official SDK comparison
+  x2: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+  x2: Requires one explicitly retained native trace.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Requires assigned native startup diagnosis.
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 2; observed failures and errors: 2 (1 as expected)
+--- unexpected failures: 1
+  FAIL tests/test_connection_serve.py::test_removed_control_directory_stops_the_service | origin src/graftling/control.py:229 (W1?; from junit) | AttributeError: module 'os' has no attribute 'killpg'
+    origins of the unexpected failures: junit 1
+--- unexpected passes (listed as failing, passed): 1
+  PASS tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns | listed origin tests/test_codex_child_interpreter_shutdown_473.py:46 W5 (637)
+--- listed failures that were skipped or not collected: 0
+observed list written: /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/observed-expected.txt
+evidence (new directory, gitignored): /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh W 51000000636    (observe again; no push, no re-run)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh X 51000000636    (re-run its failed jobs; only if the failure is transient, not a test result)
+next: correction round: compare /tmp/claude-501/rh636/rerun/runs/20261125T155012Z-P-run-51000000636-a1/observed-expected.txt with /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-632/windows-expected.txt; after a new bundle: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh 00 then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/636-graftling-windows-named-pipe/scripts/verify-636/steps.zsh P
+VERDICT 636 P: FAIL (run 51000000636 attempt 1 on 75cb93b2d6515f95e949a01eaf63a15944722e44; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; 1 unexpected passes; https://github.com/LUOXIAO92/graftling/actions/runs/51000000636)
+[exit 1]

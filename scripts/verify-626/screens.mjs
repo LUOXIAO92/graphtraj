@@ -13,12 +13,25 @@ const require = createRequire(path.join(desktop, 'package.json'));
 const facts = { desktop, out, started: new Date().toISOString(), steps: [], themes: {}, pageErrors: [], problems: [] };
 const note = text => { facts.steps.push(text); console.log(`-- ${text}`); };
 const problem = text => { facts.problems.push(text); console.log(`!! ${text}`); };
-const withTimeout = (promise, ms, what) => Promise.race([promise,
-  new Promise((_, reject) => setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms))]);
+const withTimeout = (promise, ms, what) => {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms);
+  })]).finally(() => clearTimeout(timer));
+};
 let stage = 'setup';
 let theme = null;
 let app = null;
 let page = null;
+// Playwright can reject an internal promise (e.g. "Process failed to launch!") outside the awaited call; record it
+// instead of letting Node exit before facts.json is written. The awaited call is bounded by withTimeout below.
+let unhandled = null;
+const onUnhandled = kind => error => {
+  unhandled ??= error;
+  problem(`${kind} during "${stage}": ${error?.message ?? error}`);
+};
+process.on('unhandledRejection', onUnhandled('unhandled rejection'));
+process.on('uncaughtException', onUnhandled('uncaught exception'));
 
 async function shot(name) {
   const file = path.join(out, `${theme}-${name}.png`);
@@ -97,8 +110,16 @@ try {
   stage = 'launch';
   const { _electron: electron } = require('playwright');
   facts.executable = require('electron');
-  app = await electron.launch({ executablePath: facts.executable,
+  const launching = electron.launch({ executablePath: facts.executable,
     args: [desktop, `--project=${project}`, `--user-data-dir=${path.join(out, 'profile')}`], env: process.env, timeout: 60000 });
+  // Stop waiting as soon as an unhandled launch error was seen, else after 75 s.
+  const failed = new Promise((_, reject) => { const poll = setInterval(() => {
+    if (unhandled) { clearInterval(poll); reject(unhandled); } }, 200); launching.finally(() => clearInterval(poll)).catch(() => {}); });
+  // A launch that completes after we gave up is closed at once, never left open.
+  let gaveUp = false;
+  launching.then(late => { if (gaveUp) return late.close().catch(() => late.process().kill('SIGKILL')); }).catch(() => {});
+  try { app = await withTimeout(Promise.race([launching, failed]), 75000, 'electron.launch'); }
+  catch (error) { gaveUp = true; throw error; }
   page = await app.firstWindow();
   page.setDefaultTimeout(30000);
   page.on('pageerror', error => facts.pageErrors.push(String(error)));
@@ -174,5 +195,6 @@ try {
   await fs.mkdir(out, { recursive: true });
   await fs.writeFile(path.join(out, 'facts.json'), JSON.stringify(facts, null, 2) + '\n');
   console.log(`DRIVER ${facts.verdict} problems=${facts.problems.length} facts=${path.join(out, 'facts.json')}`);
-  process.exitCode = facts.problems.length ? 1 : 0;
+  // Exit now: the app is closed or killed, and no pending Playwright handle may keep the step waiting.
+  process.exit(facts.problems.length ? 1 : 0);
 }

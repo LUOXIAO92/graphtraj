@@ -20,16 +20,17 @@
 # commit and submission.
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
-#       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its only
-#       prerequisite is graftling dev 7609e520 (W0, W1, W2, W3, W6; others only if ancestors of it), the head contains
-#       7609e520 and is shown; read through a temporary repository that borrows <Harness>/graftling's objects (nothing
+#       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its prerequisites
+#       are graftling dev 75cb93b2 (W0, W1, W2, W3, W4, W6) and ancestors of it, the head contains 75cb93b2 and is
+#       shown; read through a temporary repository that borrows <Harness>/graftling's objects (nothing
 #       is written there): noreply identity; the paths changed since the base are within ALLOWED (below); the workflow
 #       is the base one with only its push branches line changed, to exactly [agent/632-graftling-windows-ci,
 #       agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes,
-#       agent/635-graftling-windows-process-tree, agent/637-graftling-windows-process-listing,
-#       agent/638-graftling-windows-paths-encoding, dev], and the base workflow passes 632's wfcheck;
+#       agent/635-graftling-windows-process-tree, agent/638-graftling-windows-paths-encoding, dev,
+#       agent/636-graftling-windows-named-pipe, agent/637-graftling-windows-process-listing], and the base workflow
+#       passes 632's wfcheck;
 #       .github/run_test_files.py and tests/posix_only.py are unchanged; the W5 tests (new-tests.txt) are defined at
-#       the head; windows-expected.txt parses, and is GraphTraj dev 5d5938ad's without its one W5 (637) line (every
+#       the head; windows-expected.txt parses, and is GraphTraj dev 035c3fa3's without its one W5 (637) line (every
 #       other line byte-identical; wincheck637.py w5edit); the local branch in <Harness>/graftling and the remote branch
 #       are each absent, the bundle head, or an ancestor of it (else STOP). Login: gh login, git credential helper
 #       (ls-remote). Dialog: none. ~10 s.
@@ -72,11 +73,12 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/637-graftling-windows-process-listing
-# graftling dev 7609e520: W0 (632), W1 (633), W2 (634), W3 (635) and W6 (638) integrated; the candidate branches
-# from it, so it is the bundle's only prerequisite (check_bundle accepts others only as ancestors of BASE).
-BASE=7609e52089e638c963cc54c28438c99ea3964f99
-# GraphTraj dev with 635's integrated expected list; this Task changes only its W5 (637) line.
-LIST_BASE=5d5938ad
+# graftling dev 75cb93b2: W0 (632), W1 (633), W2 (634), W3 (635), W4 (636) and W6 (638) integrated. The candidate
+# merges it into its commit on 7609e520, so the bundle also lists 7609e520 as a prerequisite; check_bundle accepts
+# it only as an ancestor of BASE.
+BASE=75cb93b2d6515f95e949a01eaf63a15944722e44
+# GraphTraj dev with 636's integrated expected list (2 entries: W5 and W8); this Task deletes only its W5 (637) line.
+LIST_BASE=035c3fa3
 REPO=LUOXIAO92/graftling
 GURL=https://github.com/LUOXIAO92/graftling.git
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
@@ -212,7 +214,7 @@ check_head() {
     || { print -r -- "FAIL: no $WORKFLOW at $GSHA"; return $(( bad + 1 )); }
   print -r -- "--- $WORKFLOW at $GSHA against $BASE"
   w5_ wfdiff $WORK/windows-base.yml $WORK/windows.yml || (( bad++ ))
-  print -r -- "--- $WORKFLOW at $BASE (632's accepted workflow with 633's, 634's, 635's and 638's branches; every other property by 632's wfcheck)"
+  print -r -- "--- $WORKFLOW at $BASE (632's accepted workflow with 633's, 634's, 635's, 636's and 638's branches; every other property by 632's wfcheck)"
   if w5_ as632 $WORK/windows-base.yml $WORK/windows-base-632.yml; then
     wc_ wfcheck $WORK/windows-base-632.yml agent/632-graftling-windows-ci $JOB $SETUP $SUITE $UPLOAD || (( bad++ ))
   else

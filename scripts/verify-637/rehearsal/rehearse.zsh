@@ -11,7 +11,8 @@ S=${1:?scratch dir}; JUNIT=${2:?junit file}; HERE=${0:A:h}; STEPS=$HERE/../steps
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 REAL=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
 BRANCH=agent/637-graftling-windows-process-listing
-BASE=7609e52089e638c963cc54c28438c99ea3964f99
+# graftling dev 75cb93b2 (W4 636 integrated); the candidate merges it.
+BASE=75cb93b2d6515f95e949a01eaf63a15944722e44
 BUNDLE=$HERE/../graftling-637.bundle
 LIST=$HERE/../../verify-632/windows-expected.txt
 NEWTESTS=$HERE/../new-tests.txt
@@ -106,8 +107,8 @@ git -C $S/badsrc $NOREPLY commit -q -am 'rehearsal: changes outside W5'
 git -C $S/badsrc bundle create -q $S/bad.bundle $BASE..refs/heads/$BRANCH
 BAD=$S/bad.bundle; fresh disallowed; step disallowed disallowed-00.txt 00; step disallowed disallowed-P.txt P; unset BAD
 print -r -- "--- after P: remote $(git -C $S/disallowed/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/disallowed-P.txt
-# 00 not ready, P STOP: the expected list with the W5 (637) line still in it (GraphTraj dev 5d5938ad's list).
-git -C $HERE show 5d5938ad:scripts/verify-632/windows-expected.txt > $S/unedited-list.txt
+# 00 not ready, P STOP: the expected list with the W5 (637) line still in it (GraphTraj dev 035c3fa3's list).
+git -C $HERE show 035c3fa3:scripts/verify-632/windows-expected.txt > $S/unedited-list.txt
 BADLIST=$S/unedited-list.txt; fresh unedited-list; step unedited-list unedited-list-00.txt 00
 step unedited-list unedited-list-P.txt P; unset BADLIST
 print -r -- "--- after P: remote $(git -C $S/unedited-list/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/unedited-list-P.txt

@@ -1,34 +1,35 @@
 $ VERIFY637_GRAFTLING=/tmp/claude-501/rh637/unedited-list/graftling VERIFY637_GREMOTE=/tmp/claude-501/rh637/unedited-list/gremote.git VERIFY637_GH=/tmp/claude-501/rh637/unedited-list/gh/gh VERIFY637_EVIDENCE=/tmp/claude-501/rh637/unedited-list/evidence VERIFY637_POLL_S=1 VERIFY637_APPEAR_S=10 VERIFY637_DONE_S=30 VERIFY637_EXPECTED=/tmp/claude-501/rh637/unedited-list.txt zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/637-graftling-windows-process-listing to graftling /tmp/claude-501/rh637/unedited-list/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh637/unedited-list/graftling; head 25bd396874b01a648fba021fe1e0807d3cded5ba contains graftling dev 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 7609e52089e638c963cc54c28438c99ea3964f99; others are ancestors of the base)
---- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
-  25bd396 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: list and stop tool and member processes through the execution's job (637, W5)
+PASS: bundle verifies against /tmp/claude-501/rh637/unedited-list/graftling; head 4bf338ff290b3d058154079a747e1e89444109a3 contains graftling dev 75cb93b2d6515f95e949a01eaf63a15944722e44 (prerequisites: 7609e52089e638c963cc54c28438c99ea3964f99 75cb93b2d6515f95e949a01eaf63a15944722e44; others are ancestors of the base)
+--- bundle commits on 75cb93b2d6515f95e949a01eaf63a15944722e44:
+  4bf338f LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 75cb93b2 (W4 636) into agent/637-graftling-windows-process-listing
+  47e70a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: list and stop tool and member processes through the execution's job (637, W5)
 PASS: author and committer are the noreply identity
---- files changed since 7609e52089e638c963cc54c28438c99ea3964f99:
+--- files changed since 75cb93b2d6515f95e949a01eaf63a15944722e44:
    .github/workflows/windows.yml                      |   2 +-
    PUBLIC_API.md                                      |  11 +-
    src/graftling/_win32.py                            |  20 ++
    src/graftling/claude/execution.py                  |   3 +-
    src/graftling/codex/app_server.py                  |   5 +-
-   src/graftling/codex/managed_session.py             |  30 ++-
-   src/graftling/control.py                           |  20 +-
+   src/graftling/codex/managed_session.py             |  30 +-
+   src/graftling/control.py                           |  24 +-
    src/graftling/dsh/execution.py                     |   6 +
    src/graftling/member_processes.py                  | 102 ++++++-
    src/graftling/pi/execution.py                      |   3 +-
    src/graftling/process_tree.py                      |  26 ++
    src/graftling/tool_descendants.py                  |  59 +++-
    tests/codex_stdio_peer.py                          |  17 +-
-   tests/test_codex_child_interpreter_shutdown_473.py |  73 ++++-
+   tests/test_codex_child_interpreter_shutdown_473.py |  91 +++++-
    tests/test_codex_tool_reclaim_462.py               |  26 +-
-   tests/test_process_listing_637.py                  | 296 +++++++++++++++++++++
-   16 files changed, 666 insertions(+), 33 deletions(-)
+   tests/test_process_listing_637.py                  | 310 +++++++++++++++++++++
+   16 files changed, 701 insertions(+), 34 deletions(-)
 PASS: changed paths are within the allowed set: src/graftling/member_processes.py, src/graftling/tool_descendants.py, src/graftling/process_tree.py, src/graftling/_win32.py, src/graftling/control.py, src/graftling/claude/execution.py, src/graftling/pi/execution.py, src/graftling/dsh/execution.py, src/graftling/codex/app_server.py, src/graftling/codex/managed_session.py, PUBLIC_API.md, tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py, tests/test_codex_tool_reclaim_462.py, tests/codex_stdio_peer.py, .github/workflows/windows.yml
---- .github/workflows/windows.yml at 25bd396874b01a648fba021fe1e0807d3cded5ba against 7609e52089e638c963cc54c28438c99ea3964f99
-PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/637-graftling-windows-process-listing', 'agent/638-graftling-windows-paths-encoding', 'dev']
+--- .github/workflows/windows.yml at 4bf338ff290b3d058154079a747e1e89444109a3 against 75cb93b2d6515f95e949a01eaf63a15944722e44
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing']
 PASS: the workflow is the base one with only its push branches line changed
---- .github/workflows/windows.yml at 7609e52089e638c963cc54c28438c99ea3964f99 (632's accepted workflow with 633's, 634's, 635's and 638's branches; every other property by 632's wfcheck)
-PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev']; judged below with it set back to 632's
+--- .github/workflows/windows.yml at 75cb93b2d6515f95e949a01eaf63a15944722e44 (632's accepted workflow with 633's, 634's, 635's, 636's and 638's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe']; judged below with it set back to 632's
 PASS: push branches are exactly agent/632-graftling-windows-ci and dev
 PASS: triggers: push and workflow_dispatch only
 PASS: permissions: contents: read
@@ -55,11 +56,11 @@ PASS: the suite step runs every test file through .github/run_test_files.py with
 PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
-PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 7609e52089e638c963cc54c28438c99ea3964f99
-PASS: the 6 W5 tests of new-tests.txt are defined at 25bd396874b01a648fba021fe1e0807d3cded5ba (tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py)
-PASS: /tmp/claude-501/rh637/unedited-list.txt parses: 44 expected Windows failures and 0 expected hangs (W4 (636) 42, W5 (637) 1, W8 (not registered; outside this round) 1), 19 allowed environment skips
-expected list: 1 W5 (637) entries at the base, 1 to delete; 1 'Leader-placed (inference)' entries kept as they were: ['tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable']
-FAIL: 94 lines, expected 93; first differences: ["48: 'fail\\ttests/test_connection_serve.py::test_removed_control_directory_stops_the_service\\tsrc/graftling/' -> 'fail\\ttests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_m'", "49: 'fail\\ttests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key\\ttests/test' -> 'fail\\ttests/test_connection_serve.py::test_removed_control_directory_stops_the_service\\tsrc/graftling/'", "50: 'fail\\ttests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once\\ttests/te' -> 'fail\\ttests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key\\ttests/test'"]
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 75cb93b2d6515f95e949a01eaf63a15944722e44
+PASS: the 6 W5 tests of new-tests.txt are defined at 4bf338ff290b3d058154079a747e1e89444109a3 (tests/test_process_listing_637.py, tests/test_codex_child_interpreter_shutdown_473.py)
+PASS: /tmp/claude-501/rh637/unedited-list.txt parses: 2 expected Windows failures and 0 expected hangs (W5 (637) 1, W8 (not registered; outside this round) 1), 19 allowed environment skips
+expected list: 1 W5 (637) entries at the base, 1 to delete; 0 'Leader-placed (inference)' entries kept as they were: []
+FAIL: 52 lines, expected 51; first differences: ["48: 'fail\\ttests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable\\ttests/test_uni' -> 'fail\\ttests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_m'", "49: '' -> 'fail\\ttests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable\\ttests/test_uni'", "50: '# --- Fit no rule in round 2B; placed by the Leader (Main delegated these), by inference from siblin' -> ''"]
 FAIL: a W5 (637) line remains
 NOTE: judged against /tmp/claude-501/rh637/unedited-list.txt (rehearsal)
 STOP: the expected list does not meet the checks above; nothing pushed

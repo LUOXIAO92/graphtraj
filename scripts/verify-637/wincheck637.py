@@ -1,12 +1,12 @@
 """Task 637 (W5) step helper, beside verify-632/wincheck.py (which steps.zsh also runs, by reference).
 
 Run as: python -I wincheck637.py <command> <args...>. Standard library only except `wfdiff`, which needs PyYAML.
-  wfdiff BASE_WF HEAD_WF               the workflow at the bundle head is the one at BASE (graftling dev 7609e520) with
+  wfdiff BASE_WF HEAD_WF               the workflow at the bundle head is the one at BASE (graftling dev 75cb93b2) with
                                        only its push branches line changed, and its push branches are exactly BRANCHES
   as632 BASE_WF OUT                    write to OUT the base workflow with its push branches line set back to 632's,
                                        so 632's wfcheck judges every other property of it unchanged; fails unless
                                        that line is there exactly once
-  w5edit OLD NEW                       the expected list NEW is OLD (GraphTraj dev 5d5938ad) with exactly its W5 (637)
+  w5edit OLD NEW                       the expected list NEW is OLD (GraphTraj dev 035c3fa3) with exactly its W5 (637)
                                        lines of DELETED removed; no W5 (637) line left; every other line
                                        byte-identical and in order
   newtests DIR LIST                    every node id in LIST passed in the merged per-file JUnit files of the artifact
@@ -21,17 +21,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "verify-632"))
 from wincheck import load, nodeid  # noqa: E402
 
+# graftling dev 75cb93b2's push branches, in the workflow's order; the candidate appends only its own branch.
 BASE_BRANCHES = ["agent/632-graftling-windows-ci", "agent/633-graftling-windows-process",
                  "agent/634-graftling-windows-durable-writes", "agent/635-graftling-windows-process-tree",
-                 "agent/638-graftling-windows-paths-encoding", "dev"]
-BRANCHES = ["agent/632-graftling-windows-ci", "agent/633-graftling-windows-process",
-            "agent/634-graftling-windows-durable-writes", "agent/635-graftling-windows-process-tree",
-            "agent/637-graftling-windows-process-listing", "agent/638-graftling-windows-paths-encoding", "dev"]
+                 "agent/638-graftling-windows-paths-encoding", "dev", "agent/636-graftling-windows-named-pipe"]
+BRANCHES = BASE_BRANCHES + ["agent/637-graftling-windows-process-listing"]
 BASE_LINE = "    branches: [" + ", ".join(BASE_BRANCHES) + "]"
 HEAD_LINE = "    branches: [" + ", ".join(BRANCHES) + "]"
 LINE_632 = "    branches: [agent/632-graftling-windows-ci, dev]"
 W5 = "W5 (637)"
-# The W5 (637) lines of scripts/verify-632/windows-expected.txt at GraphTraj dev 5d5938ad, all deleted: the test
+# The W5 (637) lines of scripts/verify-632/windows-expected.txt at GraphTraj dev 035c3fa3, all deleted: the test
 # runs on Windows through the service's job and must pass (it is in new-tests.txt).
 DELETED = [
     "tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns",

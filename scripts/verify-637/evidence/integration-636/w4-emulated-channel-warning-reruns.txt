@@ -1,0 +1,10 @@
+cand run 1: 17 passed in 6.00s
+cand run 2: 17 passed in 5.99s
+cand run 3: 17 passed in 5.94s
+cand run 4: 17 passed, 1 warning in 5.98s
+cand run 5: 17 passed in 5.93s
+base run 1: 17 passed in 5.97s
+base run 2: 17 passed in 5.94s
+base run 3: 17 passed in 5.97s
+base run 4: 17 passed in 5.94s
+base run 5: 17 passed in 5.93s

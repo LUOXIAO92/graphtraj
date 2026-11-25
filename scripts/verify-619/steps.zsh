@@ -180,7 +180,7 @@ graft_local_ok() {  # the local 619 branch in $GRAFT is absent (0) or equal (1) 
 }
 # The branch head on a remote, empty when absent, "ERR <text>" when ls-remote fails (checked() then STOPs).
 ls_sha() { local out; out=$(allow $GIT -C $1 ls-remote $2 refs/heads/$BRANCH 2>&1) || { print -r -- "ERR $out"; return 0; }; print -r -- ${out%%$'\t'*}; }
-checked() { [[ $1 != ERR* ]] || stop "git ls-remote failed (nothing was pushed): ${1#ERR }"; }
+checked() { [[ ${1:-} != ERR* ]] || stop "git ls-remote failed (nothing was pushed): ${1#ERR }"; }
 remote_sha() { ls_sha $WT $REMOTE; }
 gremote_sha() { ls_sha $GRAFT $GREMOTE; }
 graft_remote_ok() {  # the graftling remote branch is absent, the bundle head, or an ancestor of the bundle's base

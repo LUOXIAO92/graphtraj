@@ -1,6 +1,6 @@
-$ VERIFY627_REMOTE=/tmp/claude-501/r627/push-fail/remote.git VERIFY627_GH=/tmp/claude-501/r627/push-fail/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627/push-fail/htmp VERIFY627_PTMP=/tmp/claude-501/r627/push-fail/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P
+$ VERIFY627_REMOTE=/tmp/claude-501/r627b/push-fail/remote.git VERIFY627_GH=/tmp/claude-501/r627b/push-fail/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627b/push-fail/htmp VERIFY627_PTMP=/tmp/claude-501/r627b/push-fail/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
-== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/r627/push-fail/remote.git agent/627-desktop-ui-structure-redesign (fast-forward only, never force); starts desktop-macos-adoption.yml and desktop-linux-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
+== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/r627b/push-fail/remote.git agent/627-desktop-ui-structure-redesign (fast-forward only, never force); starts desktop-macos-adoption.yml and desktop-linux-adoption.yml. Login: ssh key, gh login. Dialog: none. Network: GitHub.
 PASS: on agent/627-desktop-ui-structure-redesign
 PASS: tracked tree clean
 PASS: base 4fa79a8d is an ancestor of HEAD
@@ -9,17 +9,17 @@ PASS: .github/workflows/desktop-linux-adoption.yml push branches name agent/627-
 PASS: .github/workflows/desktop-macos-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
 PASS: desktop-linux-adoption.yml changes only its push branches line
 PASS: desktop-macos-adoption.yml has the 627 window-test step
-NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-7b488184fd77f1661acb9273599d0ebf71727c26 (not required for P)
-NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627/repo/scripts/verify-627/evidence/7b488184fd77f1661acb9273599d0ebf71727c26
-$ git push /tmp/claude-501/r627/push-fail/remote.git refs/heads/agent/627-desktop-ui-structure-redesign:refs/heads/agent/627-desktop-ui-structure-redesign   (HEAD 7b488184fd77f1661acb9273599d0ebf71727c26)
-  To /tmp/claude-501/r627/push-fail/remote.git
+NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-f6fd59929729679d7ad6b84f60af69e54ed04c53 (not required for P)
+NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627b/repo/scripts/verify-627/evidence/f6fd59929729679d7ad6b84f60af69e54ed04c53
+$ git push /tmp/claude-501/r627b/push-fail/remote.git refs/heads/agent/627-desktop-ui-structure-redesign:refs/heads/agent/627-desktop-ui-structure-redesign   (HEAD f6fd59929729679d7ad6b84f60af69e54ed04c53)
+  To /tmp/claude-501/r627b/push-fail/remote.git
    * [new branch]        agent/627-desktop-ui-structure-redesign -> agent/627-desktop-ui-structure-redesign
-PASS: /tmp/claude-501/r627/push-fail/remote.git agent/627-desktop-ui-structure-redesign = 7b488184fd77f1661acb9273599d0ebf71727c26
-observing push runs of desktop-macos-adoption.yml and desktop-linux-adoption.yml for 7b488184fd77f1661acb9273599d0ebf71727c26 (appearance bound 10s, completion bound 30s, poll 1s)
+PASS: /tmp/claude-501/r627b/push-fail/remote.git agent/627-desktop-ui-structure-redesign = f6fd59929729679d7ad6b84f60af69e54ed04c53
+observing push runs of desktop-macos-adoption.yml and desktop-linux-adoption.yml for f6fd59929729679d7ad6b84f60af69e54ed04c53 (appearance bound 10s, completion bound 30s, poll 1s)
 both push runs present after 2s
-  [18:19:10] .github/workflows/desktop-linux-adoption.yml in_progress -;.github/workflows/desktop-macos-adoption.yml in_progress -;
-  [18:19:11] .github/workflows/desktop-linux-adoption.yml completed failure;.github/workflows/desktop-macos-adoption.yml completed success;
---- results for 7b488184fd77f1661acb9273599d0ebf71727c26
+  [18:33:00] .github/workflows/desktop-linux-adoption.yml in_progress -;.github/workflows/desktop-macos-adoption.yml in_progress -;
+  [18:33:01] .github/workflows/desktop-linux-adoption.yml completed failure;.github/workflows/desktop-macos-adoption.yml completed success;
+--- results for f6fd59929729679d7ad6b84f60af69e54ed04c53
 RUN desktop-linux-adoption.yml | id 46200000001 | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000001
   job: installed-desktop | completed | failure | https://github.com/LUOXIAO92/graphtraj/actions/runs/46200000001/job/2
     step 9 Exercise the installed desktop under Xvfb: completed / failure
@@ -30,9 +30,9 @@ OTHER workflows triggered for this SHA:
 --- tail of: gh run view 46200000001 --repo LUOXIAO92/graphtraj --log-failed
 Installed macOS artifact and adoption	Installed app adoption, optionality and security	2026-11-25T00:00:00Z TimeoutError: stand-in failed log for run 46200000001
 --- evidence of desktop-linux-adoption.yml run 46200000001
-$ gh run download 46200000001 --repo LUOXIAO92/graphtraj -n linux-desktop-7b488184fd77f1661acb9273599d0ebf71727c26 -D /tmp/claude-501/r627/push-fail/htmp/linux-evidence-46200000001
-copied to: /tmp/claude-501/r627/push-fail/ptmp/linux-evidence-46200000001
---- files (bytes, path under /tmp/claude-501/r627/push-fail/htmp/linux-evidence-46200000001)
+$ gh run download 46200000001 --repo LUOXIAO92/graphtraj -n linux-desktop-f6fd59929729679d7ad6b84f60af69e54ed04c53 -D /tmp/claude-501/r627b/push-fail/htmp/linux-evidence-46200000001
+copied to: /tmp/claude-501/r627b/push-fail/ptmp/linux-evidence-46200000001
+--- files (bytes, path under /tmp/claude-501/r627b/push-fail/htmp/linux-evidence-46200000001)
           37  evidence/result.json
          207  evidence/ui-result.json
 --- evidence/result.json
@@ -49,9 +49,9 @@ copied to: /tmp/claude-501/r627/push-fail/ptmp/linux-evidence-46200000001
     - stand-in linux step 2
   screenshots: none
 --- evidence of desktop-macos-adoption.yml run 46200000000
-$ gh run download 46200000000 --repo LUOXIAO92/graphtraj -n graphtraj-macos-adoption-evidence -D /tmp/claude-501/r627/push-fail/htmp/mac-evidence-46200000000
-copied to: /tmp/claude-501/r627/push-fail/ptmp/mac-evidence-46200000000
---- files (bytes, path under /tmp/claude-501/r627/push-fail/htmp/mac-evidence-46200000000)
+$ gh run download 46200000000 --repo LUOXIAO92/graphtraj -n graphtraj-macos-adoption-evidence -D /tmp/claude-501/r627b/push-fail/htmp/mac-evidence-46200000000
+copied to: /tmp/claude-501/r627b/push-fail/ptmp/mac-evidence-46200000000
+--- files (bytes, path under /tmp/claude-501/r627b/push-fail/htmp/mac-evidence-46200000000)
           21  environment.txt
          273  evidence.json
           13  screens/00-start.png
@@ -65,7 +65,7 @@ copied to: /tmp/claude-501/r627/push-fail/ptmp/mac-evidence-46200000000
     - stand-in step 7
     - stand-in step 8
   screenshots: screens/00-start.png
-next (only if the failure is transient; not run by this step): /tmp/claude-501/r627/push-fail/gh/gh run rerun 46200000001 --repo LUOXIAO92/graphtraj --failed
-NEXT: zsh /private/tmp/claude-501/r627/repo/scripts/verify-627/steps.zsh W 7b488184fd77f1661acb9273599d0ebf71727c26    (re-observe; no push)
+next (only if the failure is transient; not run by this step): /tmp/claude-501/r627b/push-fail/gh/gh run rerun 46200000001 --repo LUOXIAO92/graphtraj --failed
+NEXT: zsh /private/tmp/claude-501/r627b/repo/scripts/verify-627/steps.zsh W f6fd59929729679d7ad6b84f60af69e54ed04c53    (re-observe; no push)
 VERDICT 627 P: FAIL (1/2 success; desktop-linux-adoption.yml evidence ok; desktop-macos-adoption.yml evidence ok)
 [exit 1]

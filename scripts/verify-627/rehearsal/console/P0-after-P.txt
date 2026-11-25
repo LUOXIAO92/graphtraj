@@ -1,15 +1,15 @@
-$ VERIFY627_REMOTE=/tmp/claude-501/r627/push-success/remote.git VERIFY627_GH=/tmp/claude-501/r627/push-success/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627/push-success/htmp VERIFY627_PTMP=/tmp/claude-501/r627/push-success/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P0
+$ VERIFY627_REMOTE=/tmp/claude-501/r627b/push-success/remote.git VERIFY627_GH=/tmp/claude-501/r627b/push-success/gh/gh VERIFY627_HTMP=/tmp/claude-501/r627b/push-success/htmp VERIFY627_PTMP=/tmp/claude-501/r627b/push-success/ptmp VERIFY627_POLL_S=1 VERIFY627_APPEAR_S=10 VERIFY627_DONE_S=30 zsh steps.zsh P0
 scrubbed at start (names only): DEEPSEEK_BASE_URL GRAPHTRAJ_CLI_CONNECTION CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P0] Push preflight, read only. Login: your gh login (account shown, no token) and ssh key (git ls-remote). Dialog: none. Network: GitHub.
-git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify621-stand-in | gh path: /tmp/claude-501/r627/push-success/gh/gh
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify621-stand-in | gh path: /tmp/claude-501/r627b/push-success/gh/gh
 $ gh auth status --hostname github.com   (token lines removed)
   github.com
     ✓ Logged in to github.com account stand-in-user (verify-621 fake)
     - Active account: true
 PASS: origin is git@github.com:LUOXIAO92/graphtraj.git
-NOTE: rehearsal remote /tmp/claude-501/r627/push-success/remote.git is used instead of origin for ls-remote/push
-current branch: agent/627-desktop-ui-structure-redesign | HEAD 7b488184fd77f1661acb9273599d0ebf71727c26
-PASS: /tmp/claude-501/r627/push-success/remote.git already has agent/627-desktop-ui-structure-redesign at HEAD (no push needed; observe with W)
+NOTE: rehearsal remote /tmp/claude-501/r627b/push-success/remote.git is used instead of origin for ls-remote/push
+current branch: agent/627-desktop-ui-structure-redesign | HEAD f6fd59929729679d7ad6b84f60af69e54ed04c53
+PASS: /tmp/claude-501/r627b/push-success/remote.git already has agent/627-desktop-ui-structure-redesign at HEAD (no push needed; observe with W)
 --- P preconditions
 PASS: on agent/627-desktop-ui-structure-redesign
 PASS: tracked tree clean
@@ -19,8 +19,8 @@ PASS: .github/workflows/desktop-linux-adoption.yml push branches name agent/627-
 PASS: .github/workflows/desktop-macos-adoption.yml push branches name agent/627-desktop-ui-structure-redesign
 PASS: desktop-linux-adoption.yml changes only its push branches line
 PASS: desktop-macos-adoption.yml has the 627 window-test step
-NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-7b488184fd77f1661acb9273599d0ebf71727c26 (not required for P)
-NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627/repo/scripts/verify-627/evidence/7b488184fd77f1661acb9273599d0ebf71727c26
-NEXT: zsh /private/tmp/claude-501/r627/repo/scripts/verify-627/steps.zsh W    (observes the push runs of the already pushed HEAD; no push)
-VERDICT 627 P0: PASS (P not needed; remote branch equal to 7b488184fd77f1661acb9273599d0ebf71727c26)
+NOTE: no B pass recorded for HEAD in /tmp/claude-501/graphtraj-627-f6fd59929729679d7ad6b84f60af69e54ed04c53 (not required for P)
+NOTE: no S evidence for HEAD at /private/tmp/claude-501/r627b/repo/scripts/verify-627/evidence/f6fd59929729679d7ad6b84f60af69e54ed04c53
+NEXT: zsh /private/tmp/claude-501/r627b/repo/scripts/verify-627/steps.zsh W    (observes the push runs of the already pushed HEAD; no push)
+VERDICT 627 P0: PASS (P not needed; remote branch equal to f6fd59929729679d7ad6b84f60af69e54ed04c53)
 [exit 0]

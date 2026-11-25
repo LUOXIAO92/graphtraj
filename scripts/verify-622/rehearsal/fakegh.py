@@ -3,7 +3,9 @@
 Called as: python fakegh.py <state-dir> <gh arguments...>. <state-dir>/scenario names the case:
 noise (the guarded run's log has the 618 libproc line), clean (summary, no noise), nosummary (no pytest
 summary in the step), none (no listed run's commit holds the guard), wait (the guarded run is in_progress
-for two polls, then completed and clean). Log lines use the real format: job<TAB>step<TAB>timestamp text,
+for two polls, then completed and clean); for step P: psuccess (the pushed sha's desktop-win-adoption run
+appears on the 2nd head_sha poll, in_progress for two polls, then completed and clean), ptimeout (only another
+workflow's run ever appears for the pushed sha), pdiverged (never reached: P stops before pushing). Log lines use the real format: job<TAB>step<TAB>timestamp text,
 taken from 618 realhost/main-raw/main-console-P.txt. Never contacts GitHub.
 """
 import base64
@@ -32,7 +34,7 @@ def run(rid, sha, created, run_state="completed", conclusion="failure"):
 
 
 def guarded_state():
-    if scenario != "wait":
+    if scenario not in ("wait", "psuccess"):
         return "completed"
     counter = state / "polls"
     n = int(counter.read_text()) + 1 if counter.exists() else 1
@@ -45,6 +47,24 @@ def runs():
     if scenario != "none":
         items.append(run(45600000622, GUARDED, "2026-11-26T01:00:00Z", "in_progress" if scenario == "wait" else "completed"))
         items.append(run(45600000700, OTHER, "2026-11-26T02:00:00Z"))
+    return {"total_count": len(items), "workflow_runs": items}
+
+
+PUSHED_RUN = 45600000999
+
+
+def runs_for_sha(sha):
+    (state / "pushed_sha").write_text(sha)
+    counter = state / "appear_polls"
+    n = int(counter.read_text()) + 1 if counter.exists() else 1
+    counter.write_text(str(n))
+    items = []
+    if scenario == "psuccess" and n >= 2:
+        items.append(run(PUSHED_RUN, sha, "2026-11-26T03:00:00Z", "in_progress"))
+    if scenario == "ptimeout":
+        other = run(45600000998, sha, "2026-11-26T03:00:00Z", "queued")
+        other["path"] = ".github/workflows/other.yml"
+        items.append(other)
     return {"total_count": len(items), "workflow_runs": items}
 
 
@@ -76,15 +96,20 @@ elif args[:2] == ["auth", "status"]:
 elif args[:1] == ["api"]:
     lst = re.fullmatch(rf"repos/{REPO}/actions/workflows/desktop-win-adoption\.yml/runs\?per_page=30", args[1])
     one = re.fullmatch(rf"repos/{REPO}/actions/runs/(\d+)", args[1])
+    by_sha = re.fullmatch(rf"repos/{REPO}/actions/runs\?head_sha=([0-9a-f]{{40}})&per_page=100", args[1])
     content = re.fullmatch(rf"repos/{REPO}/contents/tests/process_reclaim\.py\?ref=([0-9a-f]+)", args[1])
     if lst:
         print(json.dumps(runs()))
     elif one and int(one.group(1)) == 45600000622 and scenario != "none":
         print(json.dumps(run(45600000622, GUARDED, "2026-11-26T01:00:00Z", guarded_state())))
+    elif by_sha:
+        print(json.dumps(runs_for_sha(by_sha.group(1))))
+    elif one and int(one.group(1)) == PUSHED_RUN:
+        print(json.dumps(run(PUSHED_RUN, (state / "pushed_sha").read_text(), "2026-11-26T03:00:00Z", guarded_state())))
     elif one and int(one.group(1)) == 45546698610:
         print(json.dumps(run(45546698610, OLD, "2026-11-25T04:20:00Z")))
     elif content:
-        text = NEW_FILE if content.group(1) == GUARDED else OLD_FILE
+        text = OLD_FILE if content.group(1) in (OLD, OTHER) else NEW_FILE
         print(json.dumps({"path": "tests/process_reclaim.py", "encoding": "base64",
                           "content": base64.encodebytes(text.encode()).decode()}))
     else:

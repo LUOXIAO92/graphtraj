@@ -1,7 +1,7 @@
 name: Windows desktop adoption 266
 on:
   push:
-    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref]
+    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref, agent/622-process-reclaim-windows-noise]
 permissions:
   contents: read
 jobs:

@@ -16,9 +16,15 @@ export const taskCard = (scope, id) => taskCanvas(scope).locator(`.native-task-c
 export const taskTitle = (scope, title) => taskCanvas(scope).getByRole('button', { name: title, exact: true });
 /** Select a task by its title button (TaskCanvas.tsx card). */
 export const openTask = (scope, id) => taskCard(scope, id).locator('.native-task-title').click();
-/** The selected task id: the card whose title button is pressed. */
-export const selectedTask = scope => taskCanvas(scope).locator('.native-task-card')
-  .filter({ has: scope.page().getByRole('button', { pressed: true }) }).getAttribute('data-task-id');
+/**
+ * The selected task id: the card whose title button is pressed (TaskCanvas.tsx:243-246).
+ * While a reader is expanded the graph view is concealed with aria-hidden (main.tsx), and
+ * role queries skip it, so the pressed state is read as an attribute, as the old check read
+ * React Flow's hidden `.selected` node.
+ */
+export const selectedTask = scope => scope.locator(
+  '[aria-label="Native task canvas"] .native-task-card:has(> .native-task-title[aria-pressed="true"])')
+  .getAttribute('data-task-id');
 
 /** Open the Projects view, the only place for Add/Check/Relocate/Remove (main.tsx ProjectIndexEditor). */
 export async function projectsView(page) {

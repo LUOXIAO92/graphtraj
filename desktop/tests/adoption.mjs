@@ -613,6 +613,11 @@ async function settingsOnlyAdoption() {
   });
   const rolesFile = path.join(first, '.graphtraj', 'roles.yml');
   await fs.writeFile(rolesFile, 'roles:\n  custom_group:\n    observer:\n      runtime: codex\n      model: original-model\n      reports: [report.md]\n      codex:\n        retained_custom_field: preserved\nrole_tree: {}\n');
+  // Every task_graph reader (CLI, Agents, desktop) persists GraphTraj's derived task index
+  // when it is absent or stale (caebb993; src/graphtraj/graph/task_index.py:59-67), and a fresh
+  // project has none. Read it once through the same public operation before the snapshot, so
+  // that adding and monitoring this project must change no file at all, the index included.
+  fixtures.operate(second, 'task_graph');
   const secondBefore = await snapshot(second);
   let handle;
   let page;
@@ -1149,6 +1154,11 @@ async function main() {
     // Relocation changes only an indexed path. Use a separate disposable project
     // so the retained first/second activity records never need to be rewritten.
     const relocated = await fixtures.makeProject(path.join(root, 'relocated-project'), 'relocated-project');
+    // Every task_graph reader (CLI, Agents, desktop) persists GraphTraj's derived task index
+    // when it is absent or stale (caebb993; src/graphtraj/graph/task_index.py:59-67), and a fresh
+    // project has none. Read it once through the same public operation before the snapshot, so
+    // that Relocate, Open and Remove must change no file at all, the index included.
+    fixtures.operate(relocated, 'task_graph');
     const relocationBefore = await snapshot(relocated);
     await page.getByRole('button', { name: 'Monitor', exact: true }).click();
     await projectEntry(page, 'missing-project').click();

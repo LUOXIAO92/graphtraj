@@ -1,15 +1,15 @@
 $ VERIFY637_GRAFTLING=/tmp/claude-501/rh637/rerun/graftling VERIFY637_GREMOTE=/tmp/claude-501/rh637/rerun/gremote.git VERIFY637_GH=/tmp/claude-501/rh637/rerun/gh/gh VERIFY637_EVIDENCE=/tmp/claude-501/rh637/rerun/evidence VERIFY637_POLL_S=1 VERIFY637_APPEAR_S=10 VERIFY637_DONE_S=30 zsh steps.zsh X 51000000000
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [X] Re-run failed jobs of run 51000000000. OUTWARD-FACING: gh run rerun 51000000000 --failed starts GitHub Actions jobs. Login: gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh637/rerun/graftling; head 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0 contains graftling dev 75cb93b2d6515f95e949a01eaf63a15944722e44 (prerequisites: 75cb93b2d6515f95e949a01eaf63a15944722e44 25bd396874b01a648fba021fe1e0807d3cded5ba 7609e52089e638c963cc54c28438c99ea3964f99; 25bd396874b01a648fba021fe1e0807d3cded5ba only as an ancestor of the head, others as ancestors of the base)
+PASS: bundle verifies against /tmp/claude-501/rh637/rerun/graftling; head 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb contains graftling dev 75cb93b2d6515f95e949a01eaf63a15944722e44 (prerequisites: 75cb93b2d6515f95e949a01eaf63a15944722e44 25bd396874b01a648fba021fe1e0807d3cded5ba 7609e52089e638c963cc54c28438c99ea3964f99; 25bd396874b01a648fba021fe1e0807d3cded5ba only as an ancestor of the head, others as ancestors of the base)
 run 51000000000: .github/workflows/windows.yml | branch agent/637-graftling-windows-process-listing | attempt 1 | completed | failure
 $ gh run rerun 51000000000 --repo LUOXIAO92/graftling --failed
   ✓ Requested rerun (failed jobs) of run 51000000000
 waiting for attempt > 1 to appear (bound 10s, poll 1s)
 attempt 2 appeared after 0s
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [01:24:14] run 51000000000: completed failure
---- run 51000000000 | attempt 2 | push | conclusion failure (information only) | head 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+  [01:39:30] run 51000000000: completed failure
+--- run 51000000000 | attempt 2 | push | conclusion failure (information only) | head 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed
@@ -27,8 +27,8 @@ JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling
   step 15 | success   | Complete job | other: success or skipped
 --- job log saved: /tmp/claude-501/rh637/rerun/evidence/run-51000000000-a2/job.log; files ended, hangs, driver exit:
   per-file pytest summaries: 1
-$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0-2 -D /tmp/claude-501/rh637/rerun/evidence/run-51000000000-a2/junit
-test files in 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0: 65
+$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-9bbf644321d1746b5f268a94dcff4b1e7a2a92fb-2 -D /tmp/claude-501/rh637/rerun/evidence/run-51000000000-a2/junit
+test files in 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb: 65
 --- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/637-graftling-windows-process-listing/scripts/verify-632/windows-expected.txt
 runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
 run_test_files exit code: 1
@@ -101,5 +101,5 @@ observed list written: /tmp/claude-501/rh637/rerun/evidence/run-51000000000-a2/o
 evidence: /tmp/claude-501/rh637/rerun/evidence/run-51000000000-a2 (git-ignored unless a rehearsal root was given; copy it into tracked files in a new commit)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/637-graftling-windows-process-listing/scripts/verify-637/steps.zsh W 51000000000    (observe again; no push, no re-run)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/637-graftling-windows-process-listing/scripts/verify-637/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
-VERDICT 637 X: PASS (run 51000000000 attempt 2 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 X: PASS (run 51000000000 attempt 2 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]

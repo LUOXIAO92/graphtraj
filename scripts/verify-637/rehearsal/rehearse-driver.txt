@@ -1,41 +1,41 @@
 --- matched-00.txt
-VERDICT 637 00: PASS (P ready: yes; remote branch absent; candidate graftling 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0)
+VERDICT 637 00: PASS (P ready: yes; remote branch absent; candidate graftling 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb)
 [exit 0]
 --- matched-P.txt
-VERDICT 637 P: PASS (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: PASS (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]
 --- matched-00-again.txt
-VERDICT 637 00: PASS (P ready: yes; remote branch equal; candidate graftling 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0)
+VERDICT 637 00: PASS (P ready: yes; remote branch equal; candidate graftling 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb)
 [exit 0]
 --- matched-W-sha.txt
-VERDICT 637 W: PASS (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 W: PASS (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]
 --- matched-W-run.txt
-VERDICT 637 W: PASS (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 W: PASS (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]
 --- winpaths-P.txt
-VERDICT 637 P: PASS (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: PASS (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]
 --- listed-passes-P.txt
-VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W5 tests: PASS 6 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W5 tests: PASS 6 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]
 --- deleted-fails-P.txt
-VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; W5 tests: FAIL 5 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; W5 tests: FAIL 5 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]
 --- newtest-fails-P.txt
-VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; W5 tests: FAIL 5 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; W5 tests: FAIL 5 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]
 --- newtest-skipped-P.txt
-VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: PASS 1025 tests: 772 passed, 1 failed as listed, 0 hangs as listed, 231 POSIX-only skips, 21 environment skips; W5 tests: FAIL 5 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: PASS 1025 tests: 772 passed, 1 failed as listed, 0 hangs as listed, 231 POSIX-only skips, 21 environment skips; W5 tests: FAIL 5 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]
 --- setup-fail-P.txt
-VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: FAIL step 'Install graftling and pinned test tools' is failure; step 'Show runner, Python and pytest versions' is skipped; step 'Run the graftling test suite' is skipped (did not run the suite to its end); run_test_files exit code missing: the driver did not finish (0 or 1 expected); no per-file records (files.json): [Errno 2] No such file or directory: '/tmp/claude-501/rh637/setup-fail/evidence/run-51000000000-a1/junit/files.json'; results: FAIL JUnit holds no test; 1 listed failures skipped or absent; W5 tests: FAIL 0 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: FAIL step 'Install graftling and pinned test tools' is failure; step 'Show runner, Python and pytest versions' is skipped; step 'Run the graftling test suite' is skipped (did not run the suite to its end); run_test_files exit code missing: the driver did not finish (0 or 1 expected); no per-file records (files.json): [Errno 2] No such file or directory: '/tmp/claude-501/rh637/setup-fail/evidence/run-51000000000-a1/junit/files.json'; results: FAIL JUnit holds no test; 1 listed failures skipped or absent; W5 tests: FAIL 0 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]
 --- rerun-P.txt
-VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W5 tests: PASS 6 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: FAIL (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 skips without the POSIX-only prefix; 1 unexpected failures; 1 unexpected passes; W5 tests: PASS 6 of 6 W5 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 1]
 --- rerun-X.txt
-VERDICT 637 X: PASS (run 51000000000 attempt 2 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 X: PASS (run 51000000000 attempt 2 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]
 --- timeout-P.txt
 VERDICT 637 P: FAIL (the .github/workflows/windows.yml run never appeared within 4s)
@@ -47,16 +47,22 @@ VERDICT 637 00: STOP
 VERDICT 637 P: STOP
 [exit 1]
 --- ff-local-00.txt
-VERDICT 637 00: PASS (P ready: yes; remote branch absent; candidate graftling 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0)
+VERDICT 637 00: PASS (P ready: yes; remote branch absent; candidate graftling 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb)
 [exit 0]
 --- ff-local-P.txt
-VERDICT 637 P: PASS (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: PASS (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]
 --- pushed-before-00.txt
-VERDICT 637 00: PASS (P ready: yes; remote branch ancestor; candidate graftling 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0)
+VERDICT 637 00: PASS (P ready: yes; remote branch ancestor; candidate graftling 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb)
 [exit 0]
 --- pushed-before-P.txt
-VERDICT 637 P: PASS (run 51000000000 attempt 1 on 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 637 P: PASS (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- pushed-21a393e2-00.txt
+VERDICT 637 00: PASS (P ready: yes; remote branch ancestor; candidate graftling 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb)
+[exit 0]
+--- pushed-21a393e2-P.txt
+VERDICT 637 P: PASS (run 51000000000 attempt 1 on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1025 tests: 773 passed, 1 failed as listed, 0 hangs as listed, 230 POSIX-only skips, 21 environment skips; W5 tests: 6 of 6 W5 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]
 --- pushed-diverged-00.txt
 VERDICT 637 00: STOP
@@ -65,13 +71,13 @@ VERDICT 637 00: STOP
 VERDICT 637 P: STOP
 [exit 1]
 --- disallowed-00.txt
-VERDICT 637 00: PASS (P ready: no; remote branch absent; candidate graftling 8966297db04bacc478609d27cac12616fcb736c0)
+VERDICT 637 00: PASS (P ready: no; remote branch absent; candidate graftling 25b0ca9138a560dee6f126b38d9bcb4e7989392b)
 [exit 0]
 --- disallowed-P.txt
 VERDICT 637 P: STOP
 [exit 1]
 --- unedited-list-00.txt
-VERDICT 637 00: PASS (P ready: no; remote branch absent; candidate graftling 21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0)
+VERDICT 637 00: PASS (P ready: no; remote branch absent; candidate graftling 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb)
 [exit 0]
 --- unedited-list-P.txt
 VERDICT 637 P: STOP

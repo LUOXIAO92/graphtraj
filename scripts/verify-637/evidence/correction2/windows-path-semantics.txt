@@ -1,0 +1,4 @@
+before, Windows: '/native/thread-1.jsonl' is_absolute = False
+after,  Windows: 'D:\\native\\thread-1.jsonl' is_absolute = True
+after,  POSIX  : '/native/thread-1.jsonl' unchanged = True is_absolute = True
+this host os.path.abspath: '/native/thread-1.jsonl'

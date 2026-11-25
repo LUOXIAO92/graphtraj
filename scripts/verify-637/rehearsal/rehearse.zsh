@@ -101,6 +101,13 @@ fresh pushed-before; git -C $S/pushed-before/gremote.git update-ref refs/heads/$
 git -C $S/pushed-before/graftling branch -q $BRANCH $PUSHED
 step pushed-before pushed-before-00.txt 00; step pushed-before pushed-before-P.txt P
 print -r -- "--- after P: clone $(git -C $S/pushed-before/graftling rev-parse $BRANCH), remote $(git -C $S/pushed-before/gremote.git rev-parse $BRANCH); bundle head $HEAD_SHA; on the remote: $(git -C $S/pushed-before/gremote.git rev-list --count $PUSHED..$BRANCH) commits added, $PUSHED an ancestor: $(git -C $S/pushed-before/gremote.git merge-base --is-ancestor $PUSHED $BRANCH && print -r -- yes || print -r -- no)" >> $OUT/pushed-before-P.txt
+# PASS, the real state before correction 2's P: the previous P pushed 21a393e2 and fetched it, so the remote branch
+# and the clone's local branch are both at it. 00: P ready, remote branch an ancestor; P fast-forwards both.
+PUSHED2=21a393e2f057d2460a64f6a60d7ce2b9f4fa8bd0
+fresh pushed-21a393e2; git -C $S/pushed-21a393e2/gremote.git update-ref refs/heads/$BRANCH $PUSHED2
+git -C $S/pushed-21a393e2/graftling branch -q $BRANCH $PUSHED2
+step pushed-21a393e2 pushed-21a393e2-00.txt 00; step pushed-21a393e2 pushed-21a393e2-P.txt P
+print -r -- "--- after P: clone $(git -C $S/pushed-21a393e2/graftling rev-parse $BRANCH), remote $(git -C $S/pushed-21a393e2/gremote.git rev-parse $BRANCH); bundle head $HEAD_SHA; on the remote: $(git -C $S/pushed-21a393e2/gremote.git rev-list --count $PUSHED2..$BRANCH) commits added, $PUSHED2 an ancestor: $(git -C $S/pushed-21a393e2/gremote.git merge-base --is-ancestor $PUSHED2 $BRANCH && print -r -- yes || print -r -- no)" >> $OUT/pushed-21a393e2-P.txt
 # STOP: the clone's branch at 25bd3968 but the remote at an unrelated commit (never forced; the remote is unchanged).
 fresh pushed-diverged; git -C $S/pushed-diverged/graftling branch -q $BRANCH $PUSHED
 UNRELATED=$(diverged_commit $S/pushed-diverged/gremote.git)

@@ -1,0 +1,86 @@
+diff --git a/src/graftling/member_processes.py b/src/graftling/member_processes.py
+index 3602d73..eded835 100644
+--- a/src/graftling/member_processes.py
++++ b/src/graftling/member_processes.py
+@@ -202,13 +202,20 @@ def _open_job(name: str) -> OwnedTree:
+ 
+ 
+ def _windows_argv(pid: int) -> list[str]:
+-    """Return a process's arguments as the kernel reports them; empty when unreadable."""
++    """Return a process's arguments as the kernel reports them.
++
++    When the command line cannot be read, the executable's path alone
++    (QueryFullProcessImageNameW), so a listed process still names what it
++    runs; empty when neither can be read.
++    """
++    from graftling import _win32
+     from graftling.process import process_arguments
+ 
+     try:
+         return process_arguments(pid)
+     except OSError:
+-        return []
++        image = _win32.image_path(pid)
++        return [image] if image else []
+ 
+ 
+ def list_job(name: str, skipped: set[int] | frozenset[int]) -> dict[int, list[str]]:
+diff --git a/tests/codex_stdio_peer.py b/tests/codex_stdio_peer.py
+index cb3fac7..0ca6de1 100644
+--- a/tests/codex_stdio_peer.py
++++ b/tests/codex_stdio_peer.py
+@@ -206,7 +206,9 @@ for line in incoming():
+         result = {
+             'thread': {
+                 'id': thread_id,
+-                'path': str(rollout) if rollout else '/native/' + thread_id + '.jsonl',
++                # A real Codex reports an absolute rollout path. abspath keeps '/native/...' on
++                # POSIX and gives it the current drive on Windows (637); the file never exists.
++                'path': str(rollout) if rollout else os.path.abspath('/native/' + thread_id + '.jsonl'),
+                 'turns': [],
+             },
+             'model': os.environ.get('PEER_OBSERVED_MODEL') or params.get('model', 'runtime-default'),
+@@ -314,9 +316,11 @@ for line in incoming():
+                                   "import subprocess; subprocess.Popen(['/bin/sleep', '303']).wait()"],
+                                  env=other, **quiet)
+             if prompt == 'tool-end':
+-                # End the turn after the owner's sampler has seen the tool (about 1 s).
++                # End the turn after the owner's sampler has seen the tool (about 1 s). Windows
++                # (637): no sampler, but the test finds the tool and its grandchild in the job
++                # before the reclaim ends them, and each Python start is slower there.
+                 emit({'id': message['id'], 'result': result})
+-                time.sleep(2.5)
++                time.sleep(8 if os.name == 'nt' else 2.5)
+                 complete(thread_id, turn_id, 'tool ran')
+                 continue
+             prompt = 'hold'
+diff --git a/tests/test_codex_child_interpreter_shutdown_473.py b/tests/test_codex_child_interpreter_shutdown_473.py
+index bdc256b..649a15a 100644
+--- a/tests/test_codex_child_interpreter_shutdown_473.py
++++ b/tests/test_codex_child_interpreter_shutdown_473.py
+@@ -52,7 +52,10 @@ native_settings = reclaim.native_settings
+ 
+ def windows_tools(root: Path, agent: str, other: subprocess.Popen) -> dict[str, Identity]:
+     """Windows: the tool and its grandchild in the service's job, by their arguments, and ``other``."""
+-    marker = reclaim.record(root, agent)['process'].get('tool_marker')
++    try:
++        marker = reclaim.record(root, agent)['process'].get('tool_marker')
++    except (OSError, ValueError, KeyError, IndexError):
++        return {}  # the record is being replaced or has no execution yet; read again
+     try:
+         listed = find_marked_processes(marker) if marker else {}
+     except OSError:
+@@ -108,7 +111,12 @@ def test_child_ends_completed_after_the_owner_main_thread_returns(tmp_path: Path
+         created = json.loads(owner.stdout.readline())
+         tools   = ((lambda: windows_tools(root, created['agent'], other)) if WINDOWS
+                    else (lambda: reclaim.tools(since)))
+-        found   = reclaim.wait_for(lambda: len(tools()) == 3, 10) and tools()
++
++        def all_three() -> dict | None:
++            """The tools once all three are seen; the same read is kept (no second read racing the reclaim)."""
++            current = tools()
++            return current if len(current) == 3 else None
++        found   = reclaim.wait_for(all_three, 30 if WINDOWS else 10) or {}
+         assert found, 'the peer did not start the tool; ' + child_evidence(owner, root, created['agent'])
+ 
+         # The process exits only after the non-daemon owner has finished the end processing.

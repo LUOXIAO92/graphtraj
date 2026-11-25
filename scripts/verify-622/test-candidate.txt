@@ -1,4 +1,4 @@
-$ TMPDIR=${TMPDIR:-/tmp} /tmp/claude-501/622/venv/bin/python -m pytest -p no:cacheprovider -q -rA tests/test_process_reclaim.py tests/test_budget_notice_idle.py   # HEAD 1fda4e1d, macOS 26.6.2, arm64
+$ TMPDIR=${TMPDIR:-/tmp} /tmp/claude-501/622/venv/bin/python -m pytest -p no:cacheprovider -q -rA tests/test_process_reclaim.py tests/test_budget_notice_idle.py   # HEAD ca4a1517, macOS 26.6.2, arm64
 PASSED tests/test_process_reclaim.py::test_session_end_stops_only_this_runs_detached_processes
 PASSED tests/test_process_reclaim.py::test_a_plain_session_draws_its_own_value
 PASSED tests/test_process_reclaim.py::test_windows_session_end_skips_the_reclaim_silently

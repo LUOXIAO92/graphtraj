@@ -1,0 +1,17 @@
+$ VERIFY622_REMOTE=/tmp/claude-501/622/rh2/psuccess/remote.git VERIFY622_GH=/tmp/claude-501/622/rh2/psuccess/gh/gh VERIFY622_POLL_S=1 VERIFY622_APPEAR_S=10 VERIFY622_DONE_S=30 zsh steps.zsh O ca4a151778a50f8fdd1280ec40eb7d0745c6399f
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [O] Observe, read only, ca4a151778a50f8fdd1280ec40eb7d0745c6399f of desktop-win-adoption.yml on LUOXIAO92/graphtraj. Login: your gh login. Dialog: none. Network: GitHub.
+no other workflow triggered for this sha
+chosen run: 45600000999 | head ca4a151778a50f8fdd1280ec40eb7d0745c6399f | in_progress | https://github.com/LUOXIAO92/graphtraj/actions/runs/45600000999
+waiting for run 45600000999 to complete (poll 1s, bound 30s)
+  [14:48:29] 45600000999 completed
+run 45600000999 completed, conclusion failure (informational; 619-621 failures do not affect 622)
+$ gh run view 45600000999 --repo LUOXIAO92/graphtraj --log
+log: 9 lines
+lines of step 'Build desktop and check Windows native settings': 7
+pytest summary line(s) in that step:
+  windows-adoption	Build desktop and check Windows native settings	2026-11-26T01:10:26.6337076Z 1 error in 0.43s
+no line contains 'libproc' or 'leftover test processes'
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/622-process-reclaim-windows-noise/scripts/verify-622/steps.zsh O 45600000999    (re-reads this run; read only)
+VERDICT 622 O: PASS (run 45600000999 at ca4a151778a50f8fdd1280ec40eb7d0745c6399f: pytest finished, no libproc noise)
+[exit 0]

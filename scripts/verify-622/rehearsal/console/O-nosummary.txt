@@ -1,4 +1,4 @@
-$ VERIFY622_GH=/tmp/claude-501/622/rehearsal/nosummary/gh/gh VERIFY622_POLL_S=1 VERIFY622_DONE_S=30 zsh steps.zsh O
+$ VERIFY622_REMOTE=/tmp/claude-501/622/rh2/nosummary/remote.git VERIFY622_GH=/tmp/claude-501/622/rh2/nosummary/gh/gh VERIFY622_POLL_S=1 VERIFY622_APPEAR_S=10 VERIFY622_DONE_S=30 zsh steps.zsh O
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [O] Observe, read only, desktop-win-adoption.yml on LUOXIAO92/graphtraj. Login: your gh login. Dialog: none. Network: GitHub.
 runs checked, newest first (id | head sha | status | conclusion | guard):
@@ -11,6 +11,6 @@ log: 7 lines
 lines of step 'Build desktop and check Windows native settings': 5
 no pytest summary line in that step
 no line contains 'libproc' or 'leftover test processes'
-next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/622-process-reclaim-windows-noise/scripts/verify-622/steps.zsh O 45600000622    (re-reads this run)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/622-process-reclaim-windows-noise/scripts/verify-622/steps.zsh O 45600000622    (re-reads this run; read only)
 VERDICT 622 O: INCONCLUSIVE (no pytest summary in 'Build desktop and check Windows native settings' of run 45600000622)
 [exit 4]

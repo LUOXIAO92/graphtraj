@@ -1,0 +1,36 @@
+# HEAD ca4a1517: git diff 9401c809 HEAD -- .github
+diff --git a/.github/workflows/desktop-win-adoption.yml b/.github/workflows/desktop-win-adoption.yml
+index f094416a..1254e1d7 100644
+--- a/.github/workflows/desktop-win-adoption.yml
++++ b/.github/workflows/desktop-win-adoption.yml
+@@ -1,7 +1,7 @@
+ name: Windows desktop adoption 266
+ on:
+   push:
+-    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref]
++    branches: [agent/266-desktop-win-adoption, agent/288-desktop-d-integrated-adoption-win, agent/290-desktop-d-direct-port-win, agent/618-desktop-workflows-graftling-ref, agent/622-process-reclaim-windows-noise]
+ permissions:
+   contents: read
+ jobs:
+# $ python -I scripts/verify-622/triggercheck.py agent/622-process-reclaim-windows-noise .github/workflows/*.yml   (HEAD)
+OK   desktop-linux-adoption.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: not triggered
+OK   desktop-macos-adoption.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: not triggered
+OK   desktop-repair-package.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: not triggered
+OK   desktop-win-adoption.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: RUNS
+PASS desktop-win-adoption.yml push branches = the four earlier branches + agent/622-process-reclaim-windows-noise
+PASS only desktop-win-adoption.yml runs for a push of agent/622-process-reclaim-windows-noise
+[exit 0]
+# same check with desktop-win-adoption.yml from 9401c809 (before the trigger line)
+OK   desktop-linux-adoption.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: not triggered
+OK   desktop-macos-adoption.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: not triggered
+OK   desktop-repair-package.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: not triggered
+OK   desktop-win-adoption.yml: strict YAML; push of agent/622-process-reclaim-windows-noise: not triggered
+FAIL desktop-win-adoption.yml push branches are ['agent/266-desktop-win-adoption', 'agent/288-desktop-d-integrated-adoption-win', 'agent/290-desktop-d-direct-port-win', 'agent/618-desktop-workflows-graftling-ref'], expected ['agent/266-desktop-win-adoption', 'agent/288-desktop-d-integrated-adoption-win', 'agent/290-desktop-d-direct-port-win', 'agent/618-desktop-workflows-graftling-ref', 'agent/622-process-reclaim-windows-noise']
+FAIL workflows run for a push of agent/622-process-reclaim-windows-noise: none (expected only desktop-win-adoption.yml)
+[exit 1]
+# 618's strict-YAML check on HEAD's workflows
+OK   .github/workflows/desktop-linux-adoption.yml: branches=['agent/267-desktop-linux-adoption', 'agent/288-desktop-d-integrated-adoption-linux', 'agent/290-desktop-d-direct-port-linux', 'agent/291-desktop-global-model-role-flow', 'agent/618-desktop-workflows-graftling-ref']
+OK   .github/workflows/desktop-macos-adoption.yml: branches=['agent/265-desktop-mac-adoption', 'agent/285-desktop-d-monitor-projects', 'agent/286-desktop-usage-history-range', 'agent/287-desktop-agents-models-teams', 'agent/288-desktop-d-integrated-adoption-macos', 'agent/290-desktop-d-direct-port-macos', 'agent/292-desktop-readable-runtime-events', 'agent/295-desktop-direct-settings-save-macos', 'agent/618-desktop-workflows-graftling-ref']
+OK   .github/workflows/desktop-repair-package.yml: branches=['agent/295-desktop-direct-settings-save', 'agent/300-desktop-ux-platform-packages', 'agent/306-task-hierarchy-desktop-adoption', 'agent/618-desktop-workflows-graftling-ref']
+OK   .github/workflows/desktop-win-adoption.yml: branches=['agent/266-desktop-win-adoption', 'agent/288-desktop-d-integrated-adoption-win', 'agent/290-desktop-d-direct-port-win', 'agent/618-desktop-workflows-graftling-ref', 'agent/622-process-reclaim-windows-noise']
+[exit 0]

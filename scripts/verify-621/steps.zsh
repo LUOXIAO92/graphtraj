@@ -10,7 +10,7 @@
 # REAL ENTRY: no workflow's push trigger lists agent/621-macos-adoption-script-d-ui and this Task edits no workflow,
 # so the run is started by `gh workflow run desktop-macos-adoption.yml --repo LUOXIAO92/graphtraj
 # --ref agent/621-macos-adoption-script-d-ui -f mode=standard` after the push. GitHub runs the workflow file at that
-# ref (unchanged since 055669d9); the default branch's copy must offer workflow_dispatch (checked by 00).
+# ref (unchanged by this Task since BASE); the default branch's copy must offer workflow_dispatch (checked by 00).
 # Run one step at a time:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh, git and gh versions; gh auth status (account only); origin is LUOXIAO92/graphtraj;
 #       the default branch's desktop-macos-adoption.yml offers workflow_dispatch with mode standard and the workflow
@@ -48,7 +48,8 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/621-macos-adoption-script-d-ui
-BASE=055669d9fc86fab33cc843fd926cdaed340f3038
+# dev 4b71012c (618, 620, 622, 619) merged into the Task branch; it changed only Linux/Windows trigger lines.
+BASE=4b71012cc36b15063576c86038cf36c383d5989b
 REPO=LUOXIAO92/graphtraj
 WF=desktop-macos-adoption.yml
 FAILED_RUN=45546698537

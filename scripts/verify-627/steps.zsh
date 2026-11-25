@@ -203,9 +203,9 @@ fetch_evidence() {
   hj evidence $dest
   return 0
 }
-# observe_push <sha> <label>: wait for both push runs of sha, print results, fetch both artifacts; VERDICT last.
+# observe_push <sha>: wait for both push runs of sha, print results, fetch both artifacts; VERDICT last.
 observe_push() {
-  local sha=$1 label=$2 start=$SECONDS line prev= ok=0 rid wf concl evid
+  local sha=$1 start=$SECONDS line prev= ok=0 rid wf concl evid
   local -a rows missing others failed notes
   local runs_api="repos/$REPO/actions/runs?head_sha=$sha&per_page=100"
   summ() {

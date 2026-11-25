@@ -23,11 +23,14 @@
 #       <Harness>/graftling's objects (nothing is written there): src/ unchanged since the base, and the workflow at
 #       the bundle head (push branches exactly this branch and dev, workflow_dispatch, contents: read, no secrets or
 #       token, 40-hex action SHAs, PYTHONUTF8=1, core.symlinks before checkout, persist-credentials false, the
-#       step names this script judges); windows-expected.txt parses; the local branch in <Harness>/graftling is
-#       absent or the bundle head; the remote branch is absent, the bundle head, or an ancestor (else STOP).
+#       step names this script judges, the suite step running .github/run_test_files.py with file and total limits
+#       inside the step bound) and that driver (pytest options, taskkill /T /F, per-file records, stdlib only);
+#       windows-expected.txt parses; the local branch in <Harness>/graftling and the remote branch are each absent,
+#       the bundle head, or an ancestor of it, e.g. the previous candidate (else STOP).
 #       Login: gh login, git credential helper (ls-remote). Dialog: none. Network: GitHub. ~10 s.
 #   P   Publish and wait. OUTWARD-FACING: (1) fetches the bundle into <Harness>/graftling as local branch
-#       agent/632-graftling-windows-ci (only if absent or equal); (2) pushes it to graftling origin, fast-forward
+#       agent/632-graftling-windows-ci (only if absent or an ancestor; git fetch without '+' is fast-forward only;
+#       nothing when equal); (2) pushes it to graftling origin, fast-forward
 #       only, never force, and verifies with ls-remote; (3) waits in this process for the windows.yml push run of
 #       that SHA (appearance bound 300 s, completion bound 6000 s, poll 30 s); (4) judges it (below), saving the
 #       JUnit artifact, the job log and the judgement under scripts/verify-632/evidence/run-<id>-a<attempt>/; (5) the
@@ -45,13 +48,17 @@
 #       and complete, then judges it like P. Login: gh login, git credential helper (ls-remote). Dialog: none.
 # VERDICT (P, W, X, D): PASS only when BOTH
 #   mechanics: the run is for the candidate SHA and completed; in job windows-tests every setup step succeeded, the
-#     suite step ran to its end (success or failure; its exit code, kept in the artifact, is 0 or 1), the upload
-#     succeeded and no other step failed; the JUnit artifact was downloaded and holds > 0 tests and no collection
-#     error;
-#   results: the tests failing on Windows are exactly the `fail` entries of windows-expected.txt; every skip either
-#     starts with "POSIX-only: " (tests/posix_only.py) or is an allowed environment skip listed there.
-#   Printed: unexpected failures (with origin file:line and a suggested Task), unexpected passes, listed failures
-#   that were skipped or absent, and every skip without the prefix.
+#     suite step ran to its end (success or failure), the upload succeeded and no other step failed; the artifact was
+#     downloaded; the per-file driver (.github/run_test_files.py, one pytest process per test file) finished (exit
+#     code 0 or 1 in run-exit-code.txt) and files.json has a record for every tests/test_*.py of the run commit,
+#     each ended with pytest exit 0 or 1 and its JUnit file, or stopped after the file limit and recorded as hung;
+#   results: over the merged per-file JUnit files, the tests failing on Windows are exactly the `fail` entries of
+#     windows-expected.txt, the hung files' last started tests are exactly its `hang` entries (origin: the deepest
+#     graftling frame of the faulthandler dump in that file's log), and every skip either starts with "POSIX-only: "
+#     (tests/posix_only.py) or is an allowed environment skip listed there.
+#   Printed: unexpected failures and hangs (with origin file:line and a suggested Task), unexpected passes, listed
+#   hangs that ended, listed failures that were skipped or absent (those in a hung file are shown as not judged), and
+#   every skip without the prefix. The observed list (fail and hang lines) is written for a correction round.
 # Credentials: at start the script unsets every exported credential-class variable (a '_'-separated part ending in
 # KEY, TOKEN, SECRET(S), PASSWORD or CREDENTIAL(S); GIT_CONFIG_KEY_<n> excepted) and every ANTHROPIC_*,
 # CLAUDE_CODE_USE_*, *_BASE_URL and GRAFTLING_CONNECTION variable, printing the removed NAMES. Every started process
@@ -151,12 +158,23 @@ check_bundle() {  # the bundle verifies against $GRAFT, needs only BASE; sets GS
 }
 # check_head: read the bundle head through a temporary repository borrowing $GRAFT's objects (read only there);
 # returns the number of FAILs.
-check_head() {
-  local peek=$WORK/peek.git bad=0 changed
-  allow $GIT init -q --bare $peek || stop "cannot make a temporary repository"
-  print -r -- "$(gg rev-parse --path-format=absolute --git-common-dir)/objects" > $peek/objects/info/alternates
-  allow $GIT -C $peek fetch -q $BUNDLE refs/heads/${BRANCH}:refs/heads/peek 2> $WORK/peek-err \
+PEEK=$WORK/peek.git
+peek_repo() {  # once: $PEEK holds the bundle head as refs/heads/peek, borrowing $GRAFT's objects
+  [[ -d $PEEK ]] && return 0
+  allow $GIT init -q --bare $PEEK || stop "cannot make a temporary repository"
+  print -r -- "$(gg rev-parse --path-format=absolute --git-common-dir)/objects" > $PEEK/objects/info/alternates
+  allow $GIT -C $PEEK fetch -q $BUNDLE refs/heads/${BRANCH}:refs/heads/peek 2> $WORK/peek-err \
     || stop "cannot read the bundle: $(<$WORK/peek-err)"
+}
+# test_files <sha> <out>: the commit's tests/test_*.py, one per line, when the commit is known here; else nothing.
+test_files() {
+  peek_repo
+  allow $GIT -C $PEEK cat-file -e "$1^{commit}" 2> /dev/null || return 1
+  allow $GIT -C $PEEK ls-tree --name-only $1 tests/ | grep -E '^tests/test_[^/]*\.py$' > $2
+}
+check_head() {
+  local peek=$PEEK bad=0 changed
+  peek_repo
   print -r -- "--- bundle commits on $BASE:"
   allow $GIT -C $peek log --format='  %h %an <%ae> | %cn <%ce> | %s' $BASE..peek
   local idents=$(allow $GIT -C $peek log --format='%ae%n%ce' $BASE..peek | sort -u)
@@ -171,13 +189,30 @@ check_head() {
   wc_ wfcheck $WORK/windows.yml $BRANCH $JOB $SETUP $SUITE $UPLOAD || (( bad++ ))
   allow $GIT -C $peek show peek:tests/posix_only.py 2> /dev/null | grep -qxF "PREFIX = 'POSIX-only: '" \
     && print -r -- "PASS: tests/posix_only.py PREFIX is 'POSIX-only: '" || { print -r -- "FAIL: tests/posix_only.py PREFIX differs"; (( bad++ )); }
+  # The per-file driver the suite step runs: its pytest options, hang stop and records.
+  local want driver
+  driver=$(allow $GIT -C $peek show peek:.github/run_test_files.py 2> /dev/null)
+  for want in "'-p', 'no:cacheprovider'" "'-o', 'faulthandler_timeout=120'" "'-o', 'junit_family=xunit1'" "'-v', '-rfEsxX'" \
+              "[sys.executable, '-u', '-m', 'pytest'" "['taskkill', '/T', '/F', '/PID'" "'files.json'" "last_started"; do
+    [[ $driver == *"$want"* ]] && print -r -- "PASS: .github/run_test_files.py has $want" \
+      || { print -r -- "FAIL: .github/run_test_files.py lacks $want"; (( bad++ )); }
+  done
+  [[ $driver == *"import "* && $driver != *(import|from)\ (yaml|psutil|pytest_timeout|requests)* ]] \
+    && print -r -- "PASS: .github/run_test_files.py imports only the standard library (no yaml/psutil/pytest_timeout/requests)" \
+    || { print -r -- "FAIL: .github/run_test_files.py missing or imports a third-party module"; (( bad++ )); }
   return $bad
 }
-graft_local_ok() {  # the local branch in $GRAFT is absent (0) or equal (1) to the bundle head; else STOP
+ancestor_of_head() {  # is $1 an ancestor of the bundle head? (read in $PEEK, which holds the bundle's commits)
+  peek_repo
+  allow $GIT -C $PEEK merge-base --is-ancestor $1 peek 2> /dev/null
+}
+graft_local_ok() {  # local branch in $GRAFT: absent or an ancestor (0: P fetches, fast-forward), equal (1); else STOP
   local lsha=$(gg rev-parse -q --verify refs/heads/$BRANCH)
   if [[ -z $lsha ]]; then print -r -- "PASS: $GRAFT has no local $BRANCH (P creates it from the bundle)"; return 0; fi
-  [[ $lsha == $GSHA ]] || stop "$GRAFT has local $BRANCH at $lsha, not the bundle head $GSHA; never overwrite. Inspect: git -C $GRAFT log --oneline -3 $BRANCH"
-  print -r -- "PASS: $GRAFT local $BRANCH = bundle head"; return 1
+  [[ $lsha == $GSHA ]] && { print -r -- "PASS: $GRAFT local $BRANCH = bundle head"; return 1; }
+  ancestor_of_head $lsha || stop "$GRAFT has local $BRANCH at $lsha, not an ancestor of the bundle head $GSHA; never overwrite. Inspect: git -C $GRAFT log --oneline -3 $BRANCH"
+  print -r -- "PASS: $GRAFT local $BRANCH is at $lsha, an ancestor of the bundle head (P fast-forwards it from the bundle)"
+  return 0
 }
 # The branch head on the remote, empty when absent, "ERR <text>" when ls-remote fails (checked() then STOPs).
 gremote_sha() { local out; out=$(gg ls-remote $GREMOTE refs/heads/$BRANCH 2>&1) || { print -r -- "ERR $out"; return 0; }; print -r -- ${out%%$'\t'*}; }
@@ -188,7 +223,7 @@ graft_remote_ok() {  # absent, equal, or an ancestor of the bundle head (fast-fo
   checked $rsha
   if [[ -z $rsha ]]; then REMOTE_STATE=absent; print -r -- "PASS: $BRANCH is absent on graftling $GREMOTE"
   elif [[ $rsha == $GSHA ]]; then REMOTE_STATE=equal; print -r -- "PASS: graftling $GREMOTE already has $BRANCH at the bundle head"
-  elif gg merge-base --is-ancestor $rsha $BASE 2> /dev/null || { gg cat-file -e $GSHA 2> /dev/null && gg merge-base --is-ancestor $rsha $GSHA 2> /dev/null; }; then
+  elif ancestor_of_head $rsha; then
     REMOTE_STATE=ancestor; print -r -- "PASS: graftling $GREMOTE has $BRANCH at $rsha, an ancestor of the bundle head (fast-forward)"
   else
     stop "graftling $GREMOTE has $BRANCH at $rsha, not an ancestor of the bundle head; never force. Inspect: git -C $GRAFT fetch $GREMOTE $BRANCH && git -C $GRAFT log --oneline -5 FETCH_HEAD"
@@ -216,26 +251,40 @@ judge() {
   # The job log (ANSI colour codes need --allow-escape-sequences, 619); kept with the evidence, tail printed.
   jid=$(allow $PY -I -c 'import json, sys; print(next((j["id"] for j in json.load(open(sys.argv[1])).get("jobs", []) if j.get("name") == sys.argv[2]), ""))' $WORK/jobs.json $JOB 2> /dev/null)
   if [[ -n $jid ]] && allow $GH api --allow-escape-sequences "repos/$REPO/actions/jobs/$jid/logs" > $dir/job.log 2> $WORK/err; then
-    print -r -- "--- job log saved: $dir/job.log; pytest summary lines:"
-    grep -E '(=+ .*(passed|failed|error|skipped).* in [0-9.]+s|pytest exit code:|Timeout \(0:|INTERNALERROR)' $dir/job.log | tail -n 6 | cut -c1-240 | sed 's/^/  /'
+    print -r -- "--- job log saved: $dir/job.log; files ended, hangs, driver exit:"
+    print -r -- "  per-file pytest summaries: $(grep -cE '=+ .*(passed|failed|error|skipped|no tests ran).* in [0-9.]+s' $dir/job.log)"
+    grep -E '(### HUNG|run_test_files exit code:|INTERNALERROR|has timed out)' $dir/job.log | tail -n 12 | cut -c1-240 | sed 's/^/  /'
   else
     print -r -- "job log unavailable: $(<$WORK/err 2> /dev/null)"
   fi
   # The JUnit artifact of this attempt.
-  local name=graftling-windows-junit-$sha-${attempt:-1}
-  if [[ -f $dir/junit/junit.xml ]]; then
+  local name=graftling-windows-junit-$sha-${attempt:-1} files= tlist=
+  if [[ -f $dir/junit/environment.json ]]; then
     print -r -- "already present, not downloaded again: $dir/junit"
   else
     print -r -- "\$ gh run download $rid --repo $REPO -n $name -D $dir/junit"
     allow $GH run download $rid --repo $REPO -n $name -D $dir/junit 2>&1 | sed 's/^/  /'
   fi
-  if [[ -f $dir/junit/junit.xml ]]; then
-    print -r -- "--- results against $EXPECTED"
-    wc_ junit $dir/junit $EXPECTED $dir/observed-expected.txt > $dir/judgement.txt 2>&1
-    grep -v '^JUDGE ' $dir/judgement.txt
+  # The test files every record must cover: the run commit's tests/test_*.py.
+  if test_files $sha $WORK/testfiles.txt; then
+    tlist=$WORK/testfiles.txt; print -r -- "test files in $sha: $(grep -c . $tlist)"
+  else
+    print -r -- "NOTE: $sha is not in the bundle; per-file records are not compared with its test files"
+  fi
+  if [[ -f $dir/junit/environment.json ]]; then
+    print -r -- "--- per-file records and results against $EXPECTED"
+    wc_ junit $dir/junit $EXPECTED $dir/observed-expected.txt $tlist > $dir/judgement.txt 2>&1
+    grep -v '^JUDGE \|^FILES ' $dir/judgement.txt
+    files=$(grep '^FILES ' $dir/judgement.txt | tail -1); [[ -n $files ]] || files="FILES FAIL per-file judgement failed: $(tail -2 $dir/judgement.txt)"
     res=$(grep '^JUDGE ' $dir/judgement.txt | tail -1); [[ -n $res ]] || res="JUDGE FAIL JUnit judgement failed: $(tail -2 $dir/judgement.txt)"
   else
-    res="JUDGE FAIL no JUnit file downloaded (artifact $name)"
+    files="FILES FAIL no artifact downloaded ($name)"; res="JUDGE FAIL no JUnit files"
+  fi
+  # Mechanics: the job's steps and the per-file records.
+  if [[ $files == "FILES FAIL"* ]]; then
+    [[ $mech == "JUDGE PASS"* ]] && mech="JUDGE FAIL ${files#FILES FAIL }" || mech="$mech; ${files#FILES FAIL }"
+  else
+    mech="$mech; ${files#FILES PASS }"
   fi
   print -r -- "evidence: $dir"
   print -r -- "next: zsh $THIS W $rid    (observe again; no push, no re-run)"

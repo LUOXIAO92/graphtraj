@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.11, pytest-9.1.1, pluggy-1.5.0 -- /tmp/claude-501/vcand/bin/python
+rootdir: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/.scratch/graftling-632
+configfile: pytest.ini
+plugins: anyio-4.10.0
+collecting ... collected 61 items
+
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-first-native] PASSED [  1%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-first-ask_parent] PASSED [  3%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-last-native] PASSED [  4%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[pi-last-ask_parent] PASSED [  6%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-first-native] PASSED [  8%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-first-ask_parent] PASSED [  9%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-last-native] PASSED [ 11%]
+tests/test_host_shutdown_stop.py::test_an_unanswered_request_does_not_stop_the_others[dsh-last-ask_parent] PASSED [ 13%]
+tests/test_host_shutdown_stop.py::test_every_child_is_interrupted_before_any_is_waited_for[pi] PASSED [ 14%]
+tests/test_host_shutdown_stop.py::test_every_child_is_interrupted_before_any_is_waited_for[dsh] PASSED [ 16%]
+tests/test_host_shutdown_stop.py::test_this_shutdowns_ends_stay_held_and_arrive_once[pi] PASSED [ 18%]
+tests/test_host_shutdown_stop.py::test_this_shutdowns_ends_stay_held_and_arrive_once[dsh] PASSED [ 19%]
+tests/test_host_shutdown_stop.py::test_a_child_that_never_stops_is_named_and_the_others_end_within_the_bound[pi] PASSED [ 21%]
+tests/test_host_shutdown_stop.py::test_a_child_that_never_stops_is_named_and_the_others_end_within_the_bound[dsh] PASSED [ 22%]
+tests/test_host_shutdown_stop.py::test_the_deadline_is_ten_seconds PASSED [ 24%]
+tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[pi-raises] PASSED [ 26%]
+tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[pi-failed-result] PASSED [ 27%]
+tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[dsh-raises] 

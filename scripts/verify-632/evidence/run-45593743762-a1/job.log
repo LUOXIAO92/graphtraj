@@ -1,0 +1,554 @@
+﻿2026-11-25T10:18:45.0430757Z Current runner version: '2.338.2'
+2026-11-25T10:18:45.0456468Z ##[group]Runner Image Provisioner
+2026-11-25T10:18:45.0457420Z Hosted Compute Agent
+2026-11-25T10:18:45.0458064Z Version: 20261111.635
+2026-11-25T10:18:45.0458623Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-25T10:18:45.0459309Z Build Date: 2026-11-11T01:49:01Z
+2026-11-25T10:18:45.0460647Z Worker ID: {31ff38f9-2e82-4443-b52d-c84489238bd3}
+2026-11-25T10:18:45.0461535Z Region: westus
+2026-11-25T10:18:45.0462340Z Cloud: Azure
+2026-11-25T10:18:45.0463091Z ##[endgroup]
+2026-11-25T10:18:45.0464597Z ##[group]Operating System
+2026-11-25T10:18:45.0465220Z Microsoft Windows Server 2025
+2026-11-25T10:18:45.0465773Z 10.0.26100
+2026-11-25T10:18:45.0466229Z Datacenter
+2026-11-25T10:18:45.0466688Z ##[endgroup]
+2026-11-25T10:18:45.0467169Z ##[group]Runner Image
+2026-11-25T10:18:45.0467694Z Image: windows-2025-vs2026
+2026-11-25T10:18:45.0468214Z Version: 20261116.315.1
+2026-11-25T10:18:45.0469689Z Included Software: https://github.com/actions/runner-images/blob/win25-vs2026/20261116.315/images/windows/Windows2025-VS2026-Readme.md
+2026-11-25T10:18:45.0471361Z Image Release: https://github.com/actions/runner-images/releases/tag/win25-vs2026%2F20261116.315
+2026-11-25T10:18:45.0472274Z ##[endgroup]
+2026-11-25T10:18:45.0473336Z ##[group]GITHUB_TOKEN Permissions
+2026-11-25T10:18:45.0475127Z Contents: read
+2026-11-25T10:18:45.0475658Z Metadata: read
+2026-11-25T10:18:45.0476212Z ##[endgroup]
+2026-11-25T10:18:45.0478258Z Secret source: Actions
+2026-11-25T10:18:45.0479130Z Cache mode: write
+2026-11-25T10:18:45.0479851Z Prepare workflow directory
+2026-11-25T10:18:45.0990701Z Prepare all required actions
+2026-11-25T10:18:45.1057258Z Getting action download info
+2026-11-25T10:18:45.4820092Z Download action repository 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-25T10:18:45.6172434Z Download action repository 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-25T10:18:45.8961678Z Download action repository 'actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1' (SHA:ece7cb06caefa5fff74198d8649806c4678c61a1)
+2026-11-25T10:18:46.0955551Z Download action repository 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-25T10:18:46.5510855Z Complete job name: windows-tests
+2026-11-25T10:18:46.6933838Z ##[group]Run git config --global core.symlinks true
+2026-11-25T10:18:46.6935547Z [36;1mgit config --global core.symlinks true[0m
+2026-11-25T10:18:46.7554163Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-25T10:18:46.7556072Z env:
+2026-11-25T10:18:46.7556824Z   PYTHONUTF8: 1
+2026-11-25T10:18:46.7557656Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:18:46.7558632Z   PIP_NO_INPUT: 1
+2026-11-25T10:18:46.7559425Z ##[endgroup]
+2026-11-25T10:18:47.6308552Z ##[group]Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+2026-11-25T10:18:47.6310250Z with:
+2026-11-25T10:18:47.6311103Z   persist-credentials: false
+2026-11-25T10:18:47.6312135Z   repository: LUOXIAO92/graftling
+2026-11-25T10:18:47.6320679Z   token: ***
+2026-11-25T10:18:47.6321441Z   ssh-strict: true
+2026-11-25T10:18:47.6322190Z   ssh-user: git
+2026-11-25T10:18:47.6322959Z   clean: true
+2026-11-25T10:18:47.6323719Z   sparse-checkout-cone-mode: true
+2026-11-25T10:18:47.6324623Z   fetch-depth: 1
+2026-11-25T10:18:47.6325345Z   fetch-tags: false
+2026-11-25T10:18:47.6326097Z   show-progress: true
+2026-11-25T10:18:47.6326844Z   lfs: false
+2026-11-25T10:18:47.6327540Z   submodules: false
+2026-11-25T10:18:47.6328287Z   set-safe-directory: true
+2026-11-25T10:18:47.6329142Z   allow-unsafe-pr-checkout: false
+2026-11-25T10:18:47.6330018Z env:
+2026-11-25T10:18:47.6330704Z   PYTHONUTF8: 1
+2026-11-25T10:18:47.6331464Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:18:47.6332404Z   PIP_NO_INPUT: 1
+2026-11-25T10:18:47.6333124Z ##[endgroup]
+2026-11-25T10:18:47.7780977Z Syncing repository: LUOXIAO92/graftling
+2026-11-25T10:18:47.7783298Z ##[group]Getting Git version info
+2026-11-25T10:18:47.7784880Z Working directory is 'D:\a\graftling\graftling'
+2026-11-25T10:18:47.8604306Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-25T10:18:47.8966062Z git version 2.56.1.windows.1
+2026-11-25T10:18:47.9013826Z ##[endgroup]
+2026-11-25T10:18:47.9027778Z Copying 'C:\Users\runneradmin\.gitconfig' to 'D:\a\_temp\03233eb2-0701-4c65-807d-4f0ae8e3fc50\.gitconfig'
+2026-11-25T10:18:47.9050061Z Temporarily overriding HOME='D:\a\_temp\03233eb2-0701-4c65-807d-4f0ae8e3fc50' before making global git config changes
+2026-11-25T10:18:47.9052528Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-25T10:18:47.9061030Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\graftling\graftling
+2026-11-25T10:18:47.9437967Z Deleting the contents of 'D:\a\graftling\graftling'
+2026-11-25T10:18:47.9444318Z ##[group]Initializing the repository
+2026-11-25T10:18:47.9452687Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\graftling\graftling
+2026-11-25T10:18:48.0408782Z Initialized empty Git repository in D:/a/graftling/graftling/.git/
+2026-11-25T10:18:48.0599895Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/LUOXIAO92/graftling
+2026-11-25T10:18:48.1285396Z ##[endgroup]
+2026-11-25T10:18:48.1286834Z ##[group]Disabling automatic garbage collection
+2026-11-25T10:18:48.1294717Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-11-25T10:18:48.1678134Z ##[endgroup]
+2026-11-25T10:18:48.1679451Z ##[group]Setting up auth
+2026-11-25T10:18:48.1690334Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-25T10:18:48.2070467Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-25T10:18:49.6500041Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-25T10:18:49.6907431Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-25T10:18:50.2679900Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-25T10:18:50.3115501Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-25T10:18:50.8915575Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-11-25T10:18:50.9308997Z ##[endgroup]
+2026-11-25T10:18:50.9309628Z ##[group]Fetching the repository
+2026-11-25T10:18:50.9328311Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0034097e031168c9b5076f6eea743997626c0572:refs/remotes/origin/agent/632-graftling-windows-ci
+2026-11-25T10:18:52.1639059Z From https://github.com/LUOXIAO92/graftling
+2026-11-25T10:18:52.1640451Z  * [new ref]         0034097e031168c9b5076f6eea743997626c0572 -> origin/agent/632-graftling-windows-ci
+2026-11-25T10:18:52.1691745Z ##[endgroup]
+2026-11-25T10:18:52.1692493Z ##[group]Determining the checkout info
+2026-11-25T10:18:52.1694579Z ##[endgroup]
+2026-11-25T10:18:52.1706692Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-11-25T10:18:52.2212433Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-11-25T10:18:52.2597986Z ##[group]Checking out the ref
+2026-11-25T10:18:52.2607858Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force -B agent/632-graftling-windows-ci refs/remotes/origin/agent/632-graftling-windows-ci
+2026-11-25T10:18:52.3814129Z Switched to a new branch 'agent/632-graftling-windows-ci'
+2026-11-25T10:18:52.3844291Z branch 'agent/632-graftling-windows-ci' set up to track 'origin/agent/632-graftling-windows-ci'.
+2026-11-25T10:18:52.3902994Z ##[endgroup]
+2026-11-25T10:18:52.4354329Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-11-25T10:18:52.4733684Z 0034097e031168c9b5076f6eea743997626c0572
+2026-11-25T10:18:52.4789022Z ##[group]Removing auth
+2026-11-25T10:18:52.4800885Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-25T10:18:52.5294561Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-25T10:18:53.1065299Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-25T10:18:53.1416427Z http.https://github.com/.extraheader
+2026-11-25T10:18:53.1467104Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all http.https://github.com/.extraheader
+2026-11-25T10:18:53.1876650Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-25T10:18:53.7613947Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-25T10:18:53.8011718Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-25T10:18:54.3719701Z ##[endgroup]
+2026-11-25T10:18:54.4033261Z ##[group]Run foreach ($path in 'src/graftling/PUBLIC_API.md', 'src/graftling/install') {
+2026-11-25T10:18:54.4033984Z [36;1mforeach ($path in 'src/graftling/PUBLIC_API.md', 'src/graftling/install') {[0m
+2026-11-25T10:18:54.4034407Z [36;1m  $item = Get-Item $path[0m
+2026-11-25T10:18:54.4034938Z [36;1m  if ($item.LinkType -ne 'SymbolicLink') { throw "$path is not a symbolic link (LinkType=$($item.LinkType))" }[0m
+2026-11-25T10:18:54.4035464Z [36;1m  "$path -> $($item.Target)"[0m
+2026-11-25T10:18:54.4035708Z [36;1m}[0m
+2026-11-25T10:18:54.4036314Z [36;1mif ((Get-Content -Raw src/graftling/PUBLIC_API.md) -ne (Get-Content -Raw PUBLIC_API.md)) { throw 'src/graftling/PUBLIC_API.md does not read as PUBLIC_API.md' }[0m
+2026-11-25T10:18:54.4037268Z [36;1mif (-not (Get-ChildItem src/graftling/install -Filter *.md)) { throw 'src/graftling/install has no install guides' }[0m
+2026-11-25T10:18:54.4112965Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-25T10:18:54.4113373Z env:
+2026-11-25T10:18:54.4113566Z   PYTHONUTF8: 1
+2026-11-25T10:18:54.4113797Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:18:54.4114048Z   PIP_NO_INPUT: 1
+2026-11-25T10:18:54.4114244Z ##[endgroup]
+2026-11-25T10:18:54.7781755Z src/graftling/PUBLIC_API.md -> ..\..\PUBLIC_API.md
+2026-11-25T10:18:54.7837488Z src/graftling/install -> ..\..\docs\install
+2026-11-25T10:18:54.8736966Z ##[group]Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+2026-11-25T10:18:54.8737417Z with:
+2026-11-25T10:18:54.8737610Z   node-version: 22.18.0
+2026-11-25T10:18:54.8737832Z   architecture: x64
+2026-11-25T10:18:54.8738031Z   always-auth: false
+2026-11-25T10:18:54.8738241Z   check-latest: false
+2026-11-25T10:18:54.8740873Z   token: ***
+2026-11-25T10:18:54.8741063Z env:
+2026-11-25T10:18:54.8741238Z   PYTHONUTF8: 1
+2026-11-25T10:18:54.8741440Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:18:54.8741680Z   PIP_NO_INPUT: 1
+2026-11-25T10:18:54.8741866Z ##[endgroup]
+2026-11-25T10:18:55.0443397Z Attempting to download 22.18.0...
+2026-11-25T10:18:55.0630734Z (node:2564) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-25T10:18:55.0631912Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-25T10:18:55.7299932Z Acquiring 22.18.0 - x64 from https://github.com/actions/node-versions/releases/download/22.18.0-16666198358/node-22.18.0-win32-x64.7z
+2026-11-25T10:18:56.2492806Z Extracting ...
+2026-11-25T10:18:58.8404301Z Adding to the cache ...
+2026-11-25T10:19:02.8803702Z ##[group]Environment details
+2026-11-25T10:19:05.1317175Z node: v22.18.0
+2026-11-25T10:19:05.1317520Z npm: 10.9.3
+2026-11-25T10:19:05.1317772Z yarn: 1.22.22
+2026-11-25T10:19:05.1318379Z ##[endgroup]
+2026-11-25T10:19:05.1668929Z ##[group]Run actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+2026-11-25T10:19:05.1669379Z with:
+2026-11-25T10:19:05.1669575Z   python-version: 3.13.7
+2026-11-25T10:19:05.1669804Z   architecture: x64
+2026-11-25T10:19:05.1670005Z   check-latest: false
+2026-11-25T10:19:05.1672561Z   token: ***
+2026-11-25T10:19:05.1672765Z   update-environment: true
+2026-11-25T10:19:05.1672998Z   allow-prereleases: false
+2026-11-25T10:19:05.1673210Z   freethreaded: false
+2026-11-25T10:19:05.1673750Z env:
+2026-11-25T10:19:05.1673964Z   PYTHONUTF8: 1
+2026-11-25T10:19:05.1674173Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:19:05.1674413Z   PIP_NO_INPUT: 1
+2026-11-25T10:19:05.1693908Z ##[endgroup]
+2026-11-25T10:19:05.3366769Z ##[group]Installed versions
+2026-11-25T10:19:05.3392307Z Version 3.13.7 was not found in the local cache
+2026-11-25T10:19:06.0915064Z Version 3.13.7 is available for downloading
+2026-11-25T10:19:06.0916409Z Download from "https://github.com/actions/python-versions/releases/download/3.13.7-16980743123/python-3.13.7-win32-x64.zip"
+2026-11-25T10:19:06.6840422Z Extract downloaded archive
+2026-11-25T10:19:06.7840693Z [command]"C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Unrestricted -Command "$ErrorActionPreference = 'Stop' ; try { Add-Type -AssemblyName System.IO.Compression.ZipFile } catch { } ; try { [System.IO.Compression.ZipFile]::ExtractToDirectory('D:\a\_temp\python-3.13.7-win32-x64.zip', 'D:\a\_temp\498d5e31-d2d4-4cbd-9fde-94972f5d5898', $true) } catch { if (($_.Exception.GetType().FullName -eq 'System.Management.Automation.MethodException') -or ($_.Exception.GetType().FullName -eq 'System.Management.Automation.RuntimeException') ){ Expand-Archive -LiteralPath 'D:\a\_temp\python-3.13.7-win32-x64.zip' -DestinationPath 'D:\a\_temp\498d5e31-d2d4-4cbd-9fde-94972f5d5898' -Force } else { throw $_ } } ;"
+2026-11-25T10:19:07.2187753Z Execute installation script
+2026-11-25T10:19:15.0441893Z Check if Python hostedtoolcache folder exist...
+2026-11-25T10:19:15.0443501Z 
+2026-11-25T10:19:15.0704117Z Check if current Python version is installed...
+2026-11-25T10:19:15.0704699Z 
+2026-11-25T10:19:15.0895492Z Python3.13 (x64) was found in C:\hostedtoolcache\windows\Python...
+2026-11-25T10:19:15.0896024Z 
+2026-11-25T10:19:15.2636542Z Deleting C:\hostedtoolcache\windows\Python\3.13.17\x64...
+2026-11-25T10:19:15.2637111Z 
+2026-11-25T10:19:30.2266876Z VERBOSE: Performing the operation "Remove File" on target "C:\hostedtoolcache\windows\Python\3.13.17\x64.complete".
+2026-11-25T10:19:30.2267749Z 
+2026-11-25T10:19:30.2279708Z Remove registry entries for Python 3.13(x64)...
+2026-11-25T10:19:30.2280683Z 
+2026-11-25T10:19:30.7157674Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7159133Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\1FC4C8558E2824C4CB19F
+2026-11-25T10:19:30.7160163Z 5E1699E9CC9".
+2026-11-25T10:19:30.7160737Z 
+2026-11-25T10:19:30.7182001Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7183271Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\366311F089C88AA468D6F
+2026-11-25T10:19:30.7184196Z 4E47934DCB4".
+2026-11-25T10:19:30.7184858Z 
+2026-11-25T10:19:30.7204646Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7205948Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\4347178E0C3EC3B41823D
+2026-11-25T10:19:30.7206920Z FB16CA5A09C".
+2026-11-25T10:19:30.7207063Z 
+2026-11-25T10:19:30.7225057Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7226470Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\54503CADFE0E4174EB980
+2026-11-25T10:19:30.7227617Z 58ABBA662AB".
+2026-11-25T10:19:30.7227832Z 
+2026-11-25T10:19:30.7247564Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7248458Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\5AA347F7FB474E241BBE5
+2026-11-25T10:19:30.7249010Z 0B1F5500420".
+2026-11-25T10:19:30.7249134Z 
+2026-11-25T10:19:30.7264421Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7266081Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\5E26C8E7D76BE2D40B658
+2026-11-25T10:19:30.7267070Z 816B37397E3".
+2026-11-25T10:19:30.7267301Z 
+2026-11-25T10:19:30.7289904Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7291290Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\A5F354F24E328EA43A337
+2026-11-25T10:19:30.7292406Z C4D5E20A686".
+2026-11-25T10:19:30.7292945Z 
+2026-11-25T10:19:30.7311295Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7313410Z HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\C7EC587A0B7DD144E9206
+2026-11-25T10:19:30.7314100Z 263E4692BC7".
+2026-11-25T10:19:30.7314237Z 
+2026-11-25T10:19:30.7592563Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7593445Z HKEY_CLASSES_ROOT\Installer\Products\1FC4C8558E2824C4CB19F5E1699E9CC9".
+2026-11-25T10:19:30.7593772Z 
+2026-11-25T10:19:30.7723578Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7724586Z HKEY_CLASSES_ROOT\Installer\Products\366311F089C88AA468D6F4E47934DCB4".
+2026-11-25T10:19:30.7725045Z 
+2026-11-25T10:19:30.7817719Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7818705Z HKEY_CLASSES_ROOT\Installer\Products\4347178E0C3EC3B41823DFB16CA5A09C".
+2026-11-25T10:19:30.7819224Z 
+2026-11-25T10:19:30.7905727Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7906880Z HKEY_CLASSES_ROOT\Installer\Products\54503CADFE0E4174EB98058ABBA662AB".
+2026-11-25T10:19:30.7907523Z 
+2026-11-25T10:19:30.7945462Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7947248Z HKEY_CLASSES_ROOT\Installer\Products\5AA347F7FB474E241BBE50B1F5500420".
+2026-11-25T10:19:30.7947607Z 
+2026-11-25T10:19:30.7980468Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.7981543Z HKEY_CLASSES_ROOT\Installer\Products\5E26C8E7D76BE2D40B658816B37397E3".
+2026-11-25T10:19:30.7982304Z 
+2026-11-25T10:19:30.8384615Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.8385567Z HKEY_CLASSES_ROOT\Installer\Products\A5F354F24E328EA43A337C4D5E20A686".
+2026-11-25T10:19:30.8386070Z 
+2026-11-25T10:19:30.8549410Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.8550450Z HKEY_CLASSES_ROOT\Installer\Products\C7EC587A0B7DD144E9206263E4692BC7".
+2026-11-25T10:19:30.8550963Z 
+2026-11-25T10:19:30.8939293Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.8940562Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{0F113663-8C98-4AA8-866D-4F4E9743CD4B}".
+2026-11-25T10:19:30.8941315Z 
+2026-11-25T10:19:30.9023232Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.9026151Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{2F453F5A-23E4-4AE8-A333-C7D4E5026A68}".
+2026-11-25T10:19:30.9026656Z 
+2026-11-25T10:19:30.9106038Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.9107220Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{558C4CF1-82E8-4C42-BC91-5F1E96E9C99C}".
+2026-11-25T10:19:30.9107953Z 
+2026-11-25T10:19:30.9203188Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.9204379Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{7E8C62E5-B67D-4D2E-B056-88613B37793E}".
+2026-11-25T10:19:30.9206682Z 
+2026-11-25T10:19:30.9222599Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.9223620Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{7F743AA5-74BF-42E4-B1EB-051B5F054002}".
+2026-11-25T10:19:30.9224543Z 
+2026-11-25T10:19:30.9306362Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.9307405Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{A785CE7C-D7B0-441D-9E02-26364E96B27C}".
+2026-11-25T10:19:30.9307913Z 
+2026-11-25T10:19:30.9471650Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.9472618Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{DAC30545-E0EF-4714-BE89-50A8BB6A26BA}".
+2026-11-25T10:19:30.9473069Z 
+2026-11-25T10:19:30.9511076Z VERBOSE: Performing the operation "Remove Key" on target "Item: 
+2026-11-25T10:19:30.9511975Z HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\{E8717434-E3C0-4B3C-8132-FD1BC65A0AC9}".
+2026-11-25T10:19:30.9513120Z 
+2026-11-25T10:19:30.9975539Z Create Python 3.13.7 folder in C:\hostedtoolcache\windows\Python
+2026-11-25T10:19:30.9977104Z 
+2026-11-25T10:19:31.0025700Z Copy Python binaries to C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:19:31.0026324Z 
+2026-11-25T10:19:31.0160251Z Install Python 3.13.7 in C:\hostedtoolcache\windows\Python...
+2026-11-25T10:19:31.0161160Z 
+2026-11-25T10:20:10.7697039Z Create python3 symlink
+2026-11-25T10:20:10.7697392Z 
+2026-11-25T10:20:10.8307340Z 
+2026-11-25T10:20:10.8308305Z 
+2026-11-25T10:20:10.8314547Z Directory: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:10.8315105Z 
+2026-11-25T10:20:10.8316020Z 
+2026-11-25T10:20:10.8329286Z Mode                 LastWriteTime         Length Name
+2026-11-25T10:20:10.8335845Z ----                 -------------         ------ ----
+2026-11-25T10:20:10.8348249Z -a---l        11/25/2026  10:20 AM              0 python3.exe
+2026-11-25T10:20:10.8357763Z Install and upgrade Pip
+2026-11-25T10:20:10.8359998Z 
+2026-11-25T10:20:13.3964938Z Looking in links: c:\Users\RUNNER~1\AppData\Local\Temp\tmpk2r34d0a
+2026-11-25T10:20:13.3970561Z Requirement already satisfied: pip in c:\hostedtoolcache\windows\python\3.13.7\x64\lib\site-packages (25.2)
+2026-11-25T10:20:14.9932002Z Collecting pip
+2026-11-25T10:20:15.0183780Z Downloading pip-26.3-py3-none-any.whl.metadata (4.6 kB)
+2026-11-25T10:20:15.5872304Z Downloading pip-26.3-py3-none-any.whl (2.0 MB)
+2026-11-25T10:20:15.6403252Z 
+2026-11-25T10:20:15.6405583Z ---------------------------------------- 2.0/2.0 MB
+2026-11-25T10:20:15.6406709Z 41.3 MB/s  0:00:00
+2026-11-25T10:20:15.6407038Z 
+2026-11-25T10:20:15.6765701Z Installing collected packages: pip
+2026-11-25T10:20:15.6766593Z Attempting uninstall: pip
+2026-11-25T10:20:15.6801848Z Found existing installation: pip 25.2
+2026-11-25T10:20:15.7658605Z Uninstalling pip-25.2:
+2026-11-25T10:20:15.7878524Z Successfully uninstalled pip-25.2
+2026-11-25T10:20:19.7018516Z Successfully installed pip-26.3
+2026-11-25T10:20:19.7569640Z Create complete file
+2026-11-25T10:20:19.7569936Z 
+2026-11-25T10:20:19.7585452Z 
+2026-11-25T10:20:19.7585671Z 
+2026-11-25T10:20:19.8529014Z Successfully set up CPython (3.13.7)
+2026-11-25T10:20:19.8530254Z ##[endgroup]
+2026-11-25T10:20:19.8828568Z ##[group]Run python -m pip install --no-deps pip==25.3 setuptools==80.9.0 wheel==0.45.1 packaging==25.0 pytest==8.3.5 iniconfig==2.1.0 pluggy==1.6.0 colorama==0.4.6 PyYAML==6.0.2 websockets==15.0.1
+2026-11-25T10:20:19.8829871Z [36;1mpython -m pip install --no-deps pip==25.3 setuptools==80.9.0 wheel==0.45.1 packaging==25.0 pytest==8.3.5 iniconfig==2.1.0 pluggy==1.6.0 colorama==0.4.6 PyYAML==6.0.2 websockets==15.0.1[0m
+2026-11-25T10:20:19.8830648Z [36;1mif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }[0m
+2026-11-25T10:20:19.8831052Z [36;1mpython -m pip install --no-deps --no-build-isolation -e .[0m
+2026-11-25T10:20:19.8831462Z [36;1mif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }[0m
+2026-11-25T10:20:19.8831771Z [36;1mpython -m pip check[0m
+2026-11-25T10:20:19.8832059Z [36;1mif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }[0m
+2026-11-25T10:20:19.8904198Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-25T10:20:19.8904554Z env:
+2026-11-25T10:20:19.8904807Z   PYTHONUTF8: 1
+2026-11-25T10:20:19.8905028Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:20:19.8905276Z   PIP_NO_INPUT: 1
+2026-11-25T10:20:19.8905555Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:19.8906024Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.13.7\x64/lib/pkgconfig
+2026-11-25T10:20:19.8906475Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:19.8906885Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:19.8907281Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:19.8907594Z ##[endgroup]
+2026-11-25T10:20:21.4022809Z Collecting pip==25.3
+2026-11-25T10:20:21.6834472Z   Downloading pip-25.3-py3-none-any.whl.metadata (4.7 kB)
+2026-11-25T10:20:22.1371310Z Collecting setuptools==80.9.0
+2026-11-25T10:20:22.1431468Z   Downloading setuptools-80.9.0-py3-none-any.whl.metadata (6.6 kB)
+2026-11-25T10:20:22.1942941Z Collecting wheel==0.45.1
+2026-11-25T10:20:22.1996807Z   Downloading wheel-0.45.1-py3-none-any.whl.metadata (2.3 kB)
+2026-11-25T10:20:22.2397601Z Collecting packaging==25.0
+2026-11-25T10:20:22.2448362Z   Downloading packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
+2026-11-25T10:20:22.2949142Z Collecting pytest==8.3.5
+2026-11-25T10:20:22.2994361Z   Downloading pytest-8.3.5-py3-none-any.whl.metadata (7.6 kB)
+2026-11-25T10:20:22.3394125Z Collecting iniconfig==2.1.0
+2026-11-25T10:20:22.3445212Z   Downloading iniconfig-2.1.0-py3-none-any.whl.metadata (2.7 kB)
+2026-11-25T10:20:22.3805791Z Collecting pluggy==1.6.0
+2026-11-25T10:20:22.3850273Z   Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+2026-11-25T10:20:22.4283450Z Collecting colorama==0.4.6
+2026-11-25T10:20:22.4328319Z   Downloading colorama-0.4.6-py2.py3-none-any.whl.metadata (17 kB)
+2026-11-25T10:20:22.5055184Z Collecting PyYAML==6.0.2
+2026-11-25T10:20:22.5124539Z   Downloading PyYAML-6.0.2-cp313-cp313-win_amd64.whl.metadata (2.1 kB)
+2026-11-25T10:20:22.6847266Z Collecting websockets==15.0.1
+2026-11-25T10:20:22.6901706Z   Downloading websockets-15.0.1-cp313-cp313-win_amd64.whl.metadata (7.0 kB)
+2026-11-25T10:20:22.7210461Z Downloading pip-25.3-py3-none-any.whl (1.8 MB)
+2026-11-25T10:20:22.8078289Z    ---------------------------------------- 1.8/1.8 MB 40.0 MB/s  0:00:00
+2026-11-25T10:20:22.8117385Z Downloading setuptools-80.9.0-py3-none-any.whl (1.2 MB)
+2026-11-25T10:20:22.8409911Z    ---------------------------------------- 1.2/1.2 MB 39.8 MB/s  0:00:00
+2026-11-25T10:20:22.8461227Z Downloading wheel-0.45.1-py3-none-any.whl (72 kB)
+2026-11-25T10:20:22.8676788Z Downloading packaging-25.0-py3-none-any.whl (66 kB)
+2026-11-25T10:20:22.8847166Z Downloading pytest-8.3.5-py3-none-any.whl (343 kB)
+2026-11-25T10:20:22.9202460Z Downloading iniconfig-2.1.0-py3-none-any.whl (6.0 kB)
+2026-11-25T10:20:22.9358875Z Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
+2026-11-25T10:20:22.9539077Z Downloading colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+2026-11-25T10:20:22.9758518Z Downloading PyYAML-6.0.2-cp313-cp313-win_amd64.whl (156 kB)
+2026-11-25T10:20:22.9969567Z Downloading websockets-15.0.1-cp313-cp313-win_amd64.whl (176 kB)
+2026-11-25T10:20:23.1190482Z Installing collected packages: wheel, websockets, setuptools, PyYAML, pytest, pluggy, pip, packaging, iniconfig, colorama
+2026-11-25T10:20:25.8891617Z   Attempting uninstall: pip
+2026-11-25T10:20:25.8927556Z     Found existing installation: pip 26.3
+2026-11-25T10:20:25.9836051Z     Uninstalling pip-26.3:
+2026-11-25T10:20:26.0092836Z       Successfully uninstalled pip-26.3
+2026-11-25T10:20:28.8856104Z 
+2026-11-25T10:20:28.8877008Z Successfully installed PyYAML-6.0.2 colorama-0.4.6 iniconfig-2.1.0 packaging-25.0 pip-25.3 pluggy-1.6.0 pytest-8.3.5 setuptools-80.9.0 websockets-15.0.1 wheel-0.45.1
+2026-11-25T10:20:30.1709609Z Obtaining file:///D:/a/graftling/graftling
+2026-11-25T10:20:30.1733956Z   Checking if build backend supports build_editable: started
+2026-11-25T10:20:30.4008218Z   Checking if build backend supports build_editable: finished with status 'done'
+2026-11-25T10:20:30.4039517Z   Preparing editable metadata (pyproject.toml): started
+2026-11-25T10:20:30.7279421Z   Preparing editable metadata (pyproject.toml): finished with status 'done'
+2026-11-25T10:20:30.7370393Z Building wheels for collected packages: graftling
+2026-11-25T10:20:30.7394922Z   Building editable for graftling (pyproject.toml): started
+2026-11-25T10:20:31.1167250Z   Building editable for graftling (pyproject.toml): finished with status 'done'
+2026-11-25T10:20:31.1214004Z   Created wheel for graftling: filename=graftling-0.10.2-0.editable-py3-none-any.whl size=18684 sha256=fdb2bd1b1e0ad92f37edd9c27d25c483261b6acc6304d3c6ed5c8edd233ab7d4
+2026-11-25T10:20:31.1217114Z   Stored in directory: C:\Users\runneradmin\AppData\Local\Temp\pip-ephem-wheel-cache-llkfmjpi\wheels\75\54\b5\a41d3a83934ae5130660747cca6997a97d7eab766e2ddf9706
+2026-11-25T10:20:31.1267634Z Successfully built graftling
+2026-11-25T10:20:31.1270540Z Installing collected packages: graftling
+2026-11-25T10:20:31.1650938Z Successfully installed graftling-0.10.2
+2026-11-25T10:20:31.5830150Z No broken requirements found.
+2026-11-25T10:20:31.7378334Z ##[group]Run New-Item -ItemType Directory -Force test-results/windows | Out-Null
+2026-11-25T10:20:31.7379040Z [36;1mNew-Item -ItemType Directory -Force test-results/windows | Out-Null[0m
+2026-11-25T10:20:31.7379663Z [36;1m$facts = [ordered]@{ commit=$env:GITHUB_SHA; run=$env:GITHUB_RUN_ID; attempt=$env:GITHUB_RUN_ATTEMPT[0m
+2026-11-25T10:20:31.7380364Z [36;1m  os=[Environment]::OSVersion.VersionString; image=$env:ImageOS; image_version=$env:ImageVersion[0m
+2026-11-25T10:20:31.7381067Z [36;1m  arch=$env:PROCESSOR_ARCHITECTURE; python=(python --version); pytest=(python -m pytest --version)[0m
+2026-11-25T10:20:31.7381747Z [36;1m  node=(node --version); git=(git --version); codepage=(Get-Culture).TextInfo.ANSICodePage }[0m
+2026-11-25T10:20:31.7382387Z [36;1m$facts | ConvertTo-Json | Set-Content -Encoding utf8 test-results/windows/environment.json[0m
+2026-11-25T10:20:31.7382937Z [36;1m$facts | Format-Table -AutoSize | Out-String -Width 200[0m
+2026-11-25T10:20:31.7458255Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-25T10:20:31.7458639Z env:
+2026-11-25T10:20:31.7458837Z   PYTHONUTF8: 1
+2026-11-25T10:20:31.7459060Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:20:31.7459316Z   PIP_NO_INPUT: 1
+2026-11-25T10:20:31.7459609Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:31.7460093Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.13.7\x64/lib/pkgconfig
+2026-11-25T10:20:31.7460583Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:31.7461011Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:31.7461437Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:31.7461780Z ##[endgroup]
+2026-11-25T10:20:32.8658499Z 
+2026-11-25T10:20:32.8659052Z Name          Value
+2026-11-25T10:20:32.8662455Z ----          -----
+2026-11-25T10:20:32.8663245Z commit        0034097e031168c9b5076f6eea743997626c0572
+2026-11-25T10:20:32.8664099Z run           45593743762
+2026-11-25T10:20:32.8664671Z attempt       1
+2026-11-25T10:20:32.8665391Z os            Microsoft Windows NT 10.0.26100.0
+2026-11-25T10:20:32.8666045Z image         win25-vs2026
+2026-11-25T10:20:32.8666623Z image_version 20261116.315.1
+2026-11-25T10:20:32.8667229Z arch          AMD64
+2026-11-25T10:20:32.8667810Z python        Python 3.13.7
+2026-11-25T10:20:32.8668445Z pytest        pytest 8.3.5
+2026-11-25T10:20:32.8668958Z node          v22.18.0
+2026-11-25T10:20:32.8669632Z git           git version 2.56.1.windows.1
+2026-11-25T10:20:32.8670282Z codepage      1252
+2026-11-25T10:20:32.8670592Z 
+2026-11-25T10:20:32.8670603Z 
+2026-11-25T10:20:32.9357659Z ##[group]Run python -m pytest -p no:cacheprovider -v -rfEsxX --tb=short --durations=25 -o faulthandler_timeout=300 -o junit_family=xunit1 --junitxml=test-results/windows/junit.xml
+2026-11-25T10:20:32.9358999Z [36;1mpython -m pytest -p no:cacheprovider -v -rfEsxX --tb=short --durations=25 -o faulthandler_timeout=300 -o junit_family=xunit1 --junitxml=test-results/windows/junit.xml[0m
+2026-11-25T10:20:32.9359723Z [36;1m$code = $LASTEXITCODE[0m
+2026-11-25T10:20:32.9360135Z [36;1m"$code" | Set-Content -Encoding ascii test-results/windows/pytest-exit-code.txt[0m
+2026-11-25T10:20:32.9360558Z [36;1m"pytest exit code: $code"[0m
+2026-11-25T10:20:32.9360802Z [36;1mexit $code[0m
+2026-11-25T10:20:32.9432590Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-25T10:20:32.9432948Z env:
+2026-11-25T10:20:32.9433138Z   PYTHONUTF8: 1
+2026-11-25T10:20:32.9433354Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T10:20:32.9433596Z   PIP_NO_INPUT: 1
+2026-11-25T10:20:32.9433918Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:32.9434366Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.13.7\x64/lib/pkgconfig
+2026-11-25T10:20:32.9434837Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:32.9435241Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:32.9435651Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T10:20:32.9436039Z ##[endgroup]
+2026-11-25T10:20:33.6043765Z ============================= test session starts =============================
+2026-11-25T10:20:33.6044746Z platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+2026-11-25T10:20:33.6045469Z rootdir: D:\a\graftling\graftling
+2026-11-25T10:20:33.6045822Z configfile: pytest.ini
+2026-11-25T10:20:33.6046104Z testpaths: tests
+2026-11-25T10:20:35.4294273Z collecting ... collected 947 items
+2026-11-25T10:20:35.4294782Z 
+2026-11-25T10:20:35.4741612Z tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True] PASSED [  0%]
+2026-11-25T10:20:35.5095018Z tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[False] PASSED [  0%]
+2026-11-25T10:20:35.5492789Z tests/test_agent_completion.py::test_standby_parent_continues_once_with_real_child_notice PASSED [  0%]
+2026-11-25T10:20:38.7861693Z tests/test_agent_control.py::test_lifecycle_create_send_wait_interrupt_resume_retire PASSED [  0%]
+2026-11-25T10:20:39.8399613Z tests/test_agent_control.py::test_hierarchy_uses_true_parents_and_caller_scope PASSED [  0%]
+2026-11-25T10:25:39.8469246Z Timeout (0:05:00)!
+2026-11-25T10:25:39.8470053Z Thread 0x00001a50 (most recent call first):
+2026-11-25T10:25:39.8471178Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\concurrent\futures\thread.py", line 90 in _worker
+2026-11-25T10:25:39.8472723Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 994 in run
+2026-11-25T10:25:39.8474230Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 1043 in _bootstrap_inner
+2026-11-25T10:25:39.8476101Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 1014 in _bootstrap
+2026-11-25T10:25:39.8479183Z 
+2026-11-25T10:25:39.8479530Z Thread 0x00000f00 (most recent call first):
+2026-11-25T10:25:39.8480683Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\pathlib\_abc.py", line 633 in read_text
+2026-11-25T10:25:39.8482121Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\pathlib\_local.py", line 546 in read_text
+2026-11-25T10:25:39.8483770Z   File "D:\a\graftling\graftling\tests\test_agent_control.py", line 216 in test_repeated_controls_never_run_one_session_twice
+2026-11-25T10:25:39.8486046Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\python.py", line 159 in pytest_pyfunc_call
+2026-11-25T10:25:39.8490776Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+2026-11-25T10:25:39.8492506Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+2026-11-25T10:25:39.8494142Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+2026-11-25T10:25:39.8495752Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\python.py", line 1627 in runtest
+2026-11-25T10:25:39.8497504Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 174 in pytest_runtest_call
+2026-11-25T10:25:39.8499189Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+2026-11-25T10:25:39.8500848Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+2026-11-25T10:25:39.8502467Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+2026-11-25T10:25:39.8504088Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 242 in <lambda>
+2026-11-25T10:25:39.8505683Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 341 in from_call
+2026-11-25T10:25:39.8507729Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 241 in call_and_report
+2026-11-25T10:25:39.8509435Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 132 in runtestprotocol
+2026-11-25T10:25:39.8511236Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\runner.py", line 113 in pytest_runtest_protocol
+2026-11-25T10:25:39.8512934Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+2026-11-25T10:25:39.8514563Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+2026-11-25T10:25:39.8516204Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+2026-11-25T10:25:39.8517882Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 362 in pytest_runtestloop
+2026-11-25T10:25:39.8519542Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+2026-11-25T10:25:39.8521152Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+2026-11-25T10:25:39.8522800Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+2026-11-25T10:25:39.8524334Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 337 in _main
+2026-11-25T10:25:39.8525891Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 283 in wrap_session
+2026-11-25T10:25:39.8528152Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\main.py", line 330 in pytest_cmdline_main
+2026-11-25T10:25:39.8530135Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+2026-11-25T10:25:39.8531756Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+2026-11-25T10:25:39.8533343Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+2026-11-25T10:25:39.8534955Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\config\__init__.py", line 175 in main
+2026-11-25T10:25:39.8536699Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\config\__init__.py", line 201 in console_main
+2026-11-25T10:25:39.8539220Z   File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\pytest\__main__.py", line 9 in <module>
+2026-11-25T10:25:39.8540435Z   File "<frozen runpy>", line 88 in _run_code
+2026-11-25T10:25:39.8541260Z   File "<frozen runpy>", line 198 in _run_module_as_main
+2026-11-25T11:35:33.3621568Z tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice 
+2026-11-25T11:35:33.3623373Z leftover test processes of PYTEST_GRAFTLING_RUN=286102f9da7c4f8fa22dc172c384d146: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+2026-11-25T11:35:33.3624198Z 
+2026-11-25T11:35:33.3624601Z - generated xml file: D:\a\graftling\graftling\test-results\windows\junit.xml -
+2026-11-25T11:35:33.3625292Z ============================ slowest 25 durations =============================
+2026-11-25T11:35:33.3626071Z 3.23s call     tests/test_agent_control.py::test_lifecycle_create_send_wait_interrupt_resume_retire
+2026-11-25T11:35:33.3626966Z 1.05s call     tests/test_agent_control.py::test_hierarchy_uses_true_parents_and_caller_scope
+2026-11-25T11:35:33.3627903Z 0.04s call     tests/test_agent_completion.py::test_standby_parent_continues_once_with_real_child_notice
+2026-11-25T11:35:33.3628888Z 0.03s call     tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[False]
+2026-11-25T11:35:33.3629979Z 0.03s call     tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True]
+2026-11-25T11:35:33.3630993Z 0.01s setup    tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True]
+2026-11-25T11:35:33.3631525Z 
+2026-11-25T11:35:33.3631811Z (10 durations < 0.005s hidden.  Use -vv to show these durations.)
+2026-11-25T11:35:33.3632418Z !!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+2026-11-25T11:35:33.3633175Z C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\pathlib\_local.py:274: KeyboardInterrupt
+2026-11-25T11:35:33.3633918Z (to show a full traceback on KeyboardInterrupt use --full-trace)
+2026-11-25T11:35:33.3634546Z ======================= 5 passed in 4499.76s (1:14:59) ========================
+2026-11-25T11:35:33.5036370Z ##[error]The action 'Run the graftling test suite' has timed out after 75 minutes.
+2026-11-25T11:35:33.6909897Z ##[group]Run actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+2026-11-25T11:35:33.6910443Z with:
+2026-11-25T11:35:33.6910816Z   name: graftling-windows-junit-0034097e031168c9b5076f6eea743997626c0572-1
+2026-11-25T11:35:33.6911303Z   path: test-results/windows/
+2026-11-25T11:35:33.6911606Z   if-no-files-found: error
+2026-11-25T11:35:33.6911862Z   retention-days: 7
+2026-11-25T11:35:33.6912114Z   compression-level: 6
+2026-11-25T11:35:33.6912387Z   overwrite: false
+2026-11-25T11:35:33.6912671Z   include-hidden-files: false
+2026-11-25T11:35:33.6912942Z env:
+2026-11-25T11:35:33.6913158Z   PYTHONUTF8: 1
+2026-11-25T11:35:33.6913411Z   PIP_DISABLE_PIP_VERSION_CHECK: 1
+2026-11-25T11:35:33.6913699Z   PIP_NO_INPUT: 1
+2026-11-25T11:35:33.6914022Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T11:35:33.6914540Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.13.7\x64/lib/pkgconfig
+2026-11-25T11:35:33.6915113Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T11:35:33.6916339Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T11:35:33.6916783Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.13.7\x64
+2026-11-25T11:35:33.6917147Z ##[endgroup]
+2026-11-25T11:35:34.1888507Z (node:8048) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-25T11:35:34.1889408Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-25T11:35:34.1962508Z With the provided path, there will be 2 files uploaded
+2026-11-25T11:35:34.1968167Z Artifact name is valid!
+2026-11-25T11:35:34.1970763Z Root directory input is valid!
+2026-11-25T11:35:34.5998439Z Beginning upload of artifact content to blob storage
+2026-11-25T11:35:34.6230816Z (node:8048) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-25T11:35:34.9116781Z Uploaded bytes 896
+2026-11-25T11:35:34.9930120Z Finished uploading artifact content to blob storage!
+2026-11-25T11:35:34.9931347Z SHA256 digest of uploaded artifact zip is 703ea7f11bc3ef12ba18ee29a93fea1b61ca8f10ee2e7bfbf2def229fe96f476
+2026-11-25T11:35:34.9933543Z Finalizing artifact upload
+2026-11-25T11:35:35.4061286Z Artifact graftling-windows-junit-0034097e031168c9b5076f6eea743997626c0572-1.zip successfully finalized. Artifact ID 15016209334
+2026-11-25T11:35:35.4064135Z Artifact graftling-windows-junit-0034097e031168c9b5076f6eea743997626c0572-1 has been successfully uploaded! Final size is 896 bytes. Artifact ID is 15016209334
+2026-11-25T11:35:35.4074636Z Artifact download URL: https://github.com/LUOXIAO92/graftling/actions/runs/45593743762/artifacts/15016209334
+2026-11-25T11:35:35.6132450Z Post job cleanup.
+2026-11-25T11:35:36.0348954Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-25T11:35:36.0724277Z git version 2.56.1.windows.1
+2026-11-25T11:35:36.0789514Z Copying 'C:\Users\runneradmin\.gitconfig' to 'D:\a\_temp\d78596b6-8c14-49d9-b95d-b0c5a3703910\.gitconfig'
+2026-11-25T11:35:36.0814783Z Temporarily overriding HOME='D:\a\_temp\d78596b6-8c14-49d9-b95d-b0c5a3703910' before making global git config changes
+2026-11-25T11:35:36.0816027Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-25T11:35:36.0827065Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\graftling\graftling
+2026-11-25T11:35:36.1235055Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-25T11:35:36.1641868Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-25T11:35:36.7397495Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-25T11:35:36.7793578Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-25T11:35:37.3517745Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-25T11:35:37.3916082Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-25T11:35:38.0050545Z Cleaning up orphan processes
+2026-11-25T11:35:38.0580600Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

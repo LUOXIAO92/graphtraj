@@ -4,13 +4,19 @@
 #   fail<TAB><pytest node id><TAB><origin file:line><TAB><Task><TAB><note>
 #       a test that is not POSIX-only and fails (or errors) on Windows; origin is the graftling line that
 #       makes it fail, Task the Windows Task (629 advice, section 5) that owns the fix.
+#   hang<TAB><node id of the last started test><TAB><origin file:line><TAB><Task><TAB><note>
+#       a test file that .github/run_test_files.py stopped after its file limit; the node id is the last
+#       test its -v output shows starting, origin the deepest graftling frame of the faulthandler dump in
+#       that file's log (else the deepest test frame). Listed failures in a hung file are not judged.
 #   skip-allowed<TAB><exact skip reason><TAB><note>
 #       a skip that is not Windows-specific: the reason is the same on any host without the named
 #       installation or opt-in variable. Skips starting "POSIX-only: " (tests/posix_only.py) need no entry.
 #
-# Every other skip, every failure not listed and every listed test that passes makes the verdict FAIL.
+# Every other skip, every failure or hang not listed, every listed test that passes and every listed hang
+# that ends makes the verdict FAIL.
 #
-# STATE: pre-discovery. No `fail` entry is recorded yet. The suite has never run on Windows (629 M19), and
+# STATE: pre-discovery. One `fail` entry is recorded (below, from run 45593743762); the suite has not yet run
+# to its end on Windows (629 M19), and
 # graftling's product code reaches POSIX-only calls on most Runtime paths (os.killpg in every Runtime
 # execution and calls.py, directory fsync in sessions/archive.py, fcntl in connection.py and claude/host.py,
 # the authority-denied refusal of the control pipe), so a per-test prediction from macOS would be a guess.
@@ -41,4 +47,7 @@ skip-allowed	Installed DSH is required for its own preset.	test_pi_dsh_*_551.py:
 skip-allowed	This DSH has no readable web-app preset.	test_pi_dsh_child_tools_551.py: depends on the installed DSH
 skip-allowed	Node and an installed Pi are required	test_pi_notice_display_536.py: no Pi on the runner
 
-# --- Expected Windows failures: none recorded before the first run (see STATE above).
+# --- Expected Windows failures and hangs. Run 45593743762 (0034097e) reached only 6 tests before this one
+# --- spun until the step bound; the test's wait is bounded since defad1db, so it is expected to fail now.
+# --- Its error, in the next run's JUnit, confirms the origin and Task; the rest is discovery (STATE above).
+fail	tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice	src/graftling/control.py:2140	W1	provisional: spun at line 216 in run 45593743762 with the send returned and no 2nd execution recorded; control._alive treats every PID as alive on Windows (629 M12, Task 633)

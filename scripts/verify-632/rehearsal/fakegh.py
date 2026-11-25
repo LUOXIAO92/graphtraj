@@ -9,9 +9,17 @@ Scenarios:
               other step succeeds; the artifact's failures are exactly `fails`. Expected verdict PASS.
   mismatch    as matched, but one more test fails, the first listed failure passes, and one test skips with an
               unprefixed reason ('Node is required'). FAIL, naming all three.
+  The artifact is laid out as .github/run_test_files.py leaves it: files.json, junit/<stem>.xml and logs/<stem>.txt per
+  test file (split from `junit` by each testcase's file), run-exit-code.txt, environment.json.
   setup-fail  'Install graftling and pinned test tools' fails; later steps are skipped; the artifact holds only
-              environment.json (no JUnit). FAIL (mechanics).
-  exit2       the suite step fails with pytest exit code 2 and a collection error. FAIL (mechanics and results).
+              environment.json (no records). FAIL (mechanics).
+  exit2       the first test file ends with pytest exit code 2 and a collection error. FAIL (mechanics and results).
+  hang        as matched, but tests/test_agent_control.py was stopped after its limit and recorded as hung (no JUnit;
+              its log holds -v lines and a faulthandler dump through src/graftling/control.py:2140). With a `hang`
+              entry for its last started test: PASS.
+  hang-unexpected  the same hang without a `hang` entry: FAIL, naming it with origin control.py:2140.
+  missing-record   files.json lacks the first test file: FAIL (mechanics).
+  not-run     the last test file is recorded not-run (total limit spent): FAIL (mechanics).
   rerun       attempt 1 as mismatch; after `run rerun --failed` attempt 2 appears on the next poll and is as matched.
   dispatch    as matched; `workflow run` adds a workflow_dispatch run (another id) on the next poll.
   timeout     only another workflow ever runs for the SHA.
@@ -150,14 +158,65 @@ def artifact(run_id: int, directory: Path) -> None:
                         "src\\graftling\\connection.py:68: in agents_connection\n"
                         "    raise AgentsError('authority-denied', 'Windows does not support ...')\n"
                         "E   graftling.tool.AgentsError: Windows does not support the authenticated local control pipe.")
-    code = "1"
-    if shown == "exit2":
-        code = "2"
-        broken = ET.SubElement(tree.getroot().find("testsuite"), "testcase",
-                               {"classname": "", "name": "tests.test_broken", "file": "tests/test_broken.py"})
-        ET.SubElement(broken, "error", {"message": "collection failure"}).text = "ImportError: No module named 'fcntl'"
-    tree.write(directory / "junit.xml", encoding="utf-8", xml_declaration=True)
-    (directory / "pytest-exit-code.txt").write_text(code + "\n")
+    # As .github/run_test_files.py leaves it: one JUnit file and log per test file, files.json, run-exit-code.txt.
+    by_file: dict[str, list] = {}
+    for case in cases.values():
+        by_file.setdefault(case.get("file"), []).append(case)
+    for part in ("junit", "logs"):
+        (directory / part).mkdir(exist_ok=True)
+    records = []
+    for test_file in sorted(by_file):
+        stem = Path(test_file).stem
+        record = {"file": test_file, "log": f"logs/{stem}.txt", "outcome": "ended", "pipe_closed": True,
+                  "elapsed_s": 2.5, "junit": f"junit/{stem}.xml"}
+        members = by_file[test_file]
+        lines = [f"{nodeid(case)} {'FAILED' if case.find('failure') is not None else 'PASSED'}" for case in members]
+        if shown in ("hang", "hang-unexpected") and test_file == HUNG_FILE:
+            started = lines[:3] + [HUNG_TEST + " "]
+            (directory / record["log"]).write_text("\n".join(started) + HUNG_DUMP, encoding="utf-8")
+            record.update(outcome="hung", exit_code=None, junit=None, elapsed_s=360.2, last_started=HUNG_TEST,
+                          last_finished=False, stopped="taskkill /T /F exit 0: SUCCESS: The process with PID 4242 "
+                          "(child process of PID 4240) has been terminated.")
+            records.append(record)
+            continue
+        if shown == "not-run" and test_file == sorted(by_file)[-1]:
+            records.append({"file": test_file, "outcome": "not-run", "exit_code": None, "elapsed_s": 0, "junit": None,
+                            "reason": "--total-limit 4200 s spent"})
+            continue
+        if shown == "missing-record" and test_file == sorted(by_file)[0]:
+            continue
+        code = 1 if any(case.find("failure") is not None for case in members) else 0
+        suite = ET.Element("testsuite", {"name": "pytest", "tests": str(len(members))})
+        suite.extend(members)
+        if shown == "exit2" and test_file == sorted(by_file)[0]:
+            code = 2
+            broken = ET.SubElement(suite, "testcase", {"classname": "", "name": "tests.test_agent_completion",
+                                                        "file": test_file})
+            ET.SubElement(broken, "error", {"message": "collection failure"}).text = "ImportError: No module named 'fcntl'"
+        tree_out = ET.ElementTree(ET.Element("testsuites"))
+        tree_out.getroot().append(suite)
+        tree_out.write(directory / record["junit"], encoding="utf-8", xml_declaration=True)
+        (directory / record["log"]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        record["exit_code"] = code
+        records.append(record)
+    (directory / "files.json").write_text(json.dumps({"file_limit_s": 360.0, "total_limit_s": 4200.0, "files": records}))
+    (directory / "run-exit-code.txt").write_text("1\n")
+
+
+# The hung file of the hang scenarios, shaped like run 45593743762's faulthandler dump (Windows paths).
+HUNG_FILE = "tests/test_agent_control.py"
+HUNG_TEST = "tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice"
+HUNG_DUMP = r"""Timeout (0:02:00)!
+Thread 0x00001a50 (most recent call first):
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\concurrent\futures\thread.py", line 90 in _worker
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\threading.py", line 994 in run
+
+Thread 0x00000f00 (most recent call first):
+  File "D:\a\graftling\graftling\src\graftling\control.py", line 2140 in _reconcile
+  File "D:\a\graftling\graftling\src\graftling\control.py", line 1663 in status
+  File "D:\a\graftling\graftling\tests\test_agent_control.py", line 216 in test_repeated_controls_never_run_one_session_twice
+  File "C:\hostedtoolcache\windows\Python\3.13.7\x64\Lib\site-packages\_pytest\python.py", line 159 in pytest_pyfunc_call
+"""
 
 
 if args[:1] == ["--version"]:

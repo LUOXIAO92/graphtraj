@@ -15,6 +15,10 @@ EXPECTED=$S/windows-expected-rehearsal.txt
 mkdir -p $S
 { grep '^skip-allowed' $HERE/../windows-expected.txt
   for f in $FAILS; do print -r -- "fail	$f	src/graftling/connection.py:68	W4	rehearsal stand-in"; done } > $EXPECTED
+# The same list plus the hung file of fakegh.py's hang scenarios.
+EXPECTED_HANG=$S/windows-expected-rehearsal-hang.txt
+{ cat $EXPECTED
+  print -r -- "hang	tests/test_agent_control.py::test_repeated_controls_never_run_one_session_twice	src/graftling/control.py:2140	W1	rehearsal stand-in" } > $EXPECTED_HANG
 fresh() {  # fresh <scenario>: a new bare remote, scratch graftling clone and fake gh state
   rm -rf $S/$1; mkdir -p $S/$1/gh
   git clone -q --bare --no-hardlinks $REAL $S/$1/gremote.git
@@ -26,7 +30,7 @@ exec $PY -I $HERE/fakegh.py $S/$1/gh \"\$@\"" > $S/$1/gh/gh; chmod +x $S/$1/gh/g
 }
 knobs() {
   print -r -- VERIFY632_GRAFTLING=$S/$1/graftling VERIFY632_GREMOTE=$S/$1/gremote.git VERIFY632_GH=$S/$1/gh/gh \
-    VERIFY632_EXPECTED=$EXPECTED VERIFY632_EVIDENCE=$S/$1/evidence VERIFY632_POLL_S=1 VERIFY632_APPEAR_S=${2:-10} \
+    VERIFY632_EXPECTED=${EXP:-$EXPECTED} VERIFY632_EVIDENCE=$S/$1/evidence VERIFY632_POLL_S=1 VERIFY632_APPEAR_S=${2:-10} \
     VERIFY632_DONE_S=30
 }
 step() {  # step <scenario> <file> <step> [args]: run one step with the knobs, keep the console output
@@ -48,9 +52,20 @@ fresh exit2; step exit2 exit2-P.txt P
 fresh rerun; step rerun rerun-P.txt P; step rerun rerun-X.txt X 51000000000
 fresh dispatch; step dispatch dispatch-P.txt P; step dispatch dispatch-D.txt D
 APPEAR=4; fresh timeout; step timeout timeout-P.txt P; APPEAR=10
+# Round 1 (per-file driver): a hung file listed as a hang, the same hang unlisted, a missing record, a not-run file.
+EXP=$EXPECTED_HANG; fresh hang; step hang hang-P.txt P; unset EXP
+fresh hang-unexpected; step hang-unexpected hang-unexpected-P.txt P
+cp $S/hang-unexpected/evidence/run-51000000000-a1/observed-expected.txt $OUT/hang-unexpected-observed-expected.txt
+fresh missing-record; step missing-record missing-record-P.txt P
+fresh not-run; step not-run not-run-P.txt P
 # Guards: a local branch in the graftling clone that differs from the bundle head stops 00 (never overwritten); a
 # remote branch that is not an ancestor of the bundle head stops P before any push (never forced).
-fresh guard; git -C $S/guard/graftling branch -q agent/632-graftling-windows-ci 6166718; step guard guard-local-00.txt 00
+fresh guard; git -C $S/guard/graftling branch -q agent/632-graftling-windows-ci \
+  $(git -C $S/guard/graftling commit-tree -p 82e9d12 -m diverged '82e9d12^{tree}'); step guard guard-local-00.txt 00
+# Round 1: <Harness>/graftling and the remote hold the previous candidate 0034097e; P fast-forwards both.
+fresh ff-local; git -C $S/ff-local/graftling branch -q agent/632-graftling-windows-ci 0034097e031168c9b5076f6eea743997626c0572
+step ff-local ff-local-00.txt 00; step ff-local ff-local-P.txt P
+print -r -- "--- after P: clone $(git -C $S/ff-local/graftling rev-parse agent/632-graftling-windows-ci), remote $(git -C $S/ff-local/gremote.git rev-parse agent/632-graftling-windows-ci)" >> $OUT/ff-local-P.txt
 fresh diverged; git -C $S/diverged/gremote.git branch -q agent/632-graftling-windows-ci 82e9d12
 git -C $S/diverged/gremote.git commit-tree -p 82e9d12 -m diverged 82e9d12^{tree} > $S/diverged/tip
 git -C $S/diverged/gremote.git update-ref refs/heads/agent/632-graftling-windows-ci $(<$S/diverged/tip)

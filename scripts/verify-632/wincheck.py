@@ -8,8 +8,12 @@ Run as: python -I wincheck.py <command> <args...>. Standard library only except 
   runs FILE PATH EVENT                newest run of PATH (EVENT or '-' for any event): RUN line, or MISSING; OTHER lines
   newrun FILE PATH EVENT OLD_ID...    newest run of PATH and EVENT whose id is not an OLD_ID: RUN line, or MISSING
   jobs FILE CONFIG                    every step of the job with its conclusion; last line JUDGE PASS|FAIL <reason>
-  junit DIR EXPECTED CANDIDATE        judge DIR/junit.xml against EXPECTED; write CANDIDATE (the observed list, for a
-                                      correction round); last line JUDGE PASS|FAIL <reason>
+  junit DIR EXPECTED CANDIDATE [TESTFILES]
+                                      DIR is the artifact of .github/run_test_files.py (files.json, junit/*.xml,
+                                      logs/*.txt, run-exit-code.txt): a FILES PASS|FAIL line for the per-file records
+                                      (every file in TESTFILES ended or was stopped and recorded as hung), then the
+                                      merged JUnit results and hangs against EXPECTED; writes CANDIDATE (the observed
+                                      list, for a correction round); last line JUDGE PASS|FAIL <reason>
 Writes only the CANDIDATE file of `junit`.
 """
 import json
@@ -96,9 +100,15 @@ def wfcheck(file, branch, job_name, steps):
         check(name in names, f"step named: {name}", f"no step named: {name}")
     tests = next((step for step in items if step.get("name") == steps[-2]), {})
     command = str(tests.get("run", ""))
-    check("-p no:cacheprovider" in command and "--junitxml=" in command and "-x" not in command.split()
-          and "--maxfail" not in command, "the suite step runs pytest -p no:cacheprovider --junitxml, never stopping early",
-          "the suite step does not run the whole suite with a JUnit file")
+    check(re.search(r"^\s*python \.github/run_test_files\.py --out test-results/windows --file-limit \d+ --total-limit \d+\s*$",
+                    command, re.M) is not None and "run-exit-code.txt" in command,
+          "the suite step runs every test file through .github/run_test_files.py with file and total limits",
+          "the suite step does not run .github/run_test_files.py --out test-results/windows --file-limit N --total-limit N")
+    limits = re.search(r"--file-limit (\d+) --total-limit (\d+)", command)
+    if limits:
+        check(int(limits.group(2)) < 60 * int(tests.get("timeout-minutes") or 0),
+              f"total limit {limits.group(2)} s is inside the step's {tests.get('timeout-minutes')} minutes",
+              f"total limit {limits.group(2)} s is not inside the step's timeout")
     check(isinstance(tests.get("timeout-minutes"), int), f"suite step timeout-minutes {tests.get('timeout-minutes')}",
           "the suite step has no timeout-minutes")
     upload = next((step for step in items if step.get("name") == steps[-1]), {})
@@ -112,36 +122,39 @@ def wfcheck(file, branch, job_name, steps):
 
 
 def read_expected(file):
-    """Return ({nodeid: (origin, task, note)}, {skip reason: note}); raise ValueError naming the line."""
-    fails, skips = {}, {}
+    """Return ({nodeid: (origin, task, note)} for fail, the same for hang, {skip reason: note}).
+
+    Raises ValueError naming the line."""
+    fails, hangs, skips = {}, {}, {}
     with open(file, encoding="utf-8") as handle:
         for number, raw in enumerate(handle, 1):
             line = raw.rstrip("\n")
             if not line.strip() or line.lstrip().startswith("#"):
                 continue
             parts = line.split("\t")
-            if parts[0] == "fail" and len(parts) >= 4 and "::" in parts[1]:
-                if parts[1] in fails:
+            if parts[0] in ("fail", "hang") and len(parts) >= 4 and "::" in parts[1]:
+                table = fails if parts[0] == "fail" else hangs
+                if parts[1] in fails or parts[1] in hangs:
                     raise ValueError(f"{file}:{number}: {parts[1]} listed twice")
-                fails[parts[1]] = (parts[2], parts[3], parts[4] if len(parts) > 4 else "")
+                table[parts[1]] = (parts[2], parts[3], parts[4] if len(parts) > 4 else "")
             elif parts[0] == "skip-allowed" and len(parts) >= 2 and parts[1]:
                 if parts[1].startswith(PREFIX):
                     raise ValueError(f"{file}:{number}: POSIX-only skips need no entry")
                 skips[parts[1]] = parts[2] if len(parts) > 2 else ""
             else:
-                raise ValueError(f"{file}:{number}: not 'fail<TAB>nodeid<TAB>origin<TAB>task[<TAB>note]' "
+                raise ValueError(f"{file}:{number}: not 'fail|hang<TAB>nodeid<TAB>origin<TAB>task[<TAB>note]' "
                                  f"or 'skip-allowed<TAB>reason[<TAB>note]': {line[:120]}")
-    return fails, skips
+    return fails, hangs, skips
 
 
 def expected(file):
     try:
-        fails, skips = read_expected(file)
+        fails, hangs, skips = read_expected(file)
     except (OSError, ValueError) as error:
         print(f"FAIL: {error}")
         sys.exit(1)
-    tasks = Counter(task for _, task, _ in fails.values())
-    print(f"PASS: {file} parses: {len(fails)} expected Windows failures "
+    tasks = Counter(task for _, task, _ in [*fails.values(), *hangs.values()])
+    print(f"PASS: {file} parses: {len(fails)} expected Windows failures and {len(hangs)} expected hangs "
           f"({', '.join(f'{k} {v}' for k, v in sorted(tasks.items())) or 'none'}), {len(skips)} allowed environment skips")
 
 
@@ -246,34 +259,113 @@ def suggest(where):
     return "?"
 
 
-def junit(directory, expected_file, candidate):
-    problems = []
-    path = os.path.join(directory, "junit.xml")
+DUMP_FRAME = re.compile(r'File "([^"]+)", line (\d+)')
+
+
+def dump_origin(log_text, test_file):
+    """Deepest graftling frame of the test's thread in the last faulthandler dump, else its deepest test frame."""
+    dump = log_text.rsplit("Timeout (", 1)
+    if len(dump) < 2:
+        return None
+    stem = test_file.replace("\\", "/").rsplit("/", 1)[-1]
+    for block in re.split(r"\n\s*(?:Thread|Current thread) 0x", dump[1]):
+        frames = []   # most recent call first, as faulthandler prints them
+        for path, line in DUMP_FRAME.findall(block):
+            path = path.replace("\\", "/")
+            for root in ("src/graftling/", "tests/"):
+                if root in path:
+                    frames.append((root + path.split(root, 1)[1], line))
+        if any(path.endswith(stem) for path, _ in frames):
+            product = [frame for frame in frames if frame[0].startswith("src/graftling/")]
+            return "%s:%s" % (product or [frame for frame in frames if frame[0].startswith("tests/")])[0]
+    return None
+
+
+def files_check(directory, test_files):
+    """Per-file records: every listed test file ended, or was stopped and recorded as hung.
+
+    Returns (problems, observed hangs {nodeid: (origin, record)}, junit paths, files that hung)."""
+    problems, hangs, paths, hung_files = [], {}, [], set()
     try:
-        code = open(os.path.join(directory, "pytest-exit-code.txt"), encoding="utf-8-sig").read().strip()
+        code = open(os.path.join(directory, "run-exit-code.txt"), encoding="utf-8-sig").read().strip()
     except OSError:
         code = "missing"
+    print(f"run_test_files exit code: {code}")
+    if code not in ("0", "1"):
+        problems.append(f"run_test_files exit code {code}: the driver did not finish (0 or 1 expected)")
+    try:
+        records = load(os.path.join(directory, "files.json"))["files"]
+    except (OSError, ValueError, KeyError) as error:
+        return problems + [f"no per-file records (files.json): {error}"], hangs, paths, hung_files
+    seen = {record["file"] for record in records}
+    if test_files is not None:
+        missing = sorted(set(test_files) - seen)
+        if missing:
+            problems.append(f"{len(missing)} test files without a record: " + ", ".join(missing[:5]))
+        extra = sorted(seen - set(test_files))
+        if extra:
+            print("NOTE: records for files not in the commit's tests/: " + ", ".join(extra[:5]))
+    outcomes = Counter(record["outcome"] for record in records)
+    print(f"--- test files: {len(records)} recorded | ended {outcomes['ended']} | hung {outcomes['hung']} | "
+          f"not run {outcomes['not-run']}" + (f" | in the commit: {len(test_files)}" if test_files is not None else ""))
+    for record in records:
+        name = record["file"]
+        if record["outcome"] == "ended":
+            if record.get("exit_code") not in (0, 1):
+                problems.append(f"{name} ended with pytest exit {record.get('exit_code')} (collection or internal error)")
+                print(f"  ENDED exit {record.get('exit_code')} {record['elapsed_s']:7.1f} s  {name}")
+            if record.get("junit"):
+                paths.append(os.path.join(directory, record["junit"]))
+            else:
+                problems.append(f"{name} ended without its JUnit file")
+            if not record.get("pipe_closed", True):
+                print(f"  NOTE {name}: a leftover process held its output pipe open after pytest exited")
+        elif record["outcome"] == "hung":
+            hung_files.add(name)
+            try:
+                text = open(os.path.join(directory, record["log"]), encoding="utf-8", errors="replace").read()
+            except (OSError, KeyError):
+                text = ""
+            node = record.get("last_started") or f"{name}::<no test started>"
+            where = dump_origin(text, name) or f"{name}:?"
+            hangs[node] = (where, record)
+            print(f"  HUNG {record['elapsed_s']:7.1f} s  {name} | last started {node} | origin {where} | {record.get('stopped')}")
+        else:
+            problems.append(f"{name} was not run ({record.get('reason', record['outcome'])})")
+            print(f"  NOT RUN {name} | {record.get('reason')}")
+    slowest = sorted((r for r in records if r["outcome"] == "ended"), key=lambda r: -r["elapsed_s"])[:5]
+    print("  slowest ended files: " + ", ".join(f"{r['file']} {r['elapsed_s']} s" for r in slowest))
+    return problems, hangs, paths, hung_files
+
+
+def junit(directory, expected_file, candidate, test_files_list=None):
+    problems = []
     try:
         environment = load(os.path.join(directory, "environment.json"))
         print("runner:", " | ".join(f"{k}={environment.get(k)}" for k in
                                     ("os", "image", "image_version", "arch", "python", "pytest", "node", "codepage")))
     except (OSError, ValueError):
         print("runner: environment.json missing or unreadable")
-    print(f"pytest exit code: {code}")
-    if code not in ("0", "1"):
-        problems.append(f"pytest exit code {code}: the suite did not run to its end (0 or 1 expected)")
+    test_files = None
+    if test_files_list:
+        test_files = [line.strip() for line in open(test_files_list, encoding="utf-8") if line.strip()]
+    mechanics, hangs, paths, hung_files = files_check(directory, test_files)
+    print("FILES", "FAIL" if mechanics else "PASS", "; ".join(mechanics) or
+          "every test file ended or was stopped and recorded as hung")
     try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError) as error:
-        print(f"JUDGE FAIL no readable JUnit file: {error}")
-        return
-    try:
-        fails_expected, skips_allowed = read_expected(expected_file)
+        fails_expected, hangs_expected, skips_allowed = read_expected(expected_file)
     except (OSError, ValueError) as error:
         print(f"JUDGE FAIL expected list: {error}")
         return
+    cases_all = []
+    for path in paths:
+        try:
+            cases_all.extend(ET.parse(path).getroot().iter("testcase"))
+        except (OSError, ET.ParseError) as error:
+            problems.append(f"unreadable JUnit file {path}: {error}")
+    print(f"merged JUnit files: {len(paths)}")
     outcome, detail, cases = {}, {}, {}
-    for case in root.iter("testcase"):
+    for case in cases_all:
         node = nodeid(case)
         cases[node] = case
         failure = case.find("failure")
@@ -292,7 +384,7 @@ def junit(directory, expected_file, candidate):
     total = len(outcome)
     print(f"collected in JUnit: {total} | passed {counts['pass']} | failed {counts['fail']} | errors {counts['error']} | "
           f"skipped {counts['skip']}")
-    if total == 0:
+    if total == 0 and not hangs:
         problems.append("JUnit holds no test")
     collection = [node for node, case in cases.items()
                   if (case.find("error") is not None and case.find("error").get("message") == "collection failure")]
@@ -317,10 +409,28 @@ def junit(directory, expected_file, candidate):
     for node, reason in sorted(other_skips.items()):
         print(f"  {node} | {reason}")
 
+    # Hangs: the last started test of each stopped file, against the `hang` entries.
+    unexpected_hangs = sorted(set(hangs) - set(hangs_expected))
+    ended_now = sorted(node for node in hangs_expected if node not in hangs)
+    print(f"--- expected hangs: {len(hangs_expected)}; observed hangs: {len(hangs)} "
+          f"({len(set(hangs) & set(hangs_expected))} as expected)")
+    print(f"--- unexpected hangs: {len(unexpected_hangs)}")
+    for node in unexpected_hangs:
+        print(f"  HANG {node} | origin {hangs[node][0]} ({suggest(hangs[node][0])}) | stopped after "
+              f"{hangs[node][1]['elapsed_s']} s")
+    print(f"--- listed hangs that did not hang: {len(ended_now)}")
+    for node in ended_now:
+        print(f"  {outcome.get(node, 'absent').upper()} {node} | listed origin {hangs_expected[node][0]} {hangs_expected[node][1]}")
+
+    def in_hung_file(node):
+        return node.split("::")[0] in hung_files
+
     failing = {node for node, o in outcome.items() if o in ("fail", "error")}
     unexpected = sorted(failing - set(fails_expected))
     passed_now = sorted(node for node in fails_expected if outcome.get(node) == "pass")
-    not_seen = sorted(node for node in fails_expected if outcome.get(node) not in ("fail", "error", "pass"))
+    unjudged = sorted(node for node in fails_expected if node not in outcome and in_hung_file(node))
+    not_seen = sorted(node for node in fails_expected if outcome.get(node) not in ("fail", "error", "pass")
+                      and node not in unjudged)
     print(f"--- expected Windows failures: {len(fails_expected)}; observed failures and errors: {len(failing)} "
           f"({len(failing & set(fails_expected))} as expected)")
     print(f"--- unexpected failures: {len(unexpected)}")
@@ -332,6 +442,14 @@ def junit(directory, expected_file, candidate):
     print(f"--- listed failures that were skipped or not collected: {len(not_seen)}")
     for node in not_seen:
         print(f"  {outcome.get(node, 'absent').upper()} {node} | {detail.get(node, ('', ''))[0][:120]}")
+    if unjudged:
+        print(f"--- listed failures not judged because their file hung (no JUnit for it): {len(unjudged)}")
+        for node in unjudged:
+            print(f"  {node}")
+    if unexpected_hangs:
+        problems.append(f"{len(unexpected_hangs)} unexpected hangs")
+    if ended_now:
+        problems.append(f"{len(ended_now)} listed hangs did not hang")
     if other_skips:
         problems.append(f"{len(other_skips)} skips without the POSIX-only prefix")
     if unexpected:
@@ -356,10 +474,20 @@ def junit(directory, expected_file, candidate):
             else:
                 where, task, note = detail[node][1], suggest(detail[node][1]), "NEW: " + detail[node][0][:150]
             out.write(f"fail\t{node}\t{where}\t{task}\t{note}\n")
+        for node in unjudged:
+            where, task, note = fails_expected[node]
+            out.write(f"fail\t{node}\t{where}\t{task}\t{note} (not judged: its file hung)\n")
+        for node in sorted(hangs):
+            if node in hangs_expected:
+                where, task, note = hangs_expected[node]
+            else:
+                where, task = hangs[node][0], suggest(hangs[node][0])
+                note = f"NEW: file stopped after {hangs[node][1]['elapsed_s']} s"
+            out.write(f"hang\t{node}\t{where}\t{task}\t{note}\n")
     print(f"observed list written: {candidate}")
     print("JUDGE", "FAIL" if problems else "PASS", "; ".join(problems) or
-          f"{total} tests: {counts['pass']} passed, {len(failing)} failed as listed, {len(posix)} POSIX-only skips, "
-          f"{len(environment_skips)} environment skips")
+          f"{total} tests: {counts['pass']} passed, {len(failing)} failed as listed, {len(hangs)} hangs as listed, "
+          f"{len(posix)} POSIX-only skips, {len(environment_skips)} environment skips")
 
 
 if __name__ == "__main__":
@@ -377,6 +505,6 @@ if __name__ == "__main__":
     elif command == "jobs":
         jobs(args[0], args[1])
     elif command == "junit":
-        junit(args[0], args[1], args[2])
+        junit(args[0], args[1], args[2], args[3] if len(args) > 3 else None)
     else:
         sys.exit(f"unknown command {command}")

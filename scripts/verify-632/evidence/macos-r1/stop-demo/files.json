@@ -1,0 +1,27 @@
+{
+ "file_limit_s": 8.0,
+ "total_limit_s": 4200.0,
+ "files": [
+  {
+   "file": "tests/test_host_shutdown_stop.py",
+   "log": "logs/test_host_shutdown_stop.txt",
+   "outcome": "hung",
+   "exit_code": null,
+   "stopped": "SIGKILL to the process group",
+   "pipe_closed": true,
+   "elapsed_s": 8.0,
+   "junit": null,
+   "last_started": "tests/test_host_shutdown_stop.py::test_a_failing_interrupt_is_reported_and_stops_nobody_else[dsh-raises]",
+   "last_finished": false
+  },
+  {
+   "file": "tests/test_agent_completion.py",
+   "log": "logs/test_agent_completion.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.4,
+   "junit": "junit/test_agent_completion.xml"
+  }
+ ]
+}

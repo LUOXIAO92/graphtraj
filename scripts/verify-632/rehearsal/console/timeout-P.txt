@@ -1,38 +1,40 @@
 $ VERIFY632_GRAFTLING=/tmp/claude-501/rh632/timeout/graftling VERIFY632_GREMOTE=/tmp/claude-501/rh632/timeout/gremote.git VERIFY632_GH=/tmp/claude-501/rh632/timeout/gh/gh VERIFY632_EXPECTED=/tmp/claude-501/rh632/windows-expected-rehearsal.txt VERIFY632_EVIDENCE=/tmp/claude-501/rh632/timeout/evidence VERIFY632_POLL_S=1 VERIFY632_APPEAR_S=4 VERIFY632_DONE_S=30 zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/632-graftling-windows-ci to graftling /tmp/claude-501/rh632/timeout/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh632/timeout/graftling; head 0034097e031168c9b5076f6eea743997626c0572 on base 57bca73657d3135a4504904fcc3f1898c2419766
+PASS: bundle verifies against /tmp/claude-501/rh632/timeout/graftling; head defad1db083e911900cbea1cb0ef165e6a66d322 on base 57bca73657d3135a4504904fcc3f1898c2419766
 --- bundle commits on 57bca73657d3135a4504904fcc3f1898c2419766:
+  defad1d LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows tests: one pytest process per test file with a hang limit; bound one spin (632)
   0034097 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows tests workflow; POSIX-only tests marked (632)
 PASS: author and committer are the noreply identity
 PASS: src/ and pyproject.toml unchanged since 57bca73657d3135a4504904fcc3f1898c2419766 (no product change)
 --- files changed since 57bca73657d3135a4504904fcc3f1898c2419766:
-   .github/workflows/windows.yml            | 98 ++++++++++++++++++++++++++++++++
-   tests/conftest.py                        |  7 ++-
-   tests/posix_only.py                      | 42 ++++++++++++++
-   tests/test_agent_control.py              |  2 +
-   tests/test_agents_connections_presets.py |  2 +
-   tests/test_claude_default_tools_576.py   |  2 +
-   tests/test_claude_gateway_login_613.py   |  3 +
-   tests/test_claude_marketplace_plugin.py  |  7 +++
-   tests/test_claude_model_alias_574.py     |  2 +
-   tests/test_claude_review.py              |  2 +
-   tests/test_codex_independent_control.py  |  2 +
-   tests/test_codex_review_relay.py         |  2 +
-   tests/test_codex_tool_reclaim_462.py     |  4 +-
-   tests/test_dsh_plugin_install_python.py  |  3 +
-   tests/test_dsh_standalone_child.py       |  2 +
-   tests/test_dsh_standalone_host.py        |  3 +
-   tests/test_dsh_startup.py                |  2 +
-   tests/test_host_shutdown_stop.py         |  3 +
-   tests/test_pi_default_host_572.py        |  2 +
-   tests/test_pi_dsh_notice_holding.py      |  3 +
-   tests/test_pi_standalone_host.py         |  2 +
-   tests/test_provider_listing_609.py       |  2 +
-   tests/test_unified_data_root_577.py      |  3 +
-   tests/test_windows_emulation_619.py      |  5 ++
-   24 files changed, 203 insertions(+), 2 deletions(-)
---- .github/workflows/windows.yml at 0034097e031168c9b5076f6eea743997626c0572
+   .github/run_test_files.py                | 137 +++++++++++++++++++++++++++++++
+   .github/workflows/windows.yml            | 101 +++++++++++++++++++++++
+   tests/conftest.py                        |   7 +-
+   tests/posix_only.py                      |  42 ++++++++++
+   tests/test_agent_control.py              |  13 ++-
+   tests/test_agents_connections_presets.py |   2 +
+   tests/test_claude_default_tools_576.py   |   2 +
+   tests/test_claude_gateway_login_613.py   |   3 +
+   tests/test_claude_marketplace_plugin.py  |   7 ++
+   tests/test_claude_model_alias_574.py     |   2 +
+   tests/test_claude_review.py              |   2 +
+   tests/test_codex_independent_control.py  |   2 +
+   tests/test_codex_review_relay.py         |   2 +
+   tests/test_codex_tool_reclaim_462.py     |   4 +-
+   tests/test_dsh_plugin_install_python.py  |   3 +
+   tests/test_dsh_standalone_child.py       |   2 +
+   tests/test_dsh_standalone_host.py        |   3 +
+   tests/test_dsh_startup.py                |   2 +
+   tests/test_host_shutdown_stop.py         |   3 +
+   tests/test_pi_default_host_572.py        |   2 +
+   tests/test_pi_dsh_notice_holding.py      |   3 +
+   tests/test_pi_standalone_host.py         |   2 +
+   tests/test_provider_listing_609.py       |   2 +
+   tests/test_unified_data_root_577.py      |   3 +
+   tests/test_windows_emulation_619.py      |   5 ++
+   25 files changed, 353 insertions(+), 3 deletions(-)
+--- .github/workflows/windows.yml at defad1db083e911900cbea1cb0ef165e6a66d322
 PASS: push branches are exactly agent/632-graftling-windows-ci and dev
 PASS: triggers: push and workflow_dispatch only
 PASS: permissions: contents: read
@@ -55,25 +57,35 @@ PASS: step named: Install graftling and pinned test tools
 PASS: step named: Show runner, Python and pytest versions
 PASS: step named: Run the graftling test suite
 PASS: step named: Retain JUnit results
-PASS: the suite step runs pytest -p no:cacheprovider --junitxml, never stopping early
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
 PASS: tests/posix_only.py PREFIX is 'POSIX-only: '
-PASS: /tmp/claude-501/rh632/windows-expected-rehearsal.txt parses: 2 expected Windows failures (W4 2), 19 allowed environment skips
-PASS: agent/632-graftling-windows-ci is absent on graftling /tmp/claude-501/rh632/timeout/gremote.git
+PASS: .github/run_test_files.py has '-p', 'no:cacheprovider'
+PASS: .github/run_test_files.py has '-o', 'faulthandler_timeout=120'
+PASS: .github/run_test_files.py has '-o', 'junit_family=xunit1'
+PASS: .github/run_test_files.py has '-v', '-rfEsxX'
+PASS: .github/run_test_files.py has [sys.executable, '-u', '-m', 'pytest'
+PASS: .github/run_test_files.py has ['taskkill', '/T', '/F', '/PID'
+PASS: .github/run_test_files.py has 'files.json'
+PASS: .github/run_test_files.py has last_started
+PASS: .github/run_test_files.py imports only the standard library (no yaml/psutil/pytest_timeout/requests)
+PASS: /tmp/claude-501/rh632/windows-expected-rehearsal.txt parses: 2 expected Windows failures and 0 expected hangs (W4 2), 19 allowed environment skips
+PASS: graftling /tmp/claude-501/rh632/timeout/gremote.git has agent/632-graftling-windows-ci at 0034097e031168c9b5076f6eea743997626c0572, an ancestor of the bundle head (fast-forward)
 PASS: /tmp/claude-501/rh632/timeout/graftling has no local agent/632-graftling-windows-ci (P creates it from the bundle)
 $ git -C /tmp/claude-501/rh632/timeout/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/scripts/verify-632/graftling-632.bundle refs/heads/agent/632-graftling-windows-ci:refs/heads/agent/632-graftling-windows-ci
   From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/scripts/verify-632/graftling-632.bundle
    * [new branch]      agent/632-graftling-windows-ci -> agent/632-graftling-windows-ci
-PASS: /tmp/claude-501/rh632/timeout/graftling local agent/632-graftling-windows-ci = 0034097e031168c9b5076f6eea743997626c0572
-$ git -C /tmp/claude-501/rh632/timeout/graftling push /tmp/claude-501/rh632/timeout/gremote.git refs/heads/agent/632-graftling-windows-ci:refs/heads/agent/632-graftling-windows-ci   (0034097e031168c9b5076f6eea743997626c0572)
+PASS: /tmp/claude-501/rh632/timeout/graftling local agent/632-graftling-windows-ci = defad1db083e911900cbea1cb0ef165e6a66d322
+$ git -C /tmp/claude-501/rh632/timeout/graftling push /tmp/claude-501/rh632/timeout/gremote.git refs/heads/agent/632-graftling-windows-ci:refs/heads/agent/632-graftling-windows-ci   (defad1db083e911900cbea1cb0ef165e6a66d322)
   To /tmp/claude-501/rh632/timeout/gremote.git
-   * [new branch]      agent/632-graftling-windows-ci -> agent/632-graftling-windows-ci
-PASS: graftling /tmp/claude-501/rh632/timeout/gremote.git agent/632-graftling-windows-ci = 0034097e031168c9b5076f6eea743997626c0572
-looking for the .github/workflows/windows.yml run (event push) of 0034097e031168c9b5076f6eea743997626c0572 on LUOXIAO92/graftling (appearance bound 4s, poll 1s)
-appearance timeout after 4s: no .github/workflows/windows.yml run for 0034097e031168c9b5076f6eea743997626c0572
+     0034097..defad1d  agent/632-graftling-windows-ci -> agent/632-graftling-windows-ci
+PASS: graftling /tmp/claude-501/rh632/timeout/gremote.git agent/632-graftling-windows-ci = defad1db083e911900cbea1cb0ef165e6a66d322
+looking for the .github/workflows/windows.yml run (event push) of defad1db083e911900cbea1cb0ef165e6a66d322 on LUOXIAO92/graftling (appearance bound 4s, poll 1s)
+appearance timeout after 4s: no .github/workflows/windows.yml run for defad1db083e911900cbea1cb0ef165e6a66d322
 other workflows for this SHA:
   OTHER	.github/workflows/other.yml	51000000009	push	completed	success	https://github.com/LUOXIAO92/graftling/actions/runs/51000000009
-next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/scripts/verify-632/steps.zsh W 0034097e031168c9b5076f6eea743997626c0572    (re-observe; no push)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/632-graftling-windows-ci/scripts/verify-632/steps.zsh W defad1db083e911900cbea1cb0ef165e6a66d322    (re-observe; no push)
 VERDICT 632 P: FAIL (the .github/workflows/windows.yml run never appeared within 4s)
 [exit 1]

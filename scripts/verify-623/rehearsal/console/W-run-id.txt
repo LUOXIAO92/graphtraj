@@ -1,0 +1,28 @@
+$ VERIFY623_REMOTE=/tmp/claude-501/r623/ok/remote.git VERIFY623_GH=/tmp/claude-501/r623/ok/gh/gh VERIFY623_HTMP=/tmp/claude-501/r623/ok/htmp VERIFY623_PTMP=/tmp/claude-501/r623/ok/ptmp VERIFY623_POLL_S=1 VERIFY623_APPEAR_S=10 VERIFY623_DONE_S=30 zsh steps.zsh W 46300000000
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [W] Observe only (no push, no re-run) run 46300000000. Login: gh login. Dialog: none. Network: GitHub.
+waiting for run 46300000000 (completion bound 30s, poll 1s)
+  [18:06:21] run 46300000000: completed success
+--- run 46300000000 | desktop-win-adoption.yml | attempt 1 | completed | success | head 1cae34f018a324bd4a0f45fd544ff16d619f9fdf | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000
+  job: windows-adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000/job/2
+--- artifacts of run 46300000000
+already present, not downloaded again: /tmp/claude-501/r623/ok/htmp/win-evidence-46300000000
+copy already present: /tmp/claude-501/r623/ok/ptmp/win-evidence-46300000000
+--- files (bytes, path under /tmp/claude-501/r623/ok/htmp/win-evidence-46300000000)
+         278  adoption.json
+           3  environment.json
+          13  native-1-pick.png
+--- adoption.json
+  passed: True | stage: finished
+  steps: 7 recorded; last 6:
+    - stand-in windows step 2
+    - stand-in windows step 3
+    - stand-in windows step 4
+    - stand-in windows step 5
+    - stand-in windows step 6
+    - stand-in windows step 7
+  screenshots: none
+next: zsh /private/tmp/claude-501/r623/repo/scripts/verify-623/steps.zsh W 46300000000    (observe again; no push, no re-run)
+next: zsh /private/tmp/claude-501/r623/repo/scripts/verify-623/steps.zsh W 1cae34f018a324bd4a0f45fd544ff16d619f9fdf    (all four push runs of that commit; no push)
+VERDICT 623 W: PASS (run 46300000000 desktop-win-adoption.yml success; artifacts ok; https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000)
+[exit 0]

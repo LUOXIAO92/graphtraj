@@ -360,8 +360,8 @@ try {
     return window.graphtraj.activity(selected, { task_id: taskId, alias });
   }, { taskId, alias: process.env.ADOPTION_AGENT_ALIAS });
   const usageDate = localDate(new Date(activity.events.find(event => event.kind === 'usage').time));
-  await page.getByLabel('Start date').fill(usageDate);
-  await page.getByLabel('End date').fill(usageDate);
+  await page.getByRole('region', { name: 'Usage dashboard', exact: true }).getByLabel('Start date').fill(usageDate);
+  await page.getByRole('region', { name: 'Usage dashboard', exact: true }).getByLabel('End date').fill(usageDate);
   // D replaced the Model breakdown table with a model list, totals and a dated chart (UsageDashboard.tsx).
   const quantities = await modelQuantities();
   const input = await page.evaluate(() => (1000).toLocaleString());

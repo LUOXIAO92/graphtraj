@@ -178,7 +178,8 @@ export async function settingsAdoption({ page, firstId, secondId, runtimeHome, s
   assert.ok(!Object.hasOwn((await readCatalog(firstId)).catalog.runtimes.shared.providers, 'stale'));
   await button('Reload').click();
   await allSaved();
-  await tree.getByRole('button', { name: 'Externally updated', exact: true }).waitFor({ state: 'attached' });
+  // The model button sits in a collapsed (hidden) provider branch; include hidden nodes.
+  await tree.getByRole('button', { name: 'Externally updated', exact: true, includeHidden: true }).waitFor({ state: 'attached' });
   step('Global manual provider/model/alias saved natively; cancel, refusal and external revision conflict kept the catalog intact across two projects.');
 
   await button('Teams & roles').click();

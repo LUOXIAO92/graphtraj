@@ -50,11 +50,13 @@ export async function parallelChat({ page, members, shot }) {
   const button = name => page.getByRole('button', { name, exact: true });
   await button('Expand chat').click();
   const monitor = page.locator('.monitor-page:visible');
-  const columns = monitor.locator('.agent-column');
+  // Only the task reader's columns: D keeps the Main and member readers mounted while concealed.
+  const reader = page.getByRole('region', { name: 'Expanded agent conversations', exact: true });
+  const columns = reader.locator('.agent-column');
   await columns.last().waitFor();
   assert.equal(await columns.count(), members.length);
   for (const member of members) {
-    const column = monitor.getByRole('article', { name: member.alias, exact: true });
+    const column = reader.getByRole('article', { name: member.alias, exact: true });
     await column.getByText(`${member.historical ? 'Historical' : 'Current'} · ${visibleState(member.state)}`, { exact: true }).waitFor();
     await column.locator('.activity-event').first().waitFor();
   }

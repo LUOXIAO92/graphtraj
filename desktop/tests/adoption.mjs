@@ -220,11 +220,17 @@ const compactNumber = value => value >= 1000000 ? `${(value / 1000000).toFixed(2
 const cardStatus = task => task.disposition && task.disposition !== 'active' ? task.disposition
   : !task.active ? 'inactive' : task.status;
 
+/**
+ * The selected project's Model field. D keeps each visited project's Teams page
+ * mounted while concealed, so label lookups keep only the visible match.
+ */
+const visibleModel = page => page.getByLabel('Model', { exact: true }).filter({ visible: true });
+
 /** Show a legacy role's saved Model field (Settings.tsx 'Saved project model settings'). */
 async function openSavedModel(page) {
   const summary = page.locator('summary').filter({ hasText: /^Saved project model settings$/ }).filter({ visible: true });
   if (await summary.locator('..').getAttribute('open') === null) await summary.click();
-  await page.getByLabel('Model', { exact: true }).filter({ visible: true }).waitFor();
+  await visibleModel(page).waitFor();
 }
 
 /** Generate long, visibly controlled native message records without model calls. */
@@ -337,7 +343,7 @@ async function nativeDialogAttempt(first) {
     await projectEntry(page, 'first-project').click();
     await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
     await openSavedModel(page);
-    await page.getByLabel('Model', { exact: true }).fill('native-approved-model');
+    await visibleModel(page).fill('native-approved-model');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
     const approved = await fs.readFile(rolesFile, 'utf8');
@@ -347,12 +353,12 @@ async function nativeDialogAttempt(first) {
       command: `read ${path.relative(work, rolesFile)}; count dialog.showMessageBox`,
       output: `${approved.split('\n').filter(line => line.includes('model:')).join('; ')}; approval dialogs ${await approvalDialogs(native)}` });
 
-    await page.getByLabel('Model', { exact: true }).fill('native-cancelled-model');
+    await visibleModel(page).fill('native-cancelled-model');
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     const cancelled = await fs.readFile(rolesFile, 'utf8');
     attempts.push({ name: 'Cancel: the discarded change was not written',
       required: true,
-      ok: cancelled === approved && await page.getByLabel('Model', { exact: true }).inputValue() === 'native-approved-model',
+      ok: cancelled === approved && await visibleModel(page).inputValue() === 'native-approved-model',
       command: `read ${path.relative(work, rolesFile)}`,
       output: cancelled.split('\n').filter(line => line.includes('model:')).join('; ') });
 
@@ -375,7 +381,7 @@ async function nativeDialogAttempt(first) {
         const saved = await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected);
         assert.ok(Object.hasOwn(saved.catalog.runtimes.shared.providers, provider));
       } else {
-        await page.getByText('All changes saved', { exact: true }).waitFor();
+        await page.getByText('All changes saved', { exact: true }).filter({ visible: true }).waitFor();
         assert.equal((await page.evaluate(id => window.graphtraj.connections(id, { action: 'read' }), selected)).revision, before.revision);
       }
       assert.equal(await approvalDialogs(native), 0, 'D saves directly; no approval dialog may appear');
@@ -782,7 +788,7 @@ async function main() {
     assert.equal(migrated.selected, 'first');
     assert.equal(migrated.projects.length, 2, 'legacy symlink alias deduplicates, missing path remains');
     assert.ok(migrated.projects.find(project => project.id === 'missing').unavailable);
-    await page.getByText('Path unavailable', { exact: true }).waitFor();
+    await page.getByRole('complementary', { name: 'Projects', exact: true }).getByText('Path unavailable', { exact: true }).waitFor();
     assert.equal(await fs.readFile(legacyFile, 'utf8'), legacyText);
     await pick(firstAlias);
     assert.equal((await page.evaluate(() => window.graphtraj.projects())).projects.length, 2);
@@ -795,7 +801,9 @@ async function main() {
 
     await openTask(page.locator('.monitor-page:visible'), '2');
     await page.getByRole('complementary', { name: 'Task details' }).waitFor();
-    await page.getByText('No participating Agents recorded.').waitFor();
+    // D keeps the concealed reader mounted (aria-hidden); read the shelf the check means.
+    await page.getByRole('complementary', { name: 'Task details' })
+      .getByText('No participating Agents recorded.', { exact: true }).waitFor();
     facts.screenshots.push(await shot(page, '02-node-detail-chat-empty.png'));
     step('opened a node without records: the Chat surface rendered its empty state (not adoption evidence)');
 
@@ -868,9 +876,10 @@ async function main() {
     await openTask(page.locator('.monitor-page:visible'), '1');
     await page.getByRole('complementary', { name: 'Task details' }).waitFor();
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
-    await page.getByText(message.text).first().waitFor();
+    const reader = page.getByRole('region', { name: 'Expanded agent conversations', exact: true });
+    await reader.getByText(message.text).first().waitFor();
     // D titles a tool record 'Tool · <name>' (Activity.tsx EventCard).
-    await page.getByText(`Tool · ${toolCall.name}`, { exact: true }).first().waitFor();
+    await reader.getByText(`Tool · ${toolCall.name}`, { exact: true }).first().waitFor();
     const primaryColumn = page.locator('.monitor-page:visible').getByRole('article', { name: 'research@x1', exact: true });
     const toolCard = primaryColumn.locator('.activity-event').filter({ hasText: `Tool · ${toolCall.name}` }).first()
       .locator('details.tool-card');
@@ -886,7 +895,8 @@ async function main() {
     const members = queryActivity(first, '1').agents;
     assert.equal(members.length, 4);
     assert.ok(members.some(member => member.historical) && members.some(member => !member.historical));
-    const columns = monitor.locator('.agent-column');
+    // Only the task reader's columns; the concealed Main reader is mounted too.
+    const columns = reader.locator('.agent-column');
     assert.equal(await columns.count(), members.length);
     for (const member of members) {
       const column = monitor.getByRole('article', { name: member.alias, exact: true });
@@ -935,8 +945,8 @@ async function main() {
     await page.getByRole('button', { name: 'Expand chat', exact: true }).click();
     const secondNative = queryActivity(second, '1', 'research@x1');
     const secondMessage = secondNative.events.find(event => event.kind === 'message').text;
-    await monitor.getByText(secondMessage, { exact: true }).waitFor();
-    assert.equal(await monitor.getByText(message.text, { exact: true }).count(), 0);
+    await reader.getByText(secondMessage, { exact: true }).waitFor();
+    assert.equal(await reader.getByText(message.text, { exact: true }).count(), 0);
     facts.screenshots.push(await shot(page, '03e-second-project-native-chat.png'));
     await projectEntry(page, 'first-project').click();
     assert.deepEqual(await monitorPosition(page), updated, 'switching projects must retain first-project state');
@@ -1021,16 +1031,16 @@ async function main() {
     const firstBefore = await snapshot(first);
 
     // Declining is Cancel: the draft is shown as a pending change, then discarded.
-    await page.getByLabel('Model', { exact: true }).fill('denied-model');
+    await visibleModel(page).fill('denied-model');
     await footer('1 unsaved changes').waitFor();
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     await footer('All changes saved').waitFor();
     assert.match(await fs.readFile(rolesFile, 'utf8'), /model: original-model/);
-    assert.equal(await page.getByLabel('Model', { exact: true }).inputValue(), 'original-model');
+    assert.equal(await visibleModel(page).inputValue(), 'original-model');
     await checkSave('cancelled change');
     step('direct save has no approval dialog: a cancelled change was discarded and wrote nothing');
 
-    await page.getByLabel('Model', { exact: true }).fill('approved-model');
+    await visibleModel(page).fill('approved-model');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await page.getByRole('status').filter({ hasText: 'Settings saved.' }).waitFor();
     assert.match(await fs.readFile(rolesFile, 'utf8'), /model: approved-model/);
@@ -1046,9 +1056,9 @@ async function main() {
     const saved = await fs.readFile(rolesFile, 'utf8');
     await fs.chmod(state, 0o500);
     try {
-      await page.getByLabel('Model', { exact: true }).fill('unwritable-model');
+      await visibleModel(page).fill('unwritable-model');
       await page.getByRole('button', { name: 'Save', exact: true }).click();
-      await page.getByRole('alert').waitFor();
+      await page.getByRole('region', { name: 'Project settings', exact: true }).getByRole('alert').waitFor();
       facts.screenshots.push(await shot(page, '07-settings-save-error.png'));
       assert.equal(await fs.readFile(rolesFile, 'utf8'), saved, 'failed save must not change the file');
       step('a save that failed in the native entry reported an error and left the file unchanged');

@@ -1,0 +1,99 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 70 items
+
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.0-rc.2] PASSED [  1%]
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.1-alpha.5] PASSED [  2%]
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.2-alpha.2] PASSED [  4%]
+tests/test_dsh_standalone_child.py::test_a_missing_stored_dsh_session_is_not_resumable PASSED [  5%]
+tests/test_dsh_standalone_child.py::test_claude_host_routes_a_dsh_child_with_its_own_choices PASSED [  7%]
+tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once PASSED [  8%]
+tests/test_dsh_standalone_child.py::test_a_wait_while_the_host_queues_the_end_is_its_only_delivery[False] PASSED [ 10%]
+tests/test_dsh_standalone_child.py::test_a_wait_while_the_host_queues_the_end_is_its_only_delivery[True] PASSED [ 11%]
+tests/test_dsh_standalone_child.py::test_codex_host_routes_a_dsh_child_with_its_own_choices SKIPPED [ 12%]
+tests/test_dsh_standalone_child.py::test_dsh_child_launch_needs_no_graphtraj_setting PASSED [ 14%]
+tests/test_dsh_standalone_child.py::test_claude_host_refuses_missing_or_unsupported_dsh_at_start PASSED [ 15%]
+tests/test_dsh_standalone_child.py::test_codex_host_refuses_missing_or_unsupported_dsh_at_start SKIPPED [ 17%]
+tests/test_dsh_standalone_child.py::test_codex_host_cli_reports_an_unsupported_dsh SKIPPED [ 18%]
+tests/test_dsh_standalone_child.py::test_require_connections_covers_a_declared_dsh_connection PASSED [ 20%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.1.9-False] PASSED [ 21%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-beta.4-False] PASSED [ 22%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-rc.1-False] PASSED [ 24%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-rc.2-True] PASSED [ 25%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-rc.10-True] PASSED [ 27%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.0-True] PASSED [ 28%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.1-alpha.5-True] PASSED [ 30%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[0.2.2-alpha.2-True] PASSED [ 31%]
+tests/test_dsh_standalone_child.py::test_the_standalone_dsh_gate_is_a_floor[1.0.0-True] PASSED [ 32%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[None-unknown] PASSED [ 34%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[not json-unknown] PASSED [ 35%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[{}-unknown] PASSED [ 37%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[{"version": 2}-2] PASSED [ 38%]
+tests/test_dsh_standalone_child.py::test_an_unreadable_dsh_version_is_refused[{"version": "latest"}-latest] PASSED [ 40%]
+tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable PASSED [ 41%]
+tests/test_dsh_standalone_child.py::test_the_dsh_mcp_command_serves_without_graphtraj PASSED [ 42%]
+tests/test_dsh_standalone_child.py::test_delivered_plugin_loads_from_dsh_agent_package_alone SKIPPED [ 44%]
+tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child[None] PASSED [ 45%]
+tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child[https://declared.invalid/anthropic] PASSED [ 47%]
+tests/test_dsh_standalone_child.py::test_a_native_failure_reaches_the_parent_with_its_reason PASSED [ 48%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason0-DSH turn ended with error: HTTP_404.] PASSED [ 50%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason1-DSH turn ended with error: Stream closed.] PASSED [ 51%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason2-DSH turn ended with error: Stream closed.] PASSED [ 52%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason3-DSH turn ended with error: 429.] PASSED [ 54%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason4-DSH turn ended with error.] PASSED [ 55%]
+tests/test_dsh_standalone_child.py::test_a_partial_native_error_still_describes_the_end[reason5-DSH turn ended with error.] PASSED [ 57%]
+tests/test_dsh_standalone_child.py::test_an_empty_named_key_redacts_nothing PASSED [ 58%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1] PASSED [ 60%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic-None-https://declared.invalid/anthropic/v1] PASSED [ 61%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic/-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1] PASSED [ 62%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1] PASSED [ 64%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[http://127.0.0.1:1234-None-http://127.0.0.1:1234/v1] PASSED [ 65%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[http://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-http://api.deepseek.com/anthropic/v1] PASSED [ 67%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com:8443/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com:8443/anthropic/v1] PASSED [ 68%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-None] PASSED [ 70%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com/anthropic-None-None] PASSED [ 71%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://api.deepseek.com:443/anthropic-DEEPSEEK_API_KEY-None] PASSED [ 72%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://API.deepseek.com/anthropic-DEEPSEEK_API_KEY-None] PASSED [ 74%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[https://declared.invalid/anthropic-DSH_383_KEY-None] PASSED [ 75%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[None-DEEPSEEK_API_KEY-None] PASSED [ 77%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[None-None-None] PASSED [ 78%]
+tests/test_dsh_standalone_child.py::test_the_default_key_searches_only_where_the_connection_says[None-DSH_383_KEY-None] PASSED [ 80%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1/messages] SKIPPED [ 81%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1/messages] SKIPPED [ 82%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[http://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-http://api.deepseek.com/anthropic/v1/messages] SKIPPED [ 84%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com:8443/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com:8443/anthropic/v1/messages] SKIPPED [ 85%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages] SKIPPED [ 87%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DSH_383_KEY-https://api.deepseek.com/anthropic/v1/messages] SKIPPED [ 88%]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[None-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages] SKIPPED [ 90%]
+tests/test_dsh_standalone_child.py::test_installed_dsh_resolves_only_the_connection_endpoint[None-https://api.deepseek.com/anthropic] SKIPPED [ 91%]
+tests/test_dsh_standalone_child.py::test_installed_dsh_resolves_only_the_connection_endpoint[https://declared.invalid/anthropic-https://declared.invalid/anthropic] SKIPPED [ 92%]
+tests/test_dsh_standalone_child.py::test_a_dsh_that_cannot_start_tells_the_standalone_parent_why SKIPPED [ 94%]
+tests/test_dsh_standalone_child.py::test_a_resume_that_cannot_start_tells_the_standalone_parent_why PASSED [ 95%]
+tests/test_dsh_standalone_child.py::test_a_send_after_the_turn_completed_is_input_closed[completed-False-runtime-input-closed] PASSED [ 97%]
+tests/test_dsh_standalone_child.py::test_a_send_after_the_turn_completed_is_input_closed[None-False-operation-unavailable] PASSED [ 98%]
+tests/test_dsh_standalone_child.py::test_a_send_after_the_turn_completed_is_input_closed[interrupted-True-operation-unavailable] PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=7cd9e358f4b6409ba4fb8f5750b58634: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_standalone_child.xml -
+============================ slowest 10 durations =============================
+0.40s call     tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable
+0.25s call     tests/test_dsh_standalone_child.py::test_claude_host_routes_a_dsh_child_with_its_own_choices
+0.24s call     tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.0-rc.2]
+0.24s call     tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.2-alpha.2]
+0.24s call     tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.1-alpha.5]
+0.17s call     tests/test_dsh_standalone_child.py::test_the_dsh_mcp_command_serves_without_graphtraj
+0.15s call     tests/test_dsh_standalone_child.py::test_a_resume_that_cannot_start_tells_the_standalone_parent_why
+0.15s call     tests/test_dsh_standalone_child.py::test_a_missing_stored_dsh_session_is_not_resumable
+0.09s call     tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once
+0.08s call     tests/test_dsh_standalone_child.py::test_ambient_endpoints_do_not_route_a_dsh_child[https://declared.invalid/anthropic]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_dsh_standalone_child.py:292: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_dsh_standalone_child.py:355: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_dsh_standalone_child.py:365: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_dsh_standalone_child.py:537: Installed DSH and Node are required for native plugin evidence.
+SKIPPED [7] tests\test_dsh_standalone_child.py:684: Installed DSH and Node are required for native search evidence.
+SKIPPED [2] tests\test_dsh_standalone_child.py:710: Installed DSH and Node are required for native endpoint evidence.
+SKIPPED [1] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+======================= 56 passed, 14 skipped in 2.96s ========================

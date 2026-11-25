@@ -1,0 +1,24 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 5 items
+
+tests/test_codex_tool_reclaim_462.py::test_normal_end_owner_stops_the_tool_the_service_left SKIPPED [ 20%]
+tests/test_codex_tool_reclaim_462.py::test_owner_killed_then_reconciliation_stops_the_tool SKIPPED [ 40%]
+tests/test_codex_tool_reclaim_462.py::test_the_service_keeps_only_a_fresh_marker SKIPPED [ 60%]
+tests/test_codex_tool_reclaim_462.py::test_reclaim_runs_when_the_interpreter_refuses_new_threads SKIPPED [ 80%]
+tests/test_codex_tool_reclaim_462.py::test_a_slow_reclaim_does_not_delay_the_end SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=1bae66fcfd23425a953c549be1deecf2: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_codex_tool_reclaim_462.xml -
+============================ slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_codex_tool_reclaim_462.py:115: POSIX-only: macOS and Linux process tables; tools in their own session killed by SIGKILL and os.killpg
+SKIPPED [1] tests\test_codex_tool_reclaim_462.py:152: POSIX-only: macOS and Linux process tables; tools in their own session killed by SIGKILL and os.killpg
+SKIPPED [1] tests\test_codex_tool_reclaim_462.py:215: POSIX-only: macOS and Linux process tables; tools in their own session killed by SIGKILL and os.killpg
+SKIPPED [1] tests\test_codex_tool_reclaim_462.py:226: POSIX-only: macOS and Linux process tables; tools in their own session killed by SIGKILL and os.killpg
+SKIPPED [1] tests\test_codex_tool_reclaim_462.py:279: POSIX-only: macOS and Linux process tables; tools in their own session killed by SIGKILL and os.killpg
+============================= 5 skipped in 0.12s ==============================

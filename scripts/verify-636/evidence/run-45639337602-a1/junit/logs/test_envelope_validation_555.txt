@@ -1,0 +1,28 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 14 items
+
+tests/test_envelope_validation_555.py::test_envelope_and_argument_errors_return_together PASSED [  7%]
+tests/test_envelope_validation_555.py::test_flat_tool_reports_every_problem PASSED [ 14%]
+tests/test_envelope_validation_555.py::test_validate_schema_lists_all_and_stays_a_value_error PASSED [ 21%]
+tests/test_envelope_validation_555.py::test_any_of_reports_the_meant_alternative PASSED [ 28%]
+tests/test_envelope_validation_555.py::test_arguments_file_supplies_and_inline_overrides PASSED [ 35%]
+tests/test_envelope_validation_555.py::test_arguments_file_content_is_validated_with_the_envelope PASSED [ 42%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[None-does not exist] PASSED [ 50%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[{"runtime": "do-not-echo-7f3a",-is not valid JSON (line 1, column] PASSED [ 57%]
+tests/test_envelope_validation_555.py::test_arguments_file_refusals_echo_no_content[["do-not-echo-7f3a"]-must hold a JSON object] PASSED [ 64%]
+tests/test_envelope_validation_555.py::test_arguments_file_outside_the_boundary_is_refused PASSED [ 71%]
+tests/test_envelope_validation_555.py::test_without_o_nofollow_a_directory_is_refused_and_a_file_read PASSED [ 78%]
+tests/test_envelope_validation_555.py::test_without_a_host_boundary_a_file_is_refused PASSED [ 85%]
+tests/test_envelope_validation_555.py::test_envelope_schema_describes_the_file_field PASSED [ 92%]
+tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=39df1679515d4fcbab0171d566a10844: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_envelope_validation_555.xml -
+============================ slowest 10 durations =============================
+0.52s call     tests/test_envelope_validation_555.py::test_agents_mcp_reads_files_inside_the_verified_session_cwd
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================= 14 passed in 0.65s ==============================

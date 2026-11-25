@@ -1,0 +1,35 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 14 items
+
+tests/test_channel_windows_emulated_636.py::test_a_request_is_answered_with_its_reply_and_the_pinned_pid PASSED [  7%]
+tests/test_channel_windows_emulated_636.py::test_an_error_reply_and_a_refused_caller_keep_their_codes PASSED [ 14%]
+tests/test_channel_windows_emulated_636.py::test_a_client_that_cannot_be_pinned_is_refused PASSED [ 21%]
+tests/test_channel_windows_emulated_636.py::test_a_withdraw_before_acceptance_means_the_operation_never_runs PASSED [ 28%]
+tests/test_channel_windows_emulated_636.py::test_without_a_verdict_in_time_delivery_is_unconfirmed_and_nothing_runs PASSED [ 35%]
+tests/test_channel_windows_emulated_636.py::test_an_accepted_request_is_awaited_past_the_deadline PASSED [ 42%]
+tests/test_channel_windows_emulated_636.py::test_a_withdraw_that_crosses_the_acceptance_keeps_the_accepted_behaviour[True] PASSED [ 50%]
+tests/test_channel_windows_emulated_636.py::test_a_withdraw_that_crosses_the_acceptance_keeps_the_accepted_behaviour[False] PASSED [ 57%]
+tests/test_channel_windows_emulated_636.py::test_the_hosts_death_ends_an_accepted_wait_at_once PASSED [ 64%]
+tests/test_channel_windows_emulated_636.py::test_a_request_during_close_is_refused_and_a_running_one_finishes PASSED [ 71%]
+tests/test_channel_windows_emulated_636.py::test_after_close_the_channel_is_gone PASSED [ 78%]
+tests/test_channel_windows_emulated_636.py::test_a_second_host_on_one_address_is_refused PASSED [ 85%]
+tests/test_channel_windows_emulated_636.py::test_concurrent_callers_are_answered_independently PASSED [ 92%]
+tests/test_channel_windows_emulated_636.py::test_a_removed_control_directory_stops_the_pipe_service PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=2fe830e7cb5a41f2886b9e13dae32fa2: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_channel_windows_emulated_636.xml -
+============================ slowest 10 durations =============================
+1.22s call     tests/test_channel_windows_emulated_636.py::test_an_accepted_request_is_awaited_past_the_deadline
+0.84s call     tests/test_channel_windows_emulated_636.py::test_a_request_during_close_is_refused_and_a_running_one_finishes
+0.83s call     tests/test_channel_windows_emulated_636.py::test_the_hosts_death_ends_an_accepted_wait_at_once
+0.64s call     tests/test_channel_windows_emulated_636.py::test_a_withdraw_before_acceptance_means_the_operation_never_runs
+0.44s call     tests/test_channel_windows_emulated_636.py::test_a_withdraw_that_crosses_the_acceptance_keeps_the_accepted_behaviour[False]
+0.44s call     tests/test_channel_windows_emulated_636.py::test_a_withdraw_that_crosses_the_acceptance_keeps_the_accepted_behaviour[True]
+0.43s call     tests/test_channel_windows_emulated_636.py::test_without_a_verdict_in_time_delivery_is_unconfirmed_and_nothing_runs
+0.34s call     tests/test_channel_windows_emulated_636.py::test_concurrent_callers_are_answered_independently
+0.06s call     tests/test_channel_windows_emulated_636.py::test_an_error_reply_and_a_refused_caller_keep_their_codes
+0.03s call     tests/test_channel_windows_emulated_636.py::test_a_client_that_cannot_be_pinned_is_refused
+============================= 14 passed in 5.46s ==============================

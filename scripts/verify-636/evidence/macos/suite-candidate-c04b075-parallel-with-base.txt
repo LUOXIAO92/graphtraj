@@ -1,0 +1,90 @@
+........................................................................ [  7%]
+.................................................................sssssss [ 14%]
+ss...................................................................... [ 21%]
+.............................................................sssssssssss [ 28%]
+s....................................................................... [ 35%]
+..................................................F..................... [ 42%]
+...ssssssss............................................................. [ 49%]
+.........................................................s.............. [ 56%]
+........................................................................ [ 63%]
+..............................sssss..................................... [ 70%]
+........................................................................ [ 77%]
+........................................................................ [ 85%]
+............sssss.............ss........................................ [ 92%]
+........................................................................ [ 99%]
+........                                                                 [100%]
+=================================== FAILURES ===================================
+____________ test_normal_end_owner_stops_the_tool_the_service_left _____________
+
+tmp_path = PosixPath('/private/tmp/claude-501/pytest-of-luoxiao/pytest-612/test_normal_end_owner_stops_th0')
+native_settings = {'adapter_request': {'arguments': ['/private/tmp/claude-501/pytest-of-luoxiao/pytest-612/test_normal_end_owner_stops_t...onfig': {'default_permissions': 'chosen', 'permissions': {'chosen': {'extends': ':workspace', 'filesystem': {...}}}}}}}
+
+    def test_normal_end_owner_stops_the_tool_the_service_left(tmp_path: Path, native_settings: dict) -> None:
+        """The service exits after its turn without stopping its tool; the owner stops it."""
+        root = tmp_path / 'agents'
+        since = identity(os.getpid()).start
+        user = subprocess.Popen(['/bin/sleep', '461'], start_new_session=True)
+        found: dict[str, Identity] = {}
+        try:
+            call = bind(AgentControl(root, {'codex': CodexDriver(native_settings)}), Caller(*CALLER))
+            created = call({'action': 'create', 'runtime': 'codex', 'instruction': 'tool-end'}).document
+            found = wait_for(lambda: len(tools(since)) == 3, 10) and tools(since)
+            done = call({'action': 'wait', 'agent': created['agent'], 'timeout_seconds': 20}).document
+            assert done['result']['last_result']['outcome'] == 'completed', done
+            execution = record(root, created['agent'])
+            facts = execution['process']
+            assert facts['tool_marker'] and facts['tool_descendants'].endswith('.json')
+            # The owner reclaims on its own thread after the end is recorded (Correction 3).
+            directory = Path(facts['tool_descendants']).parent
+            termination = wait_for(lambda: next(directory.glob('codex-termination-*.yml'), None), 20)
+            assert termination is not None, 'the owner-side reclaim did not run'
+            entries = read_sidecar(facts['tool_descendants'])
+            print('sidecar:', json.dumps(entries))
+            assert {found['shell'].pid, found['sleep'].pid} <= {entry['pid'] for entry in entries}
+            assert found['other'].pid not in {entry['pid'] for entry in entries}, 'another marker is foreign'
+            report = yaml.safe_load(termination.read_text())['escaped_processes']
+            print('escaped_processes:', json.dumps(report))
+            assert sorted(item['pid'] for item in report['stopped']) == sorted([found['shell'].pid, found['sleep'].pid])
+            assert report['remaining'] == [] and 'error' not in report
+            assert not is_alive(found['shell']) and not is_alive(found['sleep'])
+>           assert is_alive(found['other']), "another execution's process is untouched"
+E           AssertionError: another execution's process is untouched
+E           assert False
+E            +  where False = is_alive(Identity(pid=28784, ppid=28782, pgid=28782, uid=501, start=1795618910296866))
+
+tests/test_codex_tool_reclaim_462.py:143: AssertionError
+----------------------------- Captured stdout call -----------------------------
+sidecar: [{"pid": 28789, "ppid": 28788, "pgid": 28789, "uid": 501, "start": 1795618911187156, "argv": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 28791, "ppid": 28789, "pgid": 28789, "uid": 501, "start": 1795618911192541, "argv": "/bin/sleep 462"}]
+escaped_processes: {"found": [{"pid": 28789, "command": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 28791, "command": "/bin/sleep 462"}], "stopped": [{"pid": 28789, "command": "/bin/sh -c /bin/sleep 462; :"}, {"pid": 28791, "command": "/bin/sleep 462"}], "remaining": []}
+=========================== short test summary info ============================
+FAILED tests/test_codex_tool_reclaim_462.py::test_normal_end_owner_stops_the_tool_the_service_left
+SKIPPED [1] tests/test_channel_windows_636.py:125: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:201: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:279: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:323: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:349: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:373: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:384: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:401: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:414: Windows-only: the named-pipe owner connection (636)
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [1] tests/test_locks_durable_634.py:162: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:190: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:216: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:233: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_process_tree_635.py:364: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:380: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:400: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:415: Windows only: Job Objects
+SKIPPED [1] tests/test_process_windows_633.py:141: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+1 failed, 973 passed, 42 skipped in 261.32s (0:04:21)
+exit 1

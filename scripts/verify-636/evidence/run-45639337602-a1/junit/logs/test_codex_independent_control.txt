@@ -1,0 +1,24 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 5 items
+
+tests/test_codex_independent_control.py::test_independent_lifecycle_requests_and_authentication SKIPPED [ 20%]
+tests/test_codex_independent_control.py::test_packaged_host_owns_parent_mcp_and_resume SKIPPED [ 40%]
+tests/test_codex_independent_control.py::test_external_root_reply_uses_existing_receiver PASSED [ 60%]
+tests/test_codex_independent_control.py::test_lost_parent_acknowledgement_does_not_repeat_child_body SKIPPED [ 80%]
+tests/test_codex_independent_control.py::test_host_cli_reports_native_turn_failure SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=333069feb3f54827af695bf3d7cfb5ba: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_codex_independent_control.xml -
+============================ slowest 10 durations =============================
+0.01s call     tests/test_codex_independent_control.py::test_external_root_reply_uses_existing_receiver
+
+(9 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_codex_independent_control.py:34: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_codex_independent_control.py:98: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_codex_independent_control.py:152: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_codex_independent_control.py:178: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+======================== 1 passed, 4 skipped in 0.14s =========================

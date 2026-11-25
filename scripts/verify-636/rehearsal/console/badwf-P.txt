@@ -1,30 +1,40 @@
 $ VERIFY636_GRAFTLING=/tmp/claude-501/rh636/badwf/graftling VERIFY636_GREMOTE=/tmp/claude-501/rh636/badwf/gremote.git VERIFY636_GH=/tmp/claude-501/rh636/badwf/gh/gh VERIFY636_EVIDENCE=/tmp/claude-501/rh636/badwf/runs VERIFY636_POLL_S=1 VERIFY636_APPEAR_S=10 VERIFY636_DONE_S=30 VERIFY636_BUNDLE=/tmp/claude-501/rh636/badwf.bundle zsh steps.zsh P
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [P] Publish and wait. OUTWARD-FACING: pushes agent/636-graftling-windows-named-pipe to graftling /tmp/claude-501/rh636/badwf/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
-PASS: bundle verifies against /tmp/claude-501/rh636/badwf/graftling; head d0a6809070c91b0b6924b89975356aa39ded23eb on base d5fb80c7cf5d85a19971c434e7f247568ad22bef (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
---- bundle commits on d5fb80c7cf5d85a19971c434e7f247568ad22bef:
-  d0a6809 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+PASS: bundle verifies against /tmp/claude-501/rh636/badwf/graftling; head 6743ee74ef4c78dd7042e6c88512e419841f30c5 on base 7609e52089e638c963cc54c28438c99ea3964f99 (prerequisites: 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced 7609e52089e638c963cc54c28438c99ea3964f99 d5fb80c7cf5d85a19971c434e7f247568ad22bef; others are ancestors of the base)
+--- bundle commits on 7609e52089e638c963cc54c28438c99ea3964f99:
+  6743ee7 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | rehearsal: an extra workflow change
+  03d67a3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the other-account test never shows the temporary password in an assertion (636)
+  61576b3 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows pipe: a caller talks only to its own user's pipe; every pipe wait is bounded (636 corrections 1, 2)
+  c04b075 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: an owner-started Runtime's callers are the processes in its job (636 Phase B)
+  3692bc0 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 7609e520 (W3 635) into agent/636-graftling-windows-named-pipe
   ff19b05 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: the Windows pipe tests' children run UTF-8 under a non-ASCII TEMP (636)
   367fbd4 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev d5fb80c7 (W6 638) into agent/636-graftling-windows-named-pipe
   2e73bdb LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: the owner connection is a named pipe per host (636, W4)
 PASS: author and committer are the noreply identity
---- files changed since d5fb80c7cf5d85a19971c434e7f247568ad22bef:
+--- files changed since 7609e52089e638c963cc54c28438c99ea3964f99:
    .github/workflows/windows.yml              |   4 +-
-   README.md                                  |   8 +
-   src/graftling/_channel_posix.py            | 297 +++++++++++++++++++++
-   src/graftling/_channel_windows.py          | 406 +++++++++++++++++++++++++++++
-   src/graftling/_win32.py                    | 314 +++++++++++++++++++++-
+   README.md                                  |   9 +
+   src/graftling/_channel_posix.py            | 297 +++++++++++++++
+   src/graftling/_channel_windows.py          | 454 +++++++++++++++++++++++
+   src/graftling/_win32.py                    | 367 ++++++++++++++++++-
+   src/graftling/claude/binding.py            |   2 +-
    src/graftling/claude/host.py               |  25 +-
+   src/graftling/codex/app_server.py          |   6 +-
    src/graftling/codex/host.py                |  10 +-
-   src/graftling/connection.py                | 270 +++----------------
-   tests/test_channel_windows_636.py          | 346 ++++++++++++++++++++++++
-   tests/test_channel_windows_emulated_636.py | 391 +++++++++++++++++++++++++++
+   src/graftling/connection.py                | 270 ++------------
+   src/graftling/dsh/binding.py               |   5 +-
+   src/graftling/pi/execution.py              |   2 +-
+   src/graftling/process.py                   |  30 +-
+   src/graftling/process_tree.py              |   5 +-
+   tests/test_channel_windows_636.py          | 567 +++++++++++++++++++++++++++++
+   tests/test_channel_windows_emulated_636.py | 483 ++++++++++++++++++++++++
    tests/test_pi_dsh_notice_holding.py        |   5 +
-   11 files changed, 1821 insertions(+), 255 deletions(-)
+   17 files changed, 2274 insertions(+), 267 deletions(-)
 PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml and README.md
-FAIL: .github/workflows/windows.yml differs from d5fb80c7cf5d85a19971c434e7f247568ad22bef otherwise than the one push branches line:
-  -    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, dev, agent/638-graftling-windows-paths-encoding]
-  +    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, dev, agent/638-graftling-windows-paths-encoding, agent/636-graftling-windows-named-pipe]
+FAIL: .github/workflows/windows.yml differs from 7609e52089e638c963cc54c28438c99ea3964f99 otherwise than the one push branches line:
+  -    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, agent/635-graftling-windows-process-tree, agent/638-graftling-windows-paths-encoding, dev]
+  +    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, agent/635-graftling-windows-process-tree, agent/638-graftling-windows-paths-encoding, dev, agent/636-graftling-windows-named-pipe]
   -    timeout-minutes: 90
   +    timeout-minutes: 120
 PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged

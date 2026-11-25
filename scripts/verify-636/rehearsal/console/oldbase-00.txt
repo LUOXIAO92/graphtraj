@@ -9,6 +9,6 @@ $ gh auth status --hostname github.com   (token lines removed)
     - Active account: true
 PASS: /tmp/claude-501/rh636/oldbase/graftling origin is https://github.com/LUOXIAO92/graftling.git
 NOTE: rehearsal remote /tmp/claude-501/rh636/oldbase/gremote.git is used instead of graftling origin
-STOP: the bundle's prerequisites are 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced, without graftling dev d5fb80c7cf5d85a19971c434e7f247568ad22bef
+STOP: the bundle's prerequisites are 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced d5fb80c7cf5d85a19971c434e7f247568ad22bef, without graftling dev 7609e52089e638c963cc54c28438c99ea3964f99
 VERDICT 636 00: STOP
 [exit 1]

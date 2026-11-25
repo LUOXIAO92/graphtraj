@@ -15,7 +15,9 @@
 # REAL ENTRY: the push run of windows.yml started by pushing this branch to LUOXIAO92/graftling. windows.yml at the
 # bundle head lists this branch in on.push.branches (the one workflow change; workflow_dispatch cannot run it because
 # the workflow is not on graftling's default branch). Nothing of GraphTraj is pushed; dev, main and tags never are.
-# EXPECTED FLOW: the first real run is also discovery. The 37 W4 (636) entries were removed from the list because
+# The remote branch already holds Phase A (ff19b054, run 45639337602); the bundle head descends from it, so P
+# fast-forwards the remote and the local branch from there.
+# EXPECTED FLOW: the first real run is also discovery. The 42 W4 (636) entries were removed from the list because
 # this change removes their failure point (the refusal 'Windows does not support the authenticated local control
 # pipe', the directory lock of the control channel); a test that now fails later, at a point another Windows Task
 # owns (W3's process groups, say), is an unexpected failure. P/W print every difference and write the observed
@@ -25,12 +27,12 @@
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
 #       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its base is
-#       graftling dev d5fb80c7 (W1, W2 and W6 integrated) and every other prerequisite git lists is an ancestor of
-#       d5fb80c7 (478dfd7f, the parent of W4's first commit); read through a temporary repository that borrows
-#       <Harness>/graftling's objects (nothing is written there): noreply author and committer, changed files since
-#       d5fb80c7 only under src/graftling/ and tests/ plus the workflow and README.md (the stat is shown), the
-#       workflow equal to d5fb80c7's except the one push branches line, its job steps present by name; the expected
-#       list parses; the local branch in
+#       graftling dev 7609e520 (W1, W2, W3 and W6 integrated) and every other prerequisite git lists is an ancestor
+#       of 7609e520 (478dfd7f and d5fb80c7, parents of W4's own commits); read through a temporary repository that
+#       borrows <Harness>/graftling's objects (nothing is written there): noreply author and committer, changed
+#       files since 7609e520 only under src/graftling/ and tests/ plus the workflow and README.md (the stat is
+#       shown), the workflow equal to 7609e520's except the one push branches line, its job steps present by name;
+#       the expected list parses; the local branch in
 #       <Harness>/graftling and the remote branch are each absent, the bundle head, or an ancestor of it (else STOP).
 #       Login: gh login, git credential helper (ls-remote). Dialog: none. Network: GitHub. ~10 s.
 #   P   Publish and wait. OUTWARD-FACING: (1) fetches the bundle into <Harness>/graftling as the local branch (only if
@@ -76,9 +78,9 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/636-graftling-windows-named-pipe
-# graftling dev d5fb80c7 (W1, W2 and W6 integrated): the bundle's base. W4's own history starts on 478dfd7f, so git
-# also lists 478dfd7f as a prerequisite; check_bundle accepts it only as an ancestor of BASE.
-BASE=d5fb80c7cf5d85a19971c434e7f247568ad22bef
+# graftling dev 7609e520 (W1, W2, W3 and W6 integrated): the bundle's base. W4's own history starts on 478dfd7f and
+# merged d5fb80c7, so git also lists those as prerequisites; check_bundle accepts them only as ancestors of BASE.
+BASE=7609e52089e638c963cc54c28438c99ea3964f99
 REPO=LUOXIAO92/graftling
 GURL=https://github.com/LUOXIAO92/graftling.git
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
@@ -98,9 +100,9 @@ BUNDLE=${VERIFY636_BUNDLE:-$HERE/graftling-636.bundle}
 WINCHECK=$WT/scripts/verify-632/wincheck.py
 EXPECTED=${VERIFY636_EXPECTED:-$WT/scripts/verify-632/windows-expected.txt}
 EVID=${VERIFY636_EVIDENCE:-$HERE/runs}
-# The one workflow change: the push branches line at d5fb80c7 and at the bundle head.
-BRANCHES_BASE="    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, dev, agent/638-graftling-windows-paths-encoding]"
-BRANCHES_HEAD="    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, dev, agent/638-graftling-windows-paths-encoding, $BRANCH]"
+# The one workflow change: the push branches line at 7609e520 and at the bundle head.
+BRANCHES_BASE="    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, agent/635-graftling-windows-process-tree, agent/638-graftling-windows-paths-encoding, dev]"
+BRANCHES_HEAD="    branches: [agent/632-graftling-windows-ci, agent/633-graftling-windows-process, agent/634-graftling-windows-durable-writes, agent/635-graftling-windows-process-tree, agent/638-graftling-windows-paths-encoding, dev, $BRANCH]"
 # The one documentation file this change edits (the Windows security difference); everything else is code or tests.
 DOC=README.md
 # The job's steps by their exact `name:` in $WORKFLOW (unchanged since defad1db).

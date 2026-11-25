@@ -1,0 +1,23 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 5 items
+
+tests/test_claude_archive_batches_468.py::test_a_batch_commits_once_not_once_per_record PASSED [ 20%]
+tests/test_claude_archive_batches_468.py::test_batch_cost_does_not_grow_with_the_archived_history PASSED [ 40%]
+tests/test_claude_archive_batches_468.py::test_another_writer_between_batches_is_kept PASSED [ 60%]
+tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open PASSED [ 80%]
+tests/test_claude_archive_batches_468.py::test_a_rewritten_transcript_is_read_again PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=239754ed08004695ae647ee115e1a08c: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_claude_archive_batches_468.xml -
+============================ slowest 10 durations =============================
+0.76s call     tests/test_claude_archive_batches_468.py::test_batch_cost_does_not_grow_with_the_archived_history
+0.46s call     tests/test_claude_archive_batches_468.py::test_many_sessions_through_one_archive_keep_few_files_open
+0.02s call     tests/test_claude_archive_batches_468.py::test_a_batch_commits_once_not_once_per_record
+0.02s call     tests/test_claude_archive_batches_468.py::test_another_writer_between_batches_is_kept
+0.01s call     tests/test_claude_archive_batches_468.py::test_a_rewritten_transcript_is_read_again
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 5 passed in 1.36s ==============================

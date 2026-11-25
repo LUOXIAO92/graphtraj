@@ -1,0 +1,15 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 1 item
+
+tests/test_connection_serve.py::test_removed_control_directory_stops_the_service PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=00f73626d26d4cd1b0e128b5c99f0752: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_connection_serve.xml -
+============================ slowest 10 durations =============================
+0.06s call     tests/test_connection_serve.py::test_removed_control_directory_stops_the_service
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 1 passed in 0.12s ==============================

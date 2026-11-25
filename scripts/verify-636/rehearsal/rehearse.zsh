@@ -11,14 +11,16 @@ WT=$(git -C $HERE rev-parse --show-toplevel)
 PY=/Users/luoxiao/miniconda3/bin/python3.13
 REAL=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
 BRANCH=agent/636-graftling-windows-named-pipe
-BASE=d5fb80c7cf5d85a19971c434e7f247568ad22bef
+BASE=7609e52089e638c963cc54c28438c99ea3964f99
+# Phase A, already on the remote (Main's P, run 45639337602): the fast-forward start.
+PHASE_A=ff19b05441d234a8c1cc312233c9c0d4b409af93
 BUNDLE=$HERE/../graftling-636.bundle
 EXPECTED=$WT/scripts/verify-632/windows-expected.txt
 OUT=$HERE/console; mkdir -p $OUT; rm -f $OUT/*.txt(N)
 mkdir -p $S
-# The stand-in's failing tests: the list's `fail` entries; and the W4 entries this Task removed (from dev 84bccb27).
+# The stand-in's failing tests: the list's `fail` entries; and the W4 entries this Task removed (from dev 5d5938ad).
 grep $'^fail\t' $EXPECTED | cut -f2 > $S/fails
-git -C $WT show 84bccb27:scripts/verify-632/windows-expected.txt | grep $'\tW4 (636)\t' | cut -f2 > $S/removed
+git -C $WT show 5d5938ad:scripts/verify-632/windows-expected.txt | grep $'\tW4 (636)\t' | cut -f2 > $S/removed
 print -r -- "stand-in failures: $(grep -c . $S/fails); removed W4 entries: $(grep -c . $S/removed)"
 
 fresh() {  # fresh <scenario>: a new bare remote (branch absent), scratch graftling clone and fake gh state
@@ -56,10 +58,11 @@ fresh matched; step matched matched-00.txt 00; step matched matched-P.txt P; ste
 step matched matched-W-sha.txt W $HEAD_SHA
 step matched matched-W-run.txt W 51000000636
 print -r -- "--- after P: clone $(git -C $S/matched/graftling rev-parse $BRANCH), remote $(git -C $S/matched/gremote.git rev-parse $BRANCH)" >> $OUT/matched-P.txt
-# The remote and the local clone hold an earlier commit of this branch: 00 sees an ancestor, P fast-forwards both.
+# The remote and the local clone hold Phase A (ff19b054), as after Main's first P: 00 sees an ancestor, P
+# fast-forwards both.
 fresh ff; git -C $S/ff/graftling fetch -q $BUNDLE refs/heads/${BRANCH}:refs/heads/rehearsal-tmp
-git -C $S/ff/graftling branch -q -f $BRANCH $FIRST; git -C $S/ff/graftling branch -q -D rehearsal-tmp
-git -C $S/ff/graftling push -q $S/ff/gremote.git ${FIRST}:refs/heads/$BRANCH
+git -C $S/ff/graftling branch -q -f $BRANCH $PHASE_A; git -C $S/ff/graftling branch -q -D rehearsal-tmp
+git -C $S/ff/graftling push -q $S/ff/gremote.git ${PHASE_A}:refs/heads/$BRANCH
 step ff ff-00.txt 00; step ff ff-P.txt P
 print -r -- "--- after P: clone $(git -C $S/ff/graftling rev-parse $BRANCH), remote $(git -C $S/ff/gremote.git rev-parse $BRANCH)" >> $OUT/ff-P.txt
 # FAIL path: a removed W4 test still fails at another Task's point, and a listed failure passes.
@@ -81,10 +84,9 @@ BUNDLE_KNOB=VERIFY636_BUNDLE=$S/badwf.bundle
 fresh badwf; step badwf badwf-00.txt 00; step badwf badwf-P.txt P
 print -r -- "--- remote branch after P: $(git -C $S/badwf/gremote.git rev-parse -q --verify $BRANCH || print -r -- absent)" >> $OUT/badwf-P.txt
 unset BUNDLE_KNOB
-# A bundle of the Phase A commit alone on 478dfd7f lacks the base d5fb80c7: 00 STOPs at the prerequisite check.
-rm -rf $S/oldbase-src; git clone -q --no-hardlinks $S/src $S/oldbase-src
-git -C $S/oldbase-src checkout -q -B $BRANCH $FIRST
-git -C $S/oldbase-src bundle create -q $S/oldbase.bundle 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced..$BRANCH
+# The Phase A bundle (d5fb80c7..ff19b054, GraphTraj 32c8d2d5) lacks the base 7609e520: 00 STOPs at the
+# prerequisite check.
+git -C $WT show 32c8d2d5:scripts/verify-636/graftling-636.bundle > $S/oldbase.bundle
 BUNDLE_KNOB=VERIFY636_BUNDLE=$S/oldbase.bundle
 fresh oldbase; step oldbase oldbase-00.txt 00
 unset BUNDLE_KNOB

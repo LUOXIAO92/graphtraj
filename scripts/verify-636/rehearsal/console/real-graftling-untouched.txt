@@ -27,8 +27,9 @@ refs/heads/agent/632-graftling-windows-ci defad1db083e911900cbea1cb0ef165e6a66d3
 refs/heads/agent/633-graftling-windows-process bc4298b611afce70dd876c5fe79f764c9f966d8a
 refs/heads/agent/634-graftling-windows-durable-writes 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
 refs/heads/agent/635-graftling-windows-process-tree 7609e52089e638c963cc54c28438c99ea3964f99
+refs/heads/agent/636-graftling-windows-named-pipe ff19b05441d234a8c1cc312233c9c0d4b409af93
 refs/heads/agent/638-graftling-windows-paths-encoding d5fb80c7cf5d85a19971c434e7f247568ad22bef
-refs/heads/dev d5fb80c7cf5d85a19971c434e7f247568ad22bef
+refs/heads/dev 7609e52089e638c963cc54c28438c99ea3964f99
 refs/heads/main 57bca73657d3135a4504904fcc3f1898c2419766
 after:
 refs/heads/agent/513-graftling-mcp-server-name a51e1004a0fe77fe492681faa2f278d80b3d725e
@@ -59,7 +60,8 @@ refs/heads/agent/632-graftling-windows-ci defad1db083e911900cbea1cb0ef165e6a66d3
 refs/heads/agent/633-graftling-windows-process bc4298b611afce70dd876c5fe79f764c9f966d8a
 refs/heads/agent/634-graftling-windows-durable-writes 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
 refs/heads/agent/635-graftling-windows-process-tree 7609e52089e638c963cc54c28438c99ea3964f99
+refs/heads/agent/636-graftling-windows-named-pipe ff19b05441d234a8c1cc312233c9c0d4b409af93
 refs/heads/agent/638-graftling-windows-paths-encoding d5fb80c7cf5d85a19971c434e7f247568ad22bef
-refs/heads/dev d5fb80c7cf5d85a19971c434e7f247568ad22bef
+refs/heads/dev 7609e52089e638c963cc54c28438c99ea3964f99
 refs/heads/main 57bca73657d3135a4504904fcc3f1898c2419766
 UNCHANGED (the rehearsal wrote only scratch clones)

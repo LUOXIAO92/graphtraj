@@ -1,0 +1,44 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 9 items
+
+tests/test_channel_windows_636.py::test_requests_from_this_and_another_process_are_answered PASSED [ 11%]
+tests/test_channel_windows_636.py::test_another_local_account_cannot_connect FAILED [ 22%]
+tests/test_channel_windows_636.py::test_a_same_user_process_outside_the_owner_is_refused_and_its_descendant_accepted PASSED [ 33%]
+tests/test_channel_windows_636.py::test_the_callers_pid_stays_pinned_while_it_is_authenticated PASSED [ 44%]
+tests/test_channel_windows_636.py::test_the_hosts_death_is_seen_at_once_by_a_caller_waiting_on_an_accepted_request PASSED [ 55%]
+tests/test_channel_windows_636.py::test_a_withdraw_before_acceptance_means_the_operation_never_runs PASSED [ 66%]
+tests/test_channel_windows_636.py::test_after_acceptance_the_caller_keeps_its_behaviour PASSED [ 77%]
+tests/test_channel_windows_636.py::test_without_a_verdict_delivery_is_unconfirmed_and_nothing_runs PASSED [ 88%]
+tests/test_channel_windows_636.py::test_a_second_host_on_one_address_fails PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=40b132f9d8c44017bae9484b76d5e368: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+__________________ test_another_local_account_cannot_connect __________________
+tests\test_channel_windows_636.py:213: in test_another_local_account_cannot_connect
+    assert run_as(user, password, child(PROBE, name)) == _win32.ERROR_ACCESS_DENIED
+E   assert 99 == 5
+E    +  where 99 = run_as('g6365fc6baa1', 'Aa1!f711113093', ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', '-I', '-X', 'utf8', '-c', '\nimport sys\ntry:\n    open(sys.argv[1], "r+b", buffering=0).close()\nexcept OSError as error:\n    sys.exit(getattr(error, "winerror", None) or 99)\n', ...])
+E    +    where ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', '-I', '-X', 'utf8', '-c', '\nimport sys\ntry:\n    open(sys.argv[1], "r+b", buffering=0).close()\nexcept OSError as error:\n    sys.exit(getattr(error, "winerror", None) or 99)\n', ...] = child('\nimport sys\ntry:\n    open(sys.argv[1], "r+b", buffering=0).close()\nexcept OSError as error:\n    sys.exit(getattr(error, "winerror", None) or 99)\n', '\\\\.\\pipe\\graftling-a8520d41d661efdbbd4b87a44cbe3be1a8537c6a609da462c79e043febdca56a')
+E    +  and   5 = _win32.ERROR_ACCESS_DENIED
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_channel_windows_636.xml -
+============================ slowest 10 durations =============================
+17.37s call     tests/test_channel_windows_636.py::test_another_local_account_cannot_connect
+3.06s call     tests/test_channel_windows_636.py::test_after_acceptance_the_caller_keeps_its_behaviour
+1.23s call     tests/test_channel_windows_636.py::test_a_withdraw_before_acceptance_means_the_operation_never_runs
+0.82s call     tests/test_channel_windows_636.py::test_requests_from_this_and_another_process_are_answered
+0.67s call     tests/test_channel_windows_636.py::test_without_a_verdict_delivery_is_unconfirmed_and_nothing_runs
+0.65s call     tests/test_channel_windows_636.py::test_the_hosts_death_is_seen_at_once_by_a_caller_waiting_on_an_accepted_request
+0.39s call     tests/test_channel_windows_636.py::test_a_same_user_process_outside_the_owner_is_refused_and_its_descendant_accepted
+0.25s call     tests/test_channel_windows_636.py::test_the_callers_pid_stays_pinned_while_it_is_authenticated
+0.06s call     tests/test_channel_windows_636.py::test_a_second_host_on_one_address_fails
+
+(1 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_channel_windows_636.py::test_another_local_account_cannot_connect - assert 99 == 5
+ +  where 99 = run_as('g6365fc6baa1', 'Aa1!f711113093', ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', '-I', '-X', 'utf8', '-c', '\nimport sys\ntry:\n    open(sys.argv[1], "r+b", buffering=0).close()\nexcept OSError as error:\n    sys.exit(getattr(error, "winerror", None) or 99)\n', ...])
+ +    where ['C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', '-I', '-X', 'utf8', '-c', '\nimport sys\ntry:\n    open(sys.argv[1], "r+b", buffering=0).close()\nexcept OSError as error:\n    sys.exit(getattr(error, "winerror", None) or 99)\n', ...] = child('\nimport sys\ntry:\n    open(sys.argv[1], "r+b", buffering=0).close()\nexcept OSError as error:\n    sys.exit(getattr(error, "winerror", None) or 99)\n', '\\\\.\\pipe\\graftling-a8520d41d661efdbbd4b87a44cbe3be1a8537c6a609da462c79e043febdca56a')
+ +  and   5 = _win32.ERROR_ACCESS_DENIED
+======================== 1 failed, 8 passed in 24.69s =========================

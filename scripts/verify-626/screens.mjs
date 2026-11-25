@@ -105,12 +105,39 @@ try {
   facts.fixtureTasks = fixtures.operate(project, 'task_graph', { view: 'full' }).tasks
     .map(task => ({ id: task.task_id, status: task.status, disposition: task.disposition }));
   note(`fixture project ${project}: ${JSON.stringify(facts.fixtureTasks)}`);
+  // A configured team (root + children), written only into the disposable project as tests/d-adoption.mjs does,
+  // so Teams & roles renders its organization tree instead of the "No teams configured" empty state.
+  stage = 'fixture team';
+  await fs.writeFile(path.join(project, '.graphtraj', 'roles.yml'), `roles:
+  delivery:
+    lead: {runtime: codex, model: gpt-5.3-codex}
+    engineer: {runtime: codex, model: gpt-5.3-codex, reports: [report.md]}
+    reviewer: {runtime: codex, model: gpt-5.3-codex}
+role_tree:
+  delivery.lead:
+    delivery.engineer: {}
+    delivery.reviewer: {}
+`);
+  // Read it back through the built app's own native settings reader (no Save, no review), with this step's HOME.
+  const { SettingsClient } = require(path.join(desktop, 'dist-electron', 'settings.js'));
+  const settings = new SettingsClient();
+  try {
+    const read = await withTimeout(settings.request(project), 30000, 'native settings read');
+    facts.fixtureTeam = { roles: Object.keys(read.roles ?? {}), edges: read.edges ?? [] };
+  } finally { settings.close(); }
+  note(`fixture team config (native read): ${JSON.stringify(facts.fixtureTeam)}`);
+  if (!facts.fixtureTeam.roles.includes('delivery.lead')
+    || !facts.fixtureTeam.edges.some(edge => edge.includes('delivery.lead')
+      && edge.some(end => end !== 'delivery.lead' && end.startsWith('delivery.'))))
+    throw new Error('fixture team (root delivery.lead with a child) is not visible through the native settings reader');
 
   // ---- launch the built app ----
   stage = 'launch';
   const { _electron: electron } = require('playwright');
   facts.executable = require('electron');
-  const launching = electron.launch({ executablePath: facts.executable,
+  // colorScheme: null = Playwright "no-override". Its default ('light') sends CDP Emulation.setEmulatedMedia
+  // prefers-color-scheme=light, which would mask nativeTheme.themeSource (host run at 43ea0bf5).
+  const launching = electron.launch({ executablePath: facts.executable, colorScheme: null,
     args: [desktop, `--project=${project}`, `--user-data-dir=${path.join(out, 'profile')}`], env: process.env, timeout: 60000 });
   // Stop waiting as soon as an unhandled launch error was seen, else after 75 s.
   const failed = new Promise((_, reject) => { const poll = setInterval(() => {
@@ -129,9 +156,20 @@ try {
 
   for (theme of ['light', 'dark']) {
     stage = `${theme}: force theme`;
-    await app.evaluate(({ nativeTheme }, value) => { nativeTheme.themeSource = value; }, theme);
-    await page.waitForFunction(dark => matchMedia('(prefers-color-scheme: dark)').matches === dark, theme === 'dark');
     facts.themes[theme] = { screens: {} };
+    // Force only through Electron's nativeTheme; no page.emulateMedia fallback. If the renderer does not follow,
+    // fail and record both sides so the mismatch is attributable.
+    const native = () => app.evaluate(({ nativeTheme }) => ({ themeSource: nativeTheme.themeSource, shouldUseDarkColors: nativeTheme.shouldUseDarkColors }));
+    await app.evaluate(({ nativeTheme }, value) => { nativeTheme.themeSource = value; }, theme);
+    facts.themes[theme].nativeTheme = await native();
+    try {
+      await page.waitForFunction(dark => matchMedia('(prefers-color-scheme: dark)').matches === dark, theme === 'dark', { timeout: 15000 });
+    } catch {
+      const darkMatches = await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches);
+      facts.themes[theme].themeMismatch = { ...(await native()), darkMatches };
+      throw new Error(`nativeTheme.themeSource=${theme} did not reach the renderer: ${JSON.stringify(facts.themes[theme].themeMismatch)}`);
+    }
+    facts.themes[theme].nativeThemeAfter = await native();
     stage = `${theme}: task graph`;
     await selectTaskOne();
     facts.themes[theme].machine = await machine();
@@ -143,8 +181,9 @@ try {
     await page.getByRole('button', { name: 'Collapse chat', exact: true }).click();
     stage = `${theme}: teams and roles`;
     await page.getByRole('button', { name: 'Teams & roles', exact: true }).click();
-    await page.getByRole('region', { name: 'Team organization tree' }).waitFor()
-      .catch(() => problem(`${theme}: Team organization tree region not found`));
+    await page.getByRole('region', { name: 'Team organization tree' }).waitFor().catch(error => {
+      throw new Error(`Teams & roles did not render the "Team organization tree" region (fixture team ${JSON.stringify(facts.fixtureTeam)}): ${error.message.split('\n')[0]}`);
+    });
     await shot('teams-roles');
     stage = `${theme}: project usage`;
     await page.getByRole('button', { name: 'Project usage', exact: true }).click();

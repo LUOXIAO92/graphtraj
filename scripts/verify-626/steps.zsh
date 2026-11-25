@@ -13,11 +13,17 @@
 #       adds projects to the real ${HOME}/.graphtraj index; monitor-ui/team-graph need a Playwright Chromium download).
 #       Login: none. Dialog: none. Network: registry.npmjs.org and github.com (Electron zip). ~1-3 min.
 #   S   Screens: from B's build, creates a disposable fixture project under $WORK/s-run (tasks implementing /
-#       superseded / pending, two agents with messages, a tool call and usage records, the default team config made by
-#       project_setup) and launches the built app with Playwright _electron (Electron from $WORK/desktop/node_modules,
+#       superseded / pending, two agents with messages, a tool call and usage records, and a configured team written
+#       into the fixture's .graphtraj/roles.yml: delivery.lead with children delivery.engineer and delivery.reviewer,
+#       read back and printed through the build's native SettingsClient before launch) and launches the built app with
+#       Playwright _electron (Electron from $WORK/desktop/node_modules,
 #       main = dist-electron/main.js) with HOME=$WORK/s-run/home and --user-data-dir under $WORK/s-run, passing the
 #       project with --project (no picker). The theme is forced only inside the app with Electron
-#       nativeTheme.themeSource = 'light' then 'dark'; the system appearance is never changed. Per theme: task graph
+#       nativeTheme.themeSource = 'light' then 'dark'; the system appearance is never changed. Playwright is launched
+#       with colorScheme: null (no-override), because its default sends CDP prefers-color-scheme=light, which masks
+#       nativeTheme. There is no page.emulateMedia fallback: if the renderer does not follow, S FAILS and facts.json
+#       records nativeTheme.themeSource / shouldUseDarkColors next to matchMedia. A missing "Team organization tree"
+#       region on Teams & roles is a hard failure. Per theme: task graph
 #       with task #1 selected, expanded chat, Teams & roles, Project usage, 1440x900 (8 PNGs, plus the 2 narrow shots below). Nothing is saved, no
 #       native dialog is opened. Machine checks per theme: matchMedia(prefers-color-scheme: dark) matches the forced
 #       theme; computed --bg equals the token; X6 edge strokes are edge/accent token values and the dependency edge and

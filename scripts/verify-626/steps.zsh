@@ -18,13 +18,20 @@
 #       main = dist-electron/main.js) with HOME=$WORK/s-run/home and --user-data-dir under $WORK/s-run, passing the
 #       project with --project (no picker). The theme is forced only inside the app with Electron
 #       nativeTheme.themeSource = 'light' then 'dark'; the system appearance is never changed. Per theme: task graph
-#       with task #1 selected, expanded chat, Teams & roles, Project usage, 1440x900 (8 PNGs). Nothing is saved, no
+#       with task #1 selected, expanded chat, Teams & roles, Project usage, 1440x900 (8 PNGs, plus the 2 narrow shots below). Nothing is saved, no
 #       native dialog is opened. Machine checks per theme: matchMedia(prefers-color-scheme: dark) matches the forced
 #       theme; computed --bg equals the token; X6 edge strokes are edge/accent token values and the dependency edge and
 #       project frame colours differ between themes and equal the tokens; no pageerror; every PNG > 10 kB.
-#       Copies PNGs + facts.json to <Worktree>/scripts/verify-626/evidence/<sha>/ (untracked), prints their paths,
-#       VERDICT last. A window appears on screen for ~30-60 s and closes itself; do not interact with it.
-#       Login: none. Dialog: none. Network: none. ~1 min.
+#       V2 narrow evidence: per theme, after the four screens the window is resized to 1000x760, the task graph with
+#       #1 selected is captured as <theme>-narrow-task-graph.png, then 1440x900 is restored (10 PNGs in total).
+#       On any failure the driver records the stage and message in facts.json, takes <theme>-failure.png if the
+#       page is alive, and always writes facts.json and closes the app (kills it if close does not finish in 10 s),
+#       so no window is left open. Copies PNGs + facts.json + driver.log to
+#       <Worktree>/scripts/verify-626/evidence/<sha>/ (untracked), prints their paths, the next command and VERDICT
+#       last. A window appears on screen for ~30-90 s and closes itself; do not interact with it.
+#       Login: none. Dialog: none. Network: none. ~1-2 min.
+# NO HOST/MODEL LOGIN: no step starts Claude, Codex, Pi or any other model Runtime and no provider login is used, so
+# the role's per-host login preflight does not apply. Each step ends with a ready-to-paste next command, then VERDICT.
 # ENTRY DIFFERENCE: S runs the development build (Electron 44.5.1 from npm, unpackaged dist + dist-electron) rather
 # than the user's installed /Applications/GraphTraj.app (packaged by scripts/package-mac.mjs from the same sources):
 # same renderer, CSS and main process code; differs in packaging, app name/icon and the bundled runtime path.
@@ -38,6 +45,8 @@ emulate -L zsh
 setopt pipe_fail no_unset extended_glob
 WT=$(git -C ${0:A:h} rev-parse --show-toplevel)
 STEP=${1:-}
+SELF=${0:A}
+NEXT=
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 GIT=$(whence -p git)
 NODE=$(whence -p node || print -r -- /usr/local/bin/node)
@@ -76,7 +85,21 @@ allow() {
   /usr/bin/env -i HOME=${RUN_HOME:-$HOME} USER=${USER:-} LOGNAME=${LOGNAME:-${USER:-}} PATH=$APATH TERM=${TERM:-dumb} \
     TMPDIR=${TMPDIR:-/tmp} LANG=en_US.UTF-8 GRAPHTRAJ_TOOL=$TOOL $extra "$@"
 }
-verdict() { print -r -- "VERDICT $1${2:+: $2}"; exit ${3:-0}; }
+# Print the ready-to-paste next command (NEXT overrides the default), then VERDICT last.
+verdict() {
+  local next=${NEXT:-}
+  if [[ -z $next ]]; then
+    case $STEP:$1 in
+      00:PASS) next="zsh $SELF B";;
+      B:PASS) next="zsh $SELF S";;
+      S:PASS) next="tell the Leader: evidence at $EVIDENCE";;
+      S:FAIL) next="tell the Leader: facts at $EVIDENCE/facts.json (driver log $EVIDENCE/driver.log); re-run after a fix: zsh $SELF S";;
+      *) next="fix the reported cause, then re-run: zsh $SELF $STEP";;
+    esac
+  fi
+  print -r -- "NEXT: $next"
+  print -r -- "VERDICT $1${2:+: $2}"; exit ${3:-0}
+}
 
 case $STEP in
 00)
@@ -123,20 +146,21 @@ B)
   verdict PASS "build and $(grep -E '^ℹ pass ' $WORK/unit.log | awk '{print $3}') unit checks passed for $SHA";;
 S)
   say "Task 626 step S: light/dark screens from $WORK/desktop"
-  [[ -f $WORK/B.ok && $(<$WORK/B.ok) == $SHA ]] || verdict FAIL "run B for $SHA first" 1
+  [[ -f $WORK/B.ok && $(<$WORK/B.ok) == $SHA ]] || { NEXT="zsh $SELF B"; verdict FAIL "run B for $SHA first" 1; }
   local run=$WORK/s-run
   rm -rf $run; mkdir -p $run/home
   RUN_HOME=$run/home allow $NODE $WT/scripts/verify-626/screens.mjs $WORK/desktop $run 2>&1 | tee $run/driver.log; local drv=$?
-  mkdir -p $EVIDENCE
+  rm -rf $EVIDENCE; mkdir -p $EVIDENCE
   local -a files=($run/*.png(N) $run/facts.json(N) $run/driver.log(N))
   (( ${#files} )) && cp $files $EVIDENCE/
   say "evidence (untracked):"
   ls -l $EVIDENCE
   [[ -f $EVIDENCE/facts.json ]] && print -r -- "facts: $EVIDENCE/facts.json"
   (( drv == 0 )) || verdict FAIL "driver exit $drv; see $EVIDENCE/facts.json and driver.log" 1
-  local n=$(ls $EVIDENCE/*.png 2>/dev/null | wc -l | tr -d ' ')
-  (( n == 8 )) || verdict FAIL "$n of 8 screenshots" 1
-  verdict PASS "8 screenshots and machine checks for $SHA in $EVIDENCE";;
+  local -a pngs=($EVIDENCE/*.png(N))
+  local n=${#${pngs:#*-failure.png}}
+  (( n == 10 )) || verdict FAIL "$n of 10 screenshots" 1
+  verdict PASS "10 screenshots and machine checks for $SHA in $EVIDENCE";;
 *)
   print -r -- "usage: zsh ${0:t} 00|B|S"; exit 2;;
 esac

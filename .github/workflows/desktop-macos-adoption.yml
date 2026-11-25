@@ -7,7 +7,7 @@ name: desktop-macos-adoption
 # workflow_dispatch stays available for later re-runs.
 on:
   push:
-    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos, agent/292-desktop-readable-runtime-events, agent/295-desktop-direct-settings-save-macos, agent/618-desktop-workflows-graftling-ref, agent/621-macos-adoption-script-d-ui, agent/627-desktop-ui-structure-redesign]
+    branches: [agent/265-desktop-mac-adoption, agent/285-desktop-d-monitor-projects, agent/286-desktop-usage-history-range, agent/287-desktop-agents-models-teams, agent/288-desktop-d-integrated-adoption-macos, agent/290-desktop-d-direct-port-macos, agent/292-desktop-readable-runtime-events, agent/295-desktop-direct-settings-save-macos, agent/618-desktop-workflows-graftling-ref, agent/621-macos-adoption-script-d-ui, agent/623-windows-desktop-adoption-green, agent/627-desktop-ui-structure-redesign]
   workflow_dispatch:
     inputs:
       mode:
@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: ${{ github.ref_name == 'agent/627-desktop-ui-structure-redesign' && 45 || 30 }}
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
-      GRAFTLING_REF: v0.10.1
+      GRAFTLING_REF: v0.10.2
       SETTINGS_ADOPTION: ${{ inputs.mode == 'settings' || github.ref_name == 'agent/295-desktop-direct-settings-save-macos' }}
       ACTIVITY_ADOPTION: ${{ inputs.mode == 'usage' || inputs.mode == 'activity' || github.ref_name == 'agent/292-desktop-readable-runtime-events' }}
     defaults:

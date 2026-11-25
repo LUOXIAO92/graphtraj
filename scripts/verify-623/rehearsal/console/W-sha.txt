@@ -1,0 +1,69 @@
+$ VERIFY623_REMOTE=/tmp/claude-501/r623/ok/remote.git VERIFY623_GH=/tmp/claude-501/r623/ok/gh/gh VERIFY623_HTMP=/tmp/claude-501/r623/ok/htmp VERIFY623_PTMP=/tmp/claude-501/r623/ok/ptmp VERIFY623_POLL_S=1 VERIFY623_APPEAR_S=10 VERIFY623_DONE_S=30 zsh steps.zsh W 1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [W] Observe only (no push, no re-run) the push runs of 1cae34f018a324bd4a0f45fd544ff16d619f9fdf. Login: gh login, ssh key (ls-remote). Dialog: none. Network: GitHub.
+observing push runs of desktop-win-adoption, desktop-macos-adoption, desktop-linux-adoption and desktop-repair-package for 1cae34f018a324bd4a0f45fd544ff16d619f9fdf (appearance bound 10s, completion bound 30s, poll 1s)
+all 4 push runs present after 0s
+  [18:06:20] desktop-win-adoption.yml completed success;desktop-macos-adoption.yml completed success;desktop-linux-adoption.yml completed success;desktop-repair-package.yml completed success;
+--- results for 1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+RUN desktop-win-adoption.yml | id 46300000000 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000
+  job: windows-adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000/job/2
+RUN desktop-macos-adoption.yml | id 46300000001 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001
+  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001/job/2
+RUN desktop-linux-adoption.yml | id 46300000002 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002
+  job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002/job/2
+RUN desktop-repair-package.yml | id 46300000003 | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000003
+  job: windows-package | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000003/job/2
+  job: linux-package | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000003/job/3
+no other workflow triggered for this SHA
+--- artifacts of desktop-win-adoption.yml run 46300000000
+already present, not downloaded again: /tmp/claude-501/r623/ok/htmp/win-evidence-46300000000
+copy already present: /tmp/claude-501/r623/ok/ptmp/win-evidence-46300000000
+--- files (bytes, path under /tmp/claude-501/r623/ok/htmp/win-evidence-46300000000)
+         278  adoption.json
+           3  environment.json
+          13  native-1-pick.png
+--- adoption.json
+  passed: True | stage: finished
+  steps: 7 recorded; last 6:
+    - stand-in windows step 2
+    - stand-in windows step 3
+    - stand-in windows step 4
+    - stand-in windows step 5
+    - stand-in windows step 6
+    - stand-in windows step 7
+  screenshots: none
+--- artifacts of desktop-macos-adoption.yml run 46300000001
+already present, not downloaded again: /tmp/claude-501/r623/ok/htmp/mac-evidence-46300000001
+copy already present: /tmp/claude-501/r623/ok/ptmp/mac-evidence-46300000001
+--- files (bytes, path under /tmp/claude-501/r623/ok/htmp/mac-evidence-46300000001)
+          63  evidence.json
+--- evidence.json
+  passed: True | stage: -
+  steps: 1 recorded; last 1:
+    - stand-in mac step
+  screenshots: none
+--- artifacts of desktop-linux-adoption.yml run 46300000002
+already present, not downloaded again: /tmp/claude-501/r623/ok/htmp/linux-evidence-46300000002
+copy already present: /tmp/claude-501/r623/ok/ptmp/linux-evidence-46300000002
+--- files (bytes, path under /tmp/claude-501/r623/ok/htmp/linux-evidence-46300000002)
+          48  evidence/ui-result.json
+--- evidence/ui-result.json
+  passed: True | stage: -
+  steps: 1 recorded; last 1:
+    - stand-in linux
+  screenshots: none
+--- artifacts of desktop-repair-package.yml run 46300000003
+already present, not downloaded again: /tmp/claude-501/r623/ok/htmp/repair-packages-46300000003/GraphTraj-windows-x64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+copy already present: /tmp/claude-501/r623/ok/ptmp/repair-packages-46300000003/GraphTraj-windows-x64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+--- files (bytes, path under /tmp/claude-501/r623/ok/htmp/repair-packages-46300000003/GraphTraj-windows-x64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf)
+          11  GraphTraj-windows-x64.zip
+          65  GraphTraj-windows-x64.zip.sha256
+no evidence.json, ui-result.json, result.json or adoption.json below /tmp/claude-501/r623/ok/htmp/repair-packages-46300000003/GraphTraj-windows-x64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+already present, not downloaded again: /tmp/claude-501/r623/ok/htmp/repair-packages-46300000003/GraphTraj-linux-amd64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+copy already present: /tmp/claude-501/r623/ok/ptmp/repair-packages-46300000003/GraphTraj-linux-amd64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+--- files (bytes, path under /tmp/claude-501/r623/ok/htmp/repair-packages-46300000003/GraphTraj-linux-amd64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf)
+          16  graphtraj_0.0.0_amd64.deb
+no evidence.json, ui-result.json, result.json or adoption.json below /tmp/claude-501/r623/ok/htmp/repair-packages-46300000003/GraphTraj-linux-amd64-1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+next: zsh /private/tmp/claude-501/r623/repo/scripts/verify-623/steps.zsh W 1cae34f018a324bd4a0f45fd544ff16d619f9fdf    (re-observe; no push)
+VERDICT 623 W: PASS (4/4 success; desktop-win-adoption.yml success, artifacts ok; desktop-macos-adoption.yml success, artifacts ok; desktop-linux-adoption.yml success, artifacts ok; desktop-repair-package.yml success, artifacts ok)
+[exit 0]

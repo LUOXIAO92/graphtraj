@@ -1,0 +1,7 @@
+$ VERIFY623_REMOTE=/tmp/claude-501/r623/fail/remote.git VERIFY623_GH=/tmp/claude-501/r623/fail/gh/gh VERIFY623_HTMP=/tmp/claude-501/r623/fail/htmp VERIFY623_PTMP=/tmp/claude-501/r623/fail/ptmp VERIFY623_POLL_S=1 VERIFY623_APPEAR_S=10 VERIFY623_DONE_S=30 zsh steps.zsh X 12345
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [X] Re-run failed jobs of run 12345. OUTWARD-FACING: gh run rerun 12345 --failed starts GitHub Actions jobs. Login: gh login. Dialog: none. Network: GitHub.
+  gh api repos/LUOXIAO92/graphtraj/actions/runs/12345 failed: gh: Not Found (HTTP 404) repos/LUOXIAO92/graphtraj/actions/runs/12345
+STOP: cannot read run 12345; nothing re-run
+VERDICT 623 X: STOP
+[exit 1]

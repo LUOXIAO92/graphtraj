@@ -1,0 +1,32 @@
+$ VERIFY623_REMOTE=/tmp/claude-501/r623/extra/remote.git VERIFY623_GH=/tmp/claude-501/r623/extra/gh/gh VERIFY623_HTMP=/tmp/claude-501/r623/extra/htmp VERIFY623_PTMP=/tmp/claude-501/r623/extra/ptmp VERIFY623_POLL_S=1 VERIFY623_APPEAR_S=10 VERIFY623_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: your gh login (account shown, no token) and ssh key (git ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify623-stand-in | gh path: /tmp/claude-501/r623/extra/gh/gh
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-623 fake)
+    - Active account: true
+PASS: origin is git@github.com:LUOXIAO92/graphtraj.git
+NOTE: rehearsal remote /tmp/claude-501/r623/extra/remote.git is used instead of origin for ls-remote/push
+current branch: agent/623-windows-desktop-adoption-green | HEAD ad6a54accb882e30720e2da6a288af924e060ebe
+PASS: agent/623-windows-desktop-adoption-green is absent on /tmp/claude-501/r623/extra/remote.git (P creates it)
+--- P preconditions
+PASS: on agent/623-windows-desktop-adoption-green
+PASS: tracked tree clean
+PASS: base cb433644 is an ancestor of HEAD
+PASS: nothing changed since base under desktop/src desktop/electron src
+INFO: desktop/tests/adoption-win.mjs unchanged since base
+FAIL: .github/workflows/desktop-win-adoption.yml:
+  changes other than the allowed lines (expected vs HEAD):
+      --- expected
+      +++ HEAD
+      @@ -121,0 +122 @@
+      +# rehearsal-only extra edit
+PASS: .github/workflows/desktop-macos-adoption.yml: only the allowed lines changed: push branches + agent/623-windows-desktop-adoption-green; GRAFTLING_REF v0.10.1 -> v0.10.2
+PASS: .github/workflows/desktop-linux-adoption.yml: only the allowed lines changed: push branches + agent/623-windows-desktop-adoption-green; GRAFTLING_REF v0.10.1 -> v0.10.2
+PASS: .github/workflows/desktop-repair-package.yml: only the allowed lines changed: push branches + agent/623-windows-desktop-adoption-green; GRAFTLING_REF v0.10.1 -> v0.10.2
+PASS: LUOXIAO92/graftling tag v0.10.2 (tag) -> commit 57bca73657d3135a4504904fcc3f1898c2419766
+next: fix the FAIL lines above, then zsh /private/tmp/claude-501/r623/repo/scripts/verify-623/steps.zsh 00
+VERDICT 623 00: PASS (P ready: no; remote branch absent; candidate ad6a54accb882e30720e2da6a288af924e060ebe)
+[exit 0]

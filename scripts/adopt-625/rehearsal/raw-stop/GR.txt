@@ -1,0 +1,27 @@
+G record: /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/G-99999999T999999-fixture
+product guard: HEAD 2c863655d346b404c31115db2d9a0c3143afd678 | git diff 4ef36426 HEAD -- src desktop/src pyproject.toml manuals skills plugins: empty | changes since GraphTraj dev 4b71012c outside scripts/adopt-625/: none | uncommitted (rehearsal outputs excepted): none | graftling range at 4ef36426: "graftling>=0.10.0,<0.11",
+  run.txt: pytest temp root: /private/tmp/claude-501/adopt-625-G-20261125T155615 (TMPDIR=/tmp/claude-501, outside the Harness)
+  run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
+  run.txt: candidate: 2c863655d346b404c31115db2d9a0c3143afd678 | graftling wheel from git archive 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2, graftling-0.10.2-py3-none-any.whl)
+  run.txt: python: /private/tmp/claude-501/r625/scr/gvenv-625/bin/python
+  run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.2 | graphtraj 0.1.0
+  run.txt: test interpreter graftling: 0.10.2 /private/tmp/claude-501/r625/scr/gvenv-625/lib/python3.13/site-packages/graftling
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_intent_queries_find_create or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document
+CHECK 625 GR the record's candidate 2c863655 has the product of 4ef36426 (production's GraphTraj): PASS
+CHECK 625 GR the record's graftling wheel is v0.10.2 (57bca73657d3135a4504904fcc3f1898c2419766): PASS (57bca73657d3135a4504904fcc3f1898c2419766)
+test interpreter graftling: 0.10.2 | dependencies line: | graftling 0.10.2 |
+CHECK 625 GR test interpreter imports graftling 0.10.2 (graftling.__version__ and metadata): PASS (0.10.2)
+  619 marker in /private/tmp/claude-501/r625/scr/gvenv-625/lib/python3.13/site-packages/graftling: sessions/archive.py 'import fcntl' x0, 'from graftling.locks import exclusive, ignore_in_git' x1, 'with exclusive(' x2 | member_processes.py Windows OSError x1 | codex/host.py Windows authority-denied x1
+CHECK 625 GR test interpreter's graftling 619's fix is in /private/tmp/claude-501/r625/scr/gvenv-625/lib/python3.13/site-packages/graftling (archive.py: no 'import fcntl', locks.exclusive x2; Windows errors in member_processes.py and codex/host.py): PASS
+CHECK 625 GR pytest temp root is outside the Harness: PASS (/private/tmp/claude-501/adopt-625-G-20261125T155615)
+CHECK 625 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
+totals: 10 passed, 3767 deselected | exit: 1
+516 current definition (task.yml current_definition): /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261122T023936.454919+0900.md
+known non-blocking ids: ONLY those in 516's current definition
+  NEW: tests/test_runtime_distribution.py::test_wheels_have_separate_owners
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/G-20261125T155615/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/G-20261125T155615/shards/shard-2.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL /private/tmp/claude-501/r625/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/G-20261125T155615/shards/shard-3.log: exit 5
+  shard timeouts ('timed out after' lines): 0
+CHECK 625 GR G record (v0.10.2 wheel) has no new failure and no ABNORMAL shard: FAIL (1 NEW ids: run SR)
+RESULT 625 G/GR: FAIL | 10 passed, 3767 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 1 | ABNORMAL shards: 0 | test interpreter graftling: 0.10.2

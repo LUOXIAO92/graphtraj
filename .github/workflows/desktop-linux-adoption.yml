@@ -2,7 +2,7 @@ name: Linux installed desktop adoption
 
 on:
   push:
-    branches: [agent/267-desktop-linux-adoption, agent/288-desktop-d-integrated-adoption-linux, agent/290-desktop-d-direct-port-linux, agent/291-desktop-global-model-role-flow, agent/618-desktop-workflows-graftling-ref, agent/620-linux-adoption-codex-fixture, agent/621-macos-adoption-script-d-ui, agent/627-desktop-ui-structure-redesign]
+    branches: [agent/267-desktop-linux-adoption, agent/288-desktop-d-integrated-adoption-linux, agent/290-desktop-d-direct-port-linux, agent/291-desktop-global-model-role-flow, agent/618-desktop-workflows-graftling-ref, agent/620-linux-adoption-codex-fixture, agent/621-macos-adoption-script-d-ui, agent/623-windows-desktop-adoption-green, agent/627-desktop-ui-structure-redesign]
 
 permissions:
   contents: read
@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 20
     env:
       # graftling tag in GraphTraj's declared range (pyproject.toml).
-      GRAFTLING_REF: v0.10.1
+      GRAFTLING_REF: v0.10.2
       ADOPTION_ROOT: ${{ github.workspace }}/desktop/test-results/linux-adoption
       ADOPTION_EXECUTABLE: /usr/bin/graphtraj-desktop
       ADOPTION_INSTALL_ROOT: /opt/graphtraj-desktop

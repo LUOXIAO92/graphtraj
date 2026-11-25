@@ -144,7 +144,9 @@ export async function datedUsage({ page, first, second, agent, date, input = 100
   // Collection is asynchronous: wait for this project's actual quantity, not
   // just a row that is also present while its history is still loading.
   const comparison = dashboard.getByRole('table', { name: 'Project comparison', exact: true });
-  const row = root => comparison.getByRole('row').filter({ has: page.locator(`span[title="${root}"]`) });
+  // The row's <span title={project.root}> (UsageDashboard.tsx:71). getByTitle needs no CSS escaping;
+  // a raw Windows root in span[title="..."] turned '\a', '\f' into CSS escapes (Windows run 45583133448).
+  const row = root => comparison.getByRole('row').filter({ has: page.getByTitle(root, { exact: true }) });
   await page.waitForFunction(({ date, quantity }) => [...document.querySelectorAll('.usage-dashboard svg title')]
     .some(title => title.textContent === `${date}: ${quantity} input tokens`), { date, quantity });
   await row(first).getByRole('cell').first().filter({ hasNotText: /^Unknown/ }).waitFor();

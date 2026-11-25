@@ -1,0 +1,7 @@
+$ VERIFY623_REMOTE=/tmp/claude-501/r623/fail/remote.git VERIFY623_GH=/tmp/claude-501/r623/fail/gh/gh VERIFY623_HTMP=/tmp/claude-501/r623/fail/htmp VERIFY623_PTMP=/tmp/claude-501/r623/fail/ptmp VERIFY623_POLL_S=1 VERIFY623_APPEAR_S=10 VERIFY623_DONE_S=30 zsh steps.zsh X 46300000001
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [X] Re-run failed jobs of run 46300000001. OUTWARD-FACING: gh run rerun 46300000001 --failed starts GitHub Actions jobs. Login: gh login. Dialog: none. Network: GitHub.
+run 46300000001: desktop-macos-adoption.yml | branch agent/623-windows-desktop-adoption-green | attempt 1 | completed | success
+STOP: run 46300000001 already succeeded; nothing to re-run
+VERDICT 623 X: STOP
+[exit 1]

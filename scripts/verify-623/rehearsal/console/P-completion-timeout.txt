@@ -1,0 +1,35 @@
+$ VERIFY623_REMOTE=/tmp/claude-501/r623/slow/remote.git VERIFY623_GH=/tmp/claude-501/r623/slow/gh/gh VERIFY623_HTMP=/tmp/claude-501/r623/slow/htmp VERIFY623_PTMP=/tmp/claude-501/r623/slow/ptmp VERIFY623_POLL_S=1 VERIFY623_APPEAR_S=10 VERIFY623_DONE_S=5 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Push and wait. OUTWARD-FACING: git push /tmp/claude-501/r623/slow/remote.git agent/623-windows-desktop-adoption-green (fast-forward only, never force); the push starts desktop-win-adoption, desktop-macos-adoption, desktop-linux-adoption and desktop-repair-package. Login: ssh key, gh login. Dialog: none. Network: GitHub.
+PASS: on agent/623-windows-desktop-adoption-green
+PASS: tracked tree clean
+PASS: base cb433644 is an ancestor of HEAD
+PASS: nothing changed since base under desktop/src desktop/electron src
+INFO: desktop/tests/adoption-win.mjs unchanged since base
+PASS: .github/workflows/desktop-win-adoption.yml: only the allowed lines changed: push branches + agent/623-windows-desktop-adoption-green; GRAFTLING_REF v0.10.1 -> v0.10.2; 619-only comment (3 lines) removed; 619-only ref expression -> env.GRAFTLING_REF
+PASS: .github/workflows/desktop-macos-adoption.yml: only the allowed lines changed: push branches + agent/623-windows-desktop-adoption-green; GRAFTLING_REF v0.10.1 -> v0.10.2
+PASS: .github/workflows/desktop-linux-adoption.yml: only the allowed lines changed: push branches + agent/623-windows-desktop-adoption-green; GRAFTLING_REF v0.10.1 -> v0.10.2
+PASS: .github/workflows/desktop-repair-package.yml: only the allowed lines changed: push branches + agent/623-windows-desktop-adoption-green; GRAFTLING_REF v0.10.1 -> v0.10.2
+PASS: LUOXIAO92/graftling tag v0.10.2 (tag) -> commit 57bca73657d3135a4504904fcc3f1898c2419766
+$ git push /tmp/claude-501/r623/slow/remote.git refs/heads/agent/623-windows-desktop-adoption-green:refs/heads/agent/623-windows-desktop-adoption-green   (HEAD 1cae34f018a324bd4a0f45fd544ff16d619f9fdf)
+  To /tmp/claude-501/r623/slow/remote.git
+   * [new branch]        agent/623-windows-desktop-adoption-green -> agent/623-windows-desktop-adoption-green
+PASS: /tmp/claude-501/r623/slow/remote.git agent/623-windows-desktop-adoption-green = 1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+observing push runs of desktop-win-adoption, desktop-macos-adoption, desktop-linux-adoption and desktop-repair-package for 1cae34f018a324bd4a0f45fd544ff16d619f9fdf (appearance bound 10s, completion bound 5s, poll 1s)
+all 4 push runs present after 1s
+  [18:06:39] desktop-win-adoption.yml in_progress -;desktop-macos-adoption.yml in_progress -;desktop-linux-adoption.yml in_progress -;desktop-repair-package.yml in_progress -;
+completion timeout after 5s
+--- results for 1cae34f018a324bd4a0f45fd544ff16d619f9fdf
+RUN desktop-win-adoption.yml | id 46300000000 | in_progress | - | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000
+  job: windows-adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000000/job/2
+RUN desktop-macos-adoption.yml | id 46300000001 | in_progress | - | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001
+  job: Installed macOS artifact and adoption | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000001/job/2
+RUN desktop-linux-adoption.yml | id 46300000002 | in_progress | - | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002
+  job: installed-desktop | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000002/job/2
+RUN desktop-repair-package.yml | id 46300000003 | in_progress | - | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000003
+  job: windows-package | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000003/job/2
+  job: linux-package | completed | success | https://github.com/LUOXIAO92/graphtraj/actions/runs/46300000003/job/3
+no other workflow triggered for this SHA
+next: zsh /private/tmp/claude-501/r623/repo/scripts/verify-623/steps.zsh W 1cae34f018a324bd4a0f45fd544ff16d619f9fdf    (re-observe; no push)
+VERDICT 623 P: FAIL (0/4 success; desktop-win-adoption.yml artifacts not fetched (run not completed); desktop-macos-adoption.yml artifacts not fetched (run not completed); desktop-linux-adoption.yml artifacts not fetched (run not completed); desktop-repair-package.yml artifacts not fetched (run not completed))
+[exit 1]

@@ -80,9 +80,12 @@
 .reading-pager > button:hover:not(:disabled) { background: var(--surface-alt); color: var(--ink); }
 
 /* V6.7: one footer row: previous, slider, next, count. */
-.columns-footer, .new-reader .columns-footer { justify-content: flex-start; gap: 10px; min-height: 34px; height: 34px; padding: 0 var(--sp-3); background: var(--surface); border-top: 1px solid var(--border-ui); }
-.columns-footer > .agent-horizontal-scrollbar, .new-reader .agent-horizontal-scrollbar { flex: 1; width: auto; min-width: 0; height: 20px; padding: 0; }
-.columns-footer > span { flex-shrink: 0; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* A grid, so the slider alone absorbs the width and the count text always stays inside the window. */
+.columns-footer, .new-reader .columns-footer { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-width: 0; min-height: 34px; height: 34px; padding: 0 var(--sp-4) 0 var(--sp-3); background: var(--surface); border-top: 1px solid var(--border-ui); overflow: hidden; }
+/* The thumb is sized to the visible share of the columns and can be wider than the track when every
+ * column fits; size containment and clipping keep it from widening the row. */
+.columns-footer > .agent-horizontal-scrollbar, .new-reader .agent-horizontal-scrollbar { width: 100%; min-width: 0; height: 20px; padding: 0; contain: inline-size; overflow: hidden; }
+.columns-footer > span { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Tabs above the columns (MemberPills): pills with role initials; historical members keep a dashed edge. */
 .d-reading-index .member-pills > button, .d-task-shelf .member-pills > button { height: 30px; padding: 0 12px 0 5px; border-radius: var(--r-pill); }
@@ -93,13 +96,20 @@
 /* V7: Members tree table, full width; guide lines show depth. */
 .member-tree { padding: var(--sp-4) var(--sp-6); gap: var(--sp-3); }
 .member-tree > .native-notice { padding: 0; }
-.member-tree-table { width: 100%; border: 1px solid var(--border-ui); border-radius: var(--r-lg); border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--surface); font-size: var(--fs-sm); }
+.member-tree-table { width: 100%; table-layout: fixed; border: 1px solid var(--border-ui); border-radius: var(--r-lg); border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--surface); font-size: var(--fs-sm); }
+/* Task, State and Runtime are compact; Agent and Parent share the remaining width. */
+.member-tree-table th:nth-child(2) { width: 88px; }
+.member-tree-table th:nth-child(3) { width: 190px; }
+.member-tree-table th:nth-child(4) { width: 120px; }
+.member-tree-table td { overflow: hidden; text-overflow: ellipsis; }
+.member-state { white-space: normal; }
 .member-tree-table th { padding: var(--sp-2) 14px; text-align: left; font-size: var(--fs-xs); font-weight: var(--fw-strong); color: var(--faint); background: var(--surface-alt); border-bottom: 1px solid var(--border-ui); white-space: nowrap; }
 .member-tree-table td { padding: 0 14px; height: 44px; border-bottom: 1px solid var(--border-ui); vertical-align: middle; color: var(--muted); }
 .member-tree-table tbody tr:last-child td { border-bottom: 0; }
 .member-tree-table tbody tr:hover td { background: var(--surface-alt); }
 .member-tree-table tr.history td { background: color-mix(in srgb, var(--bg) 60%, var(--surface)); }
-.member-agent { min-width: 260px; white-space: nowrap; }
+.member-agent { white-space: nowrap; }
+.member-agent strong { display: block; overflow: hidden; text-overflow: ellipsis; }
 .member-guides { display: inline-flex; height: 44px; vertical-align: middle; }
 .member-guides > i { width: 20px; flex-shrink: 0; position: relative; }
 .member-guides > i::before { content: ''; position: absolute; left: 9px; top: 0; bottom: 0; border-left: 1px solid var(--border-strong); }
@@ -111,4 +121,4 @@
 .member-agent > button:hover strong { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
 .member-task, .member-runtime { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .member-state small { display: block; margin-top: 2px; font-size: var(--fs-xs); color: var(--faint); }
-.member-parent { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-parent { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

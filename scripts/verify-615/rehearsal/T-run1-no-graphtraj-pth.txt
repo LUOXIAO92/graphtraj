@@ -1,0 +1,14 @@
+$ VERIFY615_ROOT=/private/tmp/claude-501/graftling-615 zsh scripts/verify-615/steps.zsh T
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [T] GraphTraj tests/test_agents_discovery_intents.py with the installed graftling (/private/tmp/claude-501/graftling-615/venv) and graphtraj from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src. pytest temp under TMPDIR=/tmp/claude-501 (outside the Harness). Login: none. Dialog: none.
+test interpreter: /private/tmp/claude-501/graftling-615/tvenv/bin/python | pytest 9.1.1 | click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | graftling 0.10.0 | graftling.__file__ /private/tmp/claude-501/graftling-615/tvenv/lib/python3.13/site-packages/graftling/__init__.py
+pytest temp root: /tmp/claude-501/verify615-T.bUC1Aa (TMPDIR=/tmp/claude-501, outside the Harness)
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+      import graftling, graphtraj; print("imported in the run: graftling", graftling.__file__, "| graphtraj", graphtraj.__file__)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ModuleNotFoundError: No module named 'graphtraj'
+pytest exit=4; full output: /private/tmp/claude-501/graftling-615/T.txt
+next: rm -rf /private/tmp/claude-501/graftling-615  (when done)
+VERDICT 615 T: ! _pytest.outcomes.Exit: Test subprocesses would not import this checkout: /private/tmp/claude-501/graftling-615/tvenv/bin/python from a neutral directory resolves subprocesses: graphtraj -> None, graftling -> /private/tmp/claude-501/graftling-615/tvenv/lib/python3.13/site-packages/graftling/__init__.py; -I Workers: graphtraj -> None, graftling -> /private/tmp/claude-501/graftling-615/tvenv/lib/python3.13/site-packages/graftling/__init__.py; expected graphtraj under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src and an installed graftling. Use a venv whose site-packages resolves this checkout: install the graftling wheel built from its repository (pip install graftling-<version>-py3-none-any.whl) and this checkout editable (pip install -e /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match), or add a .pth naming /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src. PYTHONPATH=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src serves only the subprocesses that do not run -I. !: FAIL
+exit=0

@@ -1,0 +1,22 @@
+$ VERIFY615_ROOT=/private/tmp/claude-501/graftling-615-base VERIFY615_GCOMMIT=2fdc0d38d8aa25ff22145a8d534911d38cf6bb01 zsh scripts/verify-615/steps.zsh R
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [R] Real entry: the installed subagents CLI (/private/tmp/claude-501/graftling-615-base/venv/bin/subagents), claimed by verify615-host in /private/tmp/claude-501/graftling-615-base/proj. Login: none. Dialog: none. Network: none.
+installed: 2fdc0d38d8aa25ff22145a8d534911d38cf6bb01 0.10.0 /private/tmp/claude-501/graftling-615-base/venv/lib/python3.13/site-packages/graftling/__init__.py
+$ (cd /private/tmp/claude-501/graftling-615-base/proj && /private/tmp/claude-501/graftling-615-base/venv/bin/subagents '{"action":"discover","query":"start an agent"}')  -> exit 0
+  {"features": [{"feature": "create", "description": "Create a child Agent on a Runtime; returns before its work finishes."}, {"feature": "models", "description": "List a Runtime's configured connections with their providers and models, grouped by provider; read only, starts no Agent."}], "describe": {"action": "describe", "feature": "<feature>"}}
+$ (cd /private/tmp/claude-501/graftling-615-base/proj && /private/tmp/claude-501/graftling-615-base/venv/bin/subagents '{"action":"discover","query":"list models"}')  -> exit 0
+  {"features": [{"feature": "models", "description": "List a Runtime's configured connections with their providers and models, grouped by provider; read only, starts no Agent."}], "describe": {"action": "describe", "feature": "<feature>"}}
+$ (cd /private/tmp/claude-501/graftling-615-base/proj && /private/tmp/claude-501/graftling-615-base/venv/bin/subagents '{"action":"discover","query":"providers"}')  -> exit 0
+  {"features": [{"feature": "models", "description": "List a Runtime's configured connections with their providers and models, grouped by provider; read only, starts no Agent."}], "describe": {"action": "describe", "feature": "<feature>"}}
+$ (cd /private/tmp/claude-501/graftling-615-base/proj && /private/tmp/claude-501/graftling-615-base/venv/bin/subagents '{"action":"discover","query":"choose a model"}')  -> exit 0
+  {"features": [{"feature": "models", "description": "List a Runtime's configured connections with their providers and models, grouped by provider; read only, starts no Agent."}], "describe": {"action": "describe", "feature": "<feature>"}}
+$ (cd /private/tmp/claude-501/graftling-615-base && /private/tmp/claude-501/graftling-615-base/venv/bin/subagents '{"action":"discover","query":"start an agent"}')  -> exit 1 (not claimed)
+  {"error": {"code": "authority-denied", "message": "The owning Agent connection is unavailable."}}
+CHECK 615 R: 'start an agent' -> ['create', 'models'] is exactly [create]: FAIL
+CHECK 615 R: 'list models' -> ['models'] includes models: PASS
+CHECK 615 R: 'providers' -> ['models'] includes models: PASS
+CHECK 615 R: 'choose a model' -> ['models'] includes models: PASS
+CHECK 615 R: outside the claimed directory the CLI refuses (authority-denied): PASS
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/scripts/verify-615/steps.zsh T   (optional), then rm -rf /private/tmp/claude-501/graftling-615-base when done
+VERDICT 615 R: FAIL
+exit=0

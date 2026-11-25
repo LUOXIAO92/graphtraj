@@ -1,0 +1,23 @@
+$ VERIFY615_ROOT=/private/tmp/claude-501/graftling-615-base VERIFY615_GCOMMIT=2fdc0d38d8aa25ff22145a8d534911d38cf6bb01 zsh scripts/verify-615/steps.zsh T
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [T] GraphTraj tests/test_agents_discovery_intents.py with the installed graftling (/private/tmp/claude-501/graftling-615-base/venv) and graphtraj from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src. pytest temp under TMPDIR=/tmp/claude-501 (outside the Harness). Login: none. Dialog: none.
+test interpreter: /private/tmp/claude-501/graftling-615-base/tvenv/bin/python | pytest 9.1.1 | click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | graftling 0.10.0 | graftling.__file__ /private/tmp/claude-501/graftling-615-base/tvenv/lib/python3.13/site-packages/graftling/__init__.py
+pytest temp root: /tmp/claude-501/verify615-T.rGesAZ (TMPDIR=/tmp/claude-501, outside the Harness)
+  imported in the run: graftling /private/tmp/claude-501/graftling-615-base/tvenv/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src/graphtraj/__init__.py
+PASSED tests/test_agents_discovery_intents.py::test_graphtraj_hosts_discover_agents_through_this_matcher
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[launch a new agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[spawn agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[Start a new Agent]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[bake a cake]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[start a cake]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[deploy kubernetes]
+PASSED tests/test_agents_discovery_intents.py::test_empty_and_action_name_queries_keep_their_matches
+FAILED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]
+E       AssertionError: assert ['create', 'models'] == ['create']
+E         
+E         Left contains one more item: 'models'
+E         Use -v to get more diff
+pytest exit=1; full output: /private/tmp/claude-501/graftling-615-base/T.txt
+next: rm -rf /private/tmp/claude-501/graftling-615-base  (when done)
+VERDICT 615 T: 1 failed, 8 passed in 0.35s: FAIL
+exit=0

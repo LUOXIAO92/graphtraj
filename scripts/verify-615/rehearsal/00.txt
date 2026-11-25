@@ -1,0 +1,9 @@
+$ VERIFY615_ROOT=/private/tmp/claude-501/graftling-615 zsh scripts/verify-615/steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight. Login: none. Dialog: none. Network: none.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | python: Python 3.13.11 | pytest (for T): 9.1.1
+PASS: PyYAML, websockets and click present in /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/scripts/verify-615/steps.zsh I
+CHECK 615 00: bundle verifies against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling and holds the candidate 3a35334e (branch agent/615-graftling-models-description-intent-match); ROOT /private/tmp/claude-501/graftling-615 absent: PASS
+exit=0

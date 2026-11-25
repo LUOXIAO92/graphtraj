@@ -1,0 +1,13 @@
+.........                                                                [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_agents_discovery_intents.py::test_graphtraj_hosts_discover_agents_through_this_matcher
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[launch a new agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[spawn agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[Start a new Agent]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[bake a cake]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[start a cake]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[deploy kubernetes]
+PASSED tests/test_agents_discovery_intents.py::test_empty_and_action_name_queries_keep_their_matches
+9 passed in 0.44s

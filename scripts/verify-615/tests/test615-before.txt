@@ -1,0 +1,31 @@
+F...........                                                             [100%]
+=================================== FAILURES ===================================
+_____________ test_create_intents_find_only_create[start an agent] _____________
+
+query = 'start an agent'
+
+    @pytest.mark.parametrize('query', ['start an agent', 'launch a new agent', 'spawn agent', 'Start a new Agent'])
+    def test_create_intents_find_only_create(query: str) -> None:
+        """models' description no longer carries 'start' or 'agent', so these find create alone."""
+>       assert discovered(query) == ['create']
+E       AssertionError: assert ['create', 'models'] == ['create']
+E         
+E         Left contains one more item: 'models'
+E         Use -v to get more diff
+
+tests/test_discovery_intents_615.py:19: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_discovery_intents_615.py::test_create_intents_find_only_create[launch a new agent]
+PASSED tests/test_discovery_intents_615.py::test_create_intents_find_only_create[spawn agent]
+PASSED tests/test_discovery_intents_615.py::test_create_intents_find_only_create[Start a new Agent]
+PASSED tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[models]
+PASSED tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[providers]
+PASSED tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[list models]
+PASSED tests/test_discovery_intents_615.py::test_model_listing_intents_find_models[choose a model]
+PASSED tests/test_discovery_intents_615.py::test_unrelated_queries_find_nothing[bake a cake]
+PASSED tests/test_discovery_intents_615.py::test_unrelated_queries_find_nothing[start a cake]
+PASSED tests/test_discovery_intents_615.py::test_unrelated_queries_find_nothing[deploy kubernetes]
+PASSED tests/test_discovery_intents_615.py::test_empty_and_action_name_queries_unchanged
+FAILED tests/test_discovery_intents_615.py::test_create_intents_find_only_create[start an agent]
+1 failed, 11 passed in 0.07s

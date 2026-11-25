@@ -1,0 +1,19 @@
+$ VERIFY615_ROOT=/private/tmp/claude-501/graftling-615 zsh scripts/verify-615/steps.zsh T
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [T] GraphTraj tests/test_agents_discovery_intents.py with the installed graftling (/private/tmp/claude-501/graftling-615/venv) and graphtraj from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src. pytest temp under TMPDIR=/tmp/claude-501 (outside the Harness). Login: none. Dialog: none.
+test interpreter: /private/tmp/claude-501/graftling-615/tvenv/bin/python | pytest 9.1.1 | click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | graftling 0.10.0 | graftling.__file__ /private/tmp/claude-501/graftling-615/tvenv/lib/python3.13/site-packages/graftling/__init__.py
+pytest temp root: /tmp/claude-501/verify615-T.pO1Rzp (TMPDIR=/tmp/claude-501, outside the Harness)
+  imported in the run: graftling /private/tmp/claude-501/graftling-615/tvenv/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src/graphtraj/__init__.py
+PASSED tests/test_agents_discovery_intents.py::test_graphtraj_hosts_discover_agents_through_this_matcher
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[launch a new agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[spawn agent]
+PASSED tests/test_agents_discovery_intents.py::test_intent_queries_find_create[Start a new Agent]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[bake a cake]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[start a cake]
+PASSED tests/test_agents_discovery_intents.py::test_unrelated_queries_still_find_nothing[deploy kubernetes]
+PASSED tests/test_agents_discovery_intents.py::test_empty_and_action_name_queries_keep_their_matches
+pytest exit=0; full output: /private/tmp/claude-501/graftling-615/T.txt
+next: rm -rf /private/tmp/claude-501/graftling-615  (when done)
+VERDICT 615 T: 9 passed in 0.44s: PASS
+exit=0

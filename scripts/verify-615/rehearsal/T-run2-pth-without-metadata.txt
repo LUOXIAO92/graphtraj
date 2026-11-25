@@ -1,0 +1,10 @@
+$ VERIFY615_ROOT=/private/tmp/claude-501/graftling-615 zsh scripts/verify-615/steps.zsh T
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [T] GraphTraj tests/test_agents_discovery_intents.py with the installed graftling (/private/tmp/claude-501/graftling-615/venv) and graphtraj from /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src. pytest temp under TMPDIR=/tmp/claude-501 (outside the Harness). Login: none. Dialog: none.
+test interpreter: /private/tmp/claude-501/graftling-615/tvenv/bin/python | pytest 9.1.1 | click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | graftling 0.10.0 | graftling.__file__ /private/tmp/claude-501/graftling-615/tvenv/lib/python3.13/site-packages/graftling/__init__.py
+pytest temp root: /tmp/claude-501/verify615-T.8D6jtA (TMPDIR=/tmp/claude-501, outside the Harness)
+  imported in the run: graftling /private/tmp/claude-501/graftling-615/tvenv/lib/python3.13/site-packages/graftling/__init__.py | graphtraj /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src/graphtraj/__init__.py
+pytest exit=4; full output: /private/tmp/claude-501/graftling-615/T.txt
+next: rm -rf /private/tmp/claude-501/graftling-615  (when done)
+VERDICT 615 T: ! _pytest.outcomes.Exit: The test interpreter /private/tmp/claude-501/graftling-615/tvenv/bin/python lacks the graphtraj distribution metadata (entry point graftling.hosts: graphtraj under /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/src; found no graphtraj entry) and the graphtraj-session command in /private/tmp/claude-501/graftling-615/tvenv/bin. Install this checkout editable in a dedicated venv that has graftling: pip install -e /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match; a .pth alone gives neither. !: FAIL
+exit=0

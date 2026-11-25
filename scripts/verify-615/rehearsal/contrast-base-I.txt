@@ -1,0 +1,9 @@
+$ VERIFY615_ROOT=/private/tmp/claude-501/graftling-615-base VERIFY615_GCOMMIT=2fdc0d38d8aa25ff22145a8d534911d38cf6bb01 zsh scripts/verify-615/steps.zsh I
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [I] Install graftling 2fdc0d38d8aa25ff22145a8d534911d38cf6bb01 as a wheel and the verify615-host plugin into /private/tmp/claude-501/graftling-615-base/venv. Login: none. Dialog: none. Network: none.
+wheels: graftling-0.10.0-py3-none-any.whl verify615_host-0-py3-none-any.whl 
+graftling.hosts entry points: ['verify615_host:claim']
+installed models description: List a Runtime's configured connections with their providers and models, grouped by provider; read only, starts no Agent.
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/615-graftling-models-description-intent-match/scripts/verify-615/steps.zsh R
+CHECK 615 I: graftling 0.10.0 /private/tmp/claude-501/graftling-615-base/venv/lib/python3.13/site-packages/graftling/__init__.py from 2fdc0d38d8aa25ff22145a8d534911d38cf6bb01, host plugin installed: PASS
+exit=0

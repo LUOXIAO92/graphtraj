@@ -1,0 +1,15 @@
+# The tests Task 639 (W7) adds (graftling tests/test_codex_windows_639.py) and the Codex host tests it opens to
+# Windows (tests/test_codex_independent_control.py, through 637's .cmd stand-in). On the Windows runner each must PASS.
+# The Codex service is the stand-in peer (tests/codex_stdio_peer.py) started through a .cmd file in a Job Object.
+tests/test_codex_windows_639.py::test_unix_socket_grants_are_written_only_on_posix[posix]
+tests/test_codex_windows_639.py::test_unix_socket_grants_are_written_only_on_posix[windows]
+tests/test_codex_windows_639.py::test_local_websocket_projection_names_no_unix_socket_key_on_windows[posix]
+tests/test_codex_windows_639.py::test_local_websocket_projection_names_no_unix_socket_key_on_windows[windows]
+tests/test_codex_windows_639.py::test_fork_selects_a_socket_profile_only_on_posix[posix]
+tests/test_codex_windows_639.py::test_fork_selects_a_socket_profile_only_on_posix[windows]
+tests/test_codex_windows_639.py::test_codex_child_tool_end_stop_and_takeover
+tests/test_codex_windows_639.py::test_codex_parent_host_serves_an_mcp_call_and_ends_its_session_without_a_signal
+tests/test_codex_independent_control.py::test_independent_lifecycle_requests_and_authentication
+tests/test_codex_independent_control.py::test_packaged_host_owns_parent_mcp_and_resume
+tests/test_codex_independent_control.py::test_lost_parent_acknowledgement_does_not_repeat_child_body
+tests/test_codex_independent_control.py::test_host_cli_reports_native_turn_failure

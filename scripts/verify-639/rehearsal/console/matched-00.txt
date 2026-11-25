@@ -1,0 +1,68 @@
+$ VERIFY639_GRAFTLING=/tmp/claude-501/rh639/matched/graftling VERIFY639_GREMOTE=/tmp/claude-501/rh639/matched/gremote.git VERIFY639_GH=/tmp/claude-501/rh639/matched/gh/gh VERIFY639_EVIDENCE=/tmp/claude-501/rh639/matched/evidence VERIFY639_POLL_S=1 VERIFY639_APPEAR_S=10 VERIFY639_DONE_S=30 zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/rh639/matched/gh/gh | TMPDIR for started processes: /tmp/claude-501
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-632 fake)
+    - Active account: true
+PASS: /tmp/claude-501/rh639/matched/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/rh639/matched/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/rh639/matched/graftling; head 2ee706eb749355afc3f73f03a1b0de4cd48da1f2 contains graftling dev 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb (prerequisites: 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb; any other than the base an ancestor of it)
+--- bundle commits on 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb:
+  2ee706e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Codex on Windows: no Unix socket entries (M17), the parent host opened, tests (639)
+PASS: author and committer are the noreply identity
+--- files changed since 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb:
+   .github/workflows/windows.yml           |   2 +-
+   PUBLIC_API.md                           |   6 +
+   src/graftling/codex/app_server.py       |   8 +-
+   src/graftling/codex/context.py          |   9 +-
+   src/graftling/codex/host.py             |  12 +-
+   src/graftling/codex/local_websocket.py  |  12 +-
+   tests/codex_stdio_peer.py               |  40 ++++
+   tests/test_codex_independent_control.py |  26 ++-
+   tests/test_codex_windows_639.py         | 320 ++++++++++++++++++++++++++++++++
+   tests/test_windows_emulation_619.py     |  27 ++-
+   10 files changed, 434 insertions(+), 28 deletions(-)
+PASS: changed paths are within the allowed set: src/graftling/codex/app_server.py, src/graftling/codex/context.py, src/graftling/codex/host.py, src/graftling/codex/local_websocket.py, PUBLIC_API.md, tests/codex_stdio_peer.py, tests/test_codex_independent_control.py, tests/test_codex_windows_639.py, tests/test_windows_emulation_619.py, .github/workflows/windows.yml
+--- .github/workflows/windows.yml at 2ee706eb749355afc3f73f03a1b0de4cd48da1f2 against 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing', 'agent/639-graftling-windows-codex']
+PASS: the workflow is the base one with only its push branches line changed
+--- .github/workflows/windows.yml at 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb (632's accepted workflow with 633's to 638's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing']; judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 9bbf644321d1746b5f268a94dcff4b1e7a2a92fb
+PASS: the 12 W7 tests of new-tests.txt are defined at 2ee706eb749355afc3f73f03a1b0de4cd48da1f2 (tests/test_codex_windows_639.py, tests/test_codex_independent_control.py)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/639-graftling-windows-codex/scripts/verify-632/windows-expected.txt parses: 1 expected Windows failures and 0 expected hangs (W8 (not registered; outside this round) 1), 19 allowed environment skips
+PASS: the expected list is unchanged (1 fail entries: ['tests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable'])
+PASS: /tmp/claude-501/rh639/matched/graftling has no local agent/639-graftling-windows-codex (P creates it from the bundle)
+PASS: agent/639-graftling-windows-codex is absent on graftling /tmp/claude-501/rh639/matched/gremote.git
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/639-graftling-windows-codex/scripts/verify-639/steps.zsh P    (publishes graftling 2ee706eb749355afc3f73f03a1b0de4cd48da1f2 to LUOXIAO92/graftling agent/639-graftling-windows-codex, then waits for the Windows tests run)
+VERDICT 639 00: PASS (P ready: yes; remote branch absent; candidate graftling 2ee706eb749355afc3f73f03a1b0de4cd48da1f2)
+[exit 0]

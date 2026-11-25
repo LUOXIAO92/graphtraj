@@ -8,7 +8,8 @@ setopt pipe_fail no_unset
 S=${1:?scratch dir}; HERE=${0:A:h}; WT=$(git -C $HERE rev-parse --show-toplevel)
 BRANCH=agent/627-desktop-ui-structure-redesign
 PY=/Users/luoxiao/miniconda3/bin/python3.13
-FAKE=$WT/scripts/verify-621/rehearsal/fakegh.py
+# Three push workflows (macOS, Linux, Windows) since 623 is green; push-fail = the Windows run fails.
+FAKE=$HERE/fakegh.py
 OUT=$HERE/console; mkdir -p $OUT
 rm -rf $S; mkdir -p $S
 git clone -q --no-checkout $WT $S/repo
@@ -36,9 +37,14 @@ step() {  # step <scenario> <file> <step> [args]: run one step with the knobs, k
 APPEAR=10
 fresh push-success; step push-success P0.txt P0; step push-success P-success.txt P
 step push-success P0-after-P.txt P0; rm -f $S/push-success/gh/push-polls; step push-success W.txt W
-fresh push-fail; step push-fail P-linux-fails.txt P
+fresh push-fail; step push-fail P-windows-fails.txt P
 APPEAR=4; fresh push-timeout; step push-timeout P-appearance-timeout.txt P; APPEAR=10
-# Contrast: an edit to another workflow since the base is refused.
+# Contrast 1: an edit to the repair workflow since the base is refused.
+print -r -- "# rehearsal-only extra edit" >> $S/repo/.github/workflows/desktop-repair-package.yml
+git -C $S/repo commit -q -am "rehearsal stand-in: repair workflow edit"
+fresh push-extra; step push-extra P0-repair-workflow-edit.txt P0; step push-extra P-repair-workflow-edit.txt P
+# Contrast 2: an edit to the Windows workflow beyond its push branches line is refused.
+git -C $S/repo revert -q --no-edit HEAD
 print -r -- "# rehearsal-only extra edit" >> $S/repo/.github/workflows/desktop-win-adoption.yml
-git -C $S/repo commit -q -am "rehearsal stand-in: extra workflow edit"
-fresh push-extra; step push-extra P0-extra-workflow-edit.txt P0; step push-extra P-extra-workflow-edit.txt P
+git -C $S/repo commit -q -am "rehearsal stand-in: extra Windows workflow edit"
+fresh push-extra-win; step push-extra-win P0-windows-extra-edit.txt P0

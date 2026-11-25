@@ -1,10 +1,11 @@
 #!/bin/zsh
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 627 Main-run steps (desktop UI structure: V4-V12, U1-U3). Modelled on verify-626/steps.zsh (00, B, S) and
-# verify-621/steps.zsh (P, W; its ghjson.py is reused read-only). Run one step at a time:  zsh <this file> <STEP>
+# verify-621/steps.zsh (P, W; its ghjson.py is reused read-only), with the Windows run and artifact naming of
+# verify-623/steps.zsh. Run one step at a time:  zsh <this file> <STEP>
 # Each step waits for all of its own work, then prints its result, ready-to-paste next commands and VERDICT last.
 #   00  Local preflight, read only: zsh / node (>= 22.18) / npm versions; graphtraj-tool found; this Worktree is clean
-#       at HEAD; HEAD contains BASE (dev 4fa79a8d); prints the candidate SHA, work dir, evidence dir and the entry
+#       at HEAD; HEAD contains BASE (dev 626f9301); prints the candidate SHA, work dir, evidence dir and the entry
 #       difference below. Writes nothing. Login: none. Dialog: none. Network: none. ~2 s.
 #       Observable: the printed facts and VERDICT.
 #   B   Build + unit checks: exports exactly HEAD:desktop (git archive) to WORK=${TMPDIR:-/tmp}/graphtraj-627-<sha>
@@ -34,17 +35,23 @@
 #       ~1-3 min and closes itself; do not interact with it. Nothing is saved; no native dialog opens.
 #       Login: none. Dialog: none. Network: none. ~2-4 min. Observable: 18 PNGs, facts.json verdict PASS.
 #   P0  Push preflight, read only on GitHub: gh/git versions; gh auth status (account only); origin is LUOXIAO92/graphtraj;
-#       remote branch absent, equal to or an ancestor of HEAD (else STOP, never force); the P preconditions.
-#       Login: gh login, ssh key (ls-remote). Dialog: none. Network: GitHub. ~10 s.
-#   P   Push and wait. OUTWARD-FACING (Main asks the user first): `git push origin agent/627-desktop-ui-structure-redesign`
-#       (fast-forward only, never force). The push starts desktop-macos-adoption and desktop-linux-adoption (their push
-#       lists name this branch); Windows and repair are not triggered. Then waits in this process for both push runs of
-#       HEAD to appear (bound 300 s) and complete (bound 3300 s, poll 30 s); prints per-run/per-job results with failing
-#       steps, the tail of --log-failed, downloads both evidence artifacts into <Harness>/tmp/627 with a copy in
-#       /private/tmp/graphtraj-627. VERDICT PASS only when both runs succeed.
-#       Login: ssh key, gh login. Dialog: none (ssh may ask a key passphrase). Network: GitHub. Up to ~60 min.
+#       remote branch absent, equal to or an ancestor of HEAD (else STOP, never force); the P preconditions: since BASE
+#       (dev 626f9301) exactly the macOS, Linux and Windows adoption workflows changed (desktop-repair-package.yml
+#       untouched), Linux and Windows only by adding this branch to their push branches line, and macOS has the 627
+#       window-test step. Login: gh login, ssh key (ls-remote). Dialog: none. Network: GitHub. ~10 s.
+#   P   Push and wait. OUTWARD-FACING (the user's standing approval for fast-forward pushes of this branch):
+#       `git push origin agent/627-desktop-ui-structure-redesign` (fast-forward only, never force). The push starts
+#       desktop-macos-adoption, desktop-linux-adoption and desktop-win-adoption (Windows is included since Task 623
+#       turned it green; their push lists name this branch); desktop-repair-package is not triggered. Then waits in this
+#       process for all three push runs of HEAD to appear (bound 300 s) and complete (bound 3300 s, poll 30 s); prints
+#       per-run/per-job results with failing steps and the tail of --log-failed, and downloads each run's evidence
+#       artifact (macOS graphtraj-macos-adoption-evidence, Linux linux-desktop-<sha>, Windows
+#       GraphTraj-windows-evidence-<sha>) into <Harness>/tmp/627 with a copy in /private/tmp/graphtraj-627.
+#       Observable: one RUN line per workflow, then VERDICT PASS only when all three runs succeed (3/3).
+#       Login: ssh key, gh login. Dialog: none (ssh may ask a key passphrase). Network: GitHub. Up to ~65 min
+#       (the macOS 627 job is bounded at 45 min; Windows and Linux finish earlier).
 #   W   Observe only (no push): `W` for the pushed branch head or `W <sha>`; same waiting and output as P after the
-#       push. Login: gh login. Dialog: none. Network: GitHub. Up to ~60 min.
+#       push, for all three workflows. Login: gh login. Dialog: none. Network: GitHub. Up to ~60 min.
 # NO HOST/MODEL LOGIN: no step starts Claude, Codex, Pi or any other model Runtime and no provider login is used.
 # ENTRY DIFFERENCE (S): the development build (Electron 44.5.1 from npm, unpackaged dist + dist-electron) rather than the
 # installed /Applications/GraphTraj.app (packaged by scripts/package-mac.mjs from the same sources): same renderer,
@@ -67,8 +74,9 @@ SELF=${0:A}
 HERE=${0:A:h}
 NEXT=
 BRANCH=agent/627-desktop-ui-structure-redesign
-# dev 4fa79a8d: 621 (adoption scripts) and 626 (tokens) integrated; the Task branch starts here.
-BASE=4fa79a8d05e6532fc912f8b00673970960a7f0ba
+# dev 626f9301 (623 integrated: Windows green, GRAFTLING_REF v0.10.2) merged into the Task branch as 15aa40f9; the
+# Task started on dev 4fa79a8d (621 and 626). Since 626f9301 the branch changes desktop/ and the three trigger lines.
+BASE=626f9301084ef95c870045d63b1547030096348e
 HARNESS=${WT:h:h:h:h}
 REPO=LUOXIAO92/graphtraj
 GIT=$(whence -p git)
@@ -89,10 +97,24 @@ WORK=${TMPDIR:-/tmp}
 WORK=${WORK%/}/graphtraj-627-$SHA
 EVIDENCE=$WT/scripts/verify-627/evidence/$SHA
 SCREEN_COUNT=18
-WORKFLOWS=(.github/workflows/desktop-linux-adoption.yml .github/workflows/desktop-macos-adoption.yml)
-WFNAMES="desktop-macos-adoption.yml and desktop-linux-adoption.yml"
-artifact_for() { [[ $1 == *macos* ]] && print -r -- graphtraj-macos-adoption-evidence || print -r -- linux-desktop-$2; }
-prefix_for() { [[ $1 == *macos* ]] && print -r -- mac-evidence || print -r -- linux-evidence; }
+WORKFLOWS=(.github/workflows/desktop-linux-adoption.yml .github/workflows/desktop-macos-adoption.yml .github/workflows/desktop-win-adoption.yml)
+NWF=${#WORKFLOWS}
+WFNAMES="desktop-macos-adoption.yml, desktop-linux-adoption.yml and desktop-win-adoption.yml"
+# Evidence artifact per workflow (Windows and Linux name it per SHA; see verify-623/steps.zsh).
+artifact_for() {
+  case $1 in
+    *macos*) print -r -- graphtraj-macos-adoption-evidence ;;
+    *win*) print -r -- GraphTraj-windows-evidence-$2 ;;
+    *) print -r -- linux-desktop-$2 ;;
+  esac
+}
+prefix_for() {
+  case $1 in
+    *macos*) print -r -- mac-evidence ;;
+    *win*) print -r -- win-evidence ;;
+    *) print -r -- linux-evidence ;;
+  esac
+}
 
 say() { print -r -- "== $*"; }
 is_cred() {
@@ -141,7 +163,7 @@ verdict() {
       B:PASS) next="zsh $SELF S";;
       S:PASS) next="tell the Leader: evidence at $EVIDENCE; after the Leader's review and the user's approval of the push: zsh $SELF P0";;
       S:FAIL) next="tell the Leader: facts at $EVIDENCE/facts.json (driver log $EVIDENCE/driver.log); re-run after a fix: zsh $SELF S";;
-      P0:PASS) next="ask the user before pushing, then: zsh $SELF P";;
+      P0:PASS) next="zsh $SELF P    (fast-forward push of this branch under the user's standing approval; starts the macOS, Linux and Windows runs)";;
       *) next="fix the reported cause, then re-run: zsh $SELF $STEP";;
     esac
   fi
@@ -172,14 +194,18 @@ check_tree() {
   if [[ ${(j: :)${(o)wfchanged}} != ${(j: :)${(o)WORKFLOWS}} ]]; then
     print -r -- "FAIL: workflow files changed since base must be exactly ${WORKFLOWS}; saw: ${wfchanged:-none}"; (( bad++ ))
   else
-    print -r -- "PASS: only $WFNAMES changed under .github/workflows (Windows and repair untouched)"
+    print -r -- "PASS: only $WFNAMES changed under .github/workflows (desktop-repair-package.yml untouched)"
     for wf in $WORKFLOWS; do
       if g show HEAD:$wf | grep -qE "^    branches: \[.*${BRANCH}[],]"; then print -r -- "PASS: $wf push branches name $BRANCH"
       else print -r -- "FAIL: $wf push branches do not name $BRANCH"; (( bad++ )); fi
     done
-    local linux=("${(@f)$(g diff -U0 $BASE HEAD -- .github/workflows/desktop-linux-adoption.yml | grep -E '^[-+]' | grep -vE '^(---|\+\+\+) ')}")
-    (( ${#linux} == 2 )) && print -r -- "PASS: desktop-linux-adoption.yml changes only its push branches line" \
-      || { print -r -- "FAIL: desktop-linux-adoption.yml has other changes:"; print -lr -- $linux | sed 's/^/  /'; (( bad++ )); }
+    local -a onlyline
+    for wf in .github/workflows/desktop-linux-adoption.yml .github/workflows/desktop-win-adoption.yml; do
+      onlyline=("${(@f)$(g diff -U0 $BASE HEAD -- $wf | grep -E '^[-+]' | grep -vE '^(---|\+\+\+) ')}")
+      if (( ${#onlyline} == 2 )) && [[ ${onlyline[1]} == -*"branches: ["* && ${onlyline[2]} == "${${onlyline[1]/#-/+}%]}, $BRANCH]" ]]; then
+        print -r -- "PASS: ${wf:t} changes only its push branches line, adding $BRANCH"
+      else print -r -- "FAIL: ${wf:t} has changes other than its push branches line:"; print -lr -- $onlyline | sed 's/^/  /'; (( bad++ )); fi
+    done
     g show HEAD:.github/workflows/desktop-macos-adoption.yml | grep -q "Desktop window tests for the Task 627 surfaces" \
       && print -r -- "PASS: desktop-macos-adoption.yml has the 627 window-test step" \
       || { print -r -- "FAIL: desktop-macos-adoption.yml lacks the 627 window-test step"; (( bad++ )); }
@@ -222,7 +248,7 @@ observe_push() {
     if (( SECONDS - start >= APPEAR_S )); then
       print -r -- "appearance timeout after $((SECONDS - start))s; missing:"; print -lr -- $missing | sed 's/^/  /'
       (( ${#others} )) && { print -r -- "other workflows for this SHA:"; print -lr -- $others | sed 's/^/  /'; }
-      NEXT="zsh $SELF W $sha    (re-observe; no push)"; verdict FAIL "0/2 success; ${#missing} of 2 workflows never appeared within ${APPEAR_S}s" 1
+      NEXT="zsh $SELF W $sha    (re-observe; no push)"; verdict FAIL "0/$NWF success; ${#missing} of $NWF workflows never appeared within ${APPEAR_S}s" 1
     fi
     sleep $POLL_S
   done
@@ -259,8 +285,8 @@ observe_push() {
   done
   for rid in $failed; do print -r -- "next (only if the failure is transient; not run by this step): $GH run rerun $rid --repo $REPO --failed"; done
   NEXT="zsh $SELF W $sha    (re-observe; no push)"
-  (( ok == 2 )) && verdict PASS "2/2 success; ${(j:; :)notes}"
-  verdict FAIL "$ok/2 success; ${(j:; :)notes}" 1
+  (( ok == NWF )) && verdict PASS "$NWF/$NWF success; ${(j:; :)notes}"
+  verdict FAIL "$ok/$NWF success; ${(j:; :)notes}" 1
 }
 
 case $STEP in

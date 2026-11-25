@@ -1,0 +1,27 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 7 items
+
+tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[] PASSED [ 14%]
+tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[    models: [claude-haiku-5-5]\n] PASSED [ 28%]
+tests/test_claude_gateway_login_613.py::test_a_host_claude_endpoint_without_its_key_is_refused_before_any_process PASSED [ 42%]
+tests/test_claude_gateway_login_613.py::test_a_child_reaches_its_endpoint_with_only_the_connection_key SKIPPED [ 57%]
+tests/test_claude_gateway_login_613.py::test_without_an_endpoint_the_child_keeps_the_native_login_as_before[] SKIPPED [ 71%]
+tests/test_claude_gateway_login_613.py::test_without_an_endpoint_the_child_keeps_the_native_login_as_before[    provider: anthropic\n] SKIPPED [ 85%]
+tests/test_claude_gateway_login_613.py::test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=c9976ea480884b268bb3737288bd5004: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_claude_gateway_login_613.xml -
+============================ slowest 10 durations =============================
+0.09s setup    tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[]
+0.07s call     tests/test_claude_gateway_login_613.py::test_a_recorded_agent_with_an_endpoint_but_no_key_is_refused_at_its_next_launch
+0.01s setup    tests/test_claude_gateway_login_613.py::test_a_connection_endpoint_without_its_key_is_refused_alike_by_models_and_create[    models: [claude-haiku-5-5]\n]
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_claude_gateway_login_613.py:121: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [2] tests\test_claude_gateway_login_613.py:138: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+======================== 3 passed, 4 skipped in 0.31s =========================

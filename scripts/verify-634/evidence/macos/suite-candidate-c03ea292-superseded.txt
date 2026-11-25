@@ -1,0 +1,52 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 22%]
+.....................................ssssssssssss....................... [ 30%]
+........................................................................ [ 37%]
+...................................................ssssssss............. [ 45%]
+........................................................................ [ 52%]
+................................s....................................... [ 60%]
+........................................................................ [ 67%]
+...sssss...F............................................................ [ 75%]
+........................................................................ [ 82%]
+........................................................................ [ 90%]
+........................................................................ [ 97%]
+....................                                                     [100%]
+=================================== FAILURES ===================================
+_______________ test_every_module_imports_with_graphtraj_blocked _______________
+
+    def test_every_module_imports_with_graphtraj_blocked() -> None:
+        """In a fresh interpreter where any GraphTraj import raises, every graftling module still imports."""
+        environment = {name: value for name, value in os.environ.items()
+                       if not name.startswith('GRAPHTRAJ_') and name != 'PYTHONPATH'}
+        result = subprocess.run([sys.executable, '-I', '-c', IMPORT_ALL, str(ROOT / 'src')],
+                                capture_output=True, text=True, timeout=120, env=environment)
+        assert result.returncode == 0, result.stdout + result.stderr
+        evidence = json.loads(result.stdout.splitlines()[-1])
+        assert len(evidence['modules']) > 30
+>       assert evidence['failed'] == {}
+E       assert {'graftling._...ute 'WinDLL'"} == {}
+E         
+E         Left contains 1 more item:
+E         {'graftling._win32': "AttributeError: module 'ctypes' has no attribute "
+E                              "'WinDLL'"}
+E         Use -v to get more diff
+
+tests/test_no_graphtraj_dependency.py:142: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_no_graphtraj_dependency.py::test_every_module_imports_with_graphtraj_blocked
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [1] tests/test_locks_durable_634.py:130: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:158: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:184: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:201: Windows-only: checks the Win32 lock, rename and volume paths
+1 failed, 929 passed, 26 skipped in 245.41s (0:04:05)
+exit 1

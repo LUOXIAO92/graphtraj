@@ -1,0 +1,135 @@
+$ VERIFY634_GRAFTLING=/tmp/claude-501/rh634/ff/graftling VERIFY634_GREMOTE=/tmp/claude-501/rh634/ff/gremote.git VERIFY634_GH=/tmp/claude-501/rh634/ff/gh/gh VERIFY634_EVIDENCE=/tmp/claude-501/rh634/ff/runs VERIFY634_POLL_S=1 VERIFY634_APPEAR_S=10 VERIFY634_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/634-graftling-windows-durable-writes to graftling /tmp/claude-501/rh634/ff/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/rh634/ff/graftling; head 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced on base bc4298b611afce70dd876c5fe79f764c9f966d8a (prerequisites: bc4298b611afce70dd876c5fe79f764c9f966d8a defad1db083e911900cbea1cb0ef165e6a66d322; others are ancestors of the base)
+--- bundle commits on bc4298b611afce70dd876c5fe79f764c9f966d8a:
+  478dfd7 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev bc4298b6 (633, W1) into agent/634-graftling-windows-durable-writes
+  0dd20cf LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: archive header lookup and test polls of published files retry a transient open refusal (634 correction 2)
+  f64509d LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: lock-free readers of published files retry a transient open refusal (634 correction 1)
+  2fadc6c LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows: locks without the 10 s limit, try_exclusive, durable replacement (634)
+PASS: author and committer are the noreply identity
+--- files changed since bc4298b611afce70dd876c5fe79f764c9f966d8a:
+   .github/workflows/windows.yml          |   2 +-
+   src/graftling/_win32.py                | 111 +++++++++++++-
+   src/graftling/claude/support.py        |  14 +-
+   src/graftling/codex/managed_session.py |  22 +--
+   src/graftling/config.py                |   9 +-
+   src/graftling/control.py               |  21 ++-
+   src/graftling/durable.py               | 169 ++++++++++++++++++++++
+   src/graftling/locks.py                 |  73 ++++++++--
+   src/graftling/pi/execution.py          |  14 +-
+   src/graftling/sessions/archive.py      |  48 +++----
+   src/graftling/tool_descendants.py      |  14 +-
+   tests/test_agent_control.py            |   8 +-
+   tests/test_dsh_standalone_host.py      |   3 +-
+   tests/test_host_shutdown_stop.py       |   5 +-
+   tests/test_locks_durable_634.py        | 255 +++++++++++++++++++++++++++++++++
+   tests/test_pi_dsh_notice_holding.py    |   3 +-
+   tests/test_windows_emulation_619.py    |  24 ++--
+   17 files changed, 667 insertions(+), 128 deletions(-)
+PASS: changed files are under src/graftling/ and tests/, plus .github/workflows/windows.yml
+PASS: .github/workflows/windows.yml differs from bc4298b611afce70dd876c5fe79f764c9f966d8a only in on.push.branches, which adds agent/634-graftling-windows-durable-writes
+PASS: the 7 setup steps, 'Run the graftling test suite' and 'Retain JUnit results' are named as judged
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-632/windows-expected.txt parses: 82 expected Windows failures and 0 expected hangs (W3 (635) 7, W4 (636) 37, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+W2 (634) entries left in the list: 0
+PASS: graftling /tmp/claude-501/rh634/ff/gremote.git has agent/634-graftling-windows-durable-writes at 0dd20cfcc7de0ea19f1e2cf846ace9b9ea082722, an ancestor of the bundle head (fast-forward)
+PASS: /tmp/claude-501/rh634/ff/graftling local agent/634-graftling-windows-durable-writes is at 0dd20cfcc7de0ea19f1e2cf846ace9b9ea082722, an ancestor of the bundle head (P fast-forwards it from the bundle)
+$ git -C /tmp/claude-501/rh634/ff/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/graftling-634.bundle refs/heads/agent/634-graftling-windows-durable-writes:refs/heads/agent/634-graftling-windows-durable-writes
+  From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/graftling-634.bundle
+     0dd20cf..478dfd7  agent/634-graftling-windows-durable-writes -> agent/634-graftling-windows-durable-writes
+PASS: /tmp/claude-501/rh634/ff/graftling local agent/634-graftling-windows-durable-writes = 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+$ git -C /tmp/claude-501/rh634/ff/graftling push /tmp/claude-501/rh634/ff/gremote.git refs/heads/agent/634-graftling-windows-durable-writes:refs/heads/agent/634-graftling-windows-durable-writes   (478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced)
+  To /tmp/claude-501/rh634/ff/gremote.git
+     0dd20cf..478dfd7  agent/634-graftling-windows-durable-writes -> agent/634-graftling-windows-durable-writes
+PASS: graftling /tmp/claude-501/rh634/ff/gremote.git agent/634-graftling-windows-durable-writes = 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced
+looking for the .github/workflows/windows.yml run (event push) of 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+run 51000000634 present after 1s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000634
+waiting for run 51000000634 (completion bound 30s, poll 1s)
+  [22:52:11] run 51000000634: completed failure
+--- run 51000000634 | attempt 1 | push | conclusion failure (information only) | head 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced | https://github.com/LUOXIAO92/graftling/actions/runs/51000000634
+JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000634/job/52000000634
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | setup: must succeed
+  step  3 | success   | Check out the commit under test | setup: must succeed
+  step  4 | success   | Fail unless the linked package documents are symbolic links | setup: must succeed
+  step  5 | success   | Set up Node 22.18.0 x64 | setup: must succeed
+  step  6 | success   | Set up Python 3.13.7 x64 | setup: must succeed
+  step  7 | success   | Install graftling and pinned test tools | setup: must succeed
+  step  8 | success   | Show runner, Python and pytest versions | setup: must succeed
+  step  9 | failure   | Run the graftling test suite | suite: success or failure (results judged from JUnit)
+  step 10 | success   | Retain JUnit results | upload: must succeed
+  step 11 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 12 | skipped   | Post Set up Node 22.18.0 x64 | other: success or skipped
+  step 13 | success   | Post Check out the commit under test | other: success or skipped
+  step 14 | success   | Complete job | other: success or skipped
+--- job log saved: /tmp/claude-501/rh634/ff/runs/20261125T135211Z-P-run-51000000634-a1/job.log; files ended, hangs, driver exit:
+  per-file pytest summaries: 1
+  2026-11-25T00:10:00Z run_test_files exit code: 1
+$ gh run download 51000000634 --repo LUOXIAO92/graftling -n graftling-windows-junit-478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced-1 -D /tmp/claude-501/rh634/ff/runs/20261125T135211Z-P-run-51000000634-a1/junit
+test files in 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced: 60
+--- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-632/windows-expected.txt
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+run_test_files exit code: 1
+--- test files: 60 recorded | ended 60 | hung 0 | not run 0 | in the commit: 60
+  slowest ended files: tests/test_agent_completion.py 2.5 s, tests/test_agent_control.py 2.5 s, tests/test_agents_connections_presets.py 2.5 s, tests/test_agents_request_notices.py 2.5 s, tests/test_agents_server_name.py 2.5 s
+merged JUnit files: 60
+collected in JUnit: 970 | passed 638 | failed 82 | errors 0 | skipped 250
+--- POSIX-only skips: 229 in 25 modules
+     8  tests/test_agents_connections_presets.py
+     1  tests/test_approval_integration.py
+     4  tests/test_child_server_name_551.py
+     9  tests/test_claude_default_tools_576.py
+     4  tests/test_claude_gateway_login_613.py
+     9  tests/test_claude_marketplace_plugin.py
+     1  tests/test_claude_model_alias_574.py
+     8  tests/test_claude_permission_mode_578.py
+    39  tests/test_claude_review.py
+     1  tests/test_claude_send_closing_546.py
+     4  tests/test_codex_independent_control.py
+     8  tests/test_codex_review_relay.py
+     2  tests/test_dsh_plugin_install_python.py
+     4  tests/test_dsh_standalone_child.py
+     9  tests/test_dsh_standalone_host.py
+     1  tests/test_dsh_startup.py
+     2  tests/test_extra_tools_551.py
+    28  tests/test_host_shutdown_stop.py
+    11  tests/test_pi_default_host_572.py
+     9  tests/test_pi_dsh_notice_holding.py
+     2  tests/test_pi_standalone_host.py
+    31  tests/test_pi_subagent_child_585.py
+    16  tests/test_provider_listing_609.py
+    14  tests/test_unified_data_root_577.py
+     4  tests/test_windows_emulation_619.py
+  reason x124: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+  reason x49: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sess
+  reason x26: the host runs in its own process group (start_new_session) stopped with os.killpg and SIGKILL; its lock holder uses fcntl
+  reason x22: the stand-in executable is a '#!/bin/sh' script
+  reason x4: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+  reason x3: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+  reason x1: a read-only directory made with chmod 0o555 and checked with os.geteuid
+--- allowed environment skips (not Windows-specific): 21
+  x12: Explicit pinned official SDK comparison
+  x2: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+  x2: Requires one explicitly retained native trace.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Requires assigned native startup diagnosis.
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 82; observed failures and errors: 82 (82 as expected)
+--- unexpected failures: 0
+    origins of the unexpected failures: 
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 0
+observed list written: /tmp/claude-501/rh634/ff/runs/20261125T135211Z-P-run-51000000634-a1/observed-expected.txt
+evidence (new directory, gitignored): /tmp/claude-501/rh634/ff/runs/20261125T135211Z-P-run-51000000634-a1
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/steps.zsh W 51000000634    (observe again; no push, no re-run)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/steps.zsh X 51000000634    (re-run its failed jobs; only if the failure is transient, not a test result)
+VERDICT 634 P: PASS (run 51000000634 attempt 1 on 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 970 tests: 638 passed, 82 failed as listed, 0 hangs as listed, 229 POSIX-only skips, 21 environment skips; https://github.com/LUOXIAO92/graftling/actions/runs/51000000634)
+[exit 0]
+--- after P: clone 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced, remote 478dfd7f91a1ffbf1cdd74aed9eb8f7c3c039ced

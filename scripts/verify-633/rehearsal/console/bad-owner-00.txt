@@ -1,0 +1,64 @@
+$ VERIFY633_GRAFTLING=/tmp/claude-501/rh633/bad-owner/graftling VERIFY633_GREMOTE=/tmp/claude-501/rh633/bad-owner/gremote.git VERIFY633_GH=/tmp/claude-501/rh633/bad-owner/gh/gh VERIFY633_EVIDENCE=/tmp/claude-501/rh633/bad-owner/evidence VERIFY633_POLL_S=1 VERIFY633_APPEAR_S=10 VERIFY633_DONE_S=30 VERIFY633_EXPECTED=/tmp/claude-501/rh633/bad-owner-list.txt zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/rh633/bad-owner/gh/gh | TMPDIR for started processes: /tmp/claude-501
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-632 fake)
+    - Active account: true
+PASS: /tmp/claude-501/rh633/bad-owner/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/rh633/bad-owner/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/rh633/bad-owner/graftling; head bc4298b611afce70dd876c5fe79f764c9f966d8a on base defad1db083e911900cbea1cb0ef165e6a66d322
+--- bundle commits on defad1db083e911900cbea1cb0ef165e6a66d322:
+  bc4298b LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows process facts and liveness; control._alive uses them (633, W1)
+PASS: author and committer are the noreply identity
+--- files changed since defad1db083e911900cbea1cb0ef165e6a66d322:
+   .github/workflows/windows.yml     |   2 +-
+   src/graftling/_win32.py           | 234 ++++++++++++++++++++++++++++++++++++++
+   src/graftling/control.py          |  22 ++--
+   src/graftling/process.py          | 135 +++++++++++++++++++++-
+   tests/test_process_windows_633.py | 160 ++++++++++++++++++++++++++
+   5 files changed, 535 insertions(+), 18 deletions(-)
+PASS: changed paths are within the allowed set: src/graftling/process.py, src/graftling/_win32.py, src/graftling/control.py, tests/test_process_windows_633.py, .github/workflows/windows.yml
+--- .github/workflows/windows.yml at bc4298b611afce70dd876c5fe79f764c9f966d8a against defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'dev']
+PASS: the workflow is the base one with only its push branches line changed
+--- .github/workflows/windows.yml at defad1db083e911900cbea1cb0ef165e6a66d322 (632's accepted workflow, every other property)
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since defad1db083e911900cbea1cb0ef165e6a66d322
+PASS: the 13 W1 tests of new-tests.txt are defined in tests/test_process_windows_633.py at bc4298b611afce70dd876c5fe79f764c9f966d8a
+PASS: /tmp/claude-501/rh633/bad-owner-list.txt parses: 189 expected Windows failures and 0 expected hangs (W2 (634) 108, W3 (635) 7, W4 (636) 36, W6 (638) 37, W8 (not registered; outside this round) 1), 19 allowed environment skips
+expected list: 23 W1 (633) entries at the base: 7 to delete, 16 moved to Main's owners (W3 (635) 1, W4 (636) 15)
+FAIL: line 166: tests/test_dsh_standalone_host.py::test_host_binds_only_the_supplied_native_session is not kept in place with owner W4 (636) and a note 'after W1 (run 45620245600): ...; owner decided by Main 2026-11-25' (have owner W2 (634))
+NOTE: judged against /tmp/claude-501/rh633/bad-owner-list.txt (rehearsal)
+PASS: /tmp/claude-501/rh633/bad-owner/graftling has no local agent/633-graftling-windows-process (P creates it from the bundle)
+PASS: agent/633-graftling-windows-process is absent on graftling /tmp/claude-501/rh633/bad-owner/gremote.git
+next: fix the FAIL lines above (new bundle or list from the Engineer), then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/633-graftling-windows-process/scripts/verify-633/steps.zsh 00
+VERDICT 633 00: PASS (P ready: no; remote branch absent; candidate graftling bc4298b611afce70dd876c5fe79f764c9f966d8a)
+[exit 0]

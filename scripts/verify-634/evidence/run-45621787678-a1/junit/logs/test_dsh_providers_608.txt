@@ -1,0 +1,88 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 8 items
+
+tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key FAILED [ 12%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[openrouter-False-needs api_key_env] PASSED [ 25%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider'] PASSED [ 37%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only'] PASSED [ 50%]
+tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog PASSED [ 62%]
+tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child FAILED [ 75%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers SKIPPED [ 87%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=156582ecd07a4faab8a80d99c2652d40: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+_____________ test_a_child_runs_on_the_provider_with_only_its_key _____________
+tests\test_dsh_providers_608.py:79: in test_a_child_runs_on_the_provider_with_only_its_key
+    created = invoke('create', runtime='dsh', instruction='one', model=MODEL)
+tests\test_dsh_standalone_child.py:202: in invoke
+    assert not result.failed, result.document
+E   AssertionError: {'action': 'create', 'agent': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'execution': '0ef5cac781244583bb4322c7ca4ae436', 'main_notices': [{'event': {'alias': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'event': 'failed', 'execution': '0ef5cac781244583bb4322c7ca4ae436', 'message': 'Windows does not support the authenticated local control pipe.'}, 'id': '0ef5cac781244583bb4322c7ca4ae436:failed', 'text': '[Graftling notice from agent-a6d63ce0bdf240118a91b2d3a147c104 · failed · execution 0ef5cac781244583bb4322c7ca4ae436]
+E     
+E     Windows does not support the authenticated local control pipe.'}], ...}
+E   assert not True
+E    +  where True = AgentsResult(document={'action': 'create', 'agent': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'session': None, 'execution': '0ef5cac781244583bb4322c7ca4ae436', 'message': None, 'result': {'agent': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'name': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'runtime': 'dsh', 'preset': None, 'configuration': None, 'connection': 'router-dsh', 'model': 'openai/gpt-4.1-nano', 'reasoning_effort': None, 'review': None, 'workspace': None, 'state': 'standby', 'parent': None, 'creator': {'agent': None, 'host': 'claude-native', 'session': '0b347627-6b9c-414a-9490-b1d0e4e42b80'}, 'host': 'claude-native', 'session': None, 'last_result': {'id': '0ef5cac781244583bb4322c7ca4ae436', 'outcome': 'failed', 'last_message': None, 'error': {'code': 'authority-denied', 'message': 'Windows does not support the authenticated local control pipe.'}, 'terminal_confirmed': False, 'ended_at': 1795612697.981132, 'notification': 'held'}}, 'main_notices': [{'id': '0ef5cac781244583bb4322c7ca4ae436:failed', 'event': {'alias': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'event': 'failed', 'message': 'Windows does not support the authenticated local control pipe.', 'execution': '0ef5cac781244583bb4322c7ca4ae436'}, 'text': '[Graftling notice from agent-a6d63ce0bdf240118a91b2d3a147c104 · failed · execution 0ef5cac781244583bb4322c7ca4ae436]\n\nWindows does not support the authenticated local control pipe.'}]}, failed=True).failed
+_______________ test_listing_routes_the_provider_like_its_child _______________
+tests\test_dsh_providers_608.py:154: in test_listing_routes_the_provider_like_its_child
+    assert CatalogService.patches == [{'id': 'llm-pi-ai', 'config': {'providers': {'openrouter': {
+E   AssertionError: assert [] == [{'config': {... 'llm-pi-ai'}]
+E     
+E     Right contains one more item: {'config': {'providers': {'openrouter': {'apiKeyEnv': 'OPENROUTER_608_KEY'}}}, 'id': 'llm-pi-ai'}
+E     
+E     Full diff:
+E     + []
+E     - [
+E     -     {
+E     -         'config': {
+E     -             'providers': {
+E     -                 'openrouter': {
+E     -                     'apiKeyEnv': 'OPENROUTER_608_KEY',
+E     -                 },
+E     -             },
+E     -         },
+E     -         'id': 'llm-pi-ai',
+E     -     },
+E     - ]
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_providers_608.xml -
+============================ slowest 10 durations =============================
+0.13s call     tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key
+0.06s call     tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog
+0.06s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider']
+0.06s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only']
+0.02s call     tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child
+0.01s setup    tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route
+0.01s setup    tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key
+0.01s setup    tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers
+0.01s setup    tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only']
+
+(1 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key - AssertionError: {'action': 'create', 'agent': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'execution': '0ef5cac781244583bb4322c7ca4ae436', 'main_notices': [{'event': {'alias': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'event': 'failed', 'execution': '0ef5cac781244583bb4322c7ca4ae436', 'message': 'Windows does not support the authenticated local control pipe.'}, 'id': '0ef5cac781244583bb4322c7ca4ae436:failed', 'text': '[Graftling notice from agent-a6d63ce0bdf240118a91b2d3a147c104 · failed · execution 0ef5cac781244583bb4322c7ca4ae436]
+  
+  Windows does not support the authenticated local control pipe.'}], ...}
+assert not True
+ +  where True = AgentsResult(document={'action': 'create', 'agent': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'session': None, 'execution': '0ef5cac781244583bb4322c7ca4ae436', 'message': None, 'result': {'agent': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'name': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'runtime': 'dsh', 'preset': None, 'configuration': None, 'connection': 'router-dsh', 'model': 'openai/gpt-4.1-nano', 'reasoning_effort': None, 'review': None, 'workspace': None, 'state': 'standby', 'parent': None, 'creator': {'agent': None, 'host': 'claude-native', 'session': '0b347627-6b9c-414a-9490-b1d0e4e42b80'}, 'host': 'claude-native', 'session': None, 'last_result': {'id': '0ef5cac781244583bb4322c7ca4ae436', 'outcome': 'failed', 'last_message': None, 'error': {'code': 'authority-denied', 'message': 'Windows does not support the authenticated local control pipe.'}, 'terminal_confirmed': False, 'ended_at': 1795612697.981132, 'notification': 'held'}}, 'main_notices': [{'id': '0ef5cac781244583bb4322c7ca4ae436:failed', 'event': {'alias': 'agent-a6d63ce0bdf240118a91b2d3a147c104', 'event': 'failed', 'message': 'Windows does not support the authenticated local control pipe.', 'execution': '0ef5cac781244583bb4322c7ca4ae436'}, 'text': '[Graftling notice from agent-a6d63ce0bdf240118a91b2d3a147c104 · failed · execution 0ef5cac781244583bb4322c7ca4ae436]\n\nWindows does not support the authenticated local control pipe.'}]}, failed=True).failed
+FAILED tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child - AssertionError: assert [] == [{'config': {... 'llm-pi-ai'}]
+  
+  Right contains one more item: {'config': {'providers': {'openrouter': {'apiKeyEnv': 'OPENROUTER_608_KEY'}}}, 'id': 'llm-pi-ai'}
+  
+  Full diff:
+  + []
+  - [
+  -     {
+  -         'config': {
+  -             'providers': {
+  -                 'openrouter': {
+  -                     'apiKeyEnv': 'OPENROUTER_608_KEY',
+  -                 },
+  -             },
+  -         },
+  -         'id': 'llm-pi-ai',
+  -     },
+  - ]
+SKIPPED [1] tests\test_dsh_providers_608.py:172: The installed DSH is required for native provider evidence.
+SKIPPED [1] tests\test_dsh_providers_608.py:178: The installed DSH is required for native provider evidence.
+=================== 2 failed, 4 passed, 2 skipped in 0.65s ====================

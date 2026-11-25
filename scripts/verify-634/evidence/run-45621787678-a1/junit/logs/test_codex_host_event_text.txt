@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 4 items
+
+tests/test_codex_host_event_text.py::test_text_is_the_tool_output_the_main_reads PASSED [ 25%]
+tests/test_codex_host_event_text.py::test_without_text_the_output_stays_the_event_json PASSED [ 50%]
+tests/test_codex_host_event_text.py::test_delegation_from_draws_codex_delegation_cell PASSED [ 75%]
+tests/test_codex_host_event_text.py::test_delegation_without_text_wraps_the_event_json PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=d020b125edbd42c4abcf7419f4546f69: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_codex_host_event_text.xml -
+============================ slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 4 passed in 0.11s ==============================

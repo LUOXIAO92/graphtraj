@@ -1,0 +1,31 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___ test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone ____
+tests/test_agent_control.py:506: in test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone
+    confirmed, failed = call(control, lead, action='interrupt', agent=child['agent'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_agent_control.py:108: in call
+    result = graftling.bind(control, caller)(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graftling/tool.py:345: in call
+    outcome           = backend.operate(action, arguments, binding)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graftling/control.py:761: in operate
+    return self._operate_agent(action, arguments, binding)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graftling/control.py:787: in _operate_agent
+    return self._confirm_ended(record, binding.caller)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graftling/control.py:1657: in _confirm_ended
+    if any(_alive(pid) for pid in facts.values()) or _group_alive(facts["runtime_pid"]):
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/graftling/control.py:229: in _group_alive
+    os.killpg(pid, 0)
+    ^^^^^^^^^
+/tmp/claude-501/sim633/nokillpg633.py:5: in __getattr__
+    if name == "killpg": raise AttributeError("module \x27os\x27 has no attribute \x27killpg\x27")
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: module 'os' has no attribute 'killpg'
+=========================== short test summary info ============================
+FAILED tests/test_agent_control.py::test_direct_parent_confirms_an_ended_execution_whose_processes_are_gone
+1 failed in 0.89s

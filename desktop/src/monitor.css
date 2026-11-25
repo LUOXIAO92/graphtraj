@@ -27,7 +27,10 @@
 .map-canvas > .graph-filter-empty { position: absolute; top: var(--sp-3); left: var(--sp-4); z-index: 4; max-width: calc(100% - 32px); box-shadow: var(--shadow-md); }
 
 /* V5 canvas overlays: legend and zoom bottom-left, the minimap bottom-right (task-canvas.css). */
-.native-canvas-overlays { position: absolute; left: var(--sp-4); bottom: var(--sp-4); z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); pointer-events: none; }
+/* The left overlay column never reaches the minimap's band (176 px + its 16 px inset + a 16 px gap + the column's own
+ * 16 px inset); a narrow canvas wraps the legend upwards instead, and fit() reserves the column's real height. */
+.native-canvas-overlays { position: absolute; left: var(--sp-4); bottom: var(--sp-4); z-index: 3; display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); max-width: calc(100% - 176px - 3 * var(--sp-4)); pointer-events: none; }
+.native-canvas-overlays .native-relation-legend { max-width: 100%; }
 .native-canvas-overlays > * { pointer-events: auto; border: 1px solid var(--border-ui); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-md); }
 .native-canvas-overlays .native-relation-legend { position: static; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 6px var(--sp-3); color: var(--muted); font-size: var(--fs-xs); pointer-events: none; }
 .native-relation-legend > span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
@@ -91,7 +94,8 @@
   .d-map-body { flex-direction: column; }
   .d-task-shelf.d-task-inspector { width: auto; max-width: none; max-height: 40vh; border-left: 0; border-top: 1px solid var(--border-ui); }
   .d-inspector-grip { display: none; }
-  .d-map-workspace.has-shelf .native-minimap, .d-map-workspace.has-shelf .native-relation-legend { visibility: hidden; }
+  .d-map-workspace.has-shelf .native-minimap { visibility: hidden; }
+  .d-map-workspace.has-shelf .native-relation-legend { display: none; }
   .d-floating-tools { padding-block: var(--sp-2); }
   .new-graph-controls input { width: 140px; }
   .d-map-surface, .d-map-workspace.has-shelf .d-map-surface { min-height: 200px; }

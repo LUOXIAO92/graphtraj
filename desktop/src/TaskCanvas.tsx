@@ -139,24 +139,74 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   // Polling unchanged native facts must not rebuild cells or move the viewport.
   const topology = JSON.stringify([props.projectName, props.graph.tasks, [...props.expanded].sort(), theme]);
 
+  // How the viewport was last set, so a canvas resize (the inspector or the search dock opening, a narrower window)
+  // keeps it meaningful: 'fit' re-fits, 'locate' re-centres the located card, 'manual' (the user panned or zoomed)
+  // only pans the selected card back into the visible area.
+  const view = useRef<{ mode: 'fit' | 'locate' | 'manual'; minScale: number; id: string | null }>({ mode: 'fit', minScale: .65, id: null });
+  const overlays = useRef<HTMLDivElement>(null);
+  /** V5: the band the bottom overlays occupy (legend and zoom at the left, the minimap at the right), plus a margin. */
+  function bottomReserve(): number {
+    const minimapShown = !!minimap.current && getComputedStyle(minimap.current).visibility !== 'hidden';
+    return Math.max(minimapShown ? MINIMAP.height : 0, overlays.current?.offsetHeight ?? 0) + 16 + 12;
+  }
+  /** Keep the graph's size equal to its container before any viewport arithmetic (X6 resizes asynchronously). */
+  function syncSize(graph: X6): { width: number; height: number } {
+    const width = container.current!.clientWidth, height = container.current!.clientHeight;
+    graph.resize(width, height);
+    return { width, height };
+  }
   function fit(minScale = .05): void {
     const graph = engine.current;
     if (!graph || !container.current?.clientWidth) return;
-    // V5: the bottom overlays (legend and zoom at the left, the minimap at the right) take
-    // MINIMAP.height + 16 px; the fitted content keeps clear of them (626 leftover at 1000 px).
-    graph.zoomToFit({ padding: { top: 36, left: 36, right: 36, bottom: MINIMAP.height + 44 }, minScale, maxScale: 1, useCellGeometry: false });
+    syncSize(graph);
+    // The fitted content keeps clear of the bottom overlays (626 leftover at 1000 px).
+    graph.zoomToFit({ padding: { top: 36, left: 36, right: 36, bottom: bottomReserve() }, minScale, maxScale: 1, useCellGeometry: false });
     graph.positionContent('top-left', { useCellGeometry: false });
     const translation = graph.translate();
     graph.translate(translation.tx + 36, translation.ty + 36);
+    view.current = { mode: 'fit', minScale, id: null };
+  }
+  /** Place a card in the middle of the area above the bottom overlays. */
+  function centerSafely(graph: X6, id: string): boolean {
+    const cell = graph.getCellById(id);
+    if (!cell?.isNode() || !container.current?.clientWidth) return false;
+    const { width, height } = syncSize(graph);
+    const box = graph.localToGraph(cell.getBBox());
+    const reserve = bottomReserve();
+    const translation = graph.translate();
+    graph.translate(translation.tx + width / 2 - (box.x + box.width / 2),
+      translation.ty + Math.max(12, (height - reserve) / 2) - (box.y + box.height / 2));
+    return true;
   }
   function locate(id: string): void {
     const graph = engine.current;
-    const cell = graph?.getCellById(id);
-    if (!graph || !cell) { pendingLocate.current = id; return; }
+    if (!graph || !graph.getCellById(id)) { pendingLocate.current = id; return; }
     graph.zoomTo(1);
-    graph.centerCell(cell);
+    centerSafely(graph, id);
+    view.current = { mode: 'locate', minScale: view.current.minScale, id };
     pendingLocate.current = null;
   }
+  /** Pan the least distance that brings a card fully into the area above the bottom overlays. */
+  function reveal(graph: X6, id: string): void {
+    const cell = graph.getCellById(id);
+    if (!cell?.isNode() || !container.current?.clientWidth) return;
+    const { width, height } = syncSize(graph);
+    const box = graph.localToGraph(cell.getBBox());
+    const pad = 16, bottom = height - bottomReserve();
+    const dx = box.width > width - 2 * pad || box.x < pad ? pad - box.x : box.x + box.width > width - pad ? width - pad - box.x - box.width : 0;
+    const dy = box.height > bottom - pad || box.y < pad ? pad - box.y : box.y + box.height > bottom ? bottom - box.y - box.height : 0;
+    if (dx || dy) { const translation = graph.translate(); graph.translate(translation.tx + dx, translation.ty + dy); }
+  }
+  /** Re-apply the current view after the canvas container changed size. */
+  function relayout(): void {
+    const graph = engine.current;
+    if (!graph || !container.current?.clientWidth || !projection.current?.nodes.length) return;
+    const { mode, minScale, id } = view.current;
+    if (mode === 'fit') fit(minScale);
+    else if (mode === 'locate' && id) centerSafely(graph, id);
+    else if (current.current.selected) reveal(graph, current.current.selected);
+  }
+  const manual = () => { view.current = { ...view.current, mode: 'manual', id: null }; };
   useImperativeHandle(ref, () => ({ fit, locate }));
 
   useEffect(() => {
@@ -181,10 +231,25 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
     });
     graph.on('edge:mouseleave', () => { if (pathLabel.current) pathLabel.current.textContent = ''; });
     graph.on('scale', ({ sx }) => setZoom(sx));
+    // The user's own panning or wheel zoom ends a fit or locate view.
+    graph.on('blank:mousedown', manual);
+    const element = container.current!;
+    const wheel = () => manual();
+    element.addEventListener('wheel', wheel, { passive: true });
+    // The inspector, the search dock or the window changes the canvas size: keep the view meaningful (U2, V5).
+    let frame = 0, last = `${element.clientWidth}x${element.clientHeight}`;
+    const observer = new ResizeObserver(() => {
+      const size = `${element.clientWidth}x${element.clientHeight}`;
+      if (size === last) return;
+      last = size;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(relayout);
+    });
+    observer.observe(element);
     const media = matchMedia('(prefers-color-scheme: dark)');
     const follow = () => setTheme(media.matches ? 'dark' : 'light');
     media.addEventListener('change', follow);
-    return () => { media.removeEventListener('change', follow); graph.dispose(); engine.current = null; };
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); element.removeEventListener('wheel', wheel); media.removeEventListener('change', follow); graph.dispose(); engine.current = null; };
   }, []);
 
   useEffect(() => {
@@ -277,6 +342,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
           cards.current.get(pendingToggle.current)?.querySelector<HTMLButtonElement>('.native-task-footer button')?.focus({ preventScroll: true });
         }
         pendingToggle.current = null;
+        manual();
       } else if (first.current && result.nodes.length && current.current.active) { fit(.65); first.current = false; }
     });
     graph.resetCells(cells);
@@ -318,7 +384,7 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
   // above the zoom controls; the minimap sits bottom-right.
   return <><div className="native-task-canvas" ref={container} aria-label="Native task canvas"/>
     <div className="native-minimap" ref={minimap} aria-label="Task map navigator"/>
-    <div className="native-canvas-overlays">
+    <div className="native-canvas-overlays" ref={overlays}>
       <div className="native-relation-legend">
         <span className="legend-dependency"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4"/></svg>Dependency</span>
         <span className="legend-replacement"><svg width="28" height="8" aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" strokeDasharray="8 5"/></svg>Replacement</span>
@@ -326,9 +392,9 @@ export const TaskCanvas = forwardRef<TaskCanvasHandle, Props>(function TaskCanva
         <span className="legend-crossing"><svg width="28" height="8" aria-hidden="true"><path d="M0 6H9a5 5 0 0 1 10 0H28"/></svg>Crossing</span>
       </div>
       <div className="native-task-zoom" title="Drag to pan · Ctrl/⌘ + scroll to zoom">
-        <button aria-label="Zoom out" onClick={() => engine.current?.zoom(-.15)}><Icon name="minus" size={16}/></button>
+        <button aria-label="Zoom out" onClick={() => { manual(); engine.current?.zoom(-.15); }}><Icon name="minus" size={16}/></button>
         <span>{Math.round(zoom * 100)}%</span>
-        <button aria-label="Zoom in" onClick={() => engine.current?.zoom(.15)}><Icon name="plus" size={16}/></button>
+        <button aria-label="Zoom in" onClick={() => { manual(); engine.current?.zoom(.15); }}><Icon name="plus" size={16}/></button>
       </div>
     </div>
     <output ref={pathLabel} className="native-path-label" aria-live="polite"/></>;

@@ -3,14 +3,14 @@ name: Package direct-save desktop 295
 # A dedicated push works before this workflow exists on the default branch.
 on:
   push:
-    branches: [agent/295-desktop-direct-settings-save, agent/300-desktop-ux-platform-packages, agent/306-task-hierarchy-desktop-adoption, agent/618-desktop-workflows-graftling-ref]
+    branches: [agent/295-desktop-direct-settings-save, agent/300-desktop-ux-platform-packages, agent/306-task-hierarchy-desktop-adoption, agent/618-desktop-workflows-graftling-ref, agent/623-windows-desktop-adoption-green]
 
 permissions:
   contents: read
 
 env:
   # graftling tag in GraphTraj's declared range (pyproject.toml).
-  GRAFTLING_REF: v0.10.1
+  GRAFTLING_REF: v0.10.2
   PRODUCT_COMMIT: ${{ github.sha }}
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
 

@@ -1,0 +1,73 @@
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25-vs2026 | image_version=20261116.315.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+run_test_files exit code: 1
+--- test files: 59 recorded | ended 59 | hung 0 | not run 0 | in the commit: 59
+  slowest ended files: tests/test_dsh_standalone_child.py 43.2 s, tests/test_agent_control.py 32.3 s, tests/test_host_shutdown_stop.py 24.0 s, tests/test_locks_durable_634.py 18.2 s, tests/test_dsh_standalone_host.py 13.4 s
+FILES PASS every test file ended or was stopped and recorded as hung
+merged JUnit files: 59
+collected in JUnit: 957 | passed 592 | failed 90 | errors 0 | skipped 275
+--- POSIX-only skips: 234 in 26 modules
+     8  tests/test_agents_connections_presets.py
+     1  tests/test_approval_integration.py
+     4  tests/test_child_server_name_551.py
+     9  tests/test_claude_default_tools_576.py
+     4  tests/test_claude_gateway_login_613.py
+     9  tests/test_claude_marketplace_plugin.py
+     1  tests/test_claude_model_alias_574.py
+     8  tests/test_claude_permission_mode_578.py
+    39  tests/test_claude_review.py
+     1  tests/test_claude_send_closing_546.py
+     4  tests/test_codex_independent_control.py
+     8  tests/test_codex_review_relay.py
+     5  tests/test_codex_tool_reclaim_462.py
+     2  tests/test_dsh_plugin_install_python.py
+     4  tests/test_dsh_standalone_child.py
+     9  tests/test_dsh_standalone_host.py
+     1  tests/test_dsh_startup.py
+     2  tests/test_extra_tools_551.py
+    28  tests/test_host_shutdown_stop.py
+    11  tests/test_pi_default_host_572.py
+     9  tests/test_pi_dsh_notice_holding.py
+     2  tests/test_pi_standalone_host.py
+    31  tests/test_pi_subagent_child_585.py
+    16  tests/test_provider_listing_609.py
+    14  tests/test_unified_data_root_577.py
+     4  tests/test_windows_emulation_619.py
+  reason x124: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+  reason x49: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sess
+  reason x26: the host runs in its own process group (start_new_session) stopped with os.killpg and SIGKILL; its lock holder uses fcntl
+  reason x22: the stand-in executable is a '#!/bin/sh' script
+  reason x5: macOS and Linux process tables; tools in their own session killed by SIGKILL and os.killpg
+  reason x4: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+  reason x3: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+  reason x1: a read-only directory made with chmod 0o555 and checked with os.geteuid
+--- allowed environment skips (not Windows-specific): 41
+  x12: Explicit pinned official SDK comparison
+  x7: Installed DSH and Node are required for native search evidence.
+  x3: Installed DSH is required for its own preset.
+  x2: Installed DSH and Node are required for native MCP evidence.
+  x2: Installed DSH slots and Node are required for the browser projection fixture.
+  x2: Requires one explicitly retained native trace.
+  x2: The installed DSH is required for native provider evidence.
+  x2: Installed DSH and Node are required for native endpoint evidence.
+  x1: Installed DSH and Node are required.
+  x1: Installed native DSH package metadata is required.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Installed DSH and Node are required for native plugin evidence.
+  x1: Requires assigned native startup diagnosis.
+  x1: Node and an installed Pi are required
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 89; observed failures and errors: 90 (89 as expected)
+--- unexpected failures: 1
+  FAIL tests/test_pi_dsh_notice_holding.py::test_a_live_end_is_pushed_once_with_the_host_up[dsh] | origin tests/test_pi_dsh_notice_holding.py:198 (?; from test assertion, no graftling frame) | PermissionError: [Errno 13] Permission denied: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-38\\test_a_live_end_is_pushed_once1\\data\\control\\agents\\agent-890d94b345
+    origins of the unexpected failures: test assertion, no graftling frame 1
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 0
+observed list written: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/634-graftling-windows-durable-writes/scripts/verify-634/runs/20261125T132124Z-P-run-45621787678-a1/observed-expected.txt
+JUDGE FAIL 1 unexpected failures

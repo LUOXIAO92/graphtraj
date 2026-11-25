@@ -1,0 +1,32 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 3 items
+
+tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation FAILED [ 33%]
+tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command SKIPPED [ 66%]
+tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=0c351c761eea43e3b4b18f640dfd8d2c: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+================================== FAILURES ===================================
+_________ test_the_linked_plugin_runs_the_python_of_its_installation __________
+tests\test_dsh_plugin_install_python.py:134: in test_the_linked_plugin_runs_the_python_of_its_installation
+    assert shown['error'] is None, shown['error']
+E   AssertionError: graftling-dsh: no Python that imports this graftling (C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\graftling\Lib\site-packages\graftling) was found; tried C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\bin\Lib, C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\bin\python3, C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\bin\python, python3, python. Install graftling once with uv: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git" (append @v0.10.2 to .git to match this plugin), then add graftling-dsh from that install (docs/install/dsh.md). Or set GRAFTLING_PYTHON to the Python graftling is installed in.
+E   assert 'graftling-dsh: no Python that imports this graftling (C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\graftling\\Lib\\site-packages\\graftling) was found; tried C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\bin\\Lib, C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\bin\\python3, C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\bin\\python, python3, python. Install graftling once with uv: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git" (append @v0.10.2 to .git to match this plugin), then add graftling-dsh from that install (docs/install/dsh.md). Or set GRAFTLING_PYTHON to the Python graftling is installed in.' is None
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_dsh_plugin_install_python.xml -
+============================ slowest 10 durations =============================
+2.00s setup    tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command
+1.34s setup    tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
+0.64s setup    tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged
+0.09s call     tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
+0.01s call     tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command
+
+(4 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation - AssertionError: graftling-dsh: no Python that imports this graftling (C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\graftling\Lib\site-packages\graftling) was found; tried C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\bin\Lib, C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\bin\python3, C:\Users\runneradmin\AppData\Local\Temp\pytest-of-runneradmin\pytest-25\test_the_linked_plugin_runs_th0\tools\bin\python, python3, python. Install graftling once with uv: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git" (append @v0.10.2 to .git to match this plugin), then add graftling-dsh from that install (docs/install/dsh.md). Or set GRAFTLING_PYTHON to the Python graftling is installed in.
+assert 'graftling-dsh: no Python that imports this graftling (C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\graftling\\Lib\\site-packages\\graftling) was found; tried C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\bin\\Lib, C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\bin\\python3, C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runneradmin\\pytest-25\\test_the_linked_plugin_runs_th0\\tools\\bin\\python, python3, python. Install graftling once with uv: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git" (append @v0.10.2 to .git to match this plugin), then add graftling-dsh from that install (docs/install/dsh.md). Or set GRAFTLING_PYTHON to the Python graftling is installed in.' is None
+SKIPPED [1] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+======================== 1 failed, 2 skipped in 4.35s =========================

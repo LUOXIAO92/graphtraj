@@ -1,0 +1,20 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 3 items
+
+tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True] PASSED [ 33%]
+tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[False] PASSED [ 66%]
+tests/test_agent_completion.py::test_standby_parent_continues_once_with_real_child_notice PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=2999181d20994d6b874699aff6a95c30: found=0 stopped=0 remaining=0 error=Listing marked processes is not supported on Windows.
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_agent_completion.xml -
+============================ slowest 10 durations =============================
+0.09s call     tests/test_agent_completion.py::test_standby_parent_continues_once_with_real_child_notice
+0.07s call     tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[False]
+0.07s call     tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True]
+0.01s setup    tests/test_agent_completion.py::test_completion_once_outside_lock_and_no_duplicate_body[True]
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 3 passed in 0.30s ==============================

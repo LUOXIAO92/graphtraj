@@ -1,0 +1,11 @@
+$ zsh scripts/verify-644/steps.zsh I
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [I] Interactive logon of VM_USER: a random VM-only password, Winlogon automatic logon, one reboot, wait, verify the console session. Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+$ gcloud compute ssh ... --command="powershell ... -File C:\v644\autologon.ps1"   (the password is generated on the VM and never printed)
+  AUTOLOGON FAIL: Set-LocalUser refused (stand-in)
+next: zsh scripts/verify-644/steps.zsh I
+next: zsh scripts/verify-644/steps.zsh D
+STOP: the automatic logon was not configured (see the lines above); nothing rebooted
+VERDICT 644 I: STOP
+(exit 1)

@@ -1,0 +1,6 @@
+$ env <python> vm/drive644.py case tool
+[tool] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE tool launcher: OBSERVED pid 41614; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41614) <- zsh(41553) <- zsh(41548)
+owner pid 41616; work dir <tmp>/home/work/tool
+RESULT tool NO-TOOL-CALL (rollout no-call.jsonl: the model made no shell call)
+(exit 0)

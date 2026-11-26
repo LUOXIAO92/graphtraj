@@ -1,0 +1,12 @@
+$ zsh scripts/verify-644/steps.zsh E stop
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== [E] Scan, fetch and scrub the evidence of stop. Login: gcloud. Dialog: none.
+== evidence of stop: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of stop kept as stop-prev-20261127023751
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v644/out stop" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 3, "<BASE_URL>": 6, "<BASE_URL_HOST>": 3, "<IP>": 2, "<KEY_ENV>": 3, "<MACHINE_TYPE>": 3, "<MODEL>": 3, "<PROJECT>": 3, "<PROVIDER_ID>": 3, "<PROVIDER_NAME>": 3, "<REGION>": 3, "<VM_LABEL>": 3, "<VM_NAME>": 6, "<VM_USER>": 3, "<ZONE>": 3}
+next: zsh scripts/verify-644/steps.zsh D
+VERDICT 644 E stop: FAIL (FAIL (the VM counted 3 evidence files, 2 arrived))
+(exit 1)

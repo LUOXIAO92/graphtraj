@@ -1,0 +1,55 @@
+Task 644 steps rehearsal (stand-in gcloud; random dummy settings and key; consoles 01-29 in c1/)
+--- runs
+01 00-missing-settings: expected STOP, got 'VERDICT 644 00: STOP' (verdict is the last line) -> yes
+02 00-empty-variable: expected STOP, got 'VERDICT 644 00: STOP' (verdict is the last line) -> yes
+03 00-settings-not-ignored: expected STOP, got 'VERDICT 644 00: STOP' (verdict is the last line) -> yes
+04 00-vm-user-ordinary-word: expected STOP, got 'VERDICT 644 00: STOP' (verdict is the last line) -> yes
+05 00-preflight: expected PASS, got 'VERDICT 644 00: PASS (Task VM: absent)' (verdict is the last line) -> yes
+06 C1-vm-absent: expected STOP, got 'VERDICT 644 C1: STOP' (verdict is the last line) -> yes
+07 D-vm-absent: expected PASS, got 'VERDICT 644 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' (verdict is the last line) -> yes
+08 V-full: expected PASS, got 'VERDICT 644 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' (verdict is the last line) -> yes
+09 R0-before-K: expected STOP, got 'VERDICT 644 R0: STOP (STOP; evidence PASS)' (verdict is the last line) -> yes
+10 K-dummy-key: expected PASS, got 'VERDICT 644 K: PASS (key stored as the VM user's environment variable; R0 proves it with a real call)' -> yes
+11 R0: expected PASS, got 'VERDICT 644 R0: PASS (PASS; evidence PASS)' (verdict is the last line) -> yes
+12 C1-before-I: expected STOP, got 'VERDICT 644 C1: STOP (STOP the VM user has no Active console session (run step I first); tool STOP)' (verdict is the last line) -> yes
+13 I-autologon-refused: expected STOP, got 'VERDICT 644 I: STOP' (verdict is the last line) -> yes
+14 I-not-established: expected STOP, got 'VERDICT 644 I: STOP' (verdict is the last line) -> yes
+15 I: expected PASS, got 'VERDICT 644 I: PASS (VM_USER has an Active console session: 1 console; evidence PASS)' (verdict is the last line) -> yes
+16 C1: expected PASS, got 'VERDICT 644 C1: PASS (tool PASS, nonascii PASS; evidence: tool PASS, nonascii PASS)' (verdict is the last line) -> yes
+17 C1-no-tool-call: expected NO-TOOL-CALL, got 'VERDICT 644 C1: NO-TOOL-CALL (tool PASS, nonascii NO-TOOL-CALL; evidence: tool PASS, nonascii PASS)' (verdict is the last line) -> yes
+18 case-nonascii-rerun: expected PASS, got 'VERDICT 644 case nonascii: PASS (nonascii PASS; evidence: nonascii PASS)' (verdict is the last line) -> yes
+19 C2-driver-stop: expected STOP, got 'VERDICT 644 C2: STOP (STOP driver error: RuntimeError: the owner process ended during wait (stand-in); stop PASS, takeover STOP)' (verdict is the last line) -> yes
+20 V-resume-on-existing-VM: expected PASS, got 'VERDICT 644 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' (verdict is the last line) -> yes
+21 C2: expected PASS, got 'VERDICT 644 C2: PASS (stop PASS, takeover PASS, caller PASS; evidence: stop PASS, takeover PASS, caller PASS)' (verdict is the last line) -> yes
+22 C2-stop-fails: expected FAIL, got 'VERDICT 644 C2: FAIL (stop FAIL, takeover PASS, caller PASS; evidence: stop PASS, takeover PASS, caller PASS)' (verdict is the last line) -> yes
+23 C2-env-stop: expected STOP, got 'VERDICT 644 C2: STOP (STOP the VM user has no Active console session (run step I first); stop STOP)' (verdict is the last line) -> yes
+24 case-bad-argument: expected STOP, got 'VERDICT 644 case foo: STOP' (verdict is the last line) -> yes
+25 E-tool: expected PASS, got 'VERDICT 644 E tool: PASS (PASS (evidence/live/tool, 3 files; scanned on the VM, scrubbed twice))' (verdict is the last line) -> yes
+26 E-stop-one-file-lost: expected FAIL, got 'VERDICT 644 E stop: FAIL (FAIL (the VM counted 3 evidence files, 2 arrived))' (verdict is the last line) -> yes
+27 D-disk-survives: expected FAIL, got 'VERDICT 644 D: FAIL (still present, by name/tag/labels: disks: 1)' (verdict is the last line) -> yes
+28 D-clean: expected PASS, got 'VERDICT 644 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' (verdict is the last line) -> yes
+29 C1-after-D: expected STOP, got 'VERDICT 644 C1: STOP' (verdict is the last line) -> yes
+--- checks
+an ordinary VM_USER (a word in drive644.py) is refused naming VM_USER: yes
+C1 with no VM (and no Task rules) names V: yes
+uploaded by tar: v644/autologon.ps1 v644/drive644.py v644/graftling.bundle v644/provision.ps1 v644/setkey.ps1 v644/settings.json 
+Task rules existing when instances create ran: 2 (deny and ssh); their descriptions name Task 644: 2 of 2
+VM_USER is a scrub pair sent to the VM: yes
+R0 without the key names K: yes
+C1 before I: env STOP (no console session), next I then C1, no 'do NOT run D': yes, yes, 0
+I refused before any reboot: no reboot
+I not established: observable and next I/D printed: yes, yes
+C1: item lines tool 5, nonascii 6; a cleanup after each case: 2 of 2
+C1 NO-TOOL-CALL offers one rerun of that case: yes
+C2 driver STOP: 'do NOT run D' yes; names V yes; rerun C2 named yes; offers D: 0; cases scheduled: stop takeover (caller not run after the STOP)
+V on the existing VM: instances create calls 0; re-uploads by tar 1; provisioning re-run 1; autologon.ps1 or reboot run during V: 0
+C2: item lines stop 9, takeover 4, caller 3
+C2 with a FAIL still runs every case and names D: yes, yes
+C2 env STOP: next I and C2, no 'do NOT run D': yes, yes, 0
+after D: Task rules left 0, instance absent
+run order by each step's first next line: 00 -> V; V -> K; K -> R0; R0 -> I; I -> C1; C1 -> C2; C2 -> D
+gcloud calls: 216; without --project: 0; naming another project than <PROJECT>, other than the public image read: 0; 'config' calls: 0; compute scp calls: 0
+consoles showing either address: 0
+dummy key: in gcloud argv 0, in gcloud environments 0, in files (verify-644 tree incl. local/ and rehearsal, stand-in state, evidence) 0; arrived on gcloud's stdin (length+SHA-256 match) 1 time(s)
+fetched evidence: 89 files; files still holding a settings value incl. VM_USER (any case, UTF-8): 0; files holding the sample IPv4/IPv6: 0; placeholders now present: <ACCOUNT> 69, <BASE_URL_HOST> 69, <BASE_URL> 138, <IP> 46, <KEY_ENV> 69, <MACHINE_TYPE> 69, <MODEL> 69, <PROJECT> 69, <PROVIDER_ID> 69, <PROVIDER_NAME> 69, <REGION> 69, <VM_LABEL> 69, <VM_NAME> 138, <VM_USER> 70, <ZONE> 69
+committed-or-committable files (tracked + untracked not ignored) holding any dummy value or the dummy key: 0

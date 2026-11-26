@@ -1,0 +1,18 @@
+$ zsh scripts/verify-644/steps.zsh R0
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [R0] versions and one real codex exec call, prompt on stdin (bound 10 min). Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+ITEM R0.answer PASS codex exec answered with PONG644
+RESULT R0 PASS
+== evidence of R0: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of R0 kept as R0-prev-20261127023537
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v644/out R0" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- items (1):
+  ITEM R0.answer PASS codex exec answered with PONG644
+next: zsh scripts/verify-644/steps.zsh I
+next: zsh scripts/verify-644/steps.zsh D
+VERDICT 644 R0: PASS (PASS; evidence PASS)
+(exit 0)

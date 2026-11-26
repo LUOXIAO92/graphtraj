@@ -1,0 +1,13 @@
+$ env <python> vm/drive644.py case caller
+[caller] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE caller launcher: OBSERVED pid 41684; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41684) <- zsh(41553) <- zsh(41548)
+{"parent_session": "thread-1", "service_pid": 41686, "source": "thread/start"}
+┌ thread-1 → agent-22fcea51f10a44c295538ac4ce043ccb
+│ hold
+└
+rollouts since the case began: 0 shell calls
+CASE caller probe inside the sandbox: OBSERVED not run: the stand-in has no tool sandbox (real VM only)
+CASE caller create through MCP: PASS outcome completed; creates through MCP 1; child record present; authenticated callers [41687, 41687]; stop_unconfirmed []; last message 'The child answered.'
+wall time 0.6 s
+RESULT caller PASS
+(exit 0)

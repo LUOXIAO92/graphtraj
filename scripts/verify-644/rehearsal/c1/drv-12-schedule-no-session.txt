@@ -1,0 +1,4 @@
+$ env <python> vm/drive644.py schedule tool 120
+session of the VM user: NONE; query user: No User exists for *
+RESULT tool STOP the VM user has no Active console session (run step I first)
+(exit 2)

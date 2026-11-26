@@ -1,0 +1,12 @@
+$ env <python> vm/drive644.py case nonascii
+[nonascii] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE nonascii launcher: OBSERVED pid 41626; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41626) <- zsh(41553) <- zsh(41548)
+owner pid 41628; work dir <tmp>/home/work/工作ü-644
+CASE nonascii tool call exit: PASS 1 shell call(s): exec_command 'Set-Content -Path marker-644.txt -Value tool-ran-644' -> exit 0 (function_call_output of rollout nonascii-exit0.jsonl, injected)
+CASE nonascii marker: PASS marker-644.txt in <tmp>/home/work/工作ü-644: present, content 'tool-ran-644'
+CASE nonascii turn completed: PASS outcome completed; last message 'tool ran'
+CASE nonascii runtime job: PASS runtime_job absent; runtime pid 41629; worker pid 41628 (POSIX: graftling records no job)
+CASE nonascii cwd Codex reports: PASS rollout turn_context/session_meta cwd ['<tmp>/home/work/工作ü-644']; the work dir is <tmp>/home/work/工作ü-644
+wall time 3.0 s
+RESULT nonascii PASS
+(exit 0)

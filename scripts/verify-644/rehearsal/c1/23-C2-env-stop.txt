@@ -1,0 +1,25 @@
+$ zsh scripts/verify-644/steps.zsh C2
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [C2] Cases stop (2), takeover (3) and caller (4) in VM_USER's console session (a scheduled task each; bound 1 min each). Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== case stop: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py schedule stop 60"   (bound 360s)
+session of the VM user: NONE; query user: No User exists for *
+RESULT stop STOP the VM user has no Active console session (run step I first)
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py cleanup stop"   (bound 180s)
+  CLEANUP stop: 0 leftover process(es) ended
+== evidence of stop: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of stop kept as stop-prev-20261127023746
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v644/out stop" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case stop: one line per item (0):
+  
+--- RESULT stop STOP the VM user has no Active console session (run step I first)
+=== step C2: stop STOP (evidence: stop PASS)
+next: zsh scripts/verify-644/steps.zsh I
+next: zsh scripts/verify-644/steps.zsh C2
+next: zsh scripts/verify-644/steps.zsh D
+VERDICT 644 C2: STOP (STOP the VM user has no Active console session (run step I first); stop STOP)
+(exit 1)

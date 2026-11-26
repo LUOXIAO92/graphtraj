@@ -1,0 +1,10 @@
+$ env <python> -I scripts/verify-644/rehearsal/check_parser644.py vm/drive644.py
+640-R1: 77 records; 4 shell call(s): [('exec_command', -1073741502, True), ('exec_command', -1073741502, True), ('exec_command', -1073741502, True), ('exec_command', -1073741502, True)] (tool, exit code, output present); cwd last component ['工作ü-640']
+640-R2: 76 records; 2 shell call(s): [('exec_command', -1073741502, True), ('exec_command', -1073741502, True)] (tool, exit code, output present); cwd last component ['工作ü-640']
+640-R3: 72 records; 0 shell call(s): [] (tool, exit code, output present); cwd last component ['工作ü-640']
+640-R4: 14 records; 0 shell call(s): [] (tool, exit code, output present); cwd last component ['工作ü-640']
+643-A: 26 records; 2 shell call(s): [('exec_command', -1073741502, True), ('exec_command', -1073741502, True)] (tool, exit code, output present); cwd last component ['A']
+643-B: 21 records; 1 shell call(s): [('exec_command', 0, True)] (tool, exit code, output present); cwd last component ['B']
+643-C-interactive: 21 records; 1 shell call(s): [('exec_command', 0, True)] (tool, exit code, output present); cwd last component ['C-interactive']
+643-C-ssh: 23 records; 1 shell call(s): [('exec_command', -1073741502, True)] (tool, exit code, output present); cwd last component ['C-ssh']
+(exit 0)

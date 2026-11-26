@@ -1,0 +1,3 @@
+$ env /usr/bin/python3 -I -c <tmp>/home/out/tool <VM_USER>
+count 0
+(exit 0)

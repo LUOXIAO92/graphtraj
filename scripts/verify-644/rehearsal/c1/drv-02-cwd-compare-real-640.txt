@@ -1,0 +1,3 @@
+$ env <python> -I -c vm/drive644.py <state>/tasks/640-graftling-windows-codex-real/realhost/evidence-live/R-unelevated/rollouts/rollout-2026-11-26T15-19-50-01a21871-06af-74b3-b923-a1165b563348.jsonl
+same: True True False
+(exit 0)

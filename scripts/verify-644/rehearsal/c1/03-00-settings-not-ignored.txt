@@ -1,0 +1,7 @@
+$ zsh scripts/verify-644/steps.zsh 00
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [00] Preflight, read only. Login: gcloud (account not shown). Dialog: none.
+PASS: run by zsh 5.9
+STOP: the settings file is not git-ignored here (it must sit under scripts/verify-644/local/); nothing done
+VERDICT 644 00: STOP
+(exit 1)

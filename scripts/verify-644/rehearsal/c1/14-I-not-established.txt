@@ -1,0 +1,26 @@
+$ zsh scripts/verify-644/steps.zsh I
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [I] Interactive logon of VM_USER: a random VM-only password, Winlogon automatic logon, one reboot, wait, verify the console session. Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+$ gcloud compute ssh ... --command="powershell ... -File C:\v644\autologon.ps1"   (the password is generated on the VM and never printed)
+    password: a new random one set for the VM user (24 characters; not printed)
+    Winlogon: AutoAdminLogon 1; DefaultUserName is this user: True; DefaultDomainName is this computer: True; DefaultPassword set: True
+  AUTOLOGON SET
+$ gcloud compute ssh ... --command="shutdown /r /t 10"   (reboot, so that Winlogon logs VM_USER on at the console)
+rebooting; first SSH poll in 1s (bound 8s, poll 1s)
+PASS: SSH answers after 2s
+waiting for VM_USER's Active console session (query user; bound 3s)
+  [02:35:54] not yet: SESSION NONE
+  SESSION line: No User exists for *
+  SESSION NONE
+== evidence of I: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v644/out I" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+the observable: query user shows no Active console session of VM_USER 7s after SSH answered (lines above)
+next: zsh scripts/verify-644/steps.zsh I
+next: zsh scripts/verify-644/steps.zsh D
+STOP: the interactive logon was not established (SESSION NONE); every case needs it. Retry I once, or delete: zsh scripts/verify-644/steps.zsh D
+VERDICT 644 I: STOP
+(exit 1)

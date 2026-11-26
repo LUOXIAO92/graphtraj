@@ -1,0 +1,11 @@
+$ env <python> vm/drive644.py case tool
+[tool] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE tool launcher: OBSERVED pid 41601; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41601) <- zsh(41553) <- zsh(41548)
+owner pid 41603; work dir <tmp>/home/work/tool
+CASE tool tool call exit: FAIL 1 shell call(s): exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit -1073741502 (function_call_output of rollout rollout-2026-11-26T16-56-50-01a218c9-d5bc-7a73-aec4-34216995d347.jsonl, injected)
+CASE tool marker: FAIL marker-644.txt in <tmp>/home/work/tool: absent
+CASE tool turn completed: PASS outcome completed; last message 'tool ran'
+CASE tool runtime job: PASS runtime_job absent; runtime pid 41604; worker pid 41603 (POSIX: graftling records no job)
+wall time 2.9 s
+RESULT tool FAIL (tool call exit, marker)
+(exit 0)

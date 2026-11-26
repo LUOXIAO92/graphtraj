@@ -1,0 +1,55 @@
+$ zsh scripts/verify-644/steps.zsh C1
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [C1] Cases tool (1) and nonascii (5) in VM_USER's console session (a scheduled task each; bound 1 min each). Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== case tool: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py schedule tool 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v644-tool registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/tool/console.txt):
+CASE tool launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+CASE tool tool call exit: PASS (stand-in)
+CASE tool marker: PASS (stand-in)
+CASE tool turn completed: PASS (stand-in)
+CASE tool runtime job: PASS (stand-in)
+RESULT tool PASS
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py cleanup tool"   (bound 180s)
+  CLEANUP tool: 0 leftover process(es) ended
+== evidence of tool: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of tool kept as tool-prev-20261127023628
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v644/out tool" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case tool: one line per item (5):
+  CASE tool launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+  CASE tool tool call exit: PASS (stand-in)
+  CASE tool marker: PASS (stand-in)
+  CASE tool turn completed: PASS (stand-in)
+  CASE tool runtime job: PASS (stand-in)
+--- RESULT tool PASS
+== case nonascii: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py schedule nonascii 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v644-nonascii registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/nonascii/console.txt):
+CASE nonascii launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+RESULT nonascii NO-TOOL-CALL (rollout rollout-x.jsonl: the model made no shell call)
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py cleanup nonascii"   (bound 180s)
+  CLEANUP nonascii: 0 leftover process(es) ended
+== evidence of nonascii: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of nonascii kept as nonascii-prev-20261127023634
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v644/out nonascii" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case nonascii: one line per item (1):
+  CASE nonascii launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+--- RESULT nonascii NO-TOOL-CALL (rollout rollout-x.jsonl: the model made no shell call)
+=== step C1: tool PASS, nonascii NO-TOOL-CALL (evidence: tool PASS, nonascii PASS)
+next: case nonascii: the model made no tool call; rerun it once:
+next: zsh scripts/verify-644/steps.zsh case nonascii
+next: zsh scripts/verify-644/steps.zsh C2
+next: zsh scripts/verify-644/steps.zsh D
+VERDICT 644 C1: NO-TOOL-CALL (tool PASS, nonascii NO-TOOL-CALL; evidence: tool PASS, nonascii PASS)
+(exit 1)

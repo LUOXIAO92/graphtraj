@@ -1,0 +1,22 @@
+Task 644 driver rehearsal (macOS, stand-in Codex peer; random dummy settings, key and password; consoles drv-01-20 in c1/)
+drv-01 parser-real-640-643-rollouts: expects '643-C-interactive' -> yes
+drv-02 cwd-compare-real-640: expects 'same: True True False' -> yes
+drv-03 tool-pass: expects 'RESULT tool PASS' -> yes
+drv-04 tool-fail-real-643-ssh-rollout: expects 'RESULT tool FAIL (tool call exit, marker)' -> yes
+drv-05 tool-no-tool-call: expects 'RESULT tool NO-TOOL-CALL' -> yes
+drv-06 nonascii-pass: expects 'RESULT nonascii PASS' -> yes
+drv-07 nonascii-cwd-differs-real-640: expects 'RESULT nonascii FAIL (tool call exit, cwd Codex reports)' -> yes
+drv-08 stop: expects 'RESULT stop PASS' -> yes
+drv-09 takeover: expects 'RESULT takeover PASS' -> yes
+drv-10 caller: expects 'RESULT caller PASS' -> yes
+drv-11 schedule-tool: expects 'RESULT tool PASS' -> yes
+drv-12 schedule-no-session: expects 'RESULT tool STOP the VM user has no Active console session' -> yes
+drv-13 no-key: expects 'RESULT tool STOP the key variable is not set' -> yes
+drv-14 driver-error: expects 'RESULT stop STOP driver error' -> yes
+drv-15 cleanup-planted-leftover: expects 'CLEANUP stop: 1 leftover' -> yes
+drv-16 jobopen-off-windows: expects 'NOT-WINDOWS' -> yes
+drv-17 scan-clean-vm-user-replaced: expects 'SCAN PASS' -> yes
+drv-18 scan-no-vm-user-left: expects 'count 0' -> yes
+drv-19 scan-finds-planted-key: expects 'SCAN FAIL the key or the autologon password is in 1 file(s)' -> yes
+drv-20 scan-finds-planted-password: expects 'SCAN FAIL the key or the autologon password is in 1 file(s)' -> yes
+consoles holding the dummy key, password, VM user or settings tag: 0; consoles holding a /Users/ path: 0

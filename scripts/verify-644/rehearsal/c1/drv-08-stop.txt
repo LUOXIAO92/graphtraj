@@ -1,0 +1,17 @@
+$ env <python> vm/drive644.py case stop
+[stop] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE stop launcher: OBSERVED pid 41652; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41652) <- zsh(41553) <- zsh(41548)
+owner pid 41654; the tool: & '<venv python>' '<drive644.py>' jobctx jobctx-tool.json; cmd /c start /b powershell -NoProfile -Command Start-Sleep 6441; Start-Process powershell -ArgumentList '-NoProfile','-Command','Start-Sleep 6442'; powershell -NoProfile -Command "Start-Sleep 6443"
+rollout: 0 shell calls
+CASE stop graftling stop result: PASS interrupt requested; outcome interrupted; state standby
+CASE stop sleep 6441 (cmd start /b): PASS 1 process(es) [41658]; in graftling's job: not readable off Windows; alive 30 s after the stop: []
+CASE stop sleep 6442 (Start-Process): PASS 1 process(es) [41659]; in graftling's job: not readable off Windows; alive 30 s after the stop: []
+CASE stop sleep 6443 (foreground): PASS 1 process(es) [41660]; in graftling's job: not readable off Windows; alive 30 s after the stop: []
+CASE stop job after stop: OBSERVED not Windows (rehearsal): no job to open
+CASE stop every job process ended: PASS 4 sleep process(es) seen, alive after the stop []; of the 0 job member(s) listed before the stop, alive after []
+CASE stop job by name (later process): OBSERVED a separate later process opened None by name: opened no job name recorded by graftling; active processes None; members None; sleep pids in it None; limit flags None
+CASE stop job nesting: OBSERVED per sleep (pid, in graftling job, in any job): {'6443': [(41660, None, None)], '6442': [(41659, None, None)], '6441': [(41658, None, None)], 'shell': [(41656, None, None)]}; inside the tool (jobctx): in a job None, innermost job flags None, UI None, active None, members None -> unknown (the in-tool probe left no record); graftling job flags None; the launcher's (Task Scheduler's) job: see the launcher line
+cleanup: 0 leftover tool process(es) of this case ended
+wall time 10.8 s
+RESULT stop PASS
+(exit 0)

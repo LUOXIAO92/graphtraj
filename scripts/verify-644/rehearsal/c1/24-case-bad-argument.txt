@@ -1,0 +1,5 @@
+$ zsh scripts/verify-644/steps.zsh case foo
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+usage: zsh scripts/verify-644/steps.zsh case tool|nonascii|stop|takeover|caller
+VERDICT 644 case foo: STOP
+(exit 2)

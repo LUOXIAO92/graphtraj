@@ -1,0 +1,12 @@
+$ env <python> vm/drive644.py case nonascii
+[nonascii] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE nonascii launcher: OBSERVED pid 41639; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41639) <- zsh(41553) <- zsh(41548)
+owner pid 41641; work dir <tmp>/home/work/工作ü-644
+CASE nonascii tool call exit: FAIL 4 shell call(s): exec_command 'Set-Content -Path r1-marker.txt -Value r1-640' -> exit -1073741502; exec_command 'Set-Content -Path r1-marker.txt -Value r1-640' -> exit -1073741502; exec_command 'cmd /c start /b powershell -NoProfile -Command Start-Sleep 6401; Start' -> exit -1073741502; exec_command 'powershell -NoProfile -Command "Start-Sleep 6404"' -> exit -1073741502 (function_call_output of rollout rollout-2026-11-26T15-19-50-01a21871-06af-74b3-b923-a1165b563348.jsonl, injected)
+CASE nonascii marker: PASS marker-644.txt in <tmp>/home/work/工作ü-644: present, content 'tool-ran-644'
+CASE nonascii turn completed: PASS outcome completed; last message 'tool ran'
+CASE nonascii runtime job: PASS runtime_job absent; runtime pid 41642; worker pid 41641 (POSIX: graftling records no job)
+CASE nonascii cwd Codex reports: FAIL rollout turn_context/session_meta cwd ['C:\\v640\\work\\工作ü-640']; the work dir is <tmp>/home/work/工作ü-644
+wall time 2.9 s
+RESULT nonascii FAIL (tool call exit, cwd Codex reports)
+(exit 0)

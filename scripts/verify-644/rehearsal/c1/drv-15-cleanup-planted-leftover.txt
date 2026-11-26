@@ -1,0 +1,3 @@
+$ env <python> vm/drive644.py cleanup stop
+CLEANUP stop: 1 leftover process(es) ended: sleep(41727)
+(exit 0)

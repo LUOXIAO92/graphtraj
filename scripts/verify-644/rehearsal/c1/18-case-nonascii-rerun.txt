@@ -1,0 +1,36 @@
+$ zsh scripts/verify-644/steps.zsh case nonascii
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [case nonascii] One case again in VM_USER's console session (bound 1 min). Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== case nonascii: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py schedule nonascii 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v644-nonascii registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/nonascii/console.txt):
+CASE nonascii launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+CASE nonascii tool call exit: PASS (stand-in)
+CASE nonascii marker: PASS (stand-in)
+CASE nonascii turn completed: PASS (stand-in)
+CASE nonascii runtime job: PASS (stand-in)
+CASE nonascii cwd Codex reports: PASS (stand-in)
+RESULT nonascii PASS
+$ gcloud compute ssh ... --command="<venv python> C:\v644\drive644.py cleanup nonascii"   (bound 180s)
+  CLEANUP nonascii: 0 leftover process(es) ended
+== evidence of nonascii: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of nonascii kept as nonascii-prev-20261127023641
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v644/out nonascii" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case nonascii: one line per item (6):
+  CASE nonascii launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+  CASE nonascii tool call exit: PASS (stand-in)
+  CASE nonascii marker: PASS (stand-in)
+  CASE nonascii turn completed: PASS (stand-in)
+  CASE nonascii runtime job: PASS (stand-in)
+  CASE nonascii cwd Codex reports: PASS (stand-in)
+--- RESULT nonascii PASS
+=== step case nonascii: nonascii PASS (evidence: nonascii PASS)
+next: zsh scripts/verify-644/steps.zsh D
+VERDICT 644 case nonascii: PASS (nonascii PASS; evidence: nonascii PASS)
+(exit 0)

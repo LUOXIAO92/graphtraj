@@ -1,0 +1,16 @@
+$ zsh scripts/verify-644/steps.zsh D
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [D] Delete this Task's resources (VM with all disks, both Task firewall rules). Login: gcloud. Dialog: none.
+$ gcloud compute instances delete <VM_NAME> --project=<PROJECT> --zone=<ZONE> --delete-disks=all --quiet
+  Deleted [stand-in instance].
+$ gcloud compute firewall-rules delete <VM_NAME>-ssh --project=<PROJECT> --quiet
+  Deleted [stand-in rule].
+$ gcloud compute firewall-rules delete <VM_NAME>-deny --project=<PROJECT> --quiet
+  Deleted [stand-in rule].
+== verification: nothing of this Task remains
+local Task SSH key pair removed
+reminder: the user now revokes the temporary provider key in the provider's console
+note: gcloud keeps the VM's host key in ~/.ssh/google_compute_known_hosts (alias compute.<instance id>); harmless after deletion
+next: zsh scripts/verify-644/steps.zsh D
+VERDICT 644 D: FAIL (still present, by name/tag/labels: disks: 1)
+(exit 1)

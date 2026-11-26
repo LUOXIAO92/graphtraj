@@ -1,0 +1,5 @@
+$ env <python> vm/drive644.py case stop
+[stop] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE stop launcher: OBSERVED pid 41723; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41723) <- zsh(41553) <- zsh(41548)
+RESULT stop STOP driver error: FileNotFoundError: [Errno 2] No such file or directory: '<tmp>/no-such-tests/codex_stdio_peer.py'
+(exit 2)

@@ -1,0 +1,5 @@
+$ env <python> vm/drive644.py case tool
+[tool] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE tool launcher: OBSERVED pid 41716; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41716) <- zsh(41553) <- zsh(41548)
+RESULT tool STOP the key variable is not set for this user; run step K first
+(exit 2)

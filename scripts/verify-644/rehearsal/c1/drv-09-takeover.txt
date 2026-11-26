@@ -1,0 +1,14 @@
+$ env <python> vm/drive644.py case takeover
+[takeover] a graftling Codex child, [windows] sandbox = "unelevated", in this session
+CASE takeover launcher: OBSERVED pid 41669; session None (console session None); elevated None; INTERACTIVE SID None; in a job None (Task Scheduler's: flags None, active None); NOT-WINDOWS (rehearsal); chain python(41669) <- zsh(41553) <- zsh(41548)
+first owner pid 41671; the tool: powershell -NoProfile -Command "Start-Sleep 6444"
+first owner 41671 killed hard (exit -9)
+new owner process pid 41677 (also in this session) takes over
+CASE takeover reclaim of the dead owner's tool: PASS execution ended with owner-exited; graftling recorded escaped_processes {"found": [{"command": "sleep 6444", "pid": 41673}], "remaining": [], "stopped": [{"command": "sleep 6444", "pid": 41673}]}; tool pid(s) [41673], listed stopped [41673], alive []
+CASE takeover tool process ended: PASS tool pid(s) [41673]; alive 30 s after the takeover: []
+CASE takeover same Session resumes: PASS confirm ['1f1369706bbc4a47b2a6cefa97c920dc']; resumed in the same Session: True; outcome completed; last message 'after takeover'
+rollout: 0 shell calls
+cleanup: 0 leftover tool process(es) of this case ended
+wall time 6.2 s
+RESULT takeover PASS
+(exit 0)

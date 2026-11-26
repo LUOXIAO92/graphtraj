@@ -1,0 +1,11 @@
+$ <dummy key on stdin> | VERIFY640_K_STDIN=1 zsh scripts/verify-640/steps.zsh K
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [K] Store the temporary provider key on the VM. USER ONLY, in your own terminal. Login: gcloud. Dialog: none (a hidden prompt).
+NOTE: <VM_NAME>-ssh's source was not the current public IPv4; updated (address not shown)
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+Paste the temporary provider key (hidden), then press Enter: 
+sending it on the ssh session's stdin only (not on any command line, not to any file)
+  KEY STORED for this Windows user as a User environment variable (length 50); the value is not printed
+next: zsh scripts/verify-640/steps.zsh R0
+VERDICT 640 K: PASS (key stored as the VM user's environment variable; R0 proves it with a real call)
+(exit 0)

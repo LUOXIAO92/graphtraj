@@ -1,0 +1,17 @@
+$ zsh scripts/verify-640/steps.zsh V
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [V] Create and provision the VM. CLOUD COST STARTS HERE (until D). Login: gcloud. Dialog: none.
+PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive640.py and steps.zsh)
+NOTE: project rule(s) opening tcp:22 to everyone (name priority): default-allow-ssh 65534; not changed by this Task
+NOTE: project rule(s) opening tcp:3389 to everyone (name priority): default-allow-rdp 65534; not changed by this Task
+PASS: every project rule opening SSH/RDP to everyone has a priority above 1000; the Task deny rule (1000) takes precedence
+PASS: created <VM_NAME>-deny (DENY all from everyone, priority 1000, only this VM's tag)
+PASS: created <VM_NAME>-ssh (ALLOW tcp:22 from the current public IPv4 only, priority 900, only this VM's tag)
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+$ gcloud compute instances create <VM_NAME> --project=<PROJECT> --zone=<ZONE> (image family, machine type, disk, labels, tag, instance metadata from settings)
+gcloud failed (VM creation); its own error, verbatim:
+  | ERROR: (gcloud.compute.instances.create) Could not fetch resource:
+  |  - Windows Server images are not available on free trial billing accounts (stand-in error text)
+STOP: VM creation failed; see gcloud's error above. Nothing else was done after it. If anything was created, run: zsh scripts/verify-640/steps.zsh D
+VERDICT 640 V: STOP
+(exit 1)

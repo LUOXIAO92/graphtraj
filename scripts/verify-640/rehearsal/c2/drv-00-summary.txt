@@ -1,0 +1,14 @@
+Task 640 driver rehearsal on macOS (POSIX branches; graftling 2ee706eb7493 cloned from a bundle of dev)
+--- runs
+drv-01 r0-no-key: expected /RESULT R0 STOP/, got 'RESULT R0 STOP' -> yes
+drv-02 r0-provider-refuses: expected /RESULT R0 STOP/, got 'RESULT R0 STOP' -> yes
+drv-03 r0-reported-model-differs: expected /RESULT R0 FAIL/, got 'RESULT R0 FAIL' -> yes
+drv-04 r0-pass: expected /RESULT R0 PASS/, got 'RESULT R0 PASS' -> yes
+drv-05 scan-r0: expected /SCAN PASS/, got 'SCAN PASS key checked; replacements: {"<BASE_URL>": 1, "<KEY_ENV>": 1, "<MODEL>": 6, "<PROVIDER_ID>": 5, "<PROVIDER_NAME>": 1}; files 8' -> yes
+drv-06 scan-finds-planted-key: expected /SCAN FAIL/, got 'SCAN FAIL the key value is in 1 file(s) (value not printed): ['planted.txt']' -> yes
+drv-07 run-mxc-standin: expected /RESULT R-mxc PASS/, got 'RESULT R-mxc PASS (NOT-RUN 5, PASS 9)' -> yes
+drv-08 scan-run: expected /SCAN PASS/, got 'SCAN PASS key checked; replacements: none; files 26' -> yes
+--- checks
+consoles holding the key: 0; committed-or-committable files holding a random value or the key: 0
+provider refusal console: raw error printed with placeholders (1 line(s) with <MODEL>/<BASE_URL>)
+VM-side evidence (out/) files still holding the model or base-URL host after the scans: 0

@@ -32,7 +32,7 @@
 # step K (the USER, in their own terminal) reads it with hidden input and sends it only on the ssh session's stdin.
 # EVIDENCE: VM-side evidence is scanned on the VM for the key's value (found: the step fails without printing it, and
 # nothing is fetched) and every settings value and IP address is replaced with a placeholder (<PROJECT>, <MODEL>,
-# <BASE_URL>, <IP>, ...); it is fetched with gcloud compute scp into scripts/verify-640/evidence/live/<step>/
+# <BASE_URL>, <IP>, ...); it is fetched with tar over gcloud compute ssh (no scp) into scripts/verify-640/evidence/live/<step>/
 # (git-ignored) and scrubbed again on the Mac. Counts of replacements are printed, never values.
 # DIALOGS: none in any step (gcloud runs with prompts disabled; no browser or keychain dialog is expected). K reads the
 # key at a hidden terminal prompt, which is not a dialog.
@@ -348,8 +348,8 @@ make_bundle() {  # <file>: a bundle of graftling dev (contains the candidate); v
 }
 
 # --- evidence ----------------------------------------------------------------------------------------------------
-# fetch <step>: scan on the VM (key: fail, never printed; values and IPs replaced), scp to evidence/live/<step>,
-# scrub again on the Mac. Sets FETCHED (PASS/FAIL text).
+# fetch <step>: scan on the VM (key: fail, never printed; values and IPs replaced; it prints the file count), tar over
+# ssh to evidence/live/<step> (the extracted count must equal the VM's), scrub again on the Mac. Sets FETCHED (PASS/FAIL text).
 FETCHED=
 fetch() {
   local step=$1 dest=$LIVE/$1 out
@@ -363,19 +363,22 @@ fetch() {
   if [[ -e $dest ]]; then
     local prev=$dest-prev-$(date +%Y%m%d%H%M%S); mv $dest $prev; print -r -- "  an earlier fetch of $step kept as ${prev:t}"
   fi
-  if ! gc compute scp --recurse $SSHF[1,5] "$TARGET:C:/v640/out/$step" $LIVE/ > $WORK/scp.out 2>&1; then
-    print -r -- "  gcloud compute scp failed; its output:"; sed 's/^/  | /' $WORK/scp.out
-    print -r -- "  trying the same through ssh with tar (Windows' own tar.exe)"
-    mkdir -p $dest
-    rsh "tar -cf - -C C:/v640/out $step" 2> $WORK/tar.err | tar -xf - -C $LIVE 2>> $WORK/tar.err \
-      || { sed 's/^/  | /' $WORK/tar.err; FETCHED="FAIL (fetch failed)"; return 1; }
-  fi
+  local -a sl=(${(M)${(f)out}:#SCAN PASS*})
+  local want=${${${sl[-1]:-}##*files }%%[^0-9]#}   # the VM prints CRLF over ssh
+  [[ $want == <-> ]] || { FETCHED="FAIL (the VM-side scan printed no file count)"; return 1; }
+  print -r -- "  \$ gcloud compute ssh ... --command=\"tar -cf - -C C:/v640/out $step\" | tar -xf - -C evidence/live   (Windows' own tar.exe)"
+  rsh "tar -cf - -C C:/v640/out $step" 2> $WORK/tar.err | allow tar -xf - -C $LIVE 2>> $WORK/tar.err \
+    || { sed 's/^/  | /' $WORK/tar.err; FETCHED="FAIL (fetch failed)"; return 1; }
   [[ -d $dest ]] || { FETCHED="FAIL (no $step directory arrived)"; return 1; }
+  local got=$(find $dest -type f | wc -l | tr -d ' ')
+  # The Mac pass runs on whatever arrived, before the count verdict, so a partial fetch is scrubbed too.
   [[ -f $WORK/console.txt ]] && cp $WORK/console.txt $dest/mac-console.txt
   scrub_values > $WORK/scrub.json
   out=$(allow env V640_HOME=$WORK $PY -I $HERE/vm/drive640.py scrub $dest $WORK/scrub.json 2>&1)
   print -r -- "  Mac pass: $out"
   [[ $out == SCRUB* ]] || { FETCHED="FAIL (the Mac scrub did not run)"; return 1; }
+  [[ $got == $want ]] || { FETCHED="FAIL (the VM counted $want evidence files, $got arrived)"; return 1; }
+  print -r -- "  PASS: $got of $want evidence files arrived"
   FETCHED="PASS (evidence/live/$step, $(find $dest -type f | wc -l | tr -d ' ') files; scanned on the VM, scrubbed twice)"
 }
 
@@ -473,12 +476,10 @@ V)
   cp $HERE/vm/drive640.py $HERE/vm/provision.ps1 $HERE/vm/setkey.ps1 $WORK/v640/
   vm_settings > $WORK/v640/settings.json || stop "settings.json for the VM could not be made"
   make_bundle $WORK/v640/graftling.bundle
-  print -r -- "\$ gcloud compute scp --recurse <stage>/v640 <VM_USER>@<VM_NAME>:C:/   (drive640.py, provision.ps1, setkey.ps1, settings.json without secret, graftling.bundle)"
-  if ! gc compute scp --recurse $SSHF[1,5] $WORK/v640 "$TARGET:C:/" > $WORK/up.out 2>&1; then
-    print -r -- "  gcloud compute scp failed; its output:"; sed 's/^/  | /' $WORK/up.out
-    print -r -- "  uploading the same through ssh with tar (Windows' own tar.exe)"
-    allow tar -cf - -C $WORK v640 | rsh "tar -xf - -C C:/" > $WORK/up2.out 2>&1 || { sed 's/^/  | /' $WORK/up2.out; stop "upload failed; retry: zsh $REL V"; }
-  fi
+  # tar over ssh is the only transfer (gcloud compute scp closed its connection on the real VM); files in C:\v640
+  # are overwritten on a rerun.
+  print -r -- "\$ tar -cf - v640 | gcloud compute ssh <VM_USER>@<VM_NAME> ... --command=\"tar -xf - -C C:/\"   (drive640.py, provision.ps1, setkey.ps1, settings.json without secret, graftling.bundle)"
+  allow tar -cf - -C $WORK v640 | rsh "tar -xf - -C C:/" > $WORK/up.out 2>&1 || { sed 's/^/  | /' $WORK/up.out; stop "upload failed; retry: zsh $REL V"; }
   print -r -- "PASS: uploaded to C:\\v640"
   say "provisioning on the VM (bound 40 min): Python, Node, Git, Developer Mode, Codex $CODEX_VERSION, graftling ${CANDIDATE[1,12]}, config.toml"
   bounded 2400 rsh "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $REMOTE\\provision.ps1" 2>&1 | tee $WORK/console.txt

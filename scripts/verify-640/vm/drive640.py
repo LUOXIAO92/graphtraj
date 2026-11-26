@@ -1057,8 +1057,9 @@ def scan(step: str) -> int:
     if hits:
         print(f'SCAN FAIL the key value is in {len(hits)} file(s) (value not printed): {hits}')
         return 3
+    files = sum(1 for path in directory.rglob('*') if path.is_file() and not path.is_symlink())
     print(f'SCAN PASS key {"checked" if key else "not set on this VM (nothing to find)"}; replacements: '
-          f'{json.dumps(counts, sort_keys=True) if counts else "none"}')
+          f'{json.dumps(counts, sort_keys=True) if counts else "none"}; files {files}')
     return 0
 
 

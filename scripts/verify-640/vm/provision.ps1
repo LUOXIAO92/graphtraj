@@ -19,8 +19,10 @@ $Git = 'C:\Program Files\Git\cmd\git.exe'
 $Venv = Join-Path $Root 'venv'
 $Graft = Join-Path $Root 'graftling'
 
-function Say($text) { Write-Output "== $text" }
-function Fail($text) { Write-Output "PROVISION FAIL: $text"; exit 1 }
+# Functions whose value is used write their log lines straight to the console ([Console]::Out), never to the
+# output stream, so they return exactly one value (correction 2: Fetch returned its log line and the path).
+function Say($text) { [Console]::Out.WriteLine("== $text") }
+function Fail($text) { [Console]::Out.WriteLine("PROVISION FAIL: $text"); exit 1 }
 function Fetch($url, $file, $signer) {
   $path = Join-Path $Dl $file
   if (-not (Test-Path $path)) {
@@ -28,13 +30,18 @@ function Fetch($url, $file, $signer) {
   }
   $sig = Get-AuthenticodeSignature -FilePath $path
   if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notlike "*$signer*") {
+    Remove-Item -Force $path  # a bad or partial download must not be reused by a rerun
     Fail "$file signature $($sig.Status), signer $($sig.SignerCertificate.Subject)"
   }
-  Write-Output "  $file : signature Valid, signer $($sig.SignerCertificate.Subject)"
+  [Console]::Out.WriteLine("  $file : signature Valid, signer $($sig.SignerCertificate.Subject)")
   return $path
 }
 function Run($file, $arguments) {
-  $p = Start-Process -FilePath $file -ArgumentList $arguments -Wait -PassThru -NoNewWindow
+  # The handle is read before waiting, so ExitCode is filled in (it can stay empty otherwise); the exit code is
+  # taken from the process object, never from $LASTEXITCODE.
+  $p = Start-Process -FilePath $file -ArgumentList $arguments -PassThru -NoNewWindow
+  $null = $p.Handle
+  $p.WaitForExit()
   return $p.ExitCode
 }
 
@@ -91,4 +98,4 @@ Say 'Codex config.toml (provider only, env_key names the variable; no secret) an
 if ($LASTEXITCODE -ne 0) { Fail 'config.toml not written' }
 & $VPy (Join-Path $Root 'drive640.py') versions V
 if ($LASTEXITCODE -ne 0) { Fail 'versions record failed' }
-Write-Output 'PROVISION PASS'
+[Console]::Out.WriteLine('PROVISION PASS')

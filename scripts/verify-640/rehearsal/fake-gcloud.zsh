@@ -10,7 +10,8 @@
 #   ssh-fail                  compute ssh never answers
 #   disk-left                 a disk named after the VM survives the delete (D must then FAIL)
 # Logs: argv.log, env.log (names=values of each call's environment), stdin.log (for setkey: length and SHA-256 of
-# what arrived on stdin, never the value). Fake evidence for scp downloads holds dummy values and a sample IP.
+# what arrived on stdin, never the value). Transfers are tar over ssh; fake evidence holds dummy values and sample IPs.
+#   tar-short                 the fetch tar loses one of the 3 evidence files (the count check must FAIL)
 emulate -L zsh
 setopt extended_glob
 S=${TMPDIR:-/tmp}/fake640
@@ -83,32 +84,31 @@ path.write_text(json.dumps(r))' $S/rule-$4.json $3 "$@" ;;
     print -r -- "length=${#line} sha256=$(print -rn -- $line | shasum -a 256 | cut -d' ' -f1)" >> $S/stdin.log
     [[ -n $line ]] && print -r -- "KEY STORED for this Windows user as a User environment variable (length ${#line}); the value is not printed" \
       || { print -r -- "KEY FAIL: nothing arrived on stdin; nothing stored"; exit 1; } ;;
-  *drive640.py\ scan*) print -r -- 'SCAN PASS key checked; replacements: {"<MODEL>": 2, "<PROJECT>": 1}' ;;
+  *drive640.py\ scan*) print -r -- 'SCAN PASS key checked; replacements: {"<MODEL>": 2, "<PROJECT>": 1}; files 3'$'\r' ;;
   *drive640.py\ r0*) print -r -- "ITEM R0.answer PASS codex exec answered with PONG640"; print -r -- "RESULT R0 PASS" ;;
   *drive640.py\ run\ *) m=${cmd##* }; print -r -- "ITEM R1 PASS outcome completed (stand-in)"; print -r -- "RESULT R-$m PASS (PASS 1)" ;;
-  *tar\ -*) ;;
-  *) print -r -- "stand-in: unknown remote command" >&2; exit 2 ;;
-  esac ;;
-'compute scp '*)
-  src=${@[-2]} dst=${@[-1]}
-  if [[ $src == *:C:/v640/out/* ]]; then
-    step=${src##*/}
-    mkdir -p $dst/$step/agents
+  *tar\ -xf*)   # upload: what arrived on stdin, listed; settings.json kept for the fake evidence
+    rm -rf $S/up; mkdir -p $S/up; tar -xf - -C $S/up || exit 1
+    (cd $S/up && find . -type f | sed 's|^\./||' | sort) > $S/upload.txt
+    cp $S/up/v640/settings.json $S/uploaded-settings.json 2> /dev/null; rm -rf $S/up ;;
+  *tar\ -cf*)   # fetch: the step's fake evidence (3 files) as a tar on stdout; tar-short drops one in transit
+    step=${cmd##* }; d=$S/out; rm -rf $d; mkdir -p $d/$step/agents
     # Every scrub value the steps uploaded, as written and upper-cased, plus sample addresses and a version string.
     /usr/bin/python3 -I -c 'import json, sys
 pairs = json.load(open(sys.argv[1]))["scrub"]
 print(" | ".join(v for _, v in pairs) + " | " + " | ".join(v.upper() for _, v in pairs))
-print("ip 203.0.113.7 ipv6 2001:db8::7 loopback 127.0.0.1 build 10.0.20348.2700")' $S/uploaded-settings.json > $dst/$step/console.txt
+print("ip 203.0.113.7 ipv6 2001:db8::7 loopback 127.0.0.1 build 10.0.20348.2700")' $S/uploaded-settings.json > $d/$step/console.txt
     /usr/bin/python3 -I -c 'import json, sys
 pairs = json.load(open(sys.argv[1]))["scrub"]
-print(json.dumps({"values": [v for _, v in pairs]}).encode().decode())' $S/uploaded-settings.json > $dst/$step/agents/record.json
+print(json.dumps({"values": [v for _, v in pairs]}))' $S/uploaded-settings.json > $d/$step/agents/record.json
     /usr/bin/python3 -I -c 'import json, sys
 pairs = json.load(open(sys.argv[1]))["scrub"]
-open(sys.argv[2], "wb").write(" ".join(v for _, v in pairs).encode("utf-16-le"))' $S/uploaded-settings.json $dst/$step/utf16.txt
-  else
-    find $src -type f | sed "s|^${src:h}/||" | sort > $S/upload.txt
-    cp $src/settings.json $S/uploaded-settings.json 2> /dev/null
-  fi ;;
+open(sys.argv[2], "wb").write(" ".join(v for _, v in pairs).encode("utf-16-le"))' $S/uploaded-settings.json $d/$step/utf16.txt
+    [[ -f $S/tar-short ]] && rm -f $d/$step/utf16.txt
+    tar -cf - -C $d $step ;;
+  *) print -r -- "stand-in: unknown remote command" >&2; exit 2 ;;
+  esac ;;
+'compute scp '*) print -r -- "stand-in: gcloud compute scp is not used by the steps any more" >&2; exit 4 ;;
 config*) print -r -- "stand-in: gcloud config is never expected from the steps" >&2; exit 3 ;;
 *) print -r -- "stand-in: unhandled: $*" >&2; exit 2 ;;
 esac

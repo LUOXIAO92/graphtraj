@@ -99,6 +99,10 @@ touch $S/ssh-fail; step V-no-ssh-answer STOP V; rm -f $S/ssh-fail
 step D-after-partial-V PASS D
 # The full sequence.
 step V-full PASS V
+c0=$(grep -c 'compute instances create' $S/argv.log)
+step V-again-on-existing-VM PASS V
+CHECK+="V on the existing RUNNING VM: instances create calls during it $(( $(grep -c 'compute instances create' $S/argv.log) - c0 )); said it resumes: $(yn grep -q 'provisioning resumes on it' $LAST); rules re-checked: $(yn grep -q 'Task firewall rules in place' $LAST); upload overwrote (tar): $(yn grep -q 'tar -xf - -C C:/' $LAST); provision ran: $(yn grep -q '^PROVISION PASS' $LAST)"
+CHECK+="uploaded by tar: $(tr '\n' ' ' < $S/upload.txt)"
 CHECK+="Task rules existing when instances create ran: $(grep -c . $S/rules-at-create.txt) (deny and ssh)"
 CHECK+="deny rule as specified (DENY all, 0.0.0.0/0, priority 1000, only the VM tag, enabled): $(rule deny 'r["denied"] == [{"IPProtocol": "all"}] and r["sourceRanges"] == ["0.0.0.0/0"] and r["priority"] == 1000 and r["targetTags"] == [sys.argv[1].split("rule-")[1][:-10]] and not r["disabled"]')"
 CHECK+="ssh rule as specified (ALLOW tcp:22, source = first address/32, priority 900): $(rule ssh 'r["allowed"] == [{"IPProtocol": "tcp", "ports": ["22"]}] and r["sourceRanges"] == [ip1 + "/32"] and r["priority"] == 900')"
@@ -109,6 +113,9 @@ VERIFY640_IP=$IP2 step R0 PASS R0
 CHECK+="R0 with an unchanged address made no update: $(yn grep -qv 'updated (address not shown)' $LAST)"
 VERIFY640_IP=$IP2 step R-mxc PASS R mxc
 VERIFY640_IP=$IP2 step E-R0 PASS E R0
+CHECK+="fetch count check printed: $(yn grep -q 'PASS: 3 of 3 evidence files arrived' $LAST)"
+touch $S/tar-short; VERIFY640_IP=$IP2 step E-R0-one-file-lost FAIL E R0; rm -f $S/tar-short
+CHECK+="lost file reported: $(yn grep -q 'the VM counted 3 evidence files, 2 arrived' $LAST)"
 touch $S/disk-left; step D-disk-survives FAIL D; rm -f $S/disk-left
 step D-clean PASS D
 CHECK+="after D: Task rules left $(ls $S | grep -c '^rule-'), instance $([[ -f $S/instance ]] && print present || print absent)"
@@ -119,6 +126,7 @@ lines=$(grep -c . $S/argv.log)
 noproj=$(grep -v -c -- '--project=' $S/argv.log)
 other=$(grep -v -- "--project=${V[PROJECT]}" $S/argv.log | grep -v -c -- "compute images describe-from-family .*--project=${V[IMAGE_PROJECT]}")
 cfg=$(grep -c -E '(^| )config( |$)' $S/argv.log)
+CHECK+="gcloud compute scp calls: $(grep -c 'compute scp' $S/argv.log)"
 CHECK+="gcloud calls: $lines; without --project: $noproj; naming another project than <PROJECT>, other than the public image read: $other; 'config' calls: $cfg"
 ipc=$(grep -l -F -e $IP1 -e $IP2 $OUT/*.txt 2> /dev/null | wc -l | tr -d ' ')
 CHECK+="consoles showing either address: $ipc"

@@ -92,9 +92,15 @@ and `$TMPDIR`.
   and environment. It is not a Claude host, so the serving-path check prints SKIPPED.
 - `gh` is a stand-in (`x641.py fake-gh`): a JSON file of Issues that answers a deleted Issue with HTTP 410, as GitHub
   does. The repository is `owner/repo`.
+  - Like gh's stored login, it answers only when HOME is the stand-in user HOME. Otherwise it gives the message Main
+    saw: "The token in default is invalid".
+  - `pre.txt` shows the wrapper path passing and, on the INFO line, the direct isolated-HOME gh failing.
+  - `real-old-environment.txt` is a contrast run, not a Main step. mcp-641.json was rewritten to the 3d3ca521-style
+    environment: isolated HOME, gh directly on PATH, no wrapper. Every `task_backup` then fails with that message and
+    no Issue is created.
 - No login was used and nothing was written to the network.
 - `real-broken-run2.txt` makes run 2 call nothing. Its judge FAILs, and cleanup still deletes every Issue created so far.
-- pre through post ran at 166e7e70; G, SR and suite-base ran at fbce624c. `src` and `tests` are identical from
+- pre through post (and the contrast run) ran at 1485abaa (correction 1); G, SR and suite-base ran at fbce624c. `src` and `tests` are identical from
   ed47b3b3 onward; later commits change only `scripts/verify-641`. Each commit moves HEAD, so Main's `install`
   builds the venv at the final HEAD.
 - `real-rerun-stop.txt` is a second `real` while the mapping exists: it STOPs and prints the exact `rm`.

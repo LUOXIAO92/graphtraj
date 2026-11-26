@@ -1,6 +1,6 @@
-$ zsh steps.zsh trust   (rehearsal 2026-11-26T22:06:07)
+$ zsh steps.zsh trust   (rehearsal 2026-11-26T22:12:19)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
-REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [trust] USER, once per path $TMPDIR/641r/root/proj (Main cannot: it needs a terminal and a dialog). In a plain macOS Terminal:
   cd '$TMPDIR/641r/root/proj' && $TMPDIR/641r/claude/claude --strict-mcp-config
 Dialog: 'Do you trust the files in this folder?' naming $TMPDIR/641r/root/proj. Choose 'Yes, proceed'.

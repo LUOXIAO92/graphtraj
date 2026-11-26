@@ -1,8 +1,8 @@
-$ zsh steps.zsh setup   (rehearsal 2026-11-26T22:06:05)
+$ zsh steps.zsh setup   (rehearsal 2026-11-26T22:12:17)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
-REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [setup] Main. Project $TMPDIR/641r/root/proj, probe Tasks 1 (parent) and 2 (child), Claude host material, $TMPDIR/641r/root/mcp-641.json. Dialog: none. No login.
-Create dev from e1a99715b45110d6d5a058e682a578b55beebe6d? [y/N]: Created Integration Worktree on dev.
+Create dev from f17ef652d630638dfe6fbbb123a2e96cba33df2e? [y/N]: Created Integration Worktree on dev.
 GraphTraj project setup complete.
 PASS: graphtraj setup created $TMPDIR/641r/root/proj/.graphtraj
 PASS: public task register: Task 1 ($TMPDIR/641r/root/proj/.graphtraj/state/tasks/1-verify-641-parent)
@@ -11,7 +11,7 @@ PASS: public task register: Task 2 ($TMPDIR/641r/root/proj/.graphtraj/state/task
   task 2: 'verify-641 disposable test Task (child)' | parent 1 | status pending
 PASS: probe Tasks are ready in the isolated task graph (public task_graph): 1 parent, 2 its child
 PASS: Claude host material written: ["$TMPDIR/641r/root/proj/.claude/settings.local.json","$TMPDIR/641r/root/proj/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json","$TMPDIR/
-$TMPDIR/641r/root/mcp-641.json: graphtraj -> python -m graphtraj.runtimes.claude.host serve --config ... | env names: ['GH_CONFIG_DIR', 'HOME', 'PATH']
+$TMPDIR/641r/root/mcp-641.json: graphtraj -> python -m graphtraj.runtimes.claude.host serve --config ... | env names: ['HOME', 'PATH']
 PASS: no backup mapping yet ($TMPDIR/641r/root/proj/.graphtraj/state/task-backups.yml absent)
 writes: $TMPDIR/641r/root only. dialog: none.
 RESULT 641 setup: PASS

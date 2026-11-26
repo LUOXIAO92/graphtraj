@@ -1,6 +1,6 @@
-$ zsh steps.zsh post   (rehearsal 2026-11-26T22:06:10)
+$ zsh steps.zsh post   (rehearsal 2026-11-26T22:12:22)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
-REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [post] Main. Your ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh vs pre (names, sizes, mtimes). <5 s.
 PASS: your locations are unchanged
 outputs: $TMPDIR/641r/root (copies in $TMPDIR/641r/out). To remove everything afterwards: rm -rf '$TMPDIR/641r/root'

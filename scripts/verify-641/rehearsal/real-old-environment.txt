@@ -1,0 +1,31 @@
+# Contrast run (not a Main step): before this run, mcp-641.json was rewritten with the 3d3ca521-style server
+# environment: HOME=$TMPDIR/641r/root/home and PATH=$TMPDIR/641r/bin:... (the gh stand-in directly, no wrapper):
+#   x641.py mcpconfig <proj>/.mcp.json <root>/mcp-641.json <root>/home $TMPDIR/641r/bin:/usr/bin:/bin:/usr/sbin:/sbin
+$ zsh steps.zsh real   (rehearsal 2026-11-26T22:12:32)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+== [real] Main. Two claude -p runs in $TMPDIR/641r/root/proj (mcp__graphtraj__tasks only) and gh with your login; disposable Issues in owner/repo, ALL deleted at the end (also after a FAIL). LOGIN: your Claude and gh logins. Dialog: none. ~2-4 min.
+repository: owner/repo | started 2026-11-26T13:12:32Z | MCP: env names: ['HOME', 'PATH']
+claude's environment (names only): HOME LANG PATH TERM TMPDIR USER | allowed tools: mcp__graphtraj__tasks
+== run 1: back up parent 1 and child 2 through the real host
+run 1 prompt (one line): Use only the mcp__graphtraj__tasks tool, inline arguments, one call at a time in this order: call 1 = {"action":"execute","feature":"task_backup","arguments":{"task_id":"1","repository":"owner/repo"}}; call 2 = {"action":"execute","feature":"task_backup","arguments":{"task_id":"2","repository":"owner/repo"}}. Make no other call. Then reply with exactly one line: DONE-641-1.
+claude -p run 1 exit=0
+init: model STAND-IN | apiKeySource none | plugins [] | mcp servers []
+serving path: STAND-IN (rehearsal; no Claude host)
+CHECK 641 run 1 serving path is the native association: SKIPPED (stand-in, not evidence)
+call 1: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "1", "repository": "owner/repo"}} -> ERROR {"outcome": "failed", "error": "gh api POST repos/owner/repo/issues failed: github.com\n  X Failed to log in to github.com account (default)\n  - The token in default is invalid. (stand-in: HOME is not the login HOME)", "backup": {"task_id": "1", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "d88f42eea949adab2f455fcbbe38d32b", "issue": null, "published": null, "p
+call 2: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "owner/repo"}} -> ERROR {"outcome": "failed", "error": "gh api POST repos/owner/repo/issues failed: github.com\n  X Failed to log in to github.com account (default)\n  - The token in default is invalid. (stand-in: HOME is not the login HOME)", "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "7a7c2e73ba2eda61739d18e961546f62", "issue": null, "published": null, "p
+CHECK 641 run 1 exactly the expected task_backup calls, inline, in order: PASS (2 calls)
+CHECK 641 run 1 parent 1 created: FAIL (outcome None, Issue #None)
+CHECK 641 run 1 child 2 created and linked under the parent: FAIL (outcome None, Issue #None, hierarchy None)
+final: 'stand-in' | is_error False
+RESULT 641 judge run 1: FAIL (2) | Issues {'parent': None, 'child': None}
+== cleanup (always runs): delete every Issue this run created
+Issues created by this run: none (in owner/repo)
+PASS: every Issue this run created now answers HTTP 410: none
+host log (last lines): none
+writes: $TMPDIR/641r/root (project mapping, streams) and copies in $TMPDIR/641r/out; GitHub: Issues created in owner/repo and deleted again. dialog: none.
+re-judge (paste): ~/miniconda3/bin/python3.13 -I ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/x641.py judge 2 $TMPDIR/641r/root/run-2.jsonl owner/repo $TMPDIR/641r/root/run-2-summary.json <old>
+RESULT 641 real: FAIL (lines above; created and deleted: none)
+next: report the FAIL lines; to rerun: rm '$TMPDIR/641r/root/proj/.graphtraj/state/task-backups.yml' && zsh ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/steps.zsh real
+STEP-END real rc=1

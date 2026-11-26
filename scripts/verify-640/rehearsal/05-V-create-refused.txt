@@ -1,0 +1,11 @@
+$ zsh scripts/verify-640/steps.zsh V
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [V] Create and provision the VM. CLOUD COST STARTS HERE (until D). Login: gcloud. Dialog: none.
+PASS: Task SSH key pair created under local/ssh (git-ignored)
+$ gcloud compute instances create <VM_NAME> --project=<PROJECT> --zone=<ZONE> (image family, machine type, disk, labels, tag, instance metadata from settings)
+gcloud failed (VM creation); its own error, verbatim:
+  | ERROR: (gcloud.compute.instances.create) Could not fetch resource:
+  |  - Windows Server images are not available on free trial billing accounts (stand-in error text)
+STOP: VM creation failed; see gcloud's error above. Nothing else was done after it. If anything was created, run: zsh scripts/verify-640/steps.zsh D
+VERDICT 640 V: STOP
+(exit 1)

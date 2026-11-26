@@ -1,0 +1,18 @@
+$ <venv python> scripts/verify-640/vm/drive640.py r0   (env names: <KEY_ENV>)
+[R0] versions, then one codex exec call with a one-line prompt (no tool)
+  python: 3.13.11 | packaged by Anaconda, Inc. | (main, Dec 10 2025, 21:21:08) [Clang 20.1.8 ]
+  codex_version: codex-cli 0.172.0 (stand-in)
+  codex_command: /tmp/claude-501/v640drv.wEko4J/bin/codex
+  git: git version 2.50.1 (Apple Git-155)
+  graftling_head: 2ee706eb749355afc3f73f03a1b0de4cd48da1f2
+  symbolic_links: True
+  preferred_encoding: UTF-8
+  filesystem_encoding: utf-8
+ITEM R0.candidate PASS graftling HEAD on the VM is the candidate
+codex exec exit: 0
+ITEM R0.answer PASS codex exec answered with PONG640
+ITEM R0.provider PASS rollout session_meta model_provider: ['<PROVIDER_ID>'] (configured: <PROVIDER_ID>)
+ITEM R0.model PASS rollout turn_context model: ['<MODEL>'] (configured: <MODEL>)
+ITEM R0.model-reported FAIL the model the provider reported differs from the configured one
+RESULT R0 FAIL
+(exit 1)

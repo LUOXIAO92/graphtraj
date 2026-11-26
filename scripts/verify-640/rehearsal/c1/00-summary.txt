@@ -1,0 +1,42 @@
+Task 640 steps rehearsal (stand-in gcloud; random dummy settings and key; consoles 01-22 in c1/)
+--- runs
+01 00-missing-settings: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+02 00-empty-variable: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+03 00-settings-not-ignored: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+04 00-label-value-ordinary-word: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+05 00-label-value-too-short: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+06 00-image-other-family: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+07 00-project-allow-all-65534: expected PASS, got 'VERDICT 640 00: PASS (Task VM: absent)' -> yes
+08 00-project-rule-priority-1000: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+09 V-project-rule-priority-1000: expected STOP, got 'VERDICT 640 V: STOP' -> yes
+10 V-create-refused: expected STOP, got 'VERDICT 640 V: STOP' -> yes
+11 D-after-refused-create: expected PASS, got 'VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+12 V-no-ssh-answer: expected STOP, got 'VERDICT 640 V: STOP' -> yes
+13 D-after-partial-V: expected PASS, got 'VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+14 V-full: expected PASS, got 'VERDICT 640 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' -> yes
+15 K-no-terminal: expected STOP, got 'VERDICT 640 K: STOP' -> yes
+16 K-dummy-key-after-address-change: expected PASS, got 'VERDICT 640 K: PASS (key stored as the VM user's environment variable; R0 proves it with a real call)' -> yes
+17 R0: expected PASS, got 'VERDICT 640 R0: PASS (PASS; evidence PASS)' -> yes
+18 R-mxc: expected PASS, got 'VERDICT 640 R-mxc: PASS (PASS (PASS 1); evidence PASS)' -> yes
+19 E-R0: expected PASS, got 'VERDICT 640 E: PASS (R0: PASS (evidence/live/R0, 3 files; scanned on the VM, scrubbed twice))' -> yes
+20 D-disk-survives: expected FAIL, got 'VERDICT 640 D: FAIL (still present, by name/tag/labels: disks: 1)' -> yes
+21 D-clean: expected PASS, got 'VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+22 R0-after-D: expected STOP, got 'VERDICT 640 R0: STOP' -> yes
+--- checks
+ordinary label value: console names VM_LABELS: yes
+image mismatch: gcloud's raw line printed: yes
+00 NOTE names the project rules with priorities: yes
+V stopped before creating anything: instance absent, Task rules 0
+after the refused create: Task rules present 2 (D removes them)
+Task rules existing when instances create ran: 2 (deny and ssh)
+deny rule as specified (DENY all, 0.0.0.0/0, priority 1000, only the VM tag, enabled): yes
+ssh rule as specified (ALLOW tcp:22, source = first address/32, priority 900): yes
+address change: K updated the ssh rule: yes; its source is now the new address/32: yes
+R0 with an unchanged address made no update: yes
+after D: Task rules left 0, instance absent
+gcloud calls: 129; without --project: 0; naming another project than <PROJECT>, other than the public image read: 0; 'config' calls: 0
+consoles showing either address: 0
+dummy key: in gcloud argv 0, in gcloud environments 0, in files (verify-640 tree incl. local/ and rehearsal, stand-in state, evidence) 0; arrived on gcloud's stdin (length+SHA-256 match) 1 time(s)
+scrub list on the VM leaves out the network name and label keys: yes
+fetched evidence: 15 files; files still holding a settings value (any case, UTF-8): 0; files holding the sample IPv4/IPv6: 0; settings values left in the UTF-16 sample: 0; placeholders now present: <ACCOUNT> 12, <BASE_URL_HOST> 12, <BASE_URL> 24, <IP> 8, <KEY_ENV> 12, <MACHINE_TYPE> 12, <MODEL> 12, <PROJECT> 12, <PROVIDER_ID> 12, <PROVIDER_NAME> 12, <REGION> 12, <VM_LABEL> 12, <VM_NAME> 24, <ZONE> 12
+committed-or-committable files (tracked + untracked not ignored) holding any dummy value or the dummy key: 0

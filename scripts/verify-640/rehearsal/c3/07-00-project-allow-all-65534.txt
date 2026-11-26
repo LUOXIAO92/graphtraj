@@ -1,0 +1,22 @@
+$ zsh scripts/verify-640/steps.zsh 00
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [00] Preflight, read only. Login: gcloud (account not shown). Dialog: none.
+PASS: run by zsh 5.9
+PASS: settings file is git-ignored and untracked; variables read (names only): PROJECT, ZONE, MACHINE_TYPE, VCPUS, VM_NAME, VM_LABELS, VM_USER, NETWORK, IMAGE_FAMILY, IMAGE_PROJECT, DISK_GB, PROVIDER_ID, PROVIDER_NAME, BASE_URL, WIRE_API, MODEL, KEY_ENV, PRICE_VM_USD_H, PRICE_WINLIC_USD_VCPU_H, PRICE_DISK_USD_GB_MONTH, PRICE_IP_USD_H, EST_CURRENCY, EST_RATE, BUDGET
+gcloud: Google Cloud SDK 999.0.0 (stand-in) | path: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/640-graftling-windows-codex-real/scripts/verify-640/rehearsal/fake-gcloud.zsh | TMPDIR for started processes: /tmp/claude-501
+PASS: gcloud has an active account (not shown)
+PASS: the project is reachable and ACTIVE
+PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive640.py and steps.zsh)
+PASS: the Windows image family resolves to windows-server-fake-dc-v20261111 (family as set, X86_64)
+PASS: no VM of this Task exists yet
+NOTE: project rule(s) opening tcp:22 to everyone (name priority): default-allow-ssh 65534; not changed by this Task
+NOTE: project rule(s) opening tcp:3389 to everyone (name priority): default-allow-rdp 65534; not changed by this Task
+PASS: every project rule opening SSH/RDP to everyone has a priority above 1000; the Task deny rule (1000) takes precedence
+Task firewall rules now: <VM_NAME>-deny absent, <VM_NAME>-ssh absent; V creates missing ones before the VM, D deletes both
+PASS: bundle of graftling dev 2ee706e made and verified; it contains the candidate 2ee706eb7493 (the VM checks out the candidate)
+PASS: Codex pin 0.172.0 >= 0.164.0
+PASS: no Task SSH key yet (V creates one under local/ssh)
+cost estimate (console only): 21 XXX/hour (USD 0.214/h: VM, Windows licence, disk, IP); the budget covers about 47 h of VM time
+next: zsh scripts/verify-640/steps.zsh V
+VERDICT 640 00: PASS (Task VM: absent)
+(exit 0)

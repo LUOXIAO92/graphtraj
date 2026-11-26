@@ -1,0 +1,30 @@
+Task 640 driver rehearsal on macOS (POSIX branches; graftling 2ee706eb7493 cloned from a bundle of dev)
+--- runs
+drv-01 r0-no-key: expected /RESULT R0 STOP/, got 'RESULT R0 STOP' -> yes
+drv-02 r0-provider-refuses: expected /RESULT R0 STOP/, got 'RESULT R0 STOP' -> yes
+drv-03 r0-reported-model-differs: expected /RESULT R0 FAIL/, got 'RESULT R0 FAIL' -> yes
+drv-04 r0-pass: expected /RESULT R0 PASS/, got 'RESULT R0 PASS' -> yes
+drv-05 scan-r0: expected /SCAN PASS/, got 'SCAN PASS key checked; replacements: {"<BASE_URL>": 1, "<KEY_ENV>": 1, "<MODEL>": 6, "<PROVIDER_ID>": 5, "<PROVIDER_NAME>": 1}; files 8' -> yes
+drv-06 scan-finds-planted-key: expected /SCAN FAIL/, got 'SCAN FAIL the key value is in 1 file(s) (value not printed): ['planted.txt']' -> yes
+drv-07 run-mxc-standin: expected /RESULT R-mxc PASS/, got 'RESULT R-mxc PASS (NOT-RUN 5, OBSERVED 3, PASS 9)' -> yes
+drv-08 scan-run: expected /SCAN PASS/, got 'SCAN PASS key checked; replacements: {"<MODEL>": 3, "<PROVIDER_ID>": 2}; files 29' -> yes
+drv-09 run-mxc-no-shell: expected /RESULT R-mxc NO-SHELL/, got 'RESULT R-mxc NO-SHELL (NOT-RUN 13, OBSERVED 1, PASS 4; no tool ran under mxc: UnsupportedOperation("native MXC is unavailable on this executor") (injected by the rehearsal))' -> yes
+drv-10 run-unelevated-standin: expected /RESULT R-unelevated PASS/, got 'RESULT R-unelevated PASS (NOT-RUN 5, OBSERVED 3, PASS 9)' -> yes
+drv-11 run-none-standin: expected /RESULT R-none PASS/, got 'RESULT R-none PASS (NOT-RUN 5, OBSERVED 3, PASS 9)' -> yes
+drv-12 rollout-a-shell-error: expected /RESULT R-unelevated NO-SHELL/, got 'RESULT R-unelevated NO-SHELL (NOT-RUN 13, OBSERVED 1, PASS 4; no tool ran under unelevated: the shell call returned an error: failed to start the process: CreateProcessAsUserW failed: 5)' -> yes
+drv-13 rollout-b-no-tool-call: expected /RESULT R-unelevated NO-SHELL/, got 'RESULT R-unelevated NO-SHELL (NOT-RUN 13, OBSERVED 1, PASS 4; no tool ran under unelevated: the model made no tool call)' -> yes
+drv-14 rollout-c-call-ran: expected /RESULT R-unelevated PASS/, got 'RESULT R-unelevated PASS (NOT-RUN 5, OBSERVED 3, PASS 9)' -> yes
+drv-15 run-none-after-unelevated: expected /RESULT R-none PASS/, got 'RESULT R-none PASS (NOT-RUN 5, OBSERVED 3, PASS 9)' -> yes
+drv-16 scrub-ipv6: expected /SCRUB /, got 'SCRUB replacements: {"<IP>": 2}' -> yes
+--- checks
+no-shell run: items NOT-RUN with the cause 8, FAIL items 0
+R-none evidence states the sandbox is off: yes; host settings extend :danger-full-access: 1
+real-mode settings: host approvalPolicy on-request; child approvalPolicy never; none extends :danger-full-access; unelevated extends :workspace
+(a) shell error: R1 NOT-RUN with the error text: 1; rollout copied: 1
+(b) no call: R1 NOT-RUN 'the model made no tool call': 1; R1.tool-calls says 0 calls: 1
+(c) call ran: R1/R2/R3 tool-calls items with exit 0: 3; NOT-RUN items for no-tool: 0
+R none: in-sandbox caller NOT-RUN 'no tool sandbox in this run': 1; sandbox-off line: 1
+IPv6 scrub result: path codex_core::tools::router loopback ::1 global <IP> doc <IP> linklocal fe80::1 time 12:34:56
+consoles holding the key: 0; committed-or-committable files holding a random value or the key: 0
+provider refusal console: raw error printed with placeholders (1 line(s) with <MODEL>/<BASE_URL>)
+VM-side evidence (out/) files still holding the model or base-URL host after the scans: 0

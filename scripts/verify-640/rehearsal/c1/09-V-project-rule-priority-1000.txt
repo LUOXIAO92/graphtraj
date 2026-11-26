@@ -1,0 +1,10 @@
+$ zsh scripts/verify-640/steps.zsh V
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [V] Create and provision the VM. CLOUD COST STARTS HERE (until D). Login: gcloud. Dialog: none.
+PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive640.py and steps.zsh)
+PASS: Task SSH key pair created under local/ssh (git-ignored)
+NOTE: project rule(s) opening tcp:22 to everyone (name priority): default-allow-ssh 1000; not changed by this Task
+NOTE: project rule(s) opening tcp:3389 to everyone (name priority): default-allow-rdp 65534; not changed by this Task
+STOP: project rule(s) default-allow-ssh open SSH/RDP to everyone at priority <= 1000, so the Task deny rule (priority 1000) would not take precedence; nothing created. The user decides (this Task never changes project rules)
+VERDICT 640 V: STOP
+(exit 1)

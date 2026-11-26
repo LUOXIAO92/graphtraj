@@ -1,0 +1,30 @@
+$ <venv python> scripts/verify-640/vm/drive640.py run unelevated   (env names: <KEY_ENV>)
+[R-unelevated] R1-R4 and the 629 sec. 6 Codex items with windows.sandbox = unelevated
+[R1] create a Codex child that runs one tool and ends its turn
+ITEM R1.tool-calls OBSERVED 0 shell/exec call(s) in rollout lines 0-1 (rollout injected by the rehearsal)
+ITEM R1 NOT-RUN no tool ran under unelevated: the model made no tool call
+ITEM R5.6-code-page NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+ITEM R2 NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+ITEM R5.2-cmd-start-/b NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+ITEM R5.2-Start-Process NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+ITEM R5.2-nesting NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+ITEM R3.reconcile NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+ITEM R5.2-job-by-name NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+ITEM R3.takeover NOT-RUN needs a tool process; none ran (see R1): the model made no tool call
+cleanup: ended 3 leftover tool process(es) of this run: [10903, 10902, 10900]
+[R4] Codex parent host: one real MCP call (create a child), with the 629 sec. 6 probes beside it
+{"parent_session": "thread-1", "service_pid": 10905, "source": "thread/start"}
+┌ thread-1 → agent-11b6b0aa46b84095be103144bb4ac318
+│ hold
+└
+ITEM R4 PASS outcome completed; creates through MCP 1; authenticated callers 3; stop_unconfirmed []; child record present; last message 'The child answered.'
+ITEM R5.1-mcp-caller PASS authenticated caller pid(s) [10906]; MCP server pid(s) seen [10906]; in the service job: [None]
+ITEM R5.1-sandbox-caller NOT-RUN the stand-in has no tool sandbox (real VM only)
+ITEM R5.1-forged-plain PASS a same-user process outside the job asked status: authority-denied
+ITEM R5.1-forged-parent-attribute NOT-RUN Windows only
+ITEM R5.3-process-shape NOT-RUN Win32_Process shape is real VM only
+ITEM R5.4-session-end NOT-RUN exit codes of non-child processes are read on Windows only
+ITEM R5.5-app-server-profile PASS app-server --listen stdio:// started under windows.sandbox=unelevated; graftling's profile (no unix_sockets, control directory write) accepted: 0 error line(s) in 7 stderr.log file(s); the MCP server reached the pipe from outside the tool sandbox: True
+rollouts kept in the evidence (rollouts/): 1
+RESULT R-unelevated NO-SHELL (NOT-RUN 13, OBSERVED 1, PASS 4; no tool ran under unelevated: the model made no tool call)
+(exit 1)

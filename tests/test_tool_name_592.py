@@ -56,8 +56,8 @@ ALLOWED = [
     ('README.md', '`mcp__graftling__agents` next to `mcp__graphtraj__agents`'),
     ('README.md', '`mcp__graftling__agents` is recorded only under'),
     ('README.md', "GraphTraj's `agents` and `tasks` do not list it"),
-    # A count of Agents in the desktop footer, not the tool.
-    ('desktop/src/Activity.tsx', '.agents.length} agents ·'),
+    # The plural word of the Agent count in the desktop footer (Task 627's pluralisation), not the tool.
+    ('desktop/src/Activity.tsx', "activity.agents.length === 1 ? 'agent' : 'agents'"),
 ]
 
 

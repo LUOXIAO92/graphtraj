@@ -1,8 +1,9 @@
-$ zsh steps.zsh real   (rehearsal 2026-11-26T22:12:19)
+$ zsh steps.zsh real   (rehearsal 2026-11-26T22:21:03)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
 REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [real] Main. Two claude -p runs in $TMPDIR/641r/root/proj (mcp__graphtraj__tasks only) and gh with your login; disposable Issues in owner/repo, ALL deleted at the end (also after a FAIL). LOGIN: your Claude and gh logins. Dialog: none. ~2-4 min.
-repository: owner/repo | started 2026-11-26T13:12:19Z | MCP: env names: ['HOME', 'PATH']
+venv: installed 9cd7df16; HEAD 5a8252c6 has identical src/, tests/ and pyproject.toml (only scripts differ): reusing $TMPDIR/641r/root/venv
+repository: owner/repo | started 2026-11-26T13:21:04Z | MCP: env names: ['HOME', 'PATH']
 claude's environment (names only): HOME LANG PATH TERM TMPDIR USER | allowed tools: mcp__graphtraj__tasks
 == run 1: back up parent 1 and child 2 through the real host
 run 1 prompt (one line): Use only the mcp__graphtraj__tasks tool, inline arguments, one call at a time in this order: call 1 = {"action":"execute","feature":"task_backup","arguments":{"task_id":"1","repository":"owner/repo"}}; call 2 = {"action":"execute","feature":"task_backup","arguments":{"task_id":"2","repository":"owner/repo"}}. Make no other call. Then reply with exactly one line: DONE-641-1.
@@ -10,9 +11,12 @@ claude -p run 1 exit=0
 init: model STAND-IN | apiKeySource none | plugins [] | mcp servers []
 serving path: STAND-IN (rehearsal; no Claude host)
 CHECK 641 run 1 serving path is the native association: SKIPPED (stand-in, not evidence)
-call 1: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "1", "repository": "owner/repo"}} -> {"outcome": "created", "hierarchy": [], "backup": {"task_id": "1", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "00de37ad00124759853bc8cbbb5a425f", "issue": {"number": 901, "id": 70901, "node_id": "I_stand_in_901", "url": "https://github.com/owner/repo/issues/901"}, "published": {"title": "verify-641 disposable test Task (parent)", "body": "<!-- graphtraj-task-b
-call 2: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "owner/repo"}} -> {"outcome": "created", "hierarchy": [{"parent": "1", "child": "2", "outcome": "linked"}], "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "c5059b3fb3932ee2dbc6cb86644361d0", "issue": {"number": 902, "id": 70902, "node_id": "I_stand_in_902", "url": "https://github.com/owner/repo/issues/902"}, "published": {"title": "verify-641 disposable t
-CHECK 641 run 1 exactly the expected task_backup calls, inline, in order: PASS (2 calls)
+call 1: ToolSearch {"query": "select:mcp__graphtraj__tasks", "max_results": 1} -> ""
+call 2: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "1", "repository": "owner/repo"}} -> {"outcome": "created", "hierarchy": [], "backup": {"task_id": "1", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "e486b3017b0993f9aa048e58950ed08a", "issue": {"number": 901, "id": 70901, "node_id": "I_stand_in_901", "url": "https://github.com/owner/repo/issues/901"}, "published": {"title": "verify-641 disposable test Task (parent)", "body": "<!-- graphtraj-task-b
+call 3: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "owner/repo"}} -> {"outcome": "created", "hierarchy": [{"parent": "1", "child": "2", "outcome": "linked"}], "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "3e0a73d45761a565eff2e4c828a1cf6a", "issue": {"number": 902, "id": 70902, "node_id": "I_stand_in_902", "url": "https://github.com/owner/repo/issues/902"}, "published": {"title": "verify-641 disposable t
+INFO 641 run 1: host deferred-tool load allowed (not judged): ToolSearch {"query": "select:mcp__graphtraj__tasks", "max_results": 1}
+CHECK 641 run 1 exactly the expected task_backup calls, inline, in order: PASS (2 mcp__graphtraj__tasks calls)
+CHECK 641 run 1 no other tool use: PASS
 CHECK 641 run 1 parent 1 created: PASS (outcome created, Issue #901)
 CHECK 641 run 1 child 2 created and linked under the parent: PASS (outcome created, Issue #902, hierarchy [{'parent': '1', 'child': '2', 'outcome': 'linked'}])
 final: 'stand-in' | is_error False
@@ -25,9 +29,12 @@ claude -p run 2 exit=0
 init: model STAND-IN | apiKeySource none | plugins [] | mcp servers []
 serving path: STAND-IN (rehearsal; no Claude host)
 CHECK 641 run 2 serving path is the native association: SKIPPED (stand-in, not evidence)
-call 1: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "owner/repo"}} -> {"outcome": "recreated", "replaced_issue": {"number": 902, "url": "https://github.com/owner/repo/issues/902"}, "hierarchy": [{"parent": "1", "child": "2", "outcome": "linked"}], "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "fe395bef7f8d54a52b3be05135eccb1e", "issue": {"number": 903, "id": 70903, "node_id": "I_stand_in_903", "url": "htt
-call 2: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "owner/repo"}} -> {"outcome": "unchanged", "hierarchy": [{"parent": "1", "child": "2", "outcome": "unchanged"}], "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "fe395bef7f8d54a52b3be05135eccb1e", "issue": {"number": 903, "id": 70903, "node_id": "I_stand_in_903", "url": "https://github.com/owner/repo/issues/903"}, "published": {"title": "verify-641 disposa
-CHECK 641 run 2 exactly the expected task_backup calls, inline, in order: PASS (2 calls)
+call 1: ToolSearch {"query": "select:mcp__graphtraj__tasks", "max_results": 1} -> ""
+call 2: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "owner/repo"}} -> {"outcome": "recreated", "replaced_issue": {"number": 902, "url": "https://github.com/owner/repo/issues/902"}, "hierarchy": [{"parent": "1", "child": "2", "outcome": "linked"}], "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "d47aaa8b3b8f8fde392aa11b4bf75c9f", "issue": {"number": 903, "id": 70903, "node_id": "I_stand_in_903", "url": "htt
+call 3: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "owner/repo"}} -> {"outcome": "unchanged", "hierarchy": [{"parent": "1", "child": "2", "outcome": "unchanged"}], "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "owner/repo", "marker": "d47aaa8b3b8f8fde392aa11b4bf75c9f", "issue": {"number": 903, "id": 70903, "node_id": "I_stand_in_903", "url": "https://github.com/owner/repo/issues/903"}, "published": {"title": "verify-641 disposa
+INFO 641 run 2: host deferred-tool load allowed (not judged): ToolSearch {"query": "select:mcp__graphtraj__tasks", "max_results": 1}
+CHECK 641 run 2 exactly the expected task_backup calls, inline, in order: PASS (2 mcp__graphtraj__tasks calls)
+CHECK 641 run 2 no other tool use: PASS
 CHECK 641 run 2 child 2 recreated: outcome recreated naming the deleted Issue: PASS (outcome recreated, replaced_issue {'number': 902, 'url': 'https://github.com/owner/repo/issues/902'}, new Issue #903, deleted #902)
 CHECK 641 run 2 the recreated Issue is linked under the parent: PASS (hierarchy [{'parent': '1', 'child': '2', 'outcome': 'linked'}])
 CHECK 641 run 2 repeating the backup is unchanged on the same Issue: PASS (outcome unchanged, Issue #903, hierarchy [{'parent': '1', 'child': '2', 'outcome': 'unchanged'}])

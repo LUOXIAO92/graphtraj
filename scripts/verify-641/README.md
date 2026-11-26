@@ -30,7 +30,7 @@ number that now names another object. The manual section "Back up Tasks to Issue
 | setup | Main | none | none | public `graphtraj setup`; probe Tasks 1 (parent) and 2 (child) through public `task register`, shown ready through public `task_graph`; host material; ROOT/mcp-641.json (env names HOME, PATH; PATH starts with ROOT/bin) |
 | trust | USER, once per path | – | "Do you trust the files in this folder?" → **Yes, proceed**; then `/exit` | lets Claude Code load the project plugin graphtraj-claude-host |
 | real | Main | the user's Claude login and gh login | none | see "Observables" below; ALWAYS deletes every Issue it created and shows each answers HTTP 410 |
-| post | Main | none | none | ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh unchanged |
+| post | Main | none | none | ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh unchanged on name, size and mtime against pre's baseline. Only `~/.codex/logs_*.sqlite*` and `~/.codex/models_cache.json`, the Codex Runtime's own log and model cache written by running Codex sessions, are listed as INFO and not judged. |
 | G | Main | none | none | full suite, 6 shards; waits for other test runs and for its own shards; its last lines are `RESULT 641 G`, the counts and the next command |
 | SR | Main | none | none | ids classed against 516's current definition (read through its task.yml `current_definition`) and the known `start an agent` id |
 | suite-base | Main, only for NEW ids | none | none | base c18b4beb vs candidate, both with the v0.10.2 wheel |
@@ -43,6 +43,7 @@ for its shards before it judges.
 | criterion | observable line |
 |---|---|
 | serving path is the native host | `serving path: native graphtraj-claude-host association` and `CHECK 641 run 1/2 serving path …: PASS` |
+| only the expected tool calls | `CHECK 641 run N exactly the expected task_backup calls, inline, in order: PASS (2 mcp__graphtraj__tasks calls)` and `CHECK 641 run N no other tool use: PASS`. The host's deferred-tool load `ToolSearch {"query": "select:mcp__graphtraj__tasks"}` is printed as `INFO … allowed (not judged)`. Any other tool use FAILs. |
 | baseline: both Issues exist, child linked | `CHECK 641 run 1 parent 1 created: PASS`, `CHECK 641 run 1 child 2 created and linked under the parent: PASS` |
 | the mapped Issue is really deleted | `PASS: #<child> now answers HTTP 410 (deleted)` (`gh issue delete` with your login, then a GET) |
 | deleted → new Issue, recreation and old number reported | `CHECK 641 run 2 child 2 recreated: outcome recreated naming the deleted Issue: PASS (… replaced_issue {'number': <child>, …}, new Issue #<new> …)` |
@@ -81,6 +82,9 @@ proved by `test_other_errors_on_the_mapped_issue_still_fail_without_creating`.
   (`/private/tmp/graphtraj-641`) is outside the Harness, so no Harness instruction file is above the project.
 - **Rerun of real.** It STOPs while the isolated mapping exists and prints the exact `rm` for that file. The earlier
   run's cleanup has already deleted that mapping's Issues.
+- **Reuse after a scripts-only commit.** `real` (`venv_ready`) accepts the installed venv when its commit's `src/`,
+  `tests/` and `pyproject.toml` equal HEAD's. It prints `venv: installed X; HEAD Y has identical …: reusing`. Then
+  `install`, `setup` and `trust` need not be rerun. `post` keeps comparing against pre's `ROOT/user-before.txt`.
 
 ## Rehearsal (Engineer; `zsh scripts/verify-641/rehearse.zsh <step>...`)
 
@@ -100,7 +104,20 @@ and `$TMPDIR`.
     no Issue is created.
 - No login was used and nothing was written to the network.
 - `real-broken-run2.txt` makes run 2 call nothing. Its judge FAILs, and cleanup still deletes every Issue created so far.
-- pre through post (and the contrast run) ran at 1485abaa (correction 1); G, SR and suite-base ran at fbce624c. `src` and `tests` are identical from
+- Correction 2 rehearsal:
+  - pre, install, setup and trust ran at 9cd7df16; real, its variants and post ran at 5a8252c6, reusing that venv as
+    Main will.
+  - The `claude` stand-in always loads the tool first with `ToolSearch select:mcp__graphtraj__tasks`, as the real
+    host did.
+  - `real.txt`: PASS with the INFO line.
+  - `real-other-tool.txt`: the stand-in also uses Bash, so `no other tool use: FAIL` and cleanup still runs.
+  - `post.txt`: the stand-in `~/.codex/logs_2.sqlite-wal` and `models_cache.json` were touched, so they show as INFO
+    and the step PASSes. `post-judged-change.txt`: `~/.codex/config.toml` was touched, so the step FAILs.
+  - `rejudge-main-run1.txt`: Main's actual run-1 stream (real host, 588dd269), re-judged offline by the fixed judge.
+    Run 1 PASSes: #594 parent created, #595 child created and linked. Both were already deleted. The account, model
+    and plugin list are scrubbed.
+  - `real-old-environment.txt` is from correction 1 (1485abaa).
+- G, SR and suite-base ran at fbce624c. `src` and `tests` are identical from
   ed47b3b3 onward; later commits change only `scripts/verify-641`. Each commit moves HEAD, so Main's `install`
   builds the venv at the final HEAD.
 - `real-rerun-stop.txt` is a second `real` while the mapping exists: it STOPs and prints the exact `rm`.

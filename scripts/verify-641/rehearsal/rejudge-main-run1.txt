@@ -1,0 +1,19 @@
+# Re-judge of Main's ACTUAL run-1 stream (real Claude host, candidate 588dd269, real step at 22:17) with the fixed judge
+# (x641.py at 5a8252c6). Offline: reads the retained copy realhost/run-1.jsonl; no network, no GitHub.
+# Issues #594 and #595 named below were already deleted by that run's cleanup (both answered HTTP 410).
+# Scrubbed for commit: the account is <owner>, the model <model>, the plugin list reduced to whether graphtraj-claude-host is in it.
+$ python -I x641.py judge 1 realhost/run-1.jsonl <owner>/graphtraj $TMPDIR/rejudge-summary.json
+init: model <model> | apiKeySource none | plugins [graphtraj-claude-host among others] | mcp servers [('graphtraj', 'connected')]
+serving path: native graphtraj-claude-host association
+CHECK 641 run 1 serving path is the native association: PASS
+call 1: ToolSearch {"query": "select:mcp__graphtraj__tasks", "max_results": 1} -> ""
+call 2: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "1", "repository": "<owner>/graphtraj"}} -> {"outcome": "created", "hierarchy": [], "backup": {"task_id": "1", "adapter": "github", "host": "github.com", "repository": "<owner>/graphtraj", "marker": "be9e831e78c57575da2dc04a1faf2e78", "issue": {"number": 594, "id": 6627484054, "node_id": "I_kwDOTyETEs8AAAABiwdhlg", "url": "https://github.com/<owner>/graphtraj/issues/594"}, "published": {"title": "verify-641 disposable test Task (parent)
+call 3: mcp__graphtraj__tasks {"action": "execute", "feature": "task_backup", "arguments": {"task_id": "2", "repository": "<owner>/graphtraj"}} -> {"outcome": "created", "hierarchy": [{"parent": "1", "child": "2", "outcome": "linked"}], "backup": {"task_id": "2", "adapter": "github", "host": "github.com", "repository": "<owner>/graphtraj", "marker": "dc6af4c723494e7566072568a05e2867", "issue": {"number": 595, "id": 6627484982, "node_id": "I_kwDOTyETEs8AAAABiwdlNg", "url": "https://github.com/<owner>/graphtraj/issues/595"}, "published": {
+INFO 641 run 1: host deferred-tool load allowed (not judged): ToolSearch {"query": "select:mcp__graphtraj__tasks", "max_results": 1}
+CHECK 641 run 1 exactly the expected task_backup calls, inline, in order: PASS (2 mcp__graphtraj__tasks calls)
+CHECK 641 run 1 no other tool use: PASS
+CHECK 641 run 1 parent 1 created: PASS (outcome created, Issue #594)
+CHECK 641 run 1 child 2 created and linked under the parent: PASS (outcome created, Issue #595, hierarchy [{'parent': '1', 'child': '2', 'outcome': 'linked'}])
+final: 'DONE-641-1' | is_error False
+RESULT 641 judge run 1: PASS | Issues {'parent': 594, 'child': 595}
+judge exit=0

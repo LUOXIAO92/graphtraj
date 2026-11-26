@@ -1,0 +1,20 @@
+$ zsh steps.zsh post   (rehearsal 2026-11-26T22:21:09)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+== [post] Main. Your ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh vs pre (names, sizes, mtimes; ~/.codex/logs_*.sqlite* and ~/.codex/models_cache.json listed as INFO). <5 s.
+INFO (not judged; the Codex Runtime's own log/cache files, written by running Codex sessions, not by these steps):
+  2,3c2,3
+  < .codex 9 11月 26 22:20:46 2026 logs_2.sqlite-wal
+  < .codex 9 11月 26 22:20:46 2026 models_cache.json
+  ---
+  > .codex 9 1月 1 01:01:00 2030 logs_2.sqlite-wal
+  > .codex 9 1月 1 01:01:00 2030 models_cache.json
+3c3
+< .codex 9 11月 26 22:20:46 2026 config.toml
+---
+> .codex 9 1月 1 02:02:00 2030 config.toml
+FAIL: a location changed (diff above)
+outputs: $TMPDIR/641r/root (copies in $TMPDIR/641r/out). To remove everything afterwards: rm -rf '$TMPDIR/641r/root'
+RESULT 641 post: FAIL
+next (paste): zsh ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/steps.zsh G
+STEP-END post rc=1

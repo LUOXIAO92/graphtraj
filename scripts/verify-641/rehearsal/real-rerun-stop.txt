@@ -1,7 +1,8 @@
-$ zsh steps.zsh real   (rehearsal 2026-11-26T22:12:21)
+$ zsh steps.zsh real   (rehearsal 2026-11-26T22:21:06)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
 REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [real] Main. Two claude -p runs in $TMPDIR/641r/root/proj (mcp__graphtraj__tasks only) and gh with your login; disposable Issues in owner/repo, ALL deleted at the end (also after a FAIL). LOGIN: your Claude and gh logins. Dialog: none. ~2-4 min.
+venv: installed 9cd7df16; HEAD 5a8252c6 has identical src/, tests/ and pyproject.toml (only scripts differ): reusing $TMPDIR/641r/root/venv
 STOP: $TMPDIR/641r/root/proj/.graphtraj/state/task-backups.yml exists (an earlier real run; its Issues were deleted by its cleanup). Look at it, then run exactly:
   rm '$TMPDIR/641r/root/proj/.graphtraj/state/task-backups.yml' && zsh ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/steps.zsh real
 STEP-END real rc=1

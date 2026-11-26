@@ -11,8 +11,14 @@
 # run time and never written to a file.
 # LOGIN: the user's gcloud login only (00 shows that an active account exists, not which). Every gcloud command names
 # --project (and --zone where it applies); no step runs `gcloud config set` or changes any gcloud default;
-# CLOUDSDK_CORE_DISABLE_PROMPTS=1. Only this Task's resources are created or deleted: the VM (with its boot disk) and,
-# when the project has no SSH ingress rule already, one firewall rule <VM_NAME>-ssh. Metadata is set on the instance
+# CLOUDSDK_CORE_DISABLE_PROMPTS=1 (one read names the public image project as --project). Only this Task's resources
+# are created or deleted: the VM (with its boot disk) and two firewall rules on NETWORK that target only the VM's tag:
+# <VM_NAME>-deny (DENY all ingress from 0.0.0.0/0, priority 1000) and <VM_NAME>-ssh (ALLOW tcp:22 from the current
+# public IPv4/32, priority 900). They are made and checked BEFORE the VM exists, so it is reachable only from the
+# user's address even where project rules open SSH/RDP to everyone (those are never changed; 00 and V STOP if one has
+# priority <= 1000). Every SSH step re-checks them and moves the -ssh source to the current address if it changed.
+# Values a scrub replaces must be distinctive: 00 and V STOP if one is shorter than 4 characters or occurs in
+# drive640.py or steps.zsh. Metadata is set on the instance
 # only (enable-windows-ssh, the install of google-compute-engine-ssh at sysprep, block-project-ssh-keys,
 # enable-oslogin=FALSE, and this Task's own SSH public key); nothing project-wide is changed.
 # SSH: a Task key pair in scripts/verify-640/local/ssh/ (git-ignored), passed with --ssh-key-file; the key is put in
@@ -32,14 +38,14 @@
 # key at a hidden terminal prompt, which is not a dialog.
 # Run one step at a time, in this order:  zsh scripts/verify-640/steps.zsh <STEP>
 #   00  Preflight, read only. zsh; settings file present, ignored, untracked, complete (names printed); gcloud version;
-#       an active gcloud account; the project is reachable; the Windows image family resolves (x86_64); no VM of this
-#       Task exists (else: reported, with D as next); SSH ingress rules of the network (whether the project already
-#       opens tcp:22 to everyone); graftling dev contains the candidate and the bundle can be made; the Codex pin is
+#       an active gcloud account; the project is reachable; scrub values distinctive; the Windows image family resolves
+#       (describe-from-family in the image project: that family, X86_64); no VM of this Task exists (else: reported,
+#       with D as next); project rules opening tcp:22/3389 to everyone, with priorities (STOP if <= 1000); whether the
+#       Task rules exist; graftling dev contains the candidate and the bundle can be made; the Codex pin is
 #       >= 0.164.0; the cost estimate per hour (console only). Login: gcloud. Dialog: none. ~20 s.
 #   V   Create and provision the VM. CLOUD COST STARTS HERE. Creates the VM (SSH enabled at boot); if gcloud refuses
-#       (billing, quota, policy), prints gcloud's own error and STOPs. If the network has no rule opening tcp:22,
-#       creates <VM_NAME>-ssh allowing tcp:22 only from the current public IPv4 (detected through Google's DNS, never
-#       printed). Waits (bounded 20 min) until gcloud compute ssh answers; uploads drive640.py, provision.ps1,
+#       (billing, quota, policy), prints gcloud's own error and STOPs. Before it, creates and checks the two Task rules
+#       (the -ssh source is the current public IPv4, detected through Google's DNS, never printed). Waits (bounded 20 min) until gcloud compute ssh answers; uploads drive640.py, provision.ps1,
 #       setkey.ps1, settings.json (no secret) and the graftling bundle; runs provision.ps1 (bounded 40 min); fetches
 #       out/V. Login: gcloud. Dialog: none. ~25-40 min.
 #   K   USER ONLY, in their own terminal: reads the temporary provider key with hidden input (zsh read -s) and sends
@@ -60,7 +66,7 @@
 #       Login: gcloud. Dialog: none. ~20-45 min per mode. Run `R mxc` and `R elevated` (629 sec. 6 item 8).
 #   E <step>
 #       Scan, fetch and scrub one step's evidence again (V, R0, R-mxc, R-elevated, R-unelevated). Login: gcloud.
-#   D   Delete this Task's resources: the VM with all its disks and the Task firewall rule; runnable alone at any
+#   D   Delete this Task's resources: the VM with all its disks and both Task firewall rules; runnable alone at any
 #       time, idempotent; then verifies that no instance, disk or firewall rule of this Task remains (by name, tag and
 #       labels) and prints that last; removes the local Task SSH key pair. Login: gcloud. Dialog: none. ~2-4 min.
 #       Afterwards the user revokes the temporary provider key.
@@ -149,8 +155,28 @@ load_settings() {
   [[ $KEY_ENV == [A-Za-z_][A-Za-z0-9_]# ]] || stop "settings variable KEY_ENV is not an environment variable name"
   (( ${#VM_USER} <= 20 )) || stop "settings variable VM_USER is longer than 20 characters"
   REGION=${ZONE%-*}
-  FW=$VM_NAME-ssh
+  FW=$VM_NAME-ssh     # Task rule: ALLOW tcp:22 from the current public IPv4/32, priority 900, target tag VM_NAME
+  FWD=$VM_NAME-deny   # Task rule: DENY all from 0.0.0.0/0, priority 1000, target tag VM_NAME
   TARGET=$VM_USER@$VM_NAME
+}
+# STOP, naming only the variable, when a value the evidence scrub would replace is shorter than 4 characters or occurs
+# (any case) in the committed drive640.py or steps.zsh: such a value is ordinary text and would garble the evidence.
+check_scrub_values() {
+  local host=${${BASE_URL#*://}%%/*} one
+  local -a checks=(PROJECT $PROJECT ZONE $ZONE ZONE $REGION VM_NAME $VM_NAME MACHINE_TYPE $MACHINE_TYPE
+                   PROVIDER_ID $PROVIDER_ID PROVIDER_NAME $PROVIDER_NAME BASE_URL $BASE_URL BASE_URL $host MODEL $MODEL
+                   KEY_ENV $KEY_ENV)
+  for one in ${(s:,:)VM_LABELS}; do checks+=(VM_LABELS ${one#*=}); done
+  local bad=$(allow $PY -I -c 'import sys
+text = (open(sys.argv[1], encoding="utf-8").read() + open(sys.argv[2], encoding="utf-8").read()).lower()
+a = sys.argv[3:]
+bad = []
+for name, value in zip(a[::2], a[1::2]):
+    if (len(value) < 4 or value.lower() in text) and name not in bad:
+        bad.append(name)
+print(" ".join(bad))' $HERE/vm/drive640.py $THIS $checks)
+  [[ -z $bad ]] || stop "settings variable(s) ${bad} hold ordinary text (shorter than 4 characters, or found in drive640.py or steps.zsh); the evidence scrub would garble the evidence. Choose a more distinctive value"
+  print -r -- "PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive640.py and steps.zsh)"
 }
 # A JSON list of [placeholder, value] pairs: every settings value and derived form, plus the active account.
 scrub_values() {
@@ -158,11 +184,11 @@ scrub_values() {
   local host=${${BASE_URL#*://}%%/*}
   local -a labels=(${(s:,:)VM_LABELS}) pairs=()
   local one
+  # Not the network name or label keys: they are generic words (a scrub of them garbles JSON keys and text).
   pairs=('<PROJECT>' $PROJECT '<ZONE>' $ZONE '<REGION>' $REGION '<VM_NAME>' $VM_NAME '<VM_NAME>' ${VM_NAME[1,15]}
          '<MACHINE_TYPE>' $MACHINE_TYPE '<PROVIDER_ID>' $PROVIDER_ID '<PROVIDER_NAME>' $PROVIDER_NAME
-         '<BASE_URL>' $BASE_URL '<BASE_URL>' ${BASE_URL%/} '<BASE_URL_HOST>' $host '<MODEL>' $MODEL '<KEY_ENV>' $KEY_ENV
-         '<NETWORK>' $NETWORK)
-  for one in $labels; do pairs+=('<VM_LABEL>' ${one#*=} '<VM_LABEL>' ${one%%=*}); done
+         '<BASE_URL>' $BASE_URL '<BASE_URL>' ${BASE_URL%/} '<BASE_URL_HOST>' $host '<MODEL>' $MODEL '<KEY_ENV>' $KEY_ENV)
+  for one in $labels; do pairs+=('<VM_LABEL>' ${one#*=}); done
   [[ -n $account ]] && pairs+=('<ACCOUNT>' $account)
   allow $PY -I -c 'import json, sys; a = sys.argv[1:]; print(json.dumps([[a[i], a[i + 1]] for i in range(0, len(a), 2) if a[i + 1]]))' $pairs
 }
@@ -211,27 +237,99 @@ instance_state() {  # RUNNING/TERMINATED/... or empty when absent; ERR on a fail
     || { print -r -- ERR; return 0; }
   print -r -- ${out%%$'\n'*}
 }
-# The network's enabled ingress rules that open tcp:22 to 0.0.0.0/0 for every instance (names only).
-open_ssh_rules() {
+# Existing rules (not this Task's) on NETWORK that open tcp:<port> to 0.0.0.0/0 for this VM (no target, or its tag, or
+# a service-account target): "<name> <priority>" per line; "ERR <text>" when the list fails.
+open_rules() {
   gc compute firewall-rules list --project=$PROJECT --format=json > $WORK/fw.json 2> $WORK/fw.err \
     || { print -r -- "ERR $(<$WORK/fw.err)"; return 0; }
   allow $PY -I -c 'import json, sys
-net, port = sys.argv[2], sys.argv[3]
+path, net, port, tag, *ours = sys.argv[1:]
 def opens(rule):
     for allowed in rule.get("allowed", []):
         if allowed.get("IPProtocol") not in ("tcp", "all"):
             continue
-        ports = allowed.get("ports") or ["0-65535"]
-        for item in ports:
+        for item in allowed.get("ports") or ["0-65535"]:
             low, _, high = item.partition("-")
             if int(low) <= int(port) <= int(high or low):
                 return True
     return False
-for rule in json.load(open(sys.argv[1])):
-    if (rule.get("network", "").rsplit("/", 1)[-1] == net and rule.get("direction") == "INGRESS" and not rule.get("disabled")
-            and "0.0.0.0/0" in rule.get("sourceRanges", []) and not rule.get("targetTags") and not rule.get("targetServiceAccounts")
-            and opens(rule)):
-        print(rule["name"])' $WORK/fw.json $NETWORK $1
+for rule in json.load(open(path)):
+    if (rule.get("name") not in ours and rule.get("network", "").rsplit("/", 1)[-1] == net
+            and rule.get("direction", "INGRESS") == "INGRESS" and not rule.get("disabled")
+            and "0.0.0.0/0" in rule.get("sourceRanges", [])
+            and (not rule.get("targetTags") or tag in rule.get("targetTags", [])) and opens(rule)):
+        print(rule["name"], rule.get("priority", 1000))' $WORK/fw.json $NETWORK $1 $VM_NAME $FW $FWD
+}
+# guard_open_rules: print the project's rules that open 22/3389 to everyone with their priorities; STOP if one has a
+# priority <= 1000 (the Task deny at 1000 would then not take precedence).
+guard_open_rules() {
+  local port lines one
+  local -a low=()
+  for port in 22 3389; do
+    lines=$(open_rules $port)
+    [[ $lines == ERR* ]] && stop "firewall-rules list failed: ${lines#ERR }"
+    if [[ -n $lines ]]; then
+      print -r -- "NOTE: project rule(s) opening tcp:$port to everyone (name priority): ${(j:, :)${(f)lines}}; not changed by this Task"
+      for one in ${(f)lines}; do (( ${${(z)one}[2]} <= 1000 )) && low+=${${(z)one}[1]}; done
+    else
+      print -r -- "PASS: no project rule opens tcp:$port to everyone"
+    fi
+  done
+  (( ${#low} == 0 )) || stop "project rule(s) ${(j:, :)low} open SSH/RDP to everyone at priority <= 1000, so the Task deny rule (priority 1000) would not take precedence; nothing created. The user decides (this Task never changes project rules)"
+  print -r -- "PASS: every project rule opening SSH/RDP to everyone has a priority above 1000; the Task deny rule (1000) takes precedence"
+}
+# check_rule <name> <deny|ssh> <ip>: OK | SOURCE (only the ssh source differs) | ABSENT | BAD <reason>. Never prints ip.
+check_rule() {
+  gc compute firewall-rules describe $1 --project=$PROJECT --format=json > $WORK/rule.json 2> /dev/null || { print -r -- ABSENT; return 0; }
+  allow $PY -I -c 'import json, sys
+r = json.load(open(sys.argv[1])); kind, net, tag, ip = sys.argv[2:6]
+bad = []
+if r.get("disabled"): bad.append("disabled")
+if r.get("direction", "INGRESS") != "INGRESS": bad.append("not INGRESS")
+if r.get("network", "").rsplit("/", 1)[-1] != net: bad.append("other network")
+if r.get("targetTags") != [tag]: bad.append("target is not exactly the VM tag")
+if kind == "deny":
+    if r.get("priority") != 1000: bad.append("priority not 1000")
+    if r.get("sourceRanges") != ["0.0.0.0/0"]: bad.append("source not 0.0.0.0/0")
+    if [d.get("IPProtocol") for d in r.get("denied", [])] != ["all"] or r.get("allowed"): bad.append("not DENY all")
+else:
+    if r.get("priority") != 900: bad.append("priority not 900")
+    if r.get("allowed") != [{"IPProtocol": "tcp", "ports": ["22"]}] or r.get("denied"): bad.append("not ALLOW tcp:22")
+print("BAD " + ", ".join(bad) if bad else ("SOURCE" if kind == "ssh" and r.get("sourceRanges") != [ip + "/32"] else "OK"))' \
+    $WORK/rule.json $2 $NETWORK $VM_NAME $3
+}
+# ensure_rules <create|check>: the two Task rules exist, are enabled and as specified, and the ssh rule's source is the
+# current public IPv4 (updated when it changed; the address is never printed). <create> (V) makes missing rules.
+ensure_rules() {
+  local ip=$(my_ip) state
+  [[ -n $ip ]] || stop "the current public IPv4 could not be found through Google's DNS (dig); nothing changed"
+  state=$(check_rule $FWD deny $ip)
+  if [[ $state == ABSENT && $1 == create ]]; then
+    gc_or_stop "Task deny rule" compute firewall-rules create $FWD --project=$PROJECT --network=$NETWORK --direction=INGRESS \
+      --action=DENY --rules=all --source-ranges=0.0.0.0/0 --target-tags=$VM_NAME --priority=1000 \
+      --description='Task 640: deny all ingress to the Task VM (deleted by D)' --format=none
+    print -r -- "PASS: created <VM_NAME>-deny (DENY all from everyone, priority 1000, only this VM's tag)"
+    state=$(check_rule $FWD deny $ip)
+  fi
+  [[ $state == ABSENT ]] && stop "the Task firewall rules are missing; run: zsh $REL V   (or delete everything: zsh $REL D)"
+  [[ $state == OK ]] || stop "<VM_NAME>-deny is not as specified (${state#BAD }); nothing else done. Delete with: zsh $REL D"
+  state=$(check_rule $FW ssh $ip)
+  if [[ $state == ABSENT && $1 == create ]]; then
+    gc_or_stop "Task ssh rule" compute firewall-rules create $FW --project=$PROJECT --network=$NETWORK --direction=INGRESS \
+      --action=ALLOW --rules=tcp:22 --source-ranges=$ip/32 --target-tags=$VM_NAME --priority=900 \
+      --description='Task 640: SSH from the user (deleted by D)' --format=none
+    print -r -- "PASS: created <VM_NAME>-ssh (ALLOW tcp:22 from the current public IPv4 only, priority 900, only this VM's tag)"
+    state=$(check_rule $FW ssh $ip)
+  fi
+  if [[ $state == SOURCE ]]; then
+    gc_or_stop "Task ssh rule source update" compute firewall-rules update $FW --project=$PROJECT --source-ranges=$ip/32 --format=none
+    print -r -- "NOTE: <VM_NAME>-ssh's source was not the current public IPv4; updated (address not shown)"
+    state=$(check_rule $FW ssh $ip)
+  fi
+  unset ip
+  [[ $state == ABSENT ]] && stop "the Task firewall rules are missing; run: zsh $REL V   (or delete everything: zsh $REL D)"
+  [[ $state == OK ]] || stop "<VM_NAME>-ssh is not as specified (${state#BAD }); nothing else done. Delete with: zsh $REL D"
+  print -r -- "PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag"
 }
 my_ip() {  # the current public IPv4, through Google's DNS; never printed
   if [[ -n ${VERIFY640_IP:-} ]]; then print -r -- $VERIFY640_IP; return 0; fi
@@ -296,13 +394,17 @@ case $STEP in
   gc_or_stop "project describe" projects describe $PROJECT --project=$PROJECT --format='value(lifecycleState)'
   local life=$(<$WORK/gc.out)
   [[ $life == ACTIVE ]] && print -r -- "PASS: the project is reachable and ACTIVE" || stop "the project state is '$life', not ACTIVE"
-  gc_or_stop "image lookup" compute images list --project=$PROJECT --filter="family=$IMAGE_FAMILY" --format='value(name,architecture,selfLink)'
-  local img=$(<$WORK/gc.out)
-  local -a imgs=(${(f)img})
-  local hit=${${(M)imgs:#*/projects/$IMAGE_PROJECT/*}[1]:-}
-  [[ -n $hit ]] || stop "the image family does not resolve in the image project (images list returned ${#imgs} line(s))"
-  [[ $hit == *X86_64* ]] && print -r -- "PASS: the Windows image family resolves to an X86_64 image (${${(z)hit}[1]})" \
-    || print -r -- "NOTE: the image's architecture field is not X86_64 here: ${${(z)hit}[2]:-unset}"
+  check_scrub_values
+  # A read of the PUBLIC image project (its --project names that project; image names are public).
+  gc_or_stop "image lookup" compute images describe-from-family $IMAGE_FAMILY --project=$IMAGE_PROJECT --format='value(name,family,architecture)'
+  local -a outl=("${(@f)$(<$WORK/gc.out)}")
+  local line=${outl[1]:-}
+  local -a img=("${(@ps:\t:)line}")
+  if [[ ${img[2]:-} != $IMAGE_FAMILY || ${img[3]:-} != X86_64 ]]; then
+    print -r -- "gcloud's output (name, family, architecture), raw:"; sed 's/^/  | /' $WORK/gc.out
+    stop "the image family does not resolve to an X86_64 image of exactly that family"
+  fi
+  print -r -- "PASS: the Windows image family resolves to ${img[1]} (family as set, X86_64)"
   local st=$(instance_state)
   [[ $st == ERR ]] && { sed 's/^/  | /' $WORK/list.err; stop "instances list failed"; }
   local vmstate=absent
@@ -311,14 +413,9 @@ case $STEP in
   else
     print -r -- "PASS: no VM of this Task exists yet"
   fi
-  local opens=$(open_ssh_rules 22) rdp=$(open_ssh_rules 3389)
-  [[ $opens == ERR* ]] && stop "firewall-rules list failed: ${opens#ERR }"
-  if [[ -n $opens ]]; then
-    print -r -- "NOTE: the network already opens tcp:22 to everyone through rule(s): ${(f)opens}. V creates no Task rule; the VM accepts only this Task's key (the project's rules are not changed)."
-  else
-    print -r -- "PASS: no rule opens tcp:22 to everyone; V creates <VM_NAME>-ssh (tcp:22 from the current public IPv4 only; D deletes it)"
-  fi
-  [[ -n $rdp ]] && print -r -- "NOTE: rule(s) ${(f)rdp} open tcp:3389 to everyone; the steps set no Windows password, so RDP has no usable login"
+  guard_open_rules
+  local r1=$(check_rule $FWD deny x) r2=$(check_rule $FW ssh x)
+  print -r -- "Task firewall rules now: <VM_NAME>-deny ${${r1/OK/present}/ABSENT/absent}, <VM_NAME>-ssh ${${${r2/SOURCE/present}/OK/present}/ABSENT/absent}; V creates missing ones before the VM, D deletes both"
   make_bundle $WORK/check.bundle
   allow $PY -I -c 'import sys; t = lambda v: tuple(map(int, v.split("."))); sys.exit(0 if t(sys.argv[1]) >= t(sys.argv[2]) else 1)' $CODEX_VERSION $CODEX_MIN \
     && print -r -- "PASS: Codex pin $CODEX_VERSION >= $CODEX_MIN" || stop "Codex pin $CODEX_VERSION is below $CODEX_MIN"
@@ -335,6 +432,7 @@ V)
   say "[V] Create and provision the VM. CLOUD COST STARTS HERE (until D). Login: gcloud. Dialog: none."
   load_settings
   ssh_flags
+  check_scrub_values
   mkdir -p $KEYDIR $LIVE
   if [[ ! -f $KEY ]]; then
     allow ssh-keygen -q -t ed25519 -N '' -C v640 -f $KEY || stop "ssh-keygen failed"
@@ -342,6 +440,9 @@ V)
   fi
   local st=$(instance_state)
   [[ $st == ERR ]] && { sed 's/^/  | /' $WORK/list.err; stop "instances list failed"; }
+  # The Task rules exist and are enabled BEFORE the VM exists, so it is never reachable from everyone.
+  guard_open_rules
+  ensure_rules create
   if [[ -z $st ]]; then
     print -r -- "$VM_USER:$(<$KEY.pub)" > $WORK/ssh-keys
     print -r -- 'googet -noconfirm=true install google-compute-engine-ssh' > $WORK/sysprep.cmd
@@ -358,20 +459,6 @@ V)
   else
     print -r -- "NOTE: the Task VM exists (status $st); provisioning resumes on it"
     [[ $st == RUNNING ]] || gc_or_stop "VM start" compute instances start $VM_NAME --project=$PROJECT --zone=$ZONE --format=none
-  fi
-  local opens=$(open_ssh_rules 22)
-  [[ $opens == ERR* ]] && stop "firewall-rules list failed: ${opens#ERR }; the VM exists, delete it with: zsh $REL D"
-  if [[ -n $opens ]]; then
-    print -r -- "NOTE: tcp:22 is already open on the network through the project's rule(s) ${(f)opens}; no Task rule made"
-  elif gc compute firewall-rules describe $FW --project=$PROJECT --format='value(name)' > /dev/null 2>&1; then
-    print -r -- "NOTE: the Task firewall rule exists; kept (D deletes it)"
-  else
-    local ip=$(my_ip)
-    [[ -n $ip ]] || stop "the current public IPv4 could not be found through Google's DNS (dig); nothing opened. The VM exists: zsh $REL D, or retry V"
-    gc_or_stop "firewall rule" compute firewall-rules create $FW --project=$PROJECT --network=$NETWORK --direction=INGRESS \
-      --action=ALLOW --rules=tcp:22 --source-ranges=$ip/32 --target-tags=$VM_NAME --description='Task 640 SSH (deleted by D)' --format=none
-    unset ip
-    print -r -- "PASS: Task firewall rule created: tcp:22 from the current public IPv4 only, to this VM's tag"
   fi
   print -r -- "waiting for gcloud compute ssh to answer (bound ${WAIT_S}s, poll ${POLL_S}s; Windows first boot and sysprep take ~5-10 min)"
   local start=$SECONDS answered=no
@@ -405,6 +492,7 @@ K)
   say "[K] Store the temporary provider key on the VM. USER ONLY, in your own terminal. Login: gcloud. Dialog: none (a hidden prompt)."
   load_settings
   ssh_flags
+  ensure_rules check
   [[ -t 0 || ${VERIFY640_K_STDIN:-} == 1 ]] || stop "K reads the key at a hidden terminal prompt; the user runs it in their own terminal: zsh $REL K"
   local st=$(instance_state)
   [[ $st == RUNNING ]] || stop "the Task VM is not running (status: ${st:-absent}); run V first"
@@ -427,6 +515,7 @@ K)
 R0|R)
   load_settings
   ssh_flags
+  ensure_rules check
   local mode= label=R0 cmd
   if [[ $STEP == R ]]; then
     [[ $ARG == (mxc|elevated|unelevated) ]] || stop "usage: zsh $REL R mxc|elevated|unelevated"
@@ -459,6 +548,7 @@ E)
   load_settings
   ssh_flags
   [[ $ARG == (V|R0|R-mxc|R-elevated|R-unelevated) ]] || stop "usage: zsh $REL E V|R0|R-mxc|R-elevated|R-unelevated"
+  ensure_rules check
   say "[E] Scan, fetch and scrub the evidence of $ARG. Login: gcloud. Dialog: none."
   fetch $ARG
   next_cmds D
@@ -466,7 +556,7 @@ E)
   [[ $FETCHED == PASS* ]] || exit 1
   ;;
 D)
-  say "[D] Delete this Task's resources (VM with all disks, Task firewall rule). Login: gcloud. Dialog: none."
+  say "[D] Delete this Task's resources (VM with all disks, both Task firewall rules). Login: gcloud. Dialog: none."
   load_settings
   local st=$(instance_state) bad=0
   [[ $st == ERR ]] && { sed 's/^/  | /' $WORK/list.err; stop "instances list failed; nothing deleted. Retry: zsh $REL D"; }
@@ -477,19 +567,22 @@ D)
   else
     print -r -- "no Task VM exists"
   fi
-  if gc compute firewall-rules describe $FW --project=$PROJECT --format='value(name)' > /dev/null 2>&1; then
-    print -r -- "\$ gcloud compute firewall-rules delete <VM_NAME>-ssh --project=<PROJECT> --quiet"
-    gc compute firewall-rules delete $FW --project=$PROJECT --quiet 2>&1 | sed 's/^/  /'
-  else
-    print -r -- "no Task firewall rule exists"
-  fi
+  local rule label
+  for rule label in $FW '<VM_NAME>-ssh' $FWD '<VM_NAME>-deny'; do
+    if gc compute firewall-rules describe $rule --project=$PROJECT --format='value(name)' > /dev/null 2>&1; then
+      print -r -- "\$ gcloud compute firewall-rules delete $label --project=<PROJECT> --quiet"
+      gc compute firewall-rules delete $rule --project=$PROJECT --quiet 2>&1 | sed 's/^/  /'
+    else
+      print -r -- "no Task firewall rule $label exists"
+    fi
+  done
   say "verification: nothing of this Task remains"
   local -a lf=()
   local one
   for one in ${(s:,:)VM_LABELS}; do lf+="labels.${one%%=*}=${one#*=}"; done
   local inst=$(gc compute instances list --project=$PROJECT --filter="name=$VM_NAME OR (${(j: AND :)lf})" --format='value(name)' 2> $WORK/v.err) || inst="ERR"
   local disks=$(gc compute disks list --project=$PROJECT --filter="name=$VM_NAME OR users~/instances/$VM_NAME\$" --format='value(name)' 2>> $WORK/v.err) || disks="ERR"
-  local rules=$(gc compute firewall-rules list --project=$PROJECT --filter="name=$FW OR targetTags:$VM_NAME" --format='value(name)' 2>> $WORK/v.err) || rules="ERR"
+  local rules=$(gc compute firewall-rules list --project=$PROJECT --filter="name=$FW OR name=$FWD OR targetTags:$VM_NAME" --format='value(name)' 2>> $WORK/v.err) || rules="ERR"
   [[ -s $WORK/v.err ]] && sed 's/^/  | /' $WORK/v.err
   local -a left=()
   # Counts only: the names come from the settings (the console shows gcloud's own listing above when it failed).

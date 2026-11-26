@@ -3,7 +3,10 @@
 # (one line, quoted) and its environment, and simulates the commands the steps use. State lives in $TMPDIR/fake640/:
 #   instance, fw              the Task VM / Task firewall rule exist
 #   fail-create               instances create fails as a refused billing account would (gcloud-like error text)
-#   open-ssh                  the network has a rule opening tcp:22 to everyone
+#   project-rules.json        the project's own firewall rules (Compute API Firewall resources), [] when absent
+#   rule-<name>.json          a Task firewall rule, written from the create/update argv in the API's resource shape
+#   rules-at-create.txt       the Task rules that existed when `instances create` ran (no-exposed-window check)
+#   image-mismatch            describe-from-family answers with another family (as the -core family would)
 #   ssh-fail                  compute ssh never answers
 #   disk-left                 a disk named after the VM survives the delete (D must then FAIL)
 # Logs: argv.log, env.log (names=values of each call's environment), stdin.log (for setkey: length and SHA-256 of
@@ -23,7 +26,10 @@ case "$1 $2 $3" in
 'version  '*|version*) print -r -- "Google Cloud SDK 999.0.0 (stand-in)" ;;
 'auth list'*) print -r -- "fake-account@example.invalid" ;;
 'projects describe'*) print -r -- ACTIVE ;;
-'compute images list') print -r -- "windows-server-fake-dc-v20261111	X86_64	https://www.googleapis.com/compute/v1/projects/stand-in-images/global/images/windows-server-fake-dc-v20261111" ;;
+'compute images describe-from-family')
+  # value(name,family,architecture): gcloud's value() format, tab-separated, one line for the one image.
+  fam=$4; [[ -f $S/image-mismatch ]] && fam=$4-core
+  print -r -- "windows-server-fake-dc-v20261111	$fam	X86_64" ;;
 'compute instances list')
   [[ -f $S/instance ]] && { [[ $args == *'value(status)'* ]] && print -r -- RUNNING || print -r -- $first; } ;;
 'compute instances create')
@@ -32,22 +38,39 @@ case "$1 $2 $3" in
     print -r -- " - Windows Server images are not available on free trial billing accounts (stand-in error text)" >&2
     exit 1
   fi
+  ls $S | grep '^rule-' | sort > $S/rules-at-create.txt
   touch $S/instance; print -r -- RUNNING ;;
 'compute instances start') ;;
 'compute instances delete') rm -f $S/instance; print -r -- "Deleted [stand-in instance]." ;;
 'compute firewall-rules list')
   if [[ $args == *--format=json* ]]; then
-    if [[ -f $S/open-ssh ]]; then
-      print -r -- '[{"name": "default-allow-ssh", "network": "https://x/global/networks/stand-in-net", "direction": "INGRESS", "disabled": false, "sourceRanges": ["0.0.0.0/0"], "allowed": [{"IPProtocol": "tcp", "ports": ["22"]}]}]'
-    else
-      print -r -- '[]'
-    fi
+    /usr/bin/python3 -I -c 'import json, sys, pathlib
+d = pathlib.Path(sys.argv[1])
+own = json.loads((d / "project-rules.json").read_text()) if (d / "project-rules.json").exists() else []
+print(json.dumps(own + [json.loads(p.read_text()) for p in sorted(d.glob("rule-*.json"))]))' $S
   else
-    [[ -f $S/fw ]] && print -r -- $first
+    for f in $S/rule-*.json(N); do n=${f:t:r}; print -r -- ${n#rule-}; done
   fi ;;
-'compute firewall-rules describe') [[ -f $S/fw ]] || { print -r -- "ERROR: not found" >&2; exit 1; }; print -r -- $3 ;;
-'compute firewall-rules create') touch $S/fw ;;
-'compute firewall-rules delete') rm -f $S/fw; print -r -- "Deleted [stand-in rule]." ;;
+'compute firewall-rules describe')
+  [[ -f $S/rule-$4.json ]] || { print -r -- "ERROR: (gcloud.compute.firewall-rules.describe) Could not fetch resource: not found (stand-in)" >&2; exit 1; }
+  [[ $args == *--format=json* ]] && cat $S/rule-$4.json || print -r -- $4 ;;
+'compute firewall-rules create'|'compute firewall-rules update')
+  [[ $3 == update && ! -f $S/rule-$4.json ]] && { print -r -- "ERROR: not found (stand-in)" >&2; exit 1; }
+  /usr/bin/python3 -I -c 'import json, sys, pathlib
+path = pathlib.Path(sys.argv[1]); verb = sys.argv[2]; opts = dict(a[2:].split("=", 1) for a in sys.argv[3:] if a.startswith("--") and "=" in a)
+r = json.loads(path.read_text()) if verb == "update" else {"kind": "compute#firewall", "name": path.stem[5:], "direction": opts.get("direction", "INGRESS"),
+     "priority": int(opts.get("priority", 1000)), "disabled": False,
+     "network": "https://www.googleapis.com/compute/v1/projects/" + opts["project"] + "/global/networks/" + opts.get("network", "default")}
+if "target-tags" in opts: r["targetTags"] = opts["target-tags"].split(",")
+if "source-ranges" in opts: r["sourceRanges"] = opts["source-ranges"].split(",")
+if "rules" in opts:
+    entries = []
+    for item in opts["rules"].split(","):
+        proto, _, port = item.partition(":")
+        entries.append({"IPProtocol": proto, **({"ports": [port]} if port else {})})
+    r["denied" if opts.get("action") == "DENY" else "allowed"] = entries
+path.write_text(json.dumps(r))' $S/rule-$4.json $3 "$@" ;;
+'compute firewall-rules delete') rm -f $S/rule-$4.json; print -r -- "Deleted [stand-in rule]." ;;
 'compute disks list') [[ -f $S/disk-left ]] && print -r -- $first ;;
 'compute ssh '*)
   [[ -f $S/ssh-fail ]] && { print -r -- "ssh: connect to host: Operation timed out (stand-in)" >&2; exit 255; }

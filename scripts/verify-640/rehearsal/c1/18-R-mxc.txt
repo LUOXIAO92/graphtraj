@@ -1,0 +1,17 @@
+$ zsh scripts/verify-640/steps.zsh R mxc
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== [R-mxc] R1-R4 and the 629 sec. 6 Codex items with windows.sandbox = mxc (bound 75 min). Login: gcloud. Dialog: none.
+ITEM R1 PASS outcome completed (stand-in)
+RESULT R-mxc PASS (PASS 1)
+== evidence of R-mxc: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked; replacements: {"<MODEL>": 2, "<PROJECT>": 1}
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<ZONE>": 4}
+--- items (1):
+  ITEM R1 PASS outcome completed (stand-in)
+next: zsh scripts/verify-640/steps.zsh R mxc
+next: zsh scripts/verify-640/steps.zsh R elevated
+next: zsh scripts/verify-640/steps.zsh E R-mxc
+next: zsh scripts/verify-640/steps.zsh D
+VERDICT 640 R-mxc: PASS (PASS (PASS 1); evidence PASS)
+(exit 0)

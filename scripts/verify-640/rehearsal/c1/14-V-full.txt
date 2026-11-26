@@ -1,0 +1,31 @@
+$ zsh scripts/verify-640/steps.zsh V
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [V] Create and provision the VM. CLOUD COST STARTS HERE (until D). Login: gcloud. Dialog: none.
+PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive640.py and steps.zsh)
+PASS: Task SSH key pair created under local/ssh (git-ignored)
+NOTE: project rule(s) opening tcp:22 to everyone (name priority): default-allow-ssh 65534; not changed by this Task
+NOTE: project rule(s) opening tcp:3389 to everyone (name priority): default-allow-rdp 65534; not changed by this Task
+PASS: every project rule opening SSH/RDP to everyone has a priority above 1000; the Task deny rule (1000) takes precedence
+PASS: created <VM_NAME>-deny (DENY all from everyone, priority 1000, only this VM's tag)
+PASS: created <VM_NAME>-ssh (ALLOW tcp:22 from the current public IPv4 only, priority 900, only this VM's tag)
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+$ gcloud compute instances create <VM_NAME> --project=<PROJECT> --zone=<ZONE> (image family, machine type, disk, labels, tag, instance metadata from settings)
+  status: RUNNING
+PASS: VM created (labels and tag from settings; instance metadata only)
+waiting for gcloud compute ssh to answer (bound 8s, poll 1s; Windows first boot and sysprep take ~5-10 min)
+PASS: SSH answers after 2s
+PASS: bundle of graftling dev 2ee706e made and verified; it contains the candidate 2ee706eb7493 (the VM checks out the candidate)
+$ gcloud compute scp --recurse <stage>/v640 <VM_USER>@<VM_NAME>:C:/   (drive640.py, provision.ps1, setkey.ps1, settings.json without secret, graftling.bundle)
+PASS: uploaded to C:\v640
+== provisioning on the VM (bound 40 min): Python, Node, Git, Developer Mode, Codex 0.172.0, graftling 2ee706eb7493, config.toml
+== Python 3.13.7
+PROVISION PASS
+== evidence of V: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked; replacements: {"<MODEL>": 2, "<PROJECT>": 1}
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<ZONE>": 4}
+next: zsh scripts/verify-640/steps.zsh K
+next: zsh scripts/verify-640/steps.zsh R0
+next: zsh scripts/verify-640/steps.zsh D
+next: K is run by the USER in their own terminal (hidden key input); Main runs R0 after it
+VERDICT 640 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))
+(exit 0)

@@ -5,12 +5,13 @@
 #     the raw error scrubbed; no key set STOPs);
 #   - R1-R4 and the R5 items against graftling's own stand-in Codex peer (tests/codex_stdio_peer.py), V640_STANDIN;
 #   - scan: the key planted in the evidence fails the scan without printing it; scrub counts.
-# Settings values and the key are RANDOM per run, so no committed file can hold them. Consoles: rehearsal/drv-NN-*.txt.
+# Settings values and the key are RANDOM per run, so no committed file can hold them. Consoles: rehearsal/<round>/drv-NN-*.txt.
 emulate -L zsh
 setopt pipe_fail no_unset
 HERE=${0:A:h:h}
 WT=$(git -C $HERE rev-parse --show-toplevel)
-OUT=$HERE/rehearsal
+OUT=$HERE/rehearsal/${1:-c1}   # round 1's consoles stay in rehearsal/ as committed
+mkdir -p $OUT
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery
 PY=$HARNESS/.venv-runtime/bin/python   # has PyYAML and websockets (graftling's runtime needs); graftling from PYTHONPATH
 CANDIDATE=2ee706eb749355afc3f73f03a1b0de4cd48da1f2

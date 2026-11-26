@@ -1,0 +1,28 @@
+F........                                                                [100%]
+=================================== FAILURES ===================================
+____________ test_no_production_line_names_the_old_tool_or_feature _____________
+
+    def test_no_production_line_names_the_old_tool_or_feature() -> None:
+        """A half rename fails here: only the listed look-alikes keep ``agents``."""
+        unexpected = [hit for hit in old_lines()
+                      if not any(hit[0] == path and fragment in hit[2] for path, fragment in ALLOWED)]
+>       assert unexpected == []
+E       assert [('desktop/sr...age>}</div>')] == []
+E         
+E         Left contains one more item: ('desktop/src/main.tsx', 148, '<div className="d-inspector-team"><div className="shelf-team-heading"><span className="...activity ? activity.reason || \'No participating Agents recorded.\' : \'Loading members…\'}</p></StateMessage>}</div>')
+E         Use -v to get more diff
+
+tests/test_tool_name_592.py:96: AssertionError
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_tool_name_592.py::test_every_allowed_look_alike_is_still_there
+PASSED tests/test_tool_name_592.py::test_the_guard_sees_the_forms_a_half_rename_leaves
+PASSED tests/test_tool_name_592.py::test_the_mcp_server_lists_subagents_and_tasks_only
+PASSED tests/test_tool_name_592.py::test_the_old_tool_name_is_unknown_to_graphtraj_mcp
+PASSED tests/test_tool_name_592.py::test_the_gateway_feature_is_subagents
+PASSED tests/test_tool_name_592.py::test_the_claude_hook_copy_names_subagents_and_tasks
+PASSED tests/test_tool_name_592.py::test_role_system_text_names_subagents
+PASSED tests/test_tool_name_592.py::test_skills_and_manuals_say_subagents
+FAILED tests/test_tool_name_592.py::test_no_production_line_names_the_old_tool_or_feature
+1 failed, 8 passed in 1.00s
+exit=1

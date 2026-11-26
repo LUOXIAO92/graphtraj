@@ -1,0 +1,23 @@
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY642_OUT VERIFY642_T VERIFY642_NO_PS
+== [GR] read only: the newest G record judged (G runs this at its end; Main may rerun it). Dialog: none. No login.
+G record: <TMPDIR>/r642/T/G-20261126T224345
+  run.txt: pytest temp root: <TMPDIR>/verify-642-G-20261126T224345 (TMPDIR=<TMPDIR>, outside the Harness)
+  run.txt: launch environment: PATH HOME USER TERM TMPDIR LANG only (clean(); no provider credential)
+  run.txt: candidate: a5c88dacbbaa3900649e267e33f8167822645fc6 | graftling wheel from git archive 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2)
+  run.txt: test interpreter: click 8.2.1 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.2 | graphtraj 0.1.0
+  run.txt: REHEARSAL (not evidence): VERIFY642_OUT VERIFY642_GWAIT VERIFY642_PYTEST_ARGS VERIFY642_T VERIFY642_NO_PS
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_the_claude_hook_copy_names_subagents_and_tasks or test_public_setup_and_concurrent_registration or test_no_production_line_names_the_old_tool_or_feature or test_every_allowed_look_alike_is_still_there
+shard totals:
+  1 passed, 442 deselected in 3.12s
+  3 passed, 477 deselected in 2.46s
+516 current definition (task.yml current_definition): <Harness>/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261125T162952.084209+0900.md
+  (no FAILED/ERROR lines)
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-3.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-4.log: exit 5
+
+RESULT 642 G: PASS | exit 1 | known non-blocking ids: 0 | NEW ids: 0 | REHEARSAL (not evidence)
+next: report RESULT 642 G (record <TMPDIR>/r642/T/G-20261126T224345)
+STEP-END GR rc=0

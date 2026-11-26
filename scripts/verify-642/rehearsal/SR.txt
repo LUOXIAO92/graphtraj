@@ -1,0 +1,16 @@
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY642_OUT VERIFY642_T VERIFY642_NO_PS
+== [SR] Main, read only: the newest G record's FAILED/ERROR ids and ABNORMAL shards against 516's current definition. Dialog: none. No login.
+ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-4.log: exit 5
+4 passed, 3773 deselected
+logs: <TMPDIR>/r642/T/G-20261126T224345/shards
+exit=1
+516 current definition (task.yml current_definition): <Harness>/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261125T162952.084209+0900.md
+  (no FAILED/ERROR lines)
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-1.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-3.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL <TMPDIR>/r642/T/G-20261126T224345/shards/shard-4.log: exit 5
+SR verdict: PASS (no NEW failure)
+next: none for suite-base (no NEW id)
+STEP-END SR rc=0

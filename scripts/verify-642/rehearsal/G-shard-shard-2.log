@@ -1,0 +1,5 @@
+.                                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_windows_desktop.py::test_public_setup_and_concurrent_registration
+1 passed, 442 deselected in 3.12s

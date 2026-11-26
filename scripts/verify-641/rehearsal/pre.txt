@@ -1,9 +1,9 @@
-$ zsh steps.zsh pre   (rehearsal 2026-11-26T22:12:11)
+$ zsh steps.zsh pre   (rehearsal 2026-11-26T22:20:46)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
 REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [pre] Main. Preflight; creates $TMPDIR/641r/root; ONE one-line claude -p (no MCP, no tool); gh auth status (read only). LOGIN: your Claude and gh logins (Main asks the user first). Dialog: none.
 zsh 5.9 runs ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/steps.zsh
-candidate HEAD 1485abaac7023ec4d9c604c876df0c483b39fbf7 (641 correction 1: the MCP server's gh is a run-time wrapper ROOT/bin/gh with the user's HO)
+candidate HEAD 9cd7df162009ff51dabce83ce2329bb33dd3dd8e (641 correction 2: judge only the tasks calls (an exact ToolSearch load is INFO), post list)
 PASS: base GraphTraj c18b4bebd42d9c7801fd5ba26a290d585a021118 is an ancestor of HEAD
 PASS: graftling v0.10.2 = 57bca73657d3135a4504904fcc3f1898c2419766 in ~/workspace/you-are-a-product-architect-delivery/graftling (wheel source)
 PASS: no uncommitted change in src, tests, the step files
@@ -12,7 +12,7 @@ PASS: click present in ~/workspace/you-are-a-product-architect-delivery/.venv-ru
 PASS: yaml present in ~/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
 PASS: websockets present in ~/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
 PASS: ~/miniconda3/bin/python3.13: Python 3.13.11
-your locations before (names, sizes, mtimes): 1 lines in $TMPDIR/641r/root/user-before.txt (~/.claude, ~/.claude.json and the gh config are not compared)
+your locations before (names, sizes, mtimes): 6 lines in $TMPDIR/641r/root/user-before.txt (~/.claude, ~/.claude.json and the gh config are not compared)
 PASS: claude: $TMPDIR/641r/claude/claude
 PASS: gh: $TMPDIR/641r/bin/gh (gh stand-in (rehearsal))
 claude's environment (names only): HOME LANG PATH TERM TMPDIR USER

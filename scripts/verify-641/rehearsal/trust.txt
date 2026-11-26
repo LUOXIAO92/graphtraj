@@ -1,4 +1,4 @@
-$ zsh steps.zsh trust   (rehearsal 2026-11-26T22:12:19)
+$ zsh steps.zsh trust   (rehearsal 2026-11-26T22:20:57)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
 REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [trust] USER, once per path $TMPDIR/641r/root/proj (Main cannot: it needs a terminal and a dialog). In a plain macOS Terminal:

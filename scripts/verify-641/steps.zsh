@@ -373,7 +373,8 @@ real)
     cleanup
     cp $ROOT/issues-created-and-deleted.txt $OUT/ 2>/dev/null
   }
-  print -r -- "host log (last lines): $(tail -3 $P/.graphtraj/claude-host/host.log 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+  local hostlog=$(tail -3 $P/.graphtraj/claude-host/host.log 2>/dev/null | tr '\n' ' ' | cut -c1-300)
+  print -r -- "host log (last lines): ${${hostlog% }:-none}"
   print -r -- "writes: $ROOT (project mapping, streams) and copies in $OUT; GitHub: Issues created in $R and deleted again. dialog: none."
   print -r -- "re-judge (paste): $CONDA -I $X641 judge 2 $ROOT/run-2.jsonl $R $ROOT/run-2-summary.json ${child:-<old>}"
   (( OK )) && print -r -- "RESULT 641 real: PASS (created and deleted: ${CREATED:-none})" || print -r -- "RESULT 641 real: FAIL (lines above; created and deleted: ${CREATED:-none})"

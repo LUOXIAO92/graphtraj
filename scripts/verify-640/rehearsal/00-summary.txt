@@ -1,0 +1,26 @@
+Task 640 steps rehearsal (stand-in gcloud; random dummy settings and key; consoles 01-18)
+--- runs
+01 00-missing-settings: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+02 00-empty-variable: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+03 00-settings-not-ignored: expected STOP, got 'VERDICT 640 00: STOP' -> yes
+04 00-preflight: expected PASS, got 'VERDICT 640 00: PASS (Task VM: absent)' -> yes
+05 V-create-refused: expected STOP, got 'VERDICT 640 V: STOP' -> yes
+06 D-after-refused-create: expected PASS, got 'VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+07 V-no-ssh-answer: expected STOP, got 'VERDICT 640 V: STOP' -> yes
+08 D-after-partial-V: expected PASS, got 'VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+09 V-full: expected PASS, got 'VERDICT 640 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' -> yes
+10 K-no-terminal: expected STOP, got 'VERDICT 640 K: STOP' -> yes
+11 K-dummy-key: expected PASS, got 'VERDICT 640 K: PASS (key stored as the VM user's environment variable; R0 proves it with a real call)' -> yes
+12 R0: expected PASS, got 'VERDICT 640 R0: PASS (PASS; evidence PASS)' -> yes
+13 R-mxc: expected PASS, got 'VERDICT 640 R-mxc: PASS (PASS (PASS 1); evidence PASS)' -> yes
+14 E-R0: expected PASS, got 'VERDICT 640 E: PASS (R0: PASS (evidence/live/R0, 3 files; scanned on the VM, scrubbed twice))' -> yes
+15 D-disk-survives: expected FAIL, got 'VERDICT 640 D: FAIL (still present, by name/tag/labels: disks: 1)' -> yes
+16 D-clean: expected PASS, got 'VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+17 V-project-opens-ssh: expected PASS, got 'VERDICT 640 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' -> yes
+18 D-after-open-ssh: expected PASS, got 'VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+--- checks
+gcloud calls: 84; without --project=<PROJECT>: 0; 'config' calls: 0
+dummy key: in gcloud argv 0, in gcloud environments 0, in files (verify-640 tree incl. local/ and rehearsal, stand-in state, evidence) 0; arrived on gcloud's stdin (length+SHA-256 match) 1 time(s)
+fetched evidence: 19 files; files still holding a settings value (any case, UTF-8): 0; files holding the sample IPv4/IPv6: 0; settings values left in the UTF-16 sample: 0; placeholders now present: <ACCOUNT> 15, <BASE_URL_HOST> 15, <BASE_URL> 30, <IP> 10, <KEY_ENV> 15, <MACHINE_TYPE> 15, <MODEL> 15, <PROJECT> 15, <PROVIDER_ID> 15, <PROVIDER_NAME> 15, <REGION> 15, <VM_LABEL> 30, <VM_NAME> 30, <ZONE> 15
+committed-or-committable files (tracked + untracked not ignored) holding any dummy value or the dummy key: 0
+after D-after-partial-V's V: instance present, Task firewall rule present; stand-in state now: instance absent, firewall rule absent

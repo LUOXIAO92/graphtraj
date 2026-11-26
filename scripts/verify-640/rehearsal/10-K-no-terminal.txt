@@ -1,0 +1,6 @@
+$ <dummy key on stdin> | VERIFY640_K_STDIN=0 zsh scripts/verify-640/steps.zsh K
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [K] Store the temporary provider key on the VM. USER ONLY, in your own terminal. Login: gcloud. Dialog: none (a hidden prompt).
+STOP: K reads the key at a hidden terminal prompt; the user runs it in their own terminal: zsh scripts/verify-640/steps.zsh K
+VERDICT 640 K: STOP
+(exit 1)

@@ -1,0 +1,15 @@
+$ zsh scripts/verify-640/steps.zsh V
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [V] Create and provision the VM. CLOUD COST STARTS HERE (until D). Login: gcloud. Dialog: none.
+PASS: Task SSH key pair created under local/ssh (git-ignored)
+$ gcloud compute instances create <VM_NAME> --project=<PROJECT> --zone=<ZONE> (image family, machine type, disk, labels, tag, instance metadata from settings)
+  status: RUNNING
+PASS: VM created (labels and tag from settings; instance metadata only)
+PASS: Task firewall rule created: tcp:22 from the current public IPv4 only, to this VM's tag
+waiting for gcloud compute ssh to answer (bound 8s, poll 1s; Windows first boot and sysprep take ~5-10 min)
+  [22:22:45] not yet: ssh: connect to host: Operation timed out (stand-in)
+  [22:22:48] not yet: ssh: connect to host: Operation timed out (stand-in)
+  [22:22:51] not yet: ssh: connect to host: Operation timed out (stand-in)
+STOP: no SSH answer within 8s (last: ssh: connect to host: Operation timed out (stand-in)). Retry: zsh scripts/verify-640/steps.zsh V   or delete: zsh scripts/verify-640/steps.zsh D
+VERDICT 640 V: STOP
+(exit 1)

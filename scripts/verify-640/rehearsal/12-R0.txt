@@ -1,0 +1,15 @@
+$ zsh scripts/verify-640/steps.zsh R0
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [R0] versions and one real codex exec call (bound 10 min). Login: gcloud. Dialog: none.
+ITEM R0.answer PASS codex exec answered with PONG640
+RESULT R0 PASS
+== evidence of R0: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked; replacements: {"<MODEL>": 2, "<PROJECT>": 1}
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<NETWORK>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 8, "<VM_NAME>": 8, "<ZONE>": 4}
+--- items (1):
+  ITEM R0.answer PASS codex exec answered with PONG640
+next: zsh scripts/verify-640/steps.zsh R mxc
+next: zsh scripts/verify-640/steps.zsh R elevated
+next: zsh scripts/verify-640/steps.zsh D
+VERDICT 640 R0: PASS (PASS; evidence PASS)
+(exit 0)

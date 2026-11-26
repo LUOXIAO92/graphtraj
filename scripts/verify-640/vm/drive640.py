@@ -534,8 +534,8 @@ def r0() -> int:
 # --- R1-R5 ---------------------------------------------------------------------------------------------------
 
 SANDBOX_OFF = ('Codex\'s own sandbox is OFF in this run (permission profile extends ":danger-full-access", Codex '
-               '0.172 PermissionProfile::Disabled), on a disposable VM, because no Windows sandbox mode could start a '
-               'shell there')
+               '0.172 PermissionProfile::Disabled), on a disposable VM; it always follows R unelevated, to show the '
+               'flows without Codex\'s sandbox')
 
 
 def child_settings(work: Path, codex: list[str], mode: str = '', host: bool = False) -> dict:
@@ -675,6 +675,157 @@ def shell_failure(root: Path, last: dict) -> str | None:
     return None
 
 
+SHELL_TOOLS = {'shell', 'shell_command', 'exec_command', 'local_shell', 'container.exec', 'unified_exec'}
+PROFILE_REFUSED: dict[str, str] = {}
+RUN_STARTED = [time.time()]
+
+
+def injected_rollout() -> Path | None:
+    """Rehearsal only: V640_STANDIN_ROLLOUT names a fake rollout used for every turn (labelled as injected)."""
+    value = os.environ.get('V640_STANDIN_ROLLOUT') if STANDIN else None
+    return Path(value) if value else None
+
+
+def rollout_records(session: str | None) -> tuple[Path | None, list[dict]]:
+    """The Codex rollout of ``session`` (sessions/**/rollout-*<session>*.jsonl, newest), parsed line by line."""
+    path = injected_rollout()
+    if path is None and session:
+        sessions = codex_home() / 'sessions'
+        found = sorted(sessions.rglob(f'rollout-*{session}*.jsonl'), key=lambda item: item.stat().st_mtime) \
+            if sessions.is_dir() else []
+        path = found[-1] if found else None
+    records = []
+    if path is not None and path.exists():
+        for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+            try:
+                records.append(json.loads(line))
+            except ValueError:
+                pass
+    return path, records
+
+
+def tool_calls(records: list[dict]) -> list[dict]:
+    """Shell/exec tool calls in Codex rollout records, with their command, exit code and error text.
+
+    Fields read: ``type: response_item`` with ``payload.type`` function_call / custom_tool_call / local_shell_call
+    (``payload.name``, ``payload.arguments`` or ``input`` or ``action`` -> ``command``/``cmd``, ``payload.call_id``);
+    ``payload.type`` function_call_output / custom_tool_call_output (``payload.call_id``, ``payload.output``); and
+    ``type: event_msg`` with ``payload.type`` exec_command_end (``payload.call_id``, ``exit_code``, ``stderr``).
+    """
+    calls: dict = {}
+    order: list = []
+    outputs: dict = {}
+    ends: dict = {}
+    for record in records:
+        payload = record.get('payload') or {}
+        kind = payload.get('type')
+        if record.get('type') == 'response_item' and kind in ('function_call', 'custom_tool_call', 'local_shell_call'):
+            name = payload.get('name') or ('local_shell' if kind == 'local_shell_call' else '')
+            if kind != 'local_shell_call' and name not in SHELL_TOOLS:
+                continue
+            arguments = payload.get('arguments') or payload.get('input') or payload.get('action') or ''
+            command = arguments
+            if isinstance(arguments, str):
+                try:
+                    parsed = json.loads(arguments)
+                except ValueError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    command = parsed.get('command') or parsed.get('cmd') or arguments
+            elif isinstance(arguments, dict):
+                command = arguments.get('command') or arguments.get('cmd') or arguments
+            if isinstance(command, list):
+                command = ' '.join(map(str, command))
+            ident = payload.get('call_id') or payload.get('id') or f'call-{len(order)}'
+            calls[ident] = {'tool': name, 'command': str(command)[:160]}
+            order.append(ident)
+        elif record.get('type') == 'response_item' and kind in ('function_call_output', 'custom_tool_call_output',
+                                                                'local_shell_call_output'):
+            output = payload.get('output')
+            if isinstance(output, dict):
+                output = output.get('content') or json.dumps(output, ensure_ascii=False)
+            outputs[payload.get('call_id')] = str(output or '')
+        elif record.get('type') == 'event_msg' and kind == 'exec_command_end':
+            ends[payload.get('call_id')] = payload
+    found = []
+    for ident in order:
+        output, end = outputs.get(ident, ''), ends.get(ident, {})
+        code = end.get('exit_code')
+        if code is None:
+            match = re.search(r'(?i)exit code:?\s*(-?\d+)', output) or re.search(r'"exit_code"\s*:\s*(-?\d+)', output)
+            code = int(match.group(1)) if match else None
+        failed = SHELL_FAILED.search(output) or re.search(r'(?im)^(error|failed)\b[^\n]*', output)
+        error = failed.group(0).strip()[:200] if failed else (
+            f'exit code {code}: {str(end.get("stderr") or output).strip()[:160]}' if code not in (None, 0) else None)
+        found.append({**calls[ident], 'exit_code': code, 'error': error, 'output': output.strip()[:160]})
+    return found
+
+
+def observe_calls(log: Log, ident: str, session: str | None, start: int) -> tuple[str | None, int]:
+    """One OBSERVED item for a tool-dependent step from the rollout lines written since ``start``.
+
+    Returns (cause, line count): the cause is 'the model made no tool call', or the error text when every shell call
+    returned an error; None when a call ran, or when no rollout is known (then nothing is concluded).
+    """
+    path, records = rollout_records(session)
+    injected = injected_rollout() is not None
+    if path is None or not records:
+        log.item(f'{ident}.tool-calls', 'OBSERVED', 'no Codex rollout found for this Session; tool calls unknown')
+        return None, start
+    segment = records if injected else records[start:]
+    calls = tool_calls(segment)
+    shown = '; '.join(f"{call['tool']} {call['command'][:70]!r} -> "
+                      f"{('error: ' + call['error']) if call['error'] else 'exit ' + str(call['exit_code'])}"
+                      for call in calls[:5])
+    log.item(f'{ident}.tool-calls', 'OBSERVED',
+             f'{len(calls)} shell/exec call(s) in rollout lines {0 if injected else start}-{len(records)}'
+             f'{": " + shown if shown else ""}{" (rollout injected by the rehearsal)" if injected else ""}',
+             calls=calls)
+    if STANDIN and not injected:
+        return None, len(records)
+    if not calls:
+        return 'the model made no tool call', len(records)
+    if all(call['error'] for call in calls):
+        return f'the shell call returned an error: {calls[0]["error"]}', len(records)
+    return None, len(records)
+
+
+def collect_rollouts(log: Log, roots: list[Path]) -> int:
+    """Copy every rollout written during the run, and any rollout graftling links under ``roots``, to rollouts/."""
+    target = log.dir / 'rollouts'
+    target.mkdir(parents=True, exist_ok=True)
+    sources: dict[Path, str] = {}
+    sessions = codex_home() / 'sessions'
+    if sessions.is_dir():
+        for path in sessions.rglob('rollout-*.jsonl'):
+            if path.stat().st_mtime >= RUN_STARTED[0] - 5:
+                sources.setdefault(path.resolve(), path.name)
+    for root in roots:
+        if root.is_dir():
+            for path in root.rglob('*'):
+                if path.is_symlink() and path.name.startswith('rollout') or (path.is_symlink() and 'rollout' in path.name):
+                    try:
+                        sources.setdefault(path.resolve(strict=True), 'linked-' + path.name)
+                    except OSError:
+                        pass
+    if injected_rollout() is not None:
+        sources.setdefault(injected_rollout().resolve(), 'injected-' + injected_rollout().name)
+    for source, name in sources.items():
+        if source.is_file():
+            shutil.copyfile(source, target / name)
+    return len(sources)
+
+
+def refuse_profile(log: Log, raw: str, facts: dict) -> dict:
+    """R none: Codex or graftling refused the sandbox-off profile; one item with the raw error, the rest NOT-RUN."""
+    PROFILE_REFUSED['none'] = raw[:600]
+    log.item('R-none.profile', 'FAIL', f'the profile extending ":danger-full-access" was refused; raw error: {raw[:600]}')
+    for ident in ('R1', 'R5.6-code-page', 'R2', 'R5.2-cmd-start-/b', 'R5.2-Start-Process', 'R5.2-nesting',
+                  'R3.reconcile', 'R5.2-job-by-name', 'R3.takeover', 'R4'):
+        log.item(ident, 'NOT-RUN', 'the sandbox-off profile was refused (see R-none.profile)')
+    return facts
+
+
 def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
     from graftling import AgentControl, Caller, bind
     from graftling.codex.driver import CodexDriver
@@ -699,7 +850,10 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
         created = ask({'action': 'create', 'runtime': 'codex', 'instruction': instruction('r1')})
         facts['r1_create'] = created
         if 'error' in created:
-            log.item('R1', 'FAIL', f'create refused: {json.dumps(created["error"], ensure_ascii=False)}')
+            raw = json.dumps(created['error'], ensure_ascii=False)
+            if mode == 'none':
+                return refuse_profile(log, raw, facts)
+            log.item('R1', 'FAIL', f'create refused: {raw}')
             return facts
         agent, session = created['agent'], created['session']
         done = ask({'action': 'wait', 'agent': agent, 'timeout_seconds': 300})
@@ -708,13 +862,18 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
         execution = record(root, agent)
         marker = work / 'r1-marker.txt'
         process = execution.get('process', {})
+        if mode == 'none' and last.get('outcome') == 'failed' and last.get('error'):
+            return refuse_profile(log, json.dumps(last.get('error'), ensure_ascii=False), facts)
         cause = shell_failure(root, last) if not marker.exists() else None
+        rollout_cause, lines1 = observe_calls(log, 'R1', session, 0)
+        if not marker.exists() and not cause and rollout_cause:
+            cause = rollout_cause
         if cause:
             facts['no_shell'] = cause
-            log.item('R1', 'NOT-RUN', f'Codex could not start its shell under {mode}: {cause}', process=process)
+            log.item('R1', 'NOT-RUN', f'no tool ran under {mode}: {cause}', process=process)
             for ident in ('R5.6-code-page', 'R2', 'R5.2-cmd-start-/b', 'R5.2-Start-Process', 'R5.2-nesting',
                           'R3.reconcile', 'R5.2-job-by-name', 'R3.takeover'):
-                log.item(ident, 'NOT-RUN', 'needs a tool process; Codex could not start its shell (see R1)')
+                log.item(ident, 'NOT-RUN', f'needs a tool process; none ran (see R1): {cause}')
             NO_SHELL[mode] = cause
             kill_leftovers(log, ('6401', '6402', '6403', '6404'))
             return facts
@@ -751,8 +910,6 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
         facts['r2_job_listing'] = {str(key): value for key, value in listed.items()} if isinstance(listed, dict) else listed
         log.save('r2-tools.json', {'runtime_job': job, 'tool_marker': tool_marker, 'tools': shape,
                                    'job_listing': facts['r2_job_listing']})
-        if not seen:
-            log.item('R2', 'FAIL', 'the holding tool never appeared within 240 s')
         time.sleep(SAMPLED_S)
         stop = ask({'action': 'interrupt', 'agent': agent})
         stopped = ask({'action': 'wait', 'agent': agent, 'timeout_seconds': 120})
@@ -761,11 +918,17 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
         pids = sorted({pid for pids in (seen or {}).values() for pid in pids})
         wait_for(lambda: not [pid for pid in pids if alive(pid)], 30)
         survivors = [pid for pid in pids if alive(pid)]
+        cause2, lines2 = observe_calls(log, 'R2', session, lines1)
+        if not seen and cause2:
+            for ident in ('R2', 'R5.2-cmd-start-/b', 'R5.2-Start-Process', 'R5.2-nesting'):
+                log.item(ident, 'NOT-RUN', f'needs the holding tool; none ran: {cause2}')
+        elif not seen:
+            log.item('R2', 'FAIL', 'the holding tool never appeared within 240 s')
         if seen:
             log.item('R2', 'PASS' if last.get('outcome') == 'interrupted' and not survivors else 'FAIL',
                      f'outcome {last.get("outcome")}, state {(stopped.get("result") or {}).get("state")}; '
                      f'{len(pids)} tool process(es) seen, {len(survivors)} alive 30 s after the stop')
-        if WINDOWS and not STANDIN:
+        if WINDOWS and not STANDIN and not (not seen and cause2):
             for number, label in (('6401', 'cmd start /b'), ('6402', 'Start-Process')):
                 rows = shape.get(number, [])
                 in_graft = rows and all(row['in_runtime_job'] is True for row in rows)
@@ -804,7 +967,13 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
         still = [pid for pid in pids3 if alive(pid)]
         code = ((execution or {}).get('error') or {}).get('code')
         log.save('r3-escaped.json', {'escaped_processes': escaped, 'error': (execution or {}).get('error')})
-        if execution and code == 'owner-exited' and pids3 and set(pids3) <= stopped_pids and not still:
+        cause3, _ = observe_calls(log, 'R3', session, lines2)
+        no_tool3 = cause3 if not seen3 and cause3 else None
+        if no_tool3:
+            log.item('R3.reconcile', 'NOT-RUN', f'needs the holding tool; none ran: {no_tool3} '
+                                                f'(the execution ended {code or "without an error code"})')
+            log.item('R5.2-job-by-name', 'NOT-RUN', f'needs the holding tool; none ran: {no_tool3}')
+        elif execution and code == 'owner-exited' and pids3 and set(pids3) <= stopped_pids and not still:
             log.item('R3.reconcile', 'PASS', f'ended owner-exited; escaped_processes.stopped lists the {len(pids3)} '
                                              'leftover tool process(es); none alive (the job was opened by name)')
         elif execution and code == 'owner-exited':
@@ -813,9 +982,10 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
                      f'{escaped.get("error") if isinstance(escaped, dict) else escaped}')
         else:
             log.item('R3.reconcile', 'FAIL', f'the dead owner\'s execution did not end owner-exited: {code}')
-        log.item('R5.2-job-by-name', 'PASS' if pids3 and set(pids3) <= stopped_pids else 'OBSERVED',
-                 'a later process (this one) opened the job by name and stopped the tools' if pids3 and
-                 set(pids3) <= stopped_pids else 'see R3.reconcile (No job open, or tools not in it)')
+        if not no_tool3:
+            log.item('R5.2-job-by-name', 'PASS' if pids3 and set(pids3) <= stopped_pids else 'OBSERVED',
+                     'a later process (this one) opened the job by name and stopped the tools' if pids3 and
+                     set(pids3) <= stopped_pids else 'see R3.reconcile (No job open, or tools not in it)')
         kill_leftovers(log, hold)
         confirmed = call({'action': 'interrupt', 'agent': agent})
         resumed = call({'action': 'resume', 'agent': agent, 'message': instruction('r3b')})
@@ -825,7 +995,11 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
         same = resumed.document.get('session') == session
         ok = (not confirmed.failed and confirmed.document.get('result', {}).get('termination_confirmed')
               and not resumed.failed and same and last.get('outcome') == 'completed')
-        log.item('R3.takeover', 'PASS' if ok else 'FAIL',
+        if no_tool3:
+            log.item('R3.takeover', 'NOT-RUN', f'needs a turn holding a tool when the owner dies; none ran: {no_tool3} '
+                     f'(resumed in the same Session: {same}; outcome {last.get("outcome")})')
+        else:
+          log.item('R3.takeover', 'PASS' if ok else 'FAIL',
                  f'confirm {confirmed.document.get("result", {}).get("termination_confirmed")}; resumed in the same '
                  f'Session: {same}; outcome {last.get("outcome")}; last message {str(last.get("last_message"))[:60]!r}')
         from graftling.shutdown import stop_owned
@@ -939,7 +1113,9 @@ def r4(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
     log.item('R5.1-mcp-caller', 'PASS' if callers and callers <= set(mcp) else 'OBSERVED',
              f'authenticated caller pid(s) {sorted(callers)}; MCP server pid(s) seen {mcp}; in the service job: '
              f'{[shapes[pid]["in_service_job"] for pid in mcp]}')
-    if STANDIN:
+    if mode == 'none':
+        log.item('R5.1-sandbox-caller', 'NOT-RUN', 'no tool sandbox in this run')
+    elif STANDIN:
         log.item('R5.1-sandbox-caller', 'NOT-RUN', 'the stand-in has no tool sandbox (real VM only)')
     elif sandbox is None:
         log.item('R5.1-sandbox-caller', 'OBSERVED', 'the in-sandbox probe left no file (it did not run, or could '
@@ -1080,19 +1256,26 @@ def run_mode(mode: str) -> int:
         shutil.copyfile(config, log.dir / 'config.toml')
         codex = [codex_command()]
     log.save('versions.json', {'codex': codex})
+    RUN_STARTED[0] = time.time()
     try:
         r1_to_r3(log, mode, work, codex)
     except Exception as error:
         log.item('R1-R3', 'FAIL', f'driver error: {type(error).__name__}: {error}')
-    try:
-        r4(log, mode, work, codex)
-    except Exception as error:
-        log.item('R4', 'FAIL', f'driver error: {type(error).__name__}: {error}')
+    if mode not in PROFILE_REFUSED:
+        try:
+            r4(log, mode, work, codex)
+        except Exception as error:
+            log.item('R4', 'FAIL', f'driver error: {type(error).__name__}: {error}')
+    copied = collect_rollouts(log, [work.parent / f'agents-{mode}', work.parent / f'host-{mode}'])
+    log.say(f'rollouts kept in the evidence (rollouts/): {copied}')
     counts: dict[str, int] = {}
     for item in log.items:
         counts[item['verdict']] = counts.get(item['verdict'], 0) + 1
-    verdict = 'FAIL' if counts.get('FAIL') else ('NO-SHELL' if mode in NO_SHELL else 'PASS')
-    why = f'; Codex could not start a shell under {mode}: {NO_SHELL[mode]}' if mode in NO_SHELL else ''
+    if mode in PROFILE_REFUSED:
+        verdict, why = 'PROFILE-REFUSED', f'; raw error: {PROFILE_REFUSED[mode]}'
+    else:
+        verdict = 'FAIL' if counts.get('FAIL') else ('NO-SHELL' if mode in NO_SHELL else 'PASS')
+        why = f'; no tool ran under {mode}: {NO_SHELL[mode]}' if mode in NO_SHELL else ''
     log.say(f'RESULT {step} {verdict} ({", ".join(f"{key} {value}" for key, value in sorted(counts.items()))}{why})')
     return 0 if verdict == 'PASS' else 1
 

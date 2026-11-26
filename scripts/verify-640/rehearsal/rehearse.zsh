@@ -113,7 +113,7 @@ VERIFY640_IP=$IP2 step R0 PASS R0
 CHECK+="R0 with an unchanged address made no update: $(yn grep -qv 'updated (address not shown)' $LAST)"
 VERIFY640_IP=$IP2 step R-mxc PASS R mxc
 VERIFY640_IP=$IP2 step R-unelevated PASS R unelevated
-VERIFY640_IP=$IP2 step R-none-fallback PASS R none
+VERIFY640_IP=$IP2 step R-none PASS R none
 CHECK+="R none console says Codex's sandbox is off: $(yn grep -q "Codex's own sandbox OFF" $LAST)"
 VERIFY640_IP=$IP2 step E-R0 PASS E R0
 CHECK+="fetch count check printed: $(yn grep -q 'PASS: 3 of 3 evidence files arrived' $LAST)"
@@ -125,6 +125,8 @@ CHECK+="after D: Task rules left $(ls $S | grep -c '^rule-'), instance $([[ -f $
 step R0-after-D STOP R0
 
 # Checks (counts and yes/no only).
+firstnext() { grep -h -m1 '^next: ' $OUT/[0-9][0-9]-$1.txt 2> /dev/null | sed 's/^next: zsh scripts\/verify-640\/steps.zsh //' ; }
+CHECK+="run order by each step's first next line: 00 -> $(firstnext 00-project-allow-all-65534); V -> $(firstnext V-full); K -> $(firstnext K-dummy-key-after-address-change); R0 -> $(firstnext R0); R unelevated -> $(firstnext R-unelevated); R none -> $(firstnext R-none)"
 lines=$(grep -c . $S/argv.log)
 noproj=$(grep -v -c -- '--project=' $S/argv.log)
 other=$(grep -v -- "--project=${V[PROJECT]}" $S/argv.log | grep -v -c -- "compute images describe-from-family .*--project=${V[IMAGE_PROJECT]}")

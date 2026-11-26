@@ -82,11 +82,29 @@ rm -f $H/out/R0/planted.txt
 drv run-mxc-standin 'RESULT R-mxc PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests -- run mxc
 drv scan-run 'SCAN PASS' $KEYENV=$KEYVAL -- scan R-mxc
 drv run-mxc-no-shell 'RESULT R-mxc NO-SHELL' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests V640_STANDIN_NO_SHELL=1 -- run mxc
-CHECK+="no-shell run: items NOT-RUN with the cause $(grep -c '^ITEM .* NOT-RUN .*shell' $OUT/drv-$(printf %02d $N)-run-mxc-no-shell.txt), FAIL items $(grep -c '^ITEM .* FAIL ' $OUT/drv-$(printf %02d $N)-run-mxc-no-shell.txt)"
+CHECK+="no-shell run: items NOT-RUN with the cause $(grep -c -E '^ITEM .* NOT-RUN .*(shell|none ran)' $OUT/drv-$(printf %02d $N)-run-mxc-no-shell.txt), FAIL items $(grep -c '^ITEM .* FAIL ' $OUT/drv-$(printf %02d $N)-run-mxc-no-shell.txt)"
 drv run-unelevated-standin 'RESULT R-unelevated PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests -- run unelevated
 drv run-none-standin 'RESULT R-none PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests -- run none
 CHECK+="R-none evidence states the sandbox is off: $([[ -f $H/out/R-none/SANDBOX-OFF.txt ]] && grep -q 'sandbox is OFF' $H/out/R-none/SANDBOX-OFF.txt && print yes || print no); host settings extend :danger-full-access: $(grep -c ':danger-full-access' $H/out/R-none/host-settings.json)"
 CHECK+="$(/usr/bin/env -i V640_HOME=$H PATH=/usr/bin:/bin /usr/bin/python3 -I $HERE/rehearsal/check_settings640.py $HERE/vm 2>&1)"
+# Fake rollouts in the Codex rollout shape (response_item function_call / function_call_output, event_msg
+# exec_command_end; the shape is assumed from Codex's rollout format, not read from a real 0.172 file): (a) the shell
+# call returns an error, (b) no tool call, (c) a successful call.
+mkdir -p $H/fake-rollouts
+print -r -- '{"type": "response_item", "payload": {"type": "function_call", "name": "shell_command", "arguments": "{\"command\": \"Set-Content -Path r1-marker.txt -Value r1-640\"}", "call_id": "c1"}}
+{"type": "response_item", "payload": {"type": "function_call_output", "call_id": "c1", "output": "failed to start the process: CreateProcessAsUserW failed: 5"}}' > $H/fake-rollouts/rollout-a-error.jsonl
+print -r -- '{"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "R1-DONE"}]}}' > $H/fake-rollouts/rollout-b-no-call.jsonl
+print -r -- '{"type": "response_item", "payload": {"type": "function_call", "name": "shell_command", "arguments": "{\"command\": \"Set-Content -Path r1-marker.txt -Value r1-640\"}", "call_id": "c3"}}
+{"type": "event_msg", "payload": {"type": "exec_command_end", "call_id": "c3", "exit_code": 0, "stderr": ""}}
+{"type": "response_item", "payload": {"type": "function_call_output", "call_id": "c3", "output": "Exit code: 0"}}' > $H/fake-rollouts/rollout-c-ok.jsonl
+drv rollout-a-shell-error 'RESULT R-unelevated NO-SHELL' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests V640_STANDIN_ROLLOUT=$H/fake-rollouts/rollout-a-error.jsonl -- run unelevated
+CHECK+="(a) shell error: R1 NOT-RUN with the error text: $(grep -c '^ITEM R1 NOT-RUN .*the shell call returned an error: failed to start the process' $OUT/drv-$(printf %02d $N)-rollout-a-shell-error.txt); rollout copied: $(ls $H/out/R-unelevated/rollouts | grep -c rollout-a)"
+drv rollout-b-no-tool-call 'RESULT R-unelevated NO-SHELL' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests V640_STANDIN_ROLLOUT=$H/fake-rollouts/rollout-b-no-call.jsonl -- run unelevated
+CHECK+="(b) no call: R1 NOT-RUN 'the model made no tool call': $(grep -c "^ITEM R1 NOT-RUN .*the model made no tool call" $OUT/drv-$(printf %02d $N)-rollout-b-no-tool-call.txt); R1.tool-calls says 0 calls: $(grep -c '^ITEM R1.tool-calls OBSERVED 0 shell' $OUT/drv-$(printf %02d $N)-rollout-b-no-tool-call.txt)"
+drv rollout-c-call-ran 'RESULT R-unelevated PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests V640_STANDIN_ROLLOUT=$H/fake-rollouts/rollout-c-ok.jsonl -- run unelevated
+CHECK+="(c) call ran: R1/R2/R3 tool-calls items with exit 0: $(grep -c '^ITEM R[123].tool-calls OBSERVED 1 shell/exec .*exit 0' $OUT/drv-$(printf %02d $N)-rollout-c-call-ran.txt); NOT-RUN items for no-tool: $(grep -c 'none ran' $OUT/drv-$(printf %02d $N)-rollout-c-call-ran.txt)"
+drv run-none-after-unelevated 'RESULT R-none PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests -- run none
+CHECK+="R none: in-sandbox caller NOT-RUN 'no tool sandbox in this run': $(grep -c "^ITEM R5.1-sandbox-caller NOT-RUN no tool sandbox in this run" $OUT/drv-$(printf %02d $N)-run-none-after-unelevated.txt); sandbox-off line: $(grep -c "sandbox is OFF" $OUT/drv-$(printf %02d $N)-run-none-after-unelevated.txt)"
 mkdir -p $H/v6; print -r -- 'path codex_core::tools::router loopback ::1 global 2001:4860:4860::8888 doc 2001:db8::7 linklocal fe80::1 time 12:34:56' > $H/v6/sample.txt
 print -r -- '[]' > $H/v6.json
 drv scrub-ipv6 'SCRUB ' -- scrub $H/v6 $H/v6.json

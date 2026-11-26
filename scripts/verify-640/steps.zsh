@@ -56,8 +56,9 @@
 #       Codex's rollout equal the configured ones; the provider-reported model is recorded when Codex exposes it. A
 #       provider refusal STOPs with the raw error (scrubbed); no other model and no proxy is tried. Then the evidence
 #       is scanned, fetched and scrubbed. Login: gcloud. Dialog: none. ~2-5 min.
-#   R mxc | R elevated | R unelevated | R none   (none: FALLBACK ONLY, when no Windows sandbox mode can start a shell;
-#       Codex's own sandbox is OFF, through a permission profile extending ":danger-full-access", on this disposable VM)
+#   R mxc | R elevated | R unelevated | R none   (order of a fresh run: 00, V, K, R0, R unelevated, R none, D. R none
+#       ALWAYS follows R unelevated: Codex's own sandbox is OFF, through a permission profile extending
+#       ":danger-full-access", on this disposable VM; its console and SANDBOX-OFF.txt say so)
 #       On the VM with [windows] sandbox = <mode> (Codex 0.172 WindowsSandboxModeToml): R1 child create + tool +
 #       end; R2 stop (with cmd start /b and Start-Process descendants); R3 takeover after the owner is killed; R4
 #       the Codex parent host's real MCP call; R5 the 629 sec. 6 Codex items (pipe identity incl. a caller in
@@ -521,7 +522,7 @@ R0|R)
   local mode= label=R0 cmd
   if [[ $STEP == R ]]; then
     [[ $ARG == (mxc|elevated|unelevated|none) ]] || stop "usage: zsh $REL R mxc|elevated|unelevated|none"
-    [[ $ARG == none ]] && print -r -- "NOTE: R none runs with Codex's own sandbox OFF (fallback for this disposable VM only; the evidence says so)"
+    [[ $ARG == none ]] && print -r -- "NOTE: R none runs with Codex's own sandbox OFF on this disposable VM (the evidence says so)"
     mode=$ARG label=R-$ARG cmd="run $ARG"
     say "[$label] R1-R4 and the 629 sec. 6 Codex items with windows.sandbox = $mode (bound 75 min). Login: gcloud. Dialog: none."
   else
@@ -539,7 +540,11 @@ R0|R)
     [[ $result == *PASS* ]] && next_cmds "R unelevated" D || next_cmds R0 D
     [[ $result == *STOP* ]] && print -r -- "next: the provider refused or failed: read the raw error above; the user decides (no other model, no proxy)"
   else
-    next_cmds "R unelevated" "R none   (fallback only: if no sandbox mode can start a shell)" "E $label" D
+    case $label in
+      R-unelevated) next_cmds "R none" "E $label" ;;      # R none follows R unelevated whatever its outcome
+      R-none) next_cmds D "E $label" ;;
+      *) next_cmds "R unelevated" "R none" D ;;
+    esac
   fi
   [[ -n $result ]] || result="RESULT $label FAIL (no RESULT line; the remote run ended early)"
   local verdict=${${(z)result}[3]}

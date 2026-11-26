@@ -3,10 +3,10 @@
 usage (python -I):
   x641.py task <id> <parent id or -> <out.yml>  one disposable probe Task definition (neutral text only)
   x641.py graph                                  in the project (cwd): the probe Tasks through public task_graph
-  x641.py mcpconfig <.mcp.json> <out.json> <home> <gh config dir> <gh dir>
+  x641.py mcpconfig <.mcp.json> <out.json> <home> <PATH>
                                                  Claude's --mcp-config: the project's graphtraj entry plus env HOME
-                                                 (isolated), GH_CONFIG_DIR (the user's gh login location, no token)
-                                                 and PATH (gh's directory first)
+                                                 (isolated) and PATH (ROOT/bin first, whose gh wrapper gives only gh
+                                                 the user's HOME; no token)
   x641.py prompt <1|2> <owner/name>              the one-line prompt of real run 1 or 2
   x641.py judge <1|2> <stream.jsonl> <owner/name> <summary.json> [old child number] [--stand-in]
   x641.py ours <listing.json> <since ISO>        numbers of the Issues this verification created (title prefix +
@@ -16,7 +16,9 @@ usage (python -I):
   x641.py numbers <task-backups.yml>             Issue numbers in the isolated mapping file
   x641.py subs <sub_issues.json>                 numbers of the listed Sub-issues
 Rehearsal stand-ins (never used by Main):
-  x641.py fake-gh <state.json> <gh arguments...>         a file-backed stand-in for the gh commands used here
+  x641.py fake-gh <state.json> <login HOME> <gh arguments...>
+                                                         a file-backed stand-in for the gh commands used here; like
+                                                         gh's stored login it answers only when HOME is <login HOME>
   x641.py fake-claude <claude arguments...>              runs the prompt's calls through the MCP entry's python
 Prints facts only; never prints a token, account or the user's paths.
 """
@@ -66,11 +68,10 @@ def graph() -> int:
     return 0 if ok else 1
 
 
-def mcpconfig(source: str, out: str, home: str, ghconfig: str, ghdir: str) -> int:
+def mcpconfig(source: str, out: str, home: str, search: str) -> int:
     """Write Claude's --mcp-config from the graphtraj entry that configuration --write made."""
     entry = json.loads(Path(source).read_text())['mcpServers']['graphtraj']
-    env   = {**entry.get('env', {}), 'HOME': home, 'GH_CONFIG_DIR': ghconfig,
-             'PATH': f'{ghdir}:/usr/bin:/bin:/usr/sbin:/sbin'}
+    env   = {**entry.get('env', {}), 'HOME': home, 'PATH': search}
     Path(out).write_text(json.dumps({'mcpServers': {'graphtraj': {**entry, 'env': env}}}, indent=2))
     print(f'{out}: graphtraj -> {Path(entry["command"]).name} {" ".join(entry["args"][:4])} ... | env names: {sorted(env)}')
     return 0
@@ -249,8 +250,16 @@ def subs(listing: str) -> int:
     return 0
 
 
-def fake_gh(state_file: str, args: list[str]) -> int:
-    """Rehearsal stand-in for ``gh``: auth status, api (REST used here) and issue delete, kept in a JSON file."""
+def fake_gh(state_file: str, login_home: str, args: list[str]) -> int:
+    """Rehearsal stand-in for ``gh``: auth status, api (REST used here) and issue delete, kept in a JSON file.
+
+    Like gh's stored login (found through HOME), every request except ``--version`` answers only when HOME is
+    ``login_home``; otherwise it fails as the real gh did with an isolated HOME.
+    """
+    if args[:1] != ['--version'] and os.environ.get('HOME') != login_home:
+        sys.stderr.write('github.com\n  X Failed to log in to github.com account (default)\n'
+                         '  - The token in default is invalid. (stand-in: HOME is not the login HOME)\n')
+        return 1
     path  = Path(state_file)
     state = json.loads(path.read_text()) if path.is_file() else {'issues': [], 'parents': {}, 'serial': 900}
 
@@ -279,7 +288,7 @@ def fake_gh(state_file: str, args: list[str]) -> int:
         # Only the field paths this script asks for (``.a.b``).
         at = args.index('--jq')
         expression, args = args[at + 1], args[:at] + args[at + 2:]
-        output = subprocess.run([sys.executable, '-I', __file__, 'fake-gh', state_file, *args],
+        output = subprocess.run([sys.executable, '-I', __file__, 'fake-gh', state_file, login_home, *args],
                                 capture_output=True, text=True, check=False)
         if output.returncode:
             sys.stderr.write(output.stderr)
@@ -392,7 +401,7 @@ if __name__ == '__main__':
         print(prompt(*rest))
         sys.exit(0)
     if operation == 'fake-gh':
-        sys.exit(fake_gh(rest[0], rest[1:]))
+        sys.exit(fake_gh(rest[0], rest[1], rest[2:]))
     if operation == 'fake-claude':
         sys.exit(fake_claude(rest))
     if operation not in handlers:

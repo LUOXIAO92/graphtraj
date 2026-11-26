@@ -25,9 +25,9 @@ number that now names another object. The manual section "Back up Tasks to Issue
 
 | step | who | login | dialog | proves |
 |---|---|---|---|---|
-| pre | Main | the user's Claude login and gh login (Main asks the user first) | none | zsh, HEAD on base c18b4beb, graftling v0.10.2; `claude -p` names its model and login (`init: model … apiKeySource …`); `gh auth status` passes with your HOME **and** with the MCP server's environment (isolated HOME + `GH_CONFIG_DIR`); the repository (this Worktree's origin) gives your login admin (needed by `gh issue delete`). The account name is never printed. |
+| pre | Main | the user's Claude login and gh login (Main asks the user first) | none | zsh, HEAD on base c18b4beb, graftling v0.10.2; `claude -p` names its model and login (`init: model … apiKeySource …`); writes the gh wrapper `ROOT/bin/gh`; `gh auth status` passes with your HOME **and** in the MCP server's environment (isolated HOME, PATH resolving gh to the wrapper, printed); the repository (this Worktree's origin) gives your login admin (needed by `gh issue delete`). The account name is never printed. |
 | install | Main | none | none | ROOT/venv imports graphtraj HEAD and graftling 0.10.2, both as wheels; `IssueDeleted` present |
-| setup | Main | none | none | public `graphtraj setup`; probe Tasks 1 (parent) and 2 (child) through public `task register`, shown ready through public `task_graph`; host material; ROOT/mcp-641.json (env names GH_CONFIG_DIR, HOME, PATH) |
+| setup | Main | none | none | public `graphtraj setup`; probe Tasks 1 (parent) and 2 (child) through public `task register`, shown ready through public `task_graph`; host material; ROOT/mcp-641.json (env names HOME, PATH; PATH starts with ROOT/bin) |
 | trust | USER, once per path | – | "Do you trust the files in this folder?" → **Yes, proceed**; then `/exit` | lets Claude Code load the project plugin graphtraj-claude-host |
 | real | Main | the user's Claude login and gh login | none | see "Observables" below; ALWAYS deletes every Issue it created and shows each answers HTTP 410 |
 | post | Main | none | none | ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh unchanged |
@@ -67,9 +67,16 @@ proved by `test_other_errors_on_the_mapped_issue_still_fail_without_creating`.
   deleted, the step FAILs and prints the exact command.
 - **Credentials.** The script unsets every exported credential-class variable (GH_TOKEN, GITHUB_TOKEN, …; names
   printed). gh therefore uses only your stored login. Started processes get only `PATH HOME USER TERM TMPDIR LANG`
-  plus the step's own names. The MCP server gets `HOME=ROOT/home`, so GraphTraj's state is the isolated one. It also
-  gets `GH_CONFIG_DIR=<your gh config directory>` (a directory name) and `PATH` (gh's directory first). No token value
-  is read, printed or written. pre checks that this exact environment reaches the login.
+  plus the step's own names. The MCP server gets `HOME=ROOT/home`, so GraphTraj's state is the isolated one, and
+  `PATH=ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin`.
+  - **Why a wrapper.** gh finds its stored login through HOME. In Main's pre at 3d3ca521, an isolated HOME plus
+    `GH_CONFIG_DIR` answered "The token in default is invalid".
+  - **The wrapper.** pre writes `ROOT/bin/gh` from the current layout: `HOME=<your HOME> exec <real gh> "$@"`. It is
+    never committed. So only gh gets your HOME.
+  - **What pre checks.** pre prints which gh the server's PATH resolves and FAILs unless it is that wrapper. It runs
+    `gh auth status` in exactly the server's environment. It also prints, not judged, the direct real gh with the
+    isolated HOME for contrast.
+  - No token value is read, printed or written.
 - **State.** Only the isolated project's `task-backups.yml` is used; production state is never read or written. ROOT
   (`/private/tmp/graphtraj-641`) is outside the Harness, so no Harness instruction file is above the project.
 - **Rerun of real.** It STOPs while the isolated mapping exists and prints the exact `rm` for that file. The earlier

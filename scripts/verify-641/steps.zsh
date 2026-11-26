@@ -11,8 +11,9 @@
 #   pre     Main. ROOT must not exist (STOP with the exact rm). zsh, HEAD, base c18b4beb and graftling v0.10.2; no
 #           uncommitted change; TMPDIR outside the Harness; your locations listed into ROOT/user-before.txt. ONE one-line
 #           `claude -p` (no MCP, no tool): the init record names model and login. `gh auth status` for github.com with
-#           your HOME AND with the MCP server's environment (HOME=ROOT/home, GH_CONFIG_DIR=your gh config directory);
-#           the repository (from this Worktree's origin) answers with admin permission (needed to delete Issues).
+#           your HOME AND with the MCP server's environment (HOME=ROOT/home, PATH=ROOT/bin first, where pre writes the
+#           gh wrapper ROOT/bin/gh that gives only gh your HOME; the gh it resolves is printed); the repository (from
+#           this Worktree's origin) answers with admin permission (needed to delete Issues).
 #           LOGIN: your Claude login and your gh login (Main asks the user first). Dialog: none. ~30 s.
 #   install Main. ROOT/venv: HEAD + graftling v0.10.2, both WHEELS, offline. Dialog: none. No login. ~1 min.
 #   setup   Main. ROOT/proj (own git) through public `graphtraj setup`; probe Tasks 1 (parent) and 2 (child) through
@@ -35,10 +36,12 @@
 # PASSWORD, CREDENTIAL(S); GIT_CONFIG_KEY_<n> excepted) is unset and its NAME printed, so gh uses only your stored
 # login. Every started process gets an ALLOWLIST environment (clean(): PATH HOME USER TERM TMPDIR LANG and the step's
 # own NAME=value). Claude and the script's own gh get your HOME; GraphTraj processes get HOME=ROOT/home; the MCP server
-# gets HOME=ROOT/home plus GH_CONFIG_DIR (a directory name, never a token). No token is written anywhere.
+# gets HOME=ROOT/home and PATH=ROOT/bin:...; ROOT/bin/gh (written by pre from the current layout, never committed)
+# runs the real gh with HOME=<your HOME>, because gh finds its stored login through HOME (an isolated HOME answers
+# "The token in default is invalid"). No token is read, printed or written anywhere.
 # Rehearsal only (Engineer; Main leaves all unset): VERIFY641_ROOT, VERIFY641_T, VERIFY641_OUT, VERIFY641_USERHOME,
 # VERIFY641_DEPS, VERIFY641_PYTEST_ARGS, VERIFY641_GWAIT, VERIFY641_NO_PS=1, VERIFY641_CLAUDE and VERIFY641_GH
-# (stand-ins), VERIFY641_GHCONFIG, VERIFY641_REPO. A run with any of them set prints REHEARSAL and is not evidence.
+# (stand-ins), VERIFY641_REPO. A run with any of them set prints REHEARSAL and is not evidence.
 # No zsh special parameter name is used as a variable (path, status, argv, prompt, reply, match, ...).
 emulate -L zsh
 setopt pipe_fail no_unset extended_glob no_bg_nice
@@ -70,7 +73,8 @@ D516=$H/.graphtraj/core/state/tasks/516-low-priority-flaky-tests
 KNOWN_EXTRA=("tests/test_agents_discovery_intents.py::test_intent_queries_find_create[start an agent]")   # 611; base too
 PYTEST_TMP=${TMPDIR:-/tmp}
 BASEPATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
-GHCFG=${VERIFY641_GHCONFIG:-${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$UH/.config}/gh}}   # where your gh login is kept
+GHWRAP=$ROOT/bin/gh                                 # written by pre: the real gh with your HOME (MCP server's gh)
+MCPPATH=$ROOT/bin:/usr/bin:/bin:/usr/sbin:/sbin     # the MCP server's PATH (ROOT/bin first)
 PIP=(-q --disable-pip-version-check --no-cache-dir --no-index --no-deps --no-build-isolation)
 REHEARSAL=$(print -r -- ${(k)parameters[(I)VERIFY641_*]})
 
@@ -252,9 +256,20 @@ sys.exit(1)' $ROOT/pre-stream.jsonl && pass "the Claude host answered (model and
   # gh: the account name is not printed; only whether a login answers for github.com.
   ugh auth status --hostname github.com > $ROOT/gh-auth.txt 2>&1 \
     && pass "gh auth status (your HOME): logged in to github.com" || fail "gh auth status (your HOME) failed: the USER runs 'gh auth login' in Terminal"
-  clean HOME=$HOMEDIR GH_CONFIG_DIR=$GHCFG $G auth status --hostname github.com > $ROOT/gh-auth-mcp.txt 2>&1 \
-    && pass "gh auth status with the MCP server's environment (HOME=$HOMEDIR, GH_CONFIG_DIR=$GHCFG): logged in" \
-    || fail "gh does not reach your login with HOME=$HOMEDIR and GH_CONFIG_DIR=$GHCFG: $(grep -v -i account $ROOT/gh-auth-mcp.txt | head -2 | xargs)"
+  # The MCP server's gh: a wrapper in ROOT/bin that runs the real gh with your HOME (where gh finds its login);
+  # GraphTraj and the server keep HOME=ROOT/home. Written from the current layout; only paths, no token.
+  mkdir -p ${GHWRAP:h} && print -r -- "#!/bin/sh
+HOME=${(qq)UH} exec ${(qq)G} \"\$@\"" > $GHWRAP && chmod 755 $GHWRAP || return 1
+  print -r -- "gh wrapper $GHWRAP: $(tail -1 $GHWRAP | sed "s#${(q)UH}#<your HOME>#")"
+  local resolved=$(clean HOME=$HOMEDIR PATH=$MCPPATH /bin/sh -c 'command -v gh')
+  print -r -- "MCP server environment: HOME=$HOMEDIR PATH=$MCPPATH -> gh resolves to: ${resolved:-none}"
+  [[ $resolved == $GHWRAP ]] && pass "the MCP server's PATH resolves gh to the wrapper" || fail "the MCP server's PATH resolves gh to '${resolved}', not $GHWRAP"
+  clean HOME=$HOMEDIR PATH=$MCPPATH gh auth status --hostname github.com > $ROOT/gh-auth-mcp.txt 2>&1 \
+    && pass "gh auth status in the MCP server's environment (HOME=$HOMEDIR, gh = wrapper): logged in" \
+    || fail "gh does not reach your login in the MCP server's environment: $(grep -iE 'invalid|not logged|error' $ROOT/gh-auth-mcp.txt | head -2 | xargs)"
+  # Contrast, not judged: the real gh directly with the isolated HOME (the environment of candidate 3d3ca521).
+  local direct; clean HOME=$HOMEDIR $G auth status --hostname github.com > $ROOT/gh-auth-direct.txt 2>&1; direct=$?
+  print -r -- "INFO (not judged): the real gh directly with HOME=$HOMEDIR: exit $direct $(grep -iE 'invalid|not logged' $ROOT/gh-auth-direct.txt | head -1 | xargs)"
   local admin=$(ugh api --method GET repos/$R --jq .permissions.admin 2> $ROOT/gh-repo.err)
   [[ $admin == true ]] && pass "repository $R (this Worktree's origin) answers; your login is admin there (needed by gh issue delete)" \
                        || fail "repository $R: admin=${admin:-?} $(head -c 200 $ROOT/gh-repo.err)"
@@ -316,7 +331,8 @@ setup)
   [[ -x $C ]] || { fail "no Claude CLI at ~/.local/bin/claude or on PATH (the host configuration names it)"; return 1; }
   inproj $VENV/bin/python -m graphtraj.runtimes.claude.host configuration --project $P --claude $C --write > $ROOT/host-configuration.txt 2>&1 \
     && pass "Claude host material written: $(tr -d '\n ' < $ROOT/host-configuration.txt | cut -c1-200)" || fail "host configuration --write failed ($ROOT/host-configuration.txt)"
-  clean $VENV/bin/python -I $X641 mcpconfig $P/.mcp.json $ROOT/mcp-641.json $HOMEDIR $GHCFG ${G:h} || OK=0
+  need $GHWRAP pre || return 1
+  clean $VENV/bin/python -I $X641 mcpconfig $P/.mcp.json $ROOT/mcp-641.json $HOMEDIR $MCPPATH || OK=0
   [[ -e $MAP ]] && fail "a backup mapping already exists: $MAP" || pass "no backup mapping yet ($MAP absent)"
   cp $ROOT/mcp-641.json $ROOT/task-1.yml $ROOT/task-2.yml $OUT/ 2>/dev/null
   print -r -- "writes: $ROOT only. dialog: none."

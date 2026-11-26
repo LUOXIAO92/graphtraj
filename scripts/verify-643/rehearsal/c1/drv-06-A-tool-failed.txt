@@ -1,13 +1,13 @@
 $ <venv python> scripts/verify-643/vm/drive643.py case A   (env names: <KEY_ENV>)
 [A] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
-CASE A launcher pid: 19965
-CASE A launcher parent_chain: python(19965) <- zsh(18124) <- zsh(18120)
+CASE A launcher pid: 20430
+CASE A launcher parent_chain: python(20430) <- zsh(20363) <- zsh(20361)
 CASE A launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
-CASE A codex: /tmp/claude-501/v643drv.JFFBxp/bin/codex
+CASE A codex: /tmp/claude-501/v643drv.JJx0fw/bin/codex
 CASE A launcher: codex exec (outside graftling)
 CASE A codex exit: 0
-CASE A thread: 01a2698541750000
-CASE A rollout: rollout-2026-11-27T00-00-00-01a2698541750000.jsonl (kept in rollouts/)
+CASE A thread: 01a2804376448000
+CASE A rollout: rollout-2026-11-27T00-00-00-01a2804376448000.jsonl (kept in rollouts/)
 CASE A tool calls in the rollout: 1
 CASE A call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit -1073741502; exit code -1073741502: Chunk ID: a0e20a Wall time: 0.0001 seconds Process exited with code -1073741502 Original token count: 0 Output:
 CASE A marker file: absent

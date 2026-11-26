@@ -918,7 +918,10 @@ def run_case(case: str, fresh: bool = True) -> int:
     verdict, facts = 'STOP the driver ended early', {}
     try:
         tool_path()
-        place = context()
+        try:  # never blocks the case: an unreadable fact is itself recorded
+            place = context()
+        except Exception as error:
+            place = {'pid': os.getpid(), 'windows': f'context not fully read: {type(error).__name__}: {error}'}
         log.save('context.json', place)
         for name in CONTEXT_LINES:
             if name in place:

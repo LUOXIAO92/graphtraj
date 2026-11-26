@@ -3,14 +3,14 @@ session of the VM user: ACTIVE 1 console; query user: USERNAME              SESS
 stand-in (not Windows): task B started as a plain subprocess, not a scheduled task
 --- the task's console (out/B/console.txt):
 [B] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
-CASE B launcher pid: 20094
-CASE B launcher parent_chain: python(20094) <- python(20093) <- zsh(18124) <- zsh(18120)
+CASE B launcher pid: 20549
+CASE B launcher parent_chain: python(20549) <- python(20548) <- zsh(20363) <- zsh(20361)
 CASE B launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
-CASE B codex: /tmp/claude-501/v643drv.JFFBxp/bin/codex
+CASE B codex: /tmp/claude-501/v643drv.JJx0fw/bin/codex
 CASE B launcher: codex exec (outside graftling)
 CASE B codex exit: 0
-CASE B thread: 01a2713868690000
-CASE B rollout: rollout-2026-11-27T00-00-00-01a2713868690000.jsonl (kept in rollouts/)
+CASE B thread: 01a2819878735000
+CASE B rollout: rollout-2026-11-27T00-00-00-01a2819878735000.jsonl (kept in rollouts/)
 CASE B tool calls in the rollout: 1
 CASE B call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit 0
 CASE B marker file: present, content 'tool-ran'

@@ -1,5 +1,5 @@
 $ <venv python> scripts/verify-643/vm/drive643.py session   (env names: )
-session poll at 00:58:28 (query user; the user name is never printed)
+session poll at 01:00:14 (query user; the user name is never printed)
 SESSION line: No User exists for *
 SESSION NONE
 (exit 1)

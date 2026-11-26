@@ -1,0 +1,5 @@
+$ zsh scripts/verify-640/steps.zsh R0
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+STOP: the Task firewall rules are missing; run: zsh scripts/verify-640/steps.zsh V   (or delete everything: zsh scripts/verify-640/steps.zsh D)
+VERDICT 640 R0: STOP
+(exit 1)

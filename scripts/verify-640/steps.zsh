@@ -56,7 +56,8 @@
 #       Codex's rollout equal the configured ones; the provider-reported model is recorded when Codex exposes it. A
 #       provider refusal STOPs with the raw error (scrubbed); no other model and no proxy is tried. Then the evidence
 #       is scanned, fetched and scrubbed. Login: gcloud. Dialog: none. ~2-5 min.
-#   R mxc | R elevated | R unelevated
+#   R mxc | R elevated | R unelevated | R none   (none: FALLBACK ONLY, when no Windows sandbox mode can start a shell;
+#       Codex's own sandbox is OFF, through a permission profile extending ":danger-full-access", on this disposable VM)
 #       On the VM with [windows] sandbox = <mode> (Codex 0.172 WindowsSandboxModeToml): R1 child create + tool +
 #       end; R2 stop (with cmd start /b and Start-Process descendants); R3 takeover after the owner is killed; R4
 #       the Codex parent host's real MCP call; R5 the 629 sec. 6 Codex items (pipe identity incl. a caller in
@@ -65,7 +66,7 @@
 #       prints PASS / FAIL / OBSERVED with its observable. Bounded 75 min. Then scan, fetch, scrub.
 #       Login: gcloud. Dialog: none. ~20-45 min per mode. Run `R mxc` and `R elevated` (629 sec. 6 item 8).
 #   E <step>
-#       Scan, fetch and scrub one step's evidence again (V, R0, R-mxc, R-elevated, R-unelevated). Login: gcloud.
+#       Scan, fetch and scrub one step's evidence again (V, R0, R-mxc, R-elevated, R-unelevated, R-none). Login: gcloud.
 #   D   Delete this Task's resources: the VM with all its disks and both Task firewall rules; runnable alone at any
 #       time, idempotent; then verifies that no instance, disk or firewall rule of this Task remains (by name, tag and
 #       labels) and prints that last; removes the local Task SSH key pair. Login: gcloud. Dialog: none. ~2-4 min.
@@ -519,7 +520,8 @@ R0|R)
   ensure_rules check
   local mode= label=R0 cmd
   if [[ $STEP == R ]]; then
-    [[ $ARG == (mxc|elevated|unelevated) ]] || stop "usage: zsh $REL R mxc|elevated|unelevated"
+    [[ $ARG == (mxc|elevated|unelevated|none) ]] || stop "usage: zsh $REL R mxc|elevated|unelevated|none"
+    [[ $ARG == none ]] && print -r -- "NOTE: R none runs with Codex's own sandbox OFF (fallback for this disposable VM only; the evidence says so)"
     mode=$ARG label=R-$ARG cmd="run $ARG"
     say "[$label] R1-R4 and the 629 sec. 6 Codex items with windows.sandbox = $mode (bound 75 min). Login: gcloud. Dialog: none."
   else
@@ -534,10 +536,10 @@ R0|R)
   local -a items=(${(f)"$(grep -E '^ITEM ' $WORK/console.txt)"})
   print -r -- "--- items (${#items}):"; print -lr -- $items | sed 's/^/  /'
   if [[ $STEP == R0 ]]; then
-    [[ $result == *PASS* ]] && next_cmds "R mxc" "R elevated" D || next_cmds R0 D
+    [[ $result == *PASS* ]] && next_cmds "R unelevated" D || next_cmds R0 D
     [[ $result == *STOP* ]] && print -r -- "next: the provider refused or failed: read the raw error above; the user decides (no other model, no proxy)"
   else
-    next_cmds "R mxc" "R elevated" "E $label" D
+    next_cmds "R unelevated" "R none   (fallback only: if no sandbox mode can start a shell)" "E $label" D
   fi
   [[ -n $result ]] || result="RESULT $label FAIL (no RESULT line; the remote run ended early)"
   local verdict=${${(z)result}[3]}
@@ -548,7 +550,7 @@ R0|R)
 E)
   load_settings
   ssh_flags
-  [[ $ARG == (V|R0|R-mxc|R-elevated|R-unelevated) ]] || stop "usage: zsh $REL E V|R0|R-mxc|R-elevated|R-unelevated"
+  [[ $ARG == (V|R0|R-mxc|R-elevated|R-unelevated|R-none) ]] || stop "usage: zsh $REL E V|R0|R-mxc|R-elevated|R-unelevated|R-none"
   ensure_rules check
   say "[E] Scan, fetch and scrub the evidence of $ARG. Login: gcloud. Dialog: none."
   fetch $ARG
@@ -602,5 +604,5 @@ D)
   print -r -- "VERDICT 640 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)"
   ;;
 *)
-  print -r -- "usage: zsh $REL 00|V|K|R0|R mxc|R elevated|R unelevated|E <step>|D"; exit 2 ;;
+  print -r -- "usage: zsh $REL 00|V|K|R0|R mxc|R elevated|R unelevated|R none|E <step>|D"; exit 2 ;;
 esac

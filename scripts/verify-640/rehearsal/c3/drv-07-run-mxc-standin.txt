@@ -1,0 +1,26 @@
+$ <venv python> scripts/verify-640/vm/drive640.py run mxc   (env names: <KEY_ENV>)
+[R-mxc] R1-R4 and the 629 sec. 6 Codex items with windows.sandbox = mxc
+[R1] create a Codex child that runs one tool and ends its turn
+ITEM R1 PASS outcome completed; marker file absent; runtime_job absent; last message 'tool ran'
+ITEM R5.6-code-page NOT-RUN the tool wrote its marker inside the non-ASCII worktree; the record names it
+[R2] resume with a holding tool (cmd start /b, Start-Process, Start-Sleep), then interrupt
+ITEM R2 PASS outcome interrupted, state standby; 3 tool process(es) seen, 0 alive 30 s after the stop
+[R3] resume with a holding tool, kill the owner, take over from this process
+ITEM R3.reconcile PASS ended owner-exited; escaped_processes.stopped lists the 1 leftover tool process(es); none alive (the job was opened by name)
+ITEM R5.2-job-by-name PASS a later process (this one) opened the job by name and stopped the tools
+ITEM R3.takeover PASS confirm ['24dc7dd00e6f4f8ca4540dd161b24e00']; resumed in the same Session: True; outcome completed; last message 'after takeover'
+[R4] Codex parent host: one real MCP call (create a child), with the 629 sec. 6 probes beside it
+{"parent_session": "thread-1", "service_pid": 2791, "source": "thread/start"}
+┌ thread-1 → agent-c0707872d2ac4cd989cc153ccec959c1
+│ hold
+└
+ITEM R4 PASS outcome completed; creates through MCP 1; authenticated callers 3; stop_unconfirmed []; child record present; last message 'The child answered.'
+ITEM R5.1-mcp-caller PASS authenticated caller pid(s) [2792]; MCP server pid(s) seen [2792]; in the service job: [None]
+ITEM R5.1-sandbox-caller NOT-RUN the stand-in has no tool sandbox (real VM only)
+ITEM R5.1-forged-plain PASS a same-user process outside the job asked status: authority-denied
+ITEM R5.1-forged-parent-attribute NOT-RUN Windows only
+ITEM R5.3-process-shape NOT-RUN Win32_Process shape is real VM only
+ITEM R5.4-session-end NOT-RUN exit codes of non-child processes are read on Windows only
+ITEM R5.5-app-server-profile PASS app-server --listen stdio:// started under windows.sandbox=mxc; graftling's profile (no unix_sockets, control directory write) accepted: 0 error line(s) in 3 stderr.log file(s); the MCP server reached the pipe from outside the tool sandbox: True
+RESULT R-mxc PASS (NOT-RUN 5, PASS 9)
+(exit 0)

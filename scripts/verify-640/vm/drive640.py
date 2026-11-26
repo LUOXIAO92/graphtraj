@@ -79,7 +79,9 @@ def key_value() -> str | None:
 
 
 IPV4 = re.compile(rb'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])')
-IPV6 = re.compile(rb'(?<![0-9A-Fa-f:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![0-9A-Fa-f:])')
+# A candidate must stand alone (not inside a word, so 'codex_core::tools' is no candidate) and is replaced only when
+# it is a real address: global, or with at least 3 non-empty groups (correction 3).
+IPV6 = re.compile(rb'(?<![\w:.])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])')
 KEEP_IPS = {'127.0.0.1', '0.0.0.0', '255.255.255.255', '::1', '::'}
 
 
@@ -89,7 +91,11 @@ def _ip(match: re.Match) -> bytes | None:
         address = ipaddress.ip_address(text)
     except ValueError:
         return None
-    return None if str(address) in KEEP_IPS or text in KEEP_IPS else b'<IP>'
+    if str(address) in KEEP_IPS or text in KEEP_IPS:
+        return None
+    if address.version == 6 and not address.is_global and len([g for g in text.split(':') if g]) < 3:
+        return None
+    return b'<IP>'
 
 
 def scrub_bytes(data: bytes, pairs: list[list[str]], counts: dict) -> bytes:
@@ -527,14 +533,28 @@ def r0() -> int:
 
 # --- R1-R5 ---------------------------------------------------------------------------------------------------
 
-def child_settings(work: Path, codex: list[str]) -> dict:
+SANDBOX_OFF = ('Codex\'s own sandbox is OFF in this run (permission profile extends ":danger-full-access", Codex '
+               '0.172 PermissionProfile::Disabled), on a disposable VM, because no Windows sandbox mode could start a '
+               'shell there')
+
+
+def child_settings(work: Path, codex: list[str], mode: str = '', host: bool = False) -> dict:
+    """Run.settings for a child (R1-R3) or the parent host (R4).
+
+    Children run with approvalPolicy 'never' (their shell commands stay inside the sandbox). The parent host uses
+    the documented path for its own MCP call: an approval_policy that asks ('on-request') and graftling's default
+    approvals_reviewer 'auto_review' (PUBLIC_API.md 4.1; driver.py prepare), so Codex's reviewer decides; any request
+    Codex still hands over reaches CodexHost._request (stderr, answered on stdin). Mode 'none': the profile extends
+    Codex's built-in ':danger-full-access' (sandbox off; graftling refuses legacy sandbox_mode, context.py:120).
+    """
+    base = ':danger-full-access' if mode == 'none' else ':workspace'
     parameters = {'cwd': str(work), 'developerInstructions': '',
                   'config': {'default_permissions': 'chosen', 'permissions': {
-                      'chosen': {'extends': ':workspace', 'filesystem': {str(work): 'write'}}}}}
+                      'chosen': {'extends': base, 'filesystem': {str(work): 'write'}}}}}
     if STANDIN:
         parameters['model'] = 'chosen-model'
     else:
-        parameters.update(model=settings()['provider']['model'], approvalPolicy='never')
+        parameters.update(model=settings()['provider']['model'], approvalPolicy='on-request' if host else 'never')
     return {'adapter_request': {'arguments': codex, 'worktree_path': str(work), 'session_parameters': parameters}}
 
 
@@ -633,13 +653,35 @@ def collect(root: Path, target: Path) -> None:
             shutil.copyfile(path, destination)
 
 
+NO_SHELL: dict[str, str] = {}
+SHELL_FAILED = re.compile(r'(?i)(failed to create unified exec process[^\n]*|failed to start the process[^\n]*|'
+                          r'unsupportedoperation[^\n]*|native mxc is unavailable[^\n]*|connecting runner pipe[^\n]*)')
+
+
+def shell_failure(root: Path, last: dict) -> str | None:
+    """Codex's own words when its shell tool could not start (stderr.log under the control root, the last message).
+
+    Rehearsal: V640_STANDIN_NO_SHELL injects such a line (labelled as injected).
+    """
+    if STANDIN and os.environ.get('V640_STANDIN_NO_SHELL'):
+        return 'UnsupportedOperation("native MXC is unavailable on this executor") (injected by the rehearsal)'
+    texts = [str(last.get('last_message') or '')]
+    for path in root.rglob('stderr.log'):
+        texts.append(path.read_text(encoding='utf-8', errors='replace'))
+    for text in texts:
+        found = SHELL_FAILED.search(text)
+        if found:
+            return found.group(1).strip()[:240]
+    return None
+
+
 def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
     from graftling import AgentControl, Caller, bind
     from graftling.codex.driver import CodexDriver
 
     root = work.parent / f'agents-{mode}'
     shutil.rmtree(root, ignore_errors=True)
-    native = child_settings(work, codex)
+    native = child_settings(work, codex, mode)
     log.save('child-settings.json', native)
     owner = subprocess.Popen([sys.executable, '-c', OWNER, str(root), json.dumps(native), json.dumps(CALLER)],
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8')
@@ -666,6 +708,16 @@ def r1_to_r3(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
         execution = record(root, agent)
         marker = work / 'r1-marker.txt'
         process = execution.get('process', {})
+        cause = shell_failure(root, last) if not marker.exists() else None
+        if cause:
+            facts['no_shell'] = cause
+            log.item('R1', 'NOT-RUN', f'Codex could not start its shell under {mode}: {cause}', process=process)
+            for ident in ('R5.6-code-page', 'R2', 'R5.2-cmd-start-/b', 'R5.2-Start-Process', 'R5.2-nesting',
+                          'R3.reconcile', 'R5.2-job-by-name', 'R3.takeover'):
+                log.item(ident, 'NOT-RUN', 'needs a tool process; Codex could not start its shell (see R1)')
+            NO_SHELL[mode] = cause
+            kill_leftovers(log, ('6401', '6402', '6403', '6404'))
+            return facts
         ok = last.get('outcome') == 'completed' and (STANDIN or marker.exists())
         log.item('R1', 'PASS' if ok else 'FAIL',
                  f'outcome {last.get("outcome")}; marker file {"present" if marker.exists() else "absent"}; '
@@ -803,6 +855,9 @@ def r4(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
             {'action': 'execute', 'feature': 'wait', 'arguments': {'agent': '<agent from 1>', 'timeout_seconds': 15}},
             {'action': 'execute', 'feature': 'status', 'arguments': {}}])
         text = 'mcp-in-turn'
+    elif mode in NO_SHELL:
+        text = ('Use the subagents tool to create one codex child with the instruction "Reply with exactly CHILD-OK '
+                'and run no command.", wait for its result, then reply with its answer. Run no shell command.')
     else:
         text = ('Do these three things in order.\n'
                 f"1. Run this exact PowerShell command and wait for it: & '{python}' '{me}' probe probe-sandbox.json\n"
@@ -810,24 +865,27 @@ def r4(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
                 '3. Use the subagents tool to create one codex child with the instruction "Reply with exactly '
                 'CHILD-OK and run no command.", wait for its result, then reply with its answer.')
     log.say('[R4] Codex parent host: one real MCP call (create a child), with the 629 sec. 6 probes beside it')
-    host = CodexHost(child_settings(work, codex), directory, text)
+    host_settings = child_settings(work, codex, mode, host=True)
+    log.save('host-settings.json', host_settings)
+    host = CodexHost(host_settings, directory, text)
     box: dict = {}
     thread = threading.Thread(target=lambda: box.update(result=_guard(host.run)), daemon=True)
     thread.start()
     watched: dict[int, Watched] = {}
     shapes: dict = {}
     service = None
-    started = None
     forged: dict = {}
     deadline = time.monotonic() + 900
     while thread.is_alive() and time.monotonic() < deadline:
         adapter = getattr(host, 'adapter', None)
-        pid = getattr(adapter, 'service_pid', None) if adapter is not None else None
+        try:  # the property raises once the connection is closed, not only AttributeError
+            pid = adapter.service_pid if adapter is not None else None
+        except Exception:
+            pid = None
         if pid and service is None:
             service = Watched(pid)
-        started = started or (time.monotonic() if pid else None)
-        if not forged and pid and (STANDIN or (work / 'probe-sandbox.json').exists()
-                                   or time.monotonic() > started + 45):
+        # The forged callers run as soon as the service is known, whatever the in-sandbox probe does.
+        if not forged and pid:
             forged = forge(log, host, work, pid, python, me, CONNECTION_ENV)
             (work / 'forged-done.txt').write_text('done\n', encoding='utf-8')
         table = processes()
@@ -895,8 +953,12 @@ def r4(log: Log, mode: str, work: Path, codex: list[str]) -> dict:
     plain = forged.get('plain') or {}
     code = (plain.get('result') or {}).get('error', {}).get('code') or \
         ((plain.get('result') or {}).get('document') or {}).get('error', {}).get('code')
-    log.item('R5.1-forged-plain', 'PASS' if code == 'authority-denied' else 'FAIL',
-             f'a same-user process outside the job asked status: {code or json.dumps(plain)[:300]}')
+    if not plain.get('result'):
+        log.item('R5.1-forged-plain', 'NOT-RUN', 'the forged caller did not run (the service ended first, or no '
+                                                 f'channel address was known): {json.dumps(plain)[:200]}')
+    else:
+        log.item('R5.1-forged-plain', 'PASS' if code == 'authority-denied' else 'FAIL',
+                 f'a same-user process outside the job asked status: {code or json.dumps(plain)[:300]}')
     if WINDOWS:
         parented = forged.get('parented') or {}
         answer = parented.get('result') or {}
@@ -997,7 +1059,12 @@ def probe(target: str) -> int:
 def run_mode(mode: str) -> int:
     step = f'R-{mode}'
     log = Log(step)
-    log.say(f'[{step}] R1-R4 and the 629 sec. 6 Codex items with windows.sandbox = {mode}')
+    if mode == 'none':
+        log.say(f'[{step}] R1-R4 and the 629 sec. 6 Codex items with NO Codex sandbox')
+        log.say(SANDBOX_OFF)
+        (log.dir / 'SANDBOX-OFF.txt').write_text(SANDBOX_OFF + '\n', encoding='utf-8')
+    else:
+        log.say(f'[{step}] R1-R4 and the 629 sec. 6 Codex items with windows.sandbox = {mode}')
     tool_path()
     work = HOME / 'work' / WORK_NAME
     shutil.rmtree(work, ignore_errors=True)
@@ -1009,7 +1076,7 @@ def run_mode(mode: str) -> int:
             log.say('STOP: the key variable is not set for this user; run step K first')
             log.say(f'RESULT {step} STOP')
             return 2
-        config = write_config(mode)
+        config = write_config(None if mode == 'none' else mode)
         shutil.copyfile(config, log.dir / 'config.toml')
         codex = [codex_command()]
     log.save('versions.json', {'codex': codex})
@@ -1024,9 +1091,10 @@ def run_mode(mode: str) -> int:
     counts: dict[str, int] = {}
     for item in log.items:
         counts[item['verdict']] = counts.get(item['verdict'], 0) + 1
-    verdict = 'FAIL' if counts.get('FAIL') else 'PASS'
-    log.say(f'RESULT {step} {verdict} ({", ".join(f"{key} {value}" for key, value in sorted(counts.items()))})')
-    return 1 if counts.get('FAIL') else 0
+    verdict = 'FAIL' if counts.get('FAIL') else ('NO-SHELL' if mode in NO_SHELL else 'PASS')
+    why = f'; Codex could not start a shell under {mode}: {NO_SHELL[mode]}' if mode in NO_SHELL else ''
+    log.say(f'RESULT {step} {verdict} ({", ".join(f"{key} {value}" for key, value in sorted(counts.items()))}{why})')
+    return 0 if verdict == 'PASS' else 1
 
 
 # --- evidence ------------------------------------------------------------------------------------------------

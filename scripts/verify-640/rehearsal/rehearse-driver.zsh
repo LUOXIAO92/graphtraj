@@ -56,7 +56,7 @@ chmod +x $H/bin/codex
 BASEENV=(HOME=$HOME PATH=$H/bin:/usr/bin:/bin:/usr/sbin:/sbin TMPDIR=$TMPDIR LANG=en_US.UTF-8 PYTHONPATH=$H/graftling/src
          V640_HOME=$H CODEX_HOME=$H/codex-home)
 N=0
-typeset -a SUMMARY
+typeset -a SUMMARY CHECK
 drv() {  # drv <name> <expect-regex> <extra env...> -- <driver args...>
   local name=$1 expect=$2; shift 2
   local -a extra=()
@@ -81,7 +81,16 @@ drv scan-finds-planted-key 'SCAN FAIL' $KEYENV=$KEYVAL -- scan R0
 rm -f $H/out/R0/planted.txt
 drv run-mxc-standin 'RESULT R-mxc PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests -- run mxc
 drv scan-run 'SCAN PASS' $KEYENV=$KEYVAL -- scan R-mxc
-typeset -a CHECK
+drv run-mxc-no-shell 'RESULT R-mxc NO-SHELL' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests V640_STANDIN_NO_SHELL=1 -- run mxc
+CHECK+="no-shell run: items NOT-RUN with the cause $(grep -c '^ITEM .* NOT-RUN .*shell' $OUT/drv-$(printf %02d $N)-run-mxc-no-shell.txt), FAIL items $(grep -c '^ITEM .* FAIL ' $OUT/drv-$(printf %02d $N)-run-mxc-no-shell.txt)"
+drv run-unelevated-standin 'RESULT R-unelevated PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests -- run unelevated
+drv run-none-standin 'RESULT R-none PASS' $KEYENV=$KEYVAL V640_STANDIN=$H/graftling/tests -- run none
+CHECK+="R-none evidence states the sandbox is off: $([[ -f $H/out/R-none/SANDBOX-OFF.txt ]] && grep -q 'sandbox is OFF' $H/out/R-none/SANDBOX-OFF.txt && print yes || print no); host settings extend :danger-full-access: $(grep -c ':danger-full-access' $H/out/R-none/host-settings.json)"
+CHECK+="$(/usr/bin/env -i V640_HOME=$H PATH=/usr/bin:/bin /usr/bin/python3 -I $HERE/rehearsal/check_settings640.py $HERE/vm 2>&1)"
+mkdir -p $H/v6; print -r -- 'path codex_core::tools::router loopback ::1 global 2001:4860:4860::8888 doc 2001:db8::7 linklocal fe80::1 time 12:34:56' > $H/v6/sample.txt
+print -r -- '[]' > $H/v6.json
+drv scrub-ipv6 'SCRUB ' -- scrub $H/v6 $H/v6.json
+CHECK+="IPv6 scrub result: $(<$H/v6/sample.txt)"
 k=$(grep -r -l -F -- $KEYVAL $OUT 2> /dev/null | wc -l | tr -d ' ')
 hits=$(cd $WT && git grep --untracked --exclude-standard -i -l -F -e $TAG -e $KEYVAL -- .)
 v=$(print -rn -- $hits | grep -c .)

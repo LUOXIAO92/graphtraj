@@ -1,0 +1,3 @@
+$ <venv python> scripts/verify-640/vm/drive640.py scan R-mxc   (env names: <KEY_ENV>)
+SCAN PASS key checked; replacements: none; files 27
+(exit 0)

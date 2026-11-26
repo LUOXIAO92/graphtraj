@@ -14,6 +14,13 @@ back into the Task graph. Mappings live in ``<state>/task-backups.yml``::
     pending_since: <UTC time a creation was first attempted>
     last_error:   {at, message} | null
     last_published_at: <UTC time> | null
+    replaced_issue: {number, url}   # only while recreating a deleted Issue
+
+When GitHub answers that the mapped Issue was deleted (HTTP 410), the mapping
+gets a fresh marker, ``issue: null`` and ``replaced_issue`` before a new Issue
+is created, so a retry adopts the marked Issue instead of creating another. The
+next successful backup reports ``recreated`` with ``replaced_issue`` and drops
+that field; Sub-issue relations follow the new Issue as below.
 
 A Task with local children also publishes integrated / required child counts
 and a dependency DAG of its children; a child kept in another repository shows
@@ -57,6 +64,10 @@ _FIELDS     = ("title", "body", "state")
 
 class RemoteError(Exception):
     """A GitHub request did not complete; local Tasks are unaffected."""
+
+
+class IssueDeleted(RemoteError):
+    """GitHub answered that the mapped Issue was deleted (HTTP 410)."""
 
 
 def gh_api(host: str, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
@@ -112,7 +123,9 @@ def backup_task(
     -------
     tuple
         The result document and whether the backup failed. ``outcome`` is
-        ``created``, ``updated``, ``unchanged``, ``conflict`` or ``failed``.
+        ``created``, ``recreated``, ``updated``, ``unchanged``, ``conflict``
+        or ``failed``; ``recreated`` comes with ``replaced_issue``, the
+        deleted Issue's ``{number, url}``.
     """
     if _REPOSITORY.fullmatch(repository) is None or _HOST.fullmatch(host) is None:
         raise ValueError("repository must be owner/name and host a GitHub host name")
@@ -141,7 +154,22 @@ def backup_task(
             _save(state, backups)
         desired = _render(task, mapping["marker"], records, _elsewhere(backups, mapping, records))
         try:
-            outcome, conflict = _publish(mapping, desired, retry, confirm_remote)
+            try:
+                outcome, conflict = _publish(mapping, desired, retry, confirm_remote)
+            except IssueDeleted:
+                # Persist the recreation intent with a fresh marker before
+                # creating, so a retry adopts that Issue instead of a second.
+                mapping.update(
+                    marker         = secrets.token_hex(16),
+                    issue          = None,
+                    published      = None,
+                    pending_since  = _now(),
+                    replaced_issue = {"number": mapping["issue"]["number"],
+                                      "url":    mapping["issue"]["url"]},
+                )
+                _save(state, backups)
+                desired = _render(task, mapping["marker"], records, _elsewhere(backups, mapping, records))
+                outcome, conflict = _publish(mapping, desired, False, None)
             hierarchy = [] if conflict is not None else _link(backups, mapping, records)
         except RemoteError as error:
             mapping["last_error"] = {"at": _now(), "message": str(error)}
@@ -152,7 +180,13 @@ def backup_task(
             _save(state, backups)
             return {"outcome": "conflict", **conflict, "backup": mapping}, True
         mapping.update(last_error=None, last_published_at=_now())
+
+        # A recreation, possibly completed by a retry, is reported once.
+        replaced = mapping.pop("replaced_issue", None)
         _save(state, backups)
+        if replaced is not None:
+            return {"outcome": "recreated", "replaced_issue": replaced,
+                    "hierarchy": hierarchy, "backup": mapping}, False
         return {"outcome": outcome, "hierarchy": hierarchy, "backup": mapping}, False
     finally:
         file_lock.flock(descriptor, file_lock.LOCK_UN)
@@ -165,7 +199,13 @@ def _publish(
     retry: bool,
     confirm_remote: str | None,
 ) -> tuple[str, dict[str, Any] | None]:
-    """Create or update the mapped Issue; return the outcome or a conflict report."""
+    """Create or update the mapped Issue; return the outcome or a conflict report.
+
+    Raises
+    ------
+    IssueDeleted
+        When reading the mapped Issue answers HTTP 410 (deleted).
+    """
     host, base = mapping["host"], "repos/{0}/issues".format(mapping["repository"])
     outcome    = "updated"
     if mapping["issue"] is None:
@@ -184,7 +224,13 @@ def _publish(
         if posted and desired["state"] == "open":
             return outcome, None
 
-    remote = gh_api(host, "GET", "{0}/{1}".format(base, mapping["issue"]["number"]))
+    try:
+        remote = gh_api(host, "GET", "{0}/{1}".format(base, mapping["issue"]["number"]))
+    except RemoteError as error:
+        # Only GitHub's explicit deletion answer; every other error is unchanged.
+        if type(error) is not RemoteError or "(HTTP 410)" not in str(error):
+            raise
+        raise IssueDeleted(str(error)) from error
     if mapping["issue"]["node_id"] is None:
         # One-time imported mappings know the confirmed URL/number, not an
         # invented object ID or a full published baseline. Read only that Issue.

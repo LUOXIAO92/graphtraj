@@ -19,7 +19,8 @@ from graphtraj.interfaces.cli import graphtraj
 # Issues without a ``repository`` belong to owner/repo; numbers repeat across
 # repositories while ids stay unique. ``parents`` maps a child to its parent as a
 # bare number in owner/repo and as ``owner/name#N`` elsewhere.
-# ``mode`` selects offline failure or a creation whose response is lost.
+# ``mode`` selects offline failure or a creation whose response is lost; an
+# Issue with ``error`` answers it (e.g. deleted, HTTP 410) and is not listed.
 _FAKE_GH = '''
 import json, os, sys
 from urllib.parse import urlsplit, parse_qs
@@ -96,8 +97,10 @@ if method == "POST":
 if len(parts) == 4:
     query = parse_qs(url.query)
     assert query["state"] == ["all"] and query["since"]
-    finish(sorted(here, key=lambda issue: -issue["number"]))
+    finish(sorted([issue for issue in here if "error" not in issue], key=lambda issue: -issue["number"]))
 issue = find(repo, int(parts[4]))
+if "error" in issue:
+    finish(issue["error"], 1)
 if method == "PATCH":
     issue.update(payload)
 finish(issue)
@@ -678,6 +681,93 @@ def test_parent_on_another_host_stays_pending_and_an_ambiguous_parent_writes_not
     assert _backup_task("2")["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "unchanged"}]
     assert _backup_task("1", repository="owner/other")["hierarchy"] == []
     assert _parents(remote) == {"43": 44} and len(_hierarchy_writes(remote)) == writes + 1
+
+
+_DELETED = "gh: This issue was deleted (HTTP 410)"
+
+
+def _answer(remote: Path, number: int, error: str) -> None:
+    """Make owner/repo#``number`` answer ``error``; a deletion also ends its Sub-issue relations."""
+    document = json.loads(remote.read_text())
+    next(issue for issue in document["issues"] if issue["number"] == number
+         and "repository" not in issue)["error"] = error
+    if "HTTP 410" in error:
+        document["parents"] = {child: parent for child, parent in document.get("parents", {}).items()
+                               if number not in (int(child), parent)}
+    remote.write_text(json.dumps(document))
+
+
+def _creations(remote: Path) -> int:
+    """Return how many Issues the fake remote was asked to create."""
+    return len([request for request in json.loads(remote.read_text())["requests"]
+                if request["method"] == "POST" and request["target"].endswith("/issues")])
+
+
+def test_deleted_issue_is_recreated_and_its_sub_issue_relations_restored(
+    project: Path, remote: Path,
+) -> None:
+    """Deleted child #43 and then summary #44 are replaced by #46 and #47, relinked once."""
+    _register_summary()
+    numbers = {key: _backup_task(key)["backup"]["issue"]["number"] for key in "213"}
+    assert numbers == {"2": 43, "1": 44, "3": 45} and _parents(remote) == {"43": 44, "45": 44}
+
+    _answer(remote, 43, _DELETED)
+    child = _backup_task("2")
+    assert (child["outcome"], child["replaced_issue"]) == (
+        "recreated", {"number": 43, "url": "https://github.com/owner/repo/issues/43"})
+    assert child["backup"]["issue"]["number"] == 46 and "replaced_issue" not in child["backup"]
+    assert child["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "linked"}]
+    assert "marker=" + child["backup"]["marker"] in _issues(remote)[46]["body"]
+    assert _parents(remote) == {"45": 44, "46": 44}
+
+    again = _backup_task("2")
+    assert (again["outcome"], again["hierarchy"][0]["outcome"]) == ("unchanged", "unchanged")
+    assert "replaced_issue" not in again
+
+    # A deleted summary is recreated and its mapped children placed under it.
+    _answer(remote, 44, _DELETED)
+    summary = _backup_task("1")
+    assert (summary["outcome"], summary["replaced_issue"]["number"]) == ("recreated", 44)
+    assert summary["backup"]["issue"]["number"] == 47
+    assert summary["hierarchy"] == [{"parent": "1", "child": "2", "outcome": "linked"},
+                                    {"parent": "1", "child": "3", "outcome": "linked"}]
+    assert _parents(remote) == {"45": 47, "46": 47} and _creations(remote) == 5
+
+
+def test_lost_recreation_response_is_adopted_on_retry_without_a_second_issue(
+    project: Path, remote: Path,
+) -> None:
+    """The recreation intent is saved before creating, so the retry finds the one new Issue."""
+    old = _backup_task("42")["backup"]
+    _answer(remote, 43, _DELETED)
+    _set_mode(remote, "lose-create-response")
+
+    code, failed = _backup("--repository", "owner/repo")
+    assert (code, failed["outcome"], failed["backup"]["issue"]) == (1, "failed", None)
+    assert failed["backup"]["replaced_issue"]["number"] == 43
+    assert failed["backup"]["marker"] != old["marker"]
+
+    code, retried = _backup("--repository", "owner/repo")
+    assert (code, retried["outcome"], retried["replaced_issue"]["number"]) == (0, "recreated", 43)
+    assert retried["backup"]["issue"]["number"] == 44 and retried["backup"]["last_error"] is None
+    assert _backup_task("42")["outcome"] == "unchanged"
+    assert _creations(remote) == 2 and len(_issues(remote)) == 44
+
+
+@pytest.mark.parametrize("error", ["gh: Not Found (HTTP 404)", "gh: Resource not accessible (HTTP 403)"])
+def test_other_errors_on_the_mapped_issue_still_fail_without_creating(
+    project: Path, remote: Path, error: str,
+) -> None:
+    """Only a deletion answer recreates; other errors keep the mapping and create nothing."""
+    mapping = _backup_task("42")["backup"]
+    _answer(remote, 43, error)
+
+    code, failed = _backup("--repository", "owner/repo")
+    assert (code, failed["outcome"]) == (1, "failed")
+    assert failed["error"] == "gh api GET repos/owner/repo/issues/43 failed: " + error
+    assert {key: failed["backup"][key] for key in ("marker", "issue", "published")} == {
+        key: mapping[key] for key in ("marker", "issue", "published")}
+    assert "replaced_issue" not in failed["backup"] and _creations(remote) == 1
 
 
 def test_progress_counts_only_active_children_and_marks_each_state() -> None:

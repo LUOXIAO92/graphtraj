@@ -650,7 +650,8 @@ register_tool(
 )
 register_tool(
     "task_backup",
-    "Back up one local Task to its mapped GitHub Issue, creating the Issue once. "
+    "Back up one local Task to its mapped GitHub Issue, creating the Issue once "
+    "(and again only when GitHub answers that the mapped Issue was deleted). "
     "Publishing is one-way: remote edits are reported as a conflict with their "
     "differences and never change the local Task. Equivalent to `graphtraj task backup`.",
     {"type": "object", "properties": {

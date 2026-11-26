@@ -333,9 +333,15 @@ only, and is closed when the Task is integrated, superseded or cancelled. A Task
 with children also shows integrated / required child counts and a dependency
 diagram with a legend; a child kept in another repository shows `owner/name#N`.
 
-The result `outcome` is `created`, `updated`, `unchanged`, `conflict` or `failed`.
-`failed` records the error in the mapping and leaves local Tasks unchanged;
-repeat the call. `conflict` means the Issue changed since the last backup: remote
+The result `outcome` is `created`, `recreated`, `updated`, `unchanged`, `conflict`
+or `failed`. `recreated` means GitHub answered that the mapped Issue was deleted
+(HTTP 410): a new Issue was created, the mapping now names it, and
+`replaced_issue` gives the deleted Issue's `number` and `url`. The intent is
+recorded before creating, so repeating a call whose response was lost adopts that
+Issue instead of creating another. Any other error on the mapped Issue (not
+found, no permission, network, a number that now names another object) is
+`failed` and changes nothing remote. `failed` records the error in the mapping
+and leaves local Tasks unchanged; repeat the call. `conflict` means the Issue changed since the last backup: remote
 edits are reported in `differences` with a `remote_digest` and never imported.
 Revise the local Task through Task operations when the evidence warrants it, then
 repeat with `confirm_remote` set to that digest. It applies only to that exact
@@ -360,4 +366,6 @@ Task backed up to one repository. An Issue number in another repository comes
 with `parent_repository`, `child_repository`, `previous_parent_repository` or
 `remote_parent_repository`. Unmapped children are not published automatically and
 unresolved children are omitted from a parent's `hierarchy`. Read `hierarchy`
-rather than inferring links from the Issue body.
+rather than inferring links from the Issue body. A recreated Issue is linked
+under its mapped parent and its mapped children under it the same way; back up a
+parent kept in another repository again to refresh the `owner/name#N` it shows.

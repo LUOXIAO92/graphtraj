@@ -58,6 +58,8 @@ ALLOWED = [
     ('README.md', "GraphTraj's `agents` and `tasks` do not list it"),
     # The plural word of the Agent count in the desktop footer (Task 627's pluralisation), not the tool.
     ('desktop/src/Activity.tsx', "activity.agents.length === 1 ? 'agent' : 'agents'"),
+    # The plural word of the member count in the desktop inspector's Team heading (Task 627), not the tool.
+    ('desktop/src/main.tsx', "{members.length === 1 ? 'agent' : 'agents'}"),
 ]
 
 

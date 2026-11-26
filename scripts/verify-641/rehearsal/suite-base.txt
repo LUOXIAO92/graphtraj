@@ -1,0 +1,17 @@
+$ zsh steps.zsh suite-base tests/test_github_backup.py::test_lost_recreation_response_is_adopted_on_retry_without_a_second_issue tests/test_github_backup.py::test_retry_after_lost_creation_response_adopts_the_marked_issue   (rehearsal 2026-11-26T22:05:02)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+== [suite-base] Main, only for SR's NEW ids (2): base GraphTraj c18b4bebd42d9c7801fd5ba26a290d585a021118 vs candidate HEAD fbce624c975912b6c7808725d98764ec04bcfd23, both with graftling 0.10.2 (wheel). pytest temp under TMPDIR (outside the Harness). Dialog: none.
+REHEARSAL: ps cannot list processes here; other-run check skipped (VERIFY641_NO_PS=1)
+reusing $TMPDIR/641r/T/gvenv-641
+base: pytest in $TMPDIR/641r/T/graphtraj-base | temp $TMPDIR/verify-641-sb-base-20261126T220510
+base: pytest exit=0, 1 passed in 0.77s ($TMPDIR/641r/T/suite-base-20261126T220510/base.txt)
+candidate: pytest in ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue | temp $TMPDIR/verify-641-sb-candidate-20261126T220512
+candidate: pytest exit=0, 2 passed in 1.06s ($TMPDIR/641r/T/suite-base-20261126T220510/candidate.txt)
+base not run, candidate passed: tests/test_github_backup.py::test_lost_recreation_response_is_adopted_on_retry_without_a_second_issue   [base not run | candidate passed]
+passes on both now (not reproduced): tests/test_github_backup.py::test_retry_after_lost_creation_response_adopts_the_marked_issue   [base passed | candidate passed]
+candidate-only: 0
+
+RESULT 641 suite-base: PASS (no candidate-only failure) | ids: 2 | record: $TMPDIR/641r/T/suite-base-20261126T220510
+next: report the classification; a candidate-only id is a regression of this Task
+STEP-END suite-base rc=0

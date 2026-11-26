@@ -1,0 +1,29 @@
+$ zsh steps.zsh pre   (rehearsal 2026-11-26T22:04:07)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+== [pre] Main. Preflight; creates $TMPDIR/641r/root; ONE one-line claude -p (no MCP, no tool); gh auth status (read only). LOGIN: your Claude and gh logins (Main asks the user first). Dialog: none.
+zsh 5.9 runs ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/steps.zsh
+candidate HEAD fbce624c975912b6c7808725d98764ec04bcfd23 (641: real-entry steps, helper and rehearsal driver (scripts/verify-641))
+PASS: base GraphTraj c18b4bebd42d9c7801fd5ba26a290d585a021118 is an ancestor of HEAD
+PASS: graftling v0.10.2 = 57bca73657d3135a4504904fcc3f1898c2419766 in ~/workspace/you-are-a-product-architect-delivery/graftling (wheel source)
+PASS: no uncommitted change in src, tests, the step files
+PASS: TMPDIR=$TMPDIR is outside the Harness ~/workspace/you-are-a-product-architect-delivery
+PASS: click present in ~/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: yaml present in ~/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: websockets present in ~/workspace/you-are-a-product-architect-delivery/.venv-runtime/lib/python3.13/site-packages
+PASS: ~/miniconda3/bin/python3.13: Python 3.13.11
+your locations before (names, sizes, mtimes): 1 lines in $TMPDIR/641r/root/user-before.txt (~/.claude, ~/.claude.json and the gh config are not compared)
+PASS: claude: $TMPDIR/641r/claude/claude
+PASS: gh: $TMPDIR/641r/bin/gh (gh stand-in (rehearsal))
+claude's environment (names only): HOME LANG PATH TERM TMPDIR USER
+claude -p exit=0
+init: model STAND-IN | apiKeySource none
+answer: stand-in | is_error False
+PASS: the Claude host answered (model and login above)
+PASS: gh auth status (your HOME): logged in to github.com
+PASS: gh auth status with the MCP server's environment (HOME=$TMPDIR/641r/root/home, GH_CONFIG_DIR=$TMPDIR/641r/userhome/.config/gh): logged in
+PASS: repository owner/repo (this Worktree's origin) answers; your login is admin there (needed by gh issue delete)
+writes: $TMPDIR/641r/root and copies in $TMPDIR/641r/out only. GitHub: read only. dialog: none.
+RESULT 641 pre: PASS
+next (paste): zsh ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/steps.zsh install
+STEP-END pre rc=0

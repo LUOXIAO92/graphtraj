@@ -1,0 +1,36 @@
+$ zsh steps.zsh G   (rehearsal 2026-11-26T22:04:26)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+== [G] Main. Full GraphTraj suite: HEAD fbce624c975912b6c7808725d98764ec04bcfd23 (editable) + graftling 0.10.2 (57bca73657d3135a4504904fcc3f1898c2419766 wheel), 6 shards. This process waits for any other test run, then for its shards, then judges; its LAST lines are the verdict, counts and next command. pytest temp under TMPDIR=$TMPDIR (outside the Harness). Dialog: none. No login. ~25-30 min.
+REHEARSAL: ps cannot list processes here; other-run check skipped (VERIFY641_NO_PS=1)
+pytest temp root: $TMPDIR/verify-641-G-20261126T220426 (TMPDIR=$TMPDIR, outside the Harness)
+launch environment: PATH HOME USER TERM TMPDIR LANG only (clean(); no provider credential)
+candidate: fbce624c975912b6c7808725d98764ec04bcfd23 | graftling wheel from git archive 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2)
+test interpreter: click 8.2.1 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.2 | graphtraj 0.1.0
+REHEARSAL (not evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+REHEARSAL: extra pytest args after -- -rA: -k test_github_backup or test_intent_queries_find_create
+record: $TMPDIR/641r/T/G-20261126T220426
+REHEARSAL: ps cannot list processes here; other-run check skipped (VERIFY641_NO_PS=1)
+22:04:30 started (6 shards; this step waits for them)
+22:04:45 ended: exit=1
+== [GR] read only: the newest G record judged (G runs this at its end; Main may rerun it).
+G record: $TMPDIR/641r/T/G-20261126T220426
+  run.txt: pytest temp root: $TMPDIR/verify-641-G-20261126T220426 (TMPDIR=$TMPDIR, outside the Harness)
+  run.txt: launch environment: PATH HOME USER TERM TMPDIR LANG only (clean(); no provider credential)
+  run.txt: candidate: fbce624c975912b6c7808725d98764ec04bcfd23 | graftling wheel from git archive 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2)
+  run.txt: test interpreter: click 8.2.1 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.10.2 | graphtraj 0.1.0
+  run.txt: REHEARSAL (not evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+  run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_github_backup or test_intent_queries_find_create
+shard totals:
+  21 passed, 697 deselected in 13.31s
+  4 passed, 638 deselected in 1.91s
+516 current definition (task.yml current_definition): ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261125T162952.084209+0900.md
+  (no FAILED/ERROR lines)
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-2.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-3.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-5.log: exit 5
+
+RESULT 641 G: PASS | exit 1 | known non-blocking ids: 0 | NEW ids: 0 | REHEARSAL (not evidence)
+next: report RESULT 641 G (record $TMPDIR/641r/T/G-20261126T220426)
+STEP-END GR rc=0

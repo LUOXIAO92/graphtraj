@@ -1,0 +1,17 @@
+$ zsh steps.zsh SR   (rehearsal 2026-11-26T22:04:55)
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
+== [SR] Main, read only: the newest G record's FAILED/ERROR ids and ABNORMAL shards against 516's current definition. Dialog: none.
+ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-5.log: exit 5
+25 passed, 3756 deselected
+logs: $TMPDIR/641r/T/G-20261126T220426/shards
+exit=1
+516 current definition (task.yml current_definition): ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261125T162952.084209+0900.md
+  (no FAILED/ERROR lines)
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-2.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-3.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL $TMPDIR/641r/T/G-20261126T220426/shards/shard-5.log: exit 5
+SR verdict: PASS (no NEW failure)
+next: none for suite-base (no NEW id)
+STEP-END SR rc=0

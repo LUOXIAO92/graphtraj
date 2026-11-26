@@ -25,8 +25,8 @@ export VERIFY641_REPO=owner/repo VERIFY641_NO_PS=1 VERIFY641_GWAIT=5
 export VERIFY641_PYTEST_ARGS=${VERIFY641_PYTEST_ARGS:-"-k 'test_github_backup or test_intent_queries_find_create'"}
 T=${TMPDIR%/}
 local step name; for step in "$@"; do
-  name=${REHEARSAL_NAME:-$step}
-  { print -r -- "\$ zsh steps.zsh $step   (rehearsal $(date +%FT%T))"; zsh $SD/steps.zsh $step 2>&1 } \
+  name=${REHEARSAL_NAME:-${step%% *}}   # a step word may carry arguments: 'suite-base <node id>'
+  { print -r -- "\$ zsh steps.zsh $step   (rehearsal $(date +%FT%T))"; zsh $SD/steps.zsh ${(z)step} 2>&1 } \
     | sed -e "s#/private$T#\$TMPDIR#g" -e "s#$T#\$TMPDIR#g" -e "s#$HOME#~#g" -e "s#${USER:-nobody}#<user>#g" \
     | tee $SD/rehearsal/$name.txt
 done

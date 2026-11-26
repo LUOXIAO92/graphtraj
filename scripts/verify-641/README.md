@@ -87,5 +87,12 @@ and `$TMPDIR`.
   does. The repository is `owner/repo`.
 - No login was used and nothing was written to the network.
 - `real-broken-run2.txt` makes run 2 call nothing. Its judge FAILs, and cleanup still deletes every Issue created so far.
+- pre through post ran at 166e7e70; G, SR and suite-base ran at fbce624c. `src` and `tests` are identical from
+  ed47b3b3 onward; later commits change only `scripts/verify-641`. Each commit moves HEAD, so Main's `install`
+  builds the venv at the final HEAD.
+- `real-rerun-stop.txt` is a second `real` while the mapping exists: it STOPs and prints the exact `rm`.
 - G ran `-k 'test_github_backup or test_intent_queries_find_create'` through the same entry Main uses. These are real
-  tests, including the repository-fixture backup tests, and the known `start an agent` failure was classed known.
+  tests, including the repository-fixture backup tests: 21 + 4 passed. With the graftling 0.10.2 wheel, the known
+  `start an agent` id passed here, so SR had nothing to class. Its known-id rule is unchanged from 614.
+- suite-base ran two backup test ids, base c18b4beb against the candidate. The new test is absent on base, and the
+  existing retry test passes on both.

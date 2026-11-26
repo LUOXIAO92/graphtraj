@@ -1,9 +1,9 @@
-$ zsh steps.zsh pre   (rehearsal 2026-11-26T22:04:07)
+$ zsh steps.zsh pre   (rehearsal 2026-11-26T22:06:00)
 credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
 REHEARSAL (not acceptance evidence): VERIFY641_ROOT VERIFY641_REPO VERIFY641_OUT VERIFY641_PYTEST_ARGS VERIFY641_T VERIFY641_GWAIT VERIFY641_GHCONFIG VERIFY641_USERHOME VERIFY641_GH VERIFY641_CLAUDE VERIFY641_NO_PS
 == [pre] Main. Preflight; creates $TMPDIR/641r/root; ONE one-line claude -p (no MCP, no tool); gh auth status (read only). LOGIN: your Claude and gh logins (Main asks the user first). Dialog: none.
 zsh 5.9 runs ~/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/641-task-backup-recreate-deleted-issue/scripts/verify-641/steps.zsh
-candidate HEAD fbce624c975912b6c7808725d98764ec04bcfd23 (641: real-entry steps, helper and rehearsal driver (scripts/verify-641))
+candidate HEAD 166e7e704514f5523f9c3a896a95aaf5e2e07bad (641: steps print 'none' for an empty host log; real rehearsals rerun)
 PASS: base GraphTraj c18b4bebd42d9c7801fd5ba26a290d585a021118 is an ancestor of HEAD
 PASS: graftling v0.10.2 = 57bca73657d3135a4504904fcc3f1898c2419766 in ~/workspace/you-are-a-product-architect-delivery/graftling (wheel source)
 PASS: no uncommitted change in src, tests, the step files

@@ -130,7 +130,17 @@ graftling_wheel() {  # $1 dir: graftling v0.10.2 built offline from git archive 
   git -C $GREPO archive $GCOMMIT | tar -x -C $S/graftling || { print -r -- "STOP: graftling $GCOMMIT not found"; return 1; }
   clean $CONDA -m pip wheel $PIP -w $S/wheels $S/graftling > /dev/null
 }
-venv_ready() { [[ $(cat $VENV/installed 2>/dev/null) == $HEAD ]] || { print -r -- "STOP: $VENV is not HEAD $HEAD; run: zsh $THIS install"; return 1; } }
+venv_ready() {  # the installed candidate is HEAD, or a commit whose src/, tests/ and pyproject.toml equal HEAD's
+  local inst=$(cat $VENV/installed 2>/dev/null)
+  [[ -n $inst && $inst == $HEAD ]] && return 0
+  if [[ -n $inst ]] && git -C $WT cat-file -e "$inst^{commit}" 2>/dev/null \
+     && git -C $WT diff --quiet $inst $HEAD -- src tests pyproject.toml; then
+    print -r -- "venv: installed ${inst[1,8]}; HEAD ${HEAD[1,8]} has identical src/, tests/ and pyproject.toml (only scripts differ): reusing $VENV"
+    return 0
+  fi
+  print -r -- "STOP: $VENV holds ${inst:-nothing}, whose src/tests/pyproject differ from HEAD $HEAD; run: zsh $THIS install"; return 1
+}
+VOLATILE='$1 == ".codex" && ($7 ~ /^logs_.*\.sqlite/ || $7 == "models_cache.json")'   # Codex Runtime's own log/cache
 other_suites() {  # exit 2 when ps cannot list (never read as "none")
   local listed
   if ! listed=$(ps -axww -o pid=,command= 2>&1) || [[ -z $listed ]]; then
@@ -398,11 +408,25 @@ real)
   (( OK ))
   ;;
 post)
-  say "[post] Main. Your ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh vs pre (names, sizes, mtimes). <5 s."
+  say "[post] Main. Your ~/.graphtraj, ~/.codex, ~/.pi/agent, ~/.dsh vs pre (names, sizes, mtimes; ~/.codex/logs_*.sqlite* and ~/.codex/models_cache.json listed as INFO). <5 s."
   need $ROOT/user-before.txt pre || return 1
   user_state > $ROOT/user-after.txt; cp $ROOT/user-after.txt $OUT/ 2>/dev/null
   OK=1
-  diff $ROOT/user-before.txt $ROOT/user-after.txt && pass "your locations are unchanged" || fail "a location changed (diff above)"
+  # ~/.codex/logs_*.sqlite* and ~/.codex/models_cache.json are the Codex Runtime's own log and model cache, written by
+  # the user's running Codex sessions (Main runs on Codex); no step runs Codex. They are listed as INFO, not judged.
+  # Every other entry of the four locations is judged on name, size and mtime.
+  local vol
+  for vol in before after; do
+    awk "$VOLATILE" $ROOT/user-$vol.txt > $ROOT/user-$vol-volatile.txt
+    awk "!($VOLATILE)" $ROOT/user-$vol.txt > $ROOT/user-$vol-judged.txt
+  done
+  diff $ROOT/user-before-volatile.txt $ROOT/user-after-volatile.txt > $ROOT/user-volatile.diff \
+    && print -r -- "INFO (not judged): Codex runtime-volatile files unchanged" \
+    || { print -r -- "INFO (not judged; the Codex Runtime's own log/cache files, written by running Codex sessions, not by these steps):"
+         sed 's/^/  /' $ROOT/user-volatile.diff; }
+  diff $ROOT/user-before-judged.txt $ROOT/user-after-judged.txt \
+    && pass "your locations are unchanged ($(wc -l < $ROOT/user-after-judged.txt | xargs) entries judged on name, size, mtime; $(wc -l < $ROOT/user-after-volatile.txt | xargs) Codex runtime-volatile entries listed as INFO)" \
+    || fail "a location changed (diff above)"
   print -r -- "outputs: $ROOT (copies in $OUT). To remove everything afterwards: rm -rf ${(qq)ROOT}"
   (( OK )) && print -r -- "RESULT 641 post: PASS" || print -r -- "RESULT 641 post: FAIL"
   print -r -- "next (paste): zsh $THIS G"

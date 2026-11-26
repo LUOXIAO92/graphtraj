@@ -160,11 +160,22 @@ def judge(phase: str, stream: str, repository: str, summary: str, *rest: str) ->
     for number, (name, arguments, error, answer) in enumerate(made, 1):
         print(f'call {number}: {name} {json.dumps(arguments)[:160]} -> {"ERROR " if error else ""}'
               f'{json.dumps(answer)[:400]}')
+
+    # Only the tasks calls are judged. The host's deferred-tool load of exactly this tool
+    # (ToolSearch "select:mcp__graphtraj__tasks") is allowed and shown as INFO; any other tool use fails.
+    ours    = [item for item in made if item[0] == TOOL]
+    loads   = [item for item in made if item[0] == 'ToolSearch' and isinstance(item[1], dict)
+               and item[1].get('query') == f'select:{TOOL}']
+    others  = [item for item in made if item not in ours and item not in loads]
+    for name, arguments, _, _ in loads:
+        print(f'INFO 641 run {phase}: host deferred-tool load allowed (not judged): {name} {json.dumps(arguments)}')
     expected = calls(phase, repository)
     ck('exactly the expected task_backup calls, inline, in order',
-       [(name, arguments) for name, arguments, _, _ in made] == [(TOOL, call) for call in expected],
-       f'{len(made)} calls')
-    answers = [answer if isinstance(answer, dict) and not error else {} for _, _, error, answer in made]
+       [arguments for _, arguments, _, _ in ours] == expected,
+       f'{len(ours)} {TOOL} calls')
+    ck('no other tool use', not others, ', '.join(f'{name} {json.dumps(arguments)[:80]}'
+                                                  for name, arguments, _, _ in others))
+    answers = [answer if isinstance(answer, dict) and not error else {} for _, _, error, answer in ours]
     answers += [{}] * (2 - len(answers))
     first, second = answers[:2]
 
@@ -370,6 +381,20 @@ def fake_claude(args: list[str]) -> int:
     # Rehearsal of a midway failure: the named run makes no call, so its judge fails.
     if '--rehearsal-break-run' in args and f'DONE-641-{args[args.index("--rehearsal-break-run") + 1]}.' in text:
         found = []
+    # Like the real host, first load the deferred tool (ToolSearch select:<tool>); with
+    # --rehearsal-other-tool, also use another tool, which the judge must refuse.
+    if found:
+        lines += [{'type': 'assistant', 'message': {'content': [
+                      {'type': 'tool_use', 'id': 'load-0', 'name': 'ToolSearch',
+                       'input': {'query': f'select:{TOOL}', 'max_results': 1}}]}},
+                  {'type': 'user', 'message': {'content': [
+                      {'type': 'tool_result', 'tool_use_id': 'load-0',
+                       'content': [{'type': 'tool_reference', 'tool_name': TOOL}]}]}}]
+    if found and '--rehearsal-other-tool' in args:
+        lines += [{'type': 'assistant', 'message': {'content': [
+                      {'type': 'tool_use', 'id': 'other-0', 'name': 'Bash', 'input': {'command': 'true'}}]}},
+                  {'type': 'user', 'message': {'content': [
+                      {'type': 'tool_result', 'tool_use_id': 'other-0', 'content': ''}]}}]
     if found:
         entry = json.loads(Path(args[args.index('--mcp-config') + 1]).read_text())['mcpServers']['graphtraj']
         env   = {**os.environ, **entry.get('env', {})}

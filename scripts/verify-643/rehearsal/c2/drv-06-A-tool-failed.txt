@@ -1,0 +1,21 @@
+$ <venv python> scripts/verify-643/vm/drive643.py case A   (env names: <KEY_ENV>)
+[A] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE A launcher pid: 24583
+CASE A launcher parent_chain: python(24583) <- zsh(24511) <- zsh(24508)
+CASE A launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+CASE A codex: /tmp/claude-501/v643drv.fDGnMf/bin/codex
+CASE A launcher: codex exec (outside graftling)
+CASE A prompt delivery: stdin, with '-' as the prompt argument
+CASE A arguments with a newline: 0
+CASE A exec help documents dash stdin: yes
+CASE A codex exit: 0
+CASE A thread: 01a2544086448000
+CASE A rollout: rollout-2026-11-27T00-00-00-01a2544086448000.jsonl (kept in rollouts/)
+CASE A prompt reached Codex: yes (a user message in the rollout holds the exact tool command)
+CASE A tool calls in the rollout: 1
+CASE A call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit -1073741502; exit code -1073741502: Chunk ID: a0e20a Wall time: 0.0001 seconds Process exited with code -1073741502 Original token count: 0 Output:
+CASE A marker file: absent
+CASE A wall time: 0.1 s
+CASE A codex sandbox runner (OBSERVED, never blocks): codex sandbox windows --full-auto -- powershell ... : exit 1; marker absent; 0.0 s
+RESULT A TOOL-FAILED -1073741502
+(exit 0)

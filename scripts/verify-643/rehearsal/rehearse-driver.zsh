@@ -55,13 +55,27 @@ if argv[:1] == ['sandbox']:
         print('Usage: codex sandbox windows [OPTIONS] [COMMAND]...\n  --full-auto (stand-in)'); sys.exit(0)
     print('stand-in: no Windows sandbox on this machine', file=sys.stderr); sys.exit(1)
 home = pathlib.Path(os.environ['CODEX_HOME'])
+if argv[:2] == ['exec', '--help']:
+    print('Usage: codex exec [OPTIONS] [PROMPT]\n  [PROMPT]  Initial instructions for the agent. If not provided as an argument (or if \`-\` is used),\n            instructions are read from stdin. (stand-in)'); sys.exit(0)
+# Every argv this stand-in receives is recorded (the rehearsal asserts that none holds a newline).
+(home / 'argv-log').mkdir(exist_ok=True)
+(home / 'argv-log' / f'{time.time_ns()}.json').write_text(json.dumps(argv))
+prompt = argv[-1]
+if prompt == '-':
+    prompt = sys.stdin.read().rstrip('\n')
+else:
+    # Imitates the real VM: codex.CMD (cmd.exe) cut a multi-line argv prompt at its first newline.
+    prompt = prompt.split('\n')[0]
 config = tomllib.loads((home / 'config.toml').read_text())
 day = home / 'sessions' / '2026' / '11' / '27'; day.mkdir(parents=True, exist_ok=True)
 thread = f'01a2{time.time_ns() % 10**12:012d}'
 work = pathlib.Path(argv[argv.index('-C') + 1])
 case = os.environ.get('FAKE_CODEX_CASE', 'answer')
 records = [{'type': 'session_meta', 'payload': {'id': thread, 'model_provider': config['model_provider']}},
-           {'type': 'turn_context', 'payload': {'model': config['model'], 'cwd': str(work)}}]
+           {'type': 'turn_context', 'payload': {'model': config['model'], 'cwd': str(work)}},
+           {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user', 'content': [{'type': 'input_text', 'text': prompt}]}}]
+if case != 'answer' and 'Set-Content -Path marker-643.txt' not in prompt:
+    case = 'nocall'  # the model never saw the command (as on the VM: it asked for it)
 call = {'type': 'response_item', 'payload': {'type': 'function_call', 'name': 'exec_command',
         'arguments': json.dumps({'cmd': 'Set-Content -Path marker-643.txt -Value tool-ran', 'yield_time_ms': 10000}), 'call_id': 'call_00_x'}}
 if case == 'ran':
@@ -84,7 +98,8 @@ chmod +x $H/bin/codex
 mkdir -p $H/fake-rollouts
 print -r -- '{"type": "response_item", "payload": {"type": "function_call", "name": "exec_command", "arguments": "{\"cmd\": \"Set-Content -Path marker-643.txt -Value tool-ran\"}", "call_id": "c1"}}
 {"type": "response_item", "payload": {"type": "function_call_output", "call_id": "c1", "output": "Chunk ID: f80e91\nWall time: 0.0001 seconds\nProcess exited with code -1073741502\nOriginal token count: 0\nOutput:\n"}}' > $H/fake-rollouts/rollout-failed.jsonl
-print -r -- '{"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "CASE-DONE"}]}}' > $H/fake-rollouts/rollout-no-call.jsonl
+print -r -- '{"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Use your shell tool ...\n\nSet-Content -Path marker-643.txt -Value tool-ran"}]}}
+{"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "CASE-DONE"}]}}' > $H/fake-rollouts/rollout-no-call.jsonl
 # Sample query user outputs (the user name is the current one, as on the VM; never printed by the driver).
 ME=${USER}
 print -r -- " USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME
@@ -123,10 +138,15 @@ drv r0-no-key 'RESULT R0 STOP' -- r0
 drv r0-pass 'RESULT R0 PASS' $KEYENV=$KEYVAL -- r0
 drv A-no-key 'RESULT A STOP the key variable is not set' -- case A
 drv A-tool-ran 'RESULT A TOOL-RAN' $KEYENV=$KEYVAL FAKE_CODEX_CASE=ran -- case A
+CHECK+="A TOOL-RAN: prompt on stdin with '-' $(grep -c "^CASE A prompt delivery: stdin, with '-' as the prompt argument" $LAST), prompt reached $(grep -c '^CASE A prompt reached Codex: yes' $LAST), '-' documented by exec --help $(grep -c '^CASE A exec help documents dash stdin: yes' $LAST)"
 CHECK+="A TOOL-RAN: marker line $(grep -c "^CASE A marker file: present, content 'tool-ran'" $LAST), call line with exit 0 $(grep -c '^CASE A call 1: exec_command .* -> exit 0' $LAST), rollout kept $(ls $H/out/A/rollouts | grep -c rollout-), sandbox runner OBSERVED line $(grep -c '^CASE A codex sandbox runner (OBSERVED, never blocks): codex sandbox windows --full-auto -- powershell' $LAST)"
 drv A-tool-failed 'RESULT A TOOL-FAILED -1073741502' $KEYENV=$KEYVAL FAKE_CODEX_CASE=failed -- case A
 CHECK+="A TOOL-FAILED: call line with exit -1073741502 $(grep -c '^CASE A call 1: exec_command .* -> exit -1073741502' $LAST), marker absent $(grep -c '^CASE A marker file: absent' $LAST), config.toml has [windows] sandbox = unelevated $(grep -c 'sandbox = "unelevated"' $H/out/A/config.toml)"
 drv A-no-tool-call 'RESULT A NO-TOOL-CALL' $KEYENV=$KEYVAL FAKE_CODEX_CASE=nocall -- case A
+CHECK+="A NO-TOOL-CALL only with the prompt delivered: $(grep -c '^CASE A prompt reached Codex: yes' $LAST)"
+drv A-old-argv-prompt 'RESULT A STOP prompt-not-delivered' $KEYENV=$KEYVAL FAKE_CODEX_CASE=ran V643_PROMPT_ARGV=1 -- case A
+CHECK+="old argv form (correction 1's real defect, imitated): 'prompt reached Codex: no' $(grep -c '^CASE A prompt reached Codex: no' $LAST); arguments with a newline reported $(grep -c '^CASE A arguments with a newline: 1' $LAST)"
+rm -f $H/codex-home/argv-log/*(N)
 CHECK+="every case prints the launcher lines (pid, parent chain, Win32 facts NOT-WINDOWS here): $(grep -c -E '^CASE A launcher (pid|parent_chain|windows):' $LAST) of 3; the verdict is the last line: $(tail -2 $LAST | head -1 | grep -c '^RESULT A ')"
 drv C-ssh-tool-ran 'RESULT C-ssh TOOL-RAN' $KEYENV=$KEYVAL V643_STANDIN=$H/graftling/tests -- case C-ssh
 CHECK+="C-ssh through graftling: outcome line $(grep -c '^CASE C-ssh outcome: completed' $LAST), runtime_job line $(grep -c '^CASE C-ssh runtime job:' $LAST), graftling records kept $(find $H/out/C-ssh/agents -type f 2> /dev/null | wc -l | tr -d ' ') file(s)"
@@ -144,6 +164,17 @@ drv B-schedule-tool-ran 'RESULT B TOOL-RAN' $KEYENV=$KEYVAL FAKE_CODEX_CASE=ran 
 drv verdict-B-after-rerun 'VERDICT-OF B TOOL-RAN' -- verdict B
 drv verdict-C-interactive-absent 'VERDICT-OF C-interactive none' -- verdict C-interactive
 drv C-interactive-schedule 'RESULT C-interactive TOOL-RAN' $KEYENV=$KEYVAL V643_STANDIN=$H/graftling/tests V643_QUSER_FILE=$H/quser-active.txt -- schedule C-interactive 180
+NL=$($PY -I -c 'import json, pathlib, sys
+files = sorted(pathlib.Path(sys.argv[1]).glob("*.json"))
+calls = [json.loads(p.read_text()) for p in files]
+print(len(calls), sum(1 for argv in calls for item in argv if "\n" in item or "\r" in item))' $H/codex-home/argv-log)
+CHECK+="argv handed to the stand-in codex since the old-form run (calls, arguments holding a newline): $NL (want: N 0)"
+(( N++ ))
+SF=$OUT/drv-$(printf %02d $N)-schedule-powershell-text.txt
+print -r -- "\$ python3 -I rehearsal/check_schedule643.py vm   (string checks of the generated PowerShell; no pwsh here)" > $SF
+/usr/bin/env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 V643_HOME=$H $PY -I $HERE/rehearsal/check_schedule643.py $HERE/vm >> $SF 2>&1
+print -r -- "(exit $?)" >> $SF
+SUMMARY+="drv-$(printf %02d $N) schedule-powershell-text: expected /SCHEDULE-TEXT PASS/, got '$(grep '^SCHEDULE-TEXT' $SF)' -> $(grep -q '^SCHEDULE-TEXT PASS' $SF && print yes || print no)"
 drv scan-A 'SCAN PASS' $KEYENV=$KEYVAL V643_PASSWORD=$PASSWD -- scan A
 print -r -- "planted $KEYVAL" > $H/out/A/planted.txt
 drv scan-finds-planted-key 'SCAN FAIL' $KEYENV=$KEYVAL V643_PASSWORD=$PASSWD -- scan A

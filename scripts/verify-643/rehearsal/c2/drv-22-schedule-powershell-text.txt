@@ -1,0 +1,22 @@
+$ python3 -I rehearsal/check_schedule643.py vm   (string checks of the generated PowerShell; no pwsh here)
+yes  principal from the token SID ([Security.Principal.WindowsIdentity]::GetCurrent() ... .User.Value)
+yes  New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
+yes  no USERDOMAIN\USERNAME principal any more
+yes  printed: booleans only (two PRINCIPAL lines, each a [bool] or -eq expression)
+yes  neither the name nor the SID is printed
+yes  task registered and started by name v643-B
+yes  stops on the first error
+--- the generated text:
+$ErrorActionPreference = 'Stop'
+$me = [Security.Principal.WindowsIdentity]::GetCurrent()
+$sid = $me.User.Value
+'PRINCIPAL from the token (SID of the current identity): ' + [bool]($sid -like 'S-1-5-*')
+'PRINCIPAL USERDOMAIN equals COMPUTERNAME: ' + ($env:USERDOMAIN -eq $env:COMPUTERNAME)
+$a = New-ScheduledTaskAction -Execute '/Users/luoxiao/workspace/you-are-a-product-architect-delivery/.venv-runtime/bin/python' -Argument '"C:\v643\drive643.py" task B' -WorkingDirectory '/private/tmp/claude-501/v643drv.fDGnMf'
+$p = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest
+$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 20) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName 'v643-B' -Action $a -Principal $p -Settings $s -Force | Out-Null
+Start-ScheduledTask -TaskName 'v643-B'
+'started'
+SCHEDULE-TEXT PASS: 7 of 7 checks
+(exit 0)

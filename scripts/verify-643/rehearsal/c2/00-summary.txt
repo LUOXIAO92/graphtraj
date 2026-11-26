@@ -1,0 +1,53 @@
+Task 643 steps rehearsal (stand-in gcloud; random dummy settings and key; consoles 01-28 in c2/)
+--- runs
+01 00-missing-settings: expected STOP, got 'VERDICT 643 00: STOP' -> yes
+02 00-empty-variable: expected STOP, got 'VERDICT 643 00: STOP' -> yes
+03 00-settings-not-ignored: expected STOP, got 'VERDICT 643 00: STOP' -> yes
+04 00-preflight: expected PASS, got 'VERDICT 643 00: PASS (Task VM: absent)' -> yes
+05 A-vm-absent: expected STOP, got 'VERDICT 643 A: STOP' -> yes
+06 D-vm-absent: expected PASS, got 'VERDICT 643 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+07 V-full: expected PASS, got 'VERDICT 643 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' -> yes
+08 K-dummy-key: expected PASS, got 'VERDICT 643 K: PASS (key stored as the VM user's environment variable; R0 proves it with a real call)' -> yes
+09 R0: expected PASS, got 'VERDICT 643 R0: PASS (PASS; evidence PASS)' -> yes
+10 B-before-I: expected STOP, got 'VERDICT 643 B: STOP the VM user has no Active console session (run step I first) (evidence PASS)' -> yes
+11 A-tool-failed: expected TOOL-FAILED, got 'VERDICT 643 A: TOOL-FAILED -1073741502 (evidence PASS)' -> yes
+12 A-no-tool-call: expected NO-TOOL-CALL, got 'VERDICT 643 A: NO-TOOL-CALL (evidence PASS)' -> yes
+13 I-autologon-refused: expected STOP, got 'VERDICT 643 I: STOP' -> yes
+14 I-not-established: expected STOP, got 'VERDICT 643 I: STOP' -> yes
+15 I: expected PASS, got 'VERDICT 643 I: PASS (VM_USER has an Active console session: 1 console; evidence PASS)' -> yes
+16 B-driver-stop: expected STOP, got 'VERDICT 643 B: STOP the scheduled task could not be registered or started: Register-ScheduledTask : No mapping between account names and security IDs was done. (stand-in) (evidence PASS)' -> yes
+17 V-resume-on-existing-VM: expected PASS, got 'VERDICT 643 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' -> yes
+18 B-tool-failed: expected TOOL-FAILED, got 'VERDICT 643 B: TOOL-FAILED -1073741502 (evidence PASS)' -> yes
+19 C-interactive-refused: expected STOP, got 'VERDICT 643 C interactive: STOP' -> yes
+20 B-tool-ran: expected TOOL-RAN, got 'VERDICT 643 B: TOOL-RAN (evidence PASS)' -> yes
+21 C-interactive: expected TOOL-FAILED, got 'VERDICT 643 C interactive: TOOL-FAILED -1073741502 (evidence PASS)' -> yes
+22 C-ssh: expected TOOL-FAILED, got 'VERDICT 643 C ssh: TOOL-FAILED -1073741502 (evidence PASS)' -> yes
+23 C-bad-argument: expected STOP, got 'VERDICT 643 C: STOP' -> yes
+24 E-A: expected PASS, got 'VERDICT 643 E A: PASS (PASS (evidence/live/A, 3 files; scanned on the VM, scrubbed twice))' -> yes
+25 E-B-one-file-lost: expected FAIL, got 'VERDICT 643 E B: FAIL (FAIL (the VM counted 3 evidence files, 2 arrived))' -> yes
+26 D-disk-survives: expected FAIL, got 'VERDICT 643 D: FAIL (still present, by name/tag/labels: disks: 1)' -> yes
+27 D-clean: expected PASS, got 'VERDICT 643 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' -> yes
+28 A-after-D: expected STOP, got 'VERDICT 643 A: STOP' -> yes
+--- checks
+A with no VM names V as next: yes
+uploaded by tar: v643/autologon.ps1 v643/drive643.py v643/graftling.bundle v643/provision.ps1 v643/setkey.ps1 v643/settings.json 
+Task rules existing when instances create ran: 2 (deny and ssh); their descriptions name Task 643: 2 of 2
+B before I: refused for no console session, next names I: yes
+A prints its case lines and next I: 4 line(s); yes
+A NO-TOOL-CALL offers a rerun: yes
+I refused before any reboot: no reboot
+I not established: observable and next I/D printed: yes, yes
+B driver STOP: tells Main not to run D: yes; names V for the fix: yes; offers D: 0
+V on the existing VM: instances create calls 0; re-uploads by tar 1; provisioning re-run 1; said it resumes yes; resume next line yes; autologon.ps1 or reboot run during V: 0
+B TOOL-FAILED: next is C ssh, not C interactive: yes, 0
+C interactive refused with the reason and next C ssh: yes, yes; nothing scheduled for C-interactive: 0
+B TOOL-RAN: next C interactive: yes
+after D: Task rules left 0, instance absent
+run order by each step's first next line: 00 -> V; V -> K; K -> R0; R0 -> A; A -> I; I -> B; B (tool ran) -> C interactive; C interactive -> C ssh; C ssh -> D
+gcloud compute scp calls: 0
+gcloud calls: 168; without --project: 0; naming another project than <PROJECT>, other than the public image read: 0; 'config' calls: 0
+consoles showing either address: 0
+dummy key: in gcloud argv 0, in gcloud environments 0, in files (verify-643 tree incl. local/ and rehearsal, stand-in state, evidence) 0; arrived on gcloud's stdin (length+SHA-256 match) 1 time(s)
+scrub list on the VM leaves out the network name and label keys: yes
+fetched evidence: 57 files; files still holding a settings value (any case, UTF-8): 0; files holding the sample IPv4/IPv6: 0; settings values left in the UTF-16 sample: 0; placeholders now present: <ACCOUNT> 45, <BASE_URL_HOST> 45, <BASE_URL> 90, <IP> 30, <KEY_ENV> 45, <MACHINE_TYPE> 45, <MODEL> 45, <PROJECT> 45, <PROVIDER_ID> 45, <PROVIDER_NAME> 45, <REGION> 45, <VM_LABEL> 45, <VM_NAME> 90, <ZONE> 45
+committed-or-committable files (tracked + untracked not ignored) holding any dummy value or the dummy key: 0

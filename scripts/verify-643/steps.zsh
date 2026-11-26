@@ -47,6 +47,10 @@
 #   V   Create and provision the VM, as 640's. CLOUD COST STARTS HERE. Task rules first, then the VM; wait for SSH
 #       (bound 20 min); upload by tar (drive643.py, provision.ps1, setkey.ps1, autologon.ps1, settings.json without
 #       secret, the graftling bundle); provision.ps1 (bound 40 min); fetch out/V. ~25-40 min.
+#       On an existing VM, V creates nothing: it re-checks the rules, re-uploads by tar (files in C:\v643 overwritten)
+#       and re-runs provision.ps1, which skips what is installed (Python, Node, Git, the clone, the venv) and repeats
+#       only idempotent work (Codex pin, checkout of the candidate, pip -e, config.toml). The key (K) and the
+#       automatic logon (I) stay. This is how a fix is uploaded during a run.
 #   K   USER ONLY, in their own terminal: the temporary provider key at a hidden prompt, sent on the ssh session's
 #       stdin to setkey.ps1 (stored as the VM user's environment variable). Prints "stored" and the length.
 #   R0  One codex exec with a one-line prompt: the answer, provider and model as configured (as 640). ~2-5 min.
@@ -64,6 +68,10 @@
 #       tag and labels) and prints that last; removes the local Task SSH key pair. ~2-4 min. Afterwards the user
 #       revokes the temporary provider key.
 # Every step prints ready-to-paste next commands and `VERDICT 643 <step>: ...` last.
+# A case that STOPs on a driver error (anything but a missing console session or key) prints: do NOT run D, ask the
+# Leader; a fix is uploaded with V on this same VM, then the step is rerun.
+# Correction 1: codex exec gets its prompt on stdin ('-' as the prompt argument; no argument holds a newline), and
+# each case prints whether the prompt reached Codex; the scheduled task's principal is the SID of the SSH token.
 # Rehearsal knobs (Engineer only): VERIFY643_GCLOUD, VERIFY643_SETTINGS, VERIFY643_EVIDENCE, VERIFY643_GRAFTLING,
 # VERIFY643_K_STDIN=1, VERIFY643_WAIT_S / _POLL_S / _REBOOT_S / _SESSION_S / _CASE_S (bounds), VERIFY643_IP. Unset,
 # every step runs the real commands.
@@ -414,6 +422,14 @@ run_case() {
   CASE_VERDICT=${result#RESULT $label }
   [[ -n $result ]] || CASE_VERDICT="STOP no RESULT line (the remote run ended early; see the console above)"
 }
+# A case STOP that is not an environment condition the steps name themselves (no console session: run I; no key: run
+# K) is a defect of the steps or driver: the VM is kept for a fix, which V uploads by tar on this same VM.
+env_stop() { [[ $CASE_VERDICT == *'no Active console session'* || $CASE_VERDICT == *'key variable is not set'* ]]; }
+driver_stop_next() {
+  print -r -- "next: do NOT run D: this STOP is a driver error; the VM stays as it is. Ask the Leader; a fix is uploaded with:"
+  next_cmds V
+  print -r -- "next: (V resumes on this existing VM: re-uploads by tar and re-runs the idempotent provisioning; then rerun this step)"
+}
 case_verdict() {  # print the step's verdict (last line); a STOP or failed evidence ends the step with exit 1
   print -r -- "VERDICT 643 $STEPNAME: $CASE_VERDICT (evidence ${FETCHED%% *})"
   [[ $CASE_VERDICT != STOP* && $FETCHED == PASS* ]] || exit 1
@@ -520,6 +536,9 @@ V)
   bounded 2400 rsh "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $REMOTE\\provision.ps1" 2>&1 | tee $WORK/console.txt
   grep -q '^PROVISION PASS' $WORK/console.txt || stop "provisioning did not pass (last lines above). Retry: zsh $REL V   or delete: zsh $REL D"
   fetch V || stop "the V evidence: $FETCHED"
+  if [[ -n $st ]]; then
+    print -r -- "next: V resumed on the existing VM (re-uploaded, provisioning re-run); the key from K and the automatic logon of I stay: rerun the step that stopped"
+  fi
   next_cmds K R0 D
   print -r -- "next: K is run by the USER in their own terminal (hidden key input); Main runs R0 after it"
   print -r -- "VERDICT 643 V: PASS (VM provisioned; evidence $FETCHED)"
@@ -568,7 +587,7 @@ A)
   run_case A "case A" 1200
   case $CASE_VERDICT in
     NO-TOOL-CALL*) print -r -- "next: the model made no tool call; rerun A once before going on"; next_cmds A I D ;;
-    STOP*) next_cmds A "E A" D ;;
+    STOP*) if env_stop; then next_cmds K A; else driver_stop_next; fi ;;
     *) next_cmds I D ;;
   esac
   case_verdict
@@ -617,7 +636,8 @@ B)
     NO-TOOL-CALL*) print -r -- "next: the model made no tool call; rerun B once before going on"; next_cmds B "C ssh" D ;;
     TOOL-FAILED*) print -r -- "next: C interactive is not run (B's tool did not run; the step would refuse)"; next_cmds "C ssh" D ;;
     *console\ session*) next_cmds I B D ;;
-    *) next_cmds B "E B" D ;;
+    *key\ variable*) next_cmds K B ;;
+    *) driver_stop_next ;;
   esac
   case_verdict
   ;;
@@ -637,7 +657,7 @@ C)
     run_case C-interactive "schedule C-interactive $CASE_S" $((CASE_S + 300))
     case $CASE_VERDICT in
       NO-TOOL-CALL*) print -r -- "next: the model made no tool call; rerun once"; next_cmds "C interactive" "C ssh" D ;;
-      STOP*) next_cmds "C interactive" "E C-interactive" "C ssh" D ;;
+      STOP*) if env_stop; then next_cmds I "C interactive"; else driver_stop_next; fi ;;
       *) next_cmds "C ssh" D ;;
     esac
   else
@@ -645,7 +665,7 @@ C)
     run_case C-ssh "case C-ssh" 1200
     case $CASE_VERDICT in
       NO-TOOL-CALL*) print -r -- "next: the model made no tool call; rerun once"; next_cmds "C ssh" D ;;
-      STOP*) next_cmds "C ssh" "E C-ssh" D ;;
+      STOP*) if env_stop; then next_cmds K "C ssh"; else driver_stop_next; fi ;;
       *) next_cmds D ;;
     esac
   fi

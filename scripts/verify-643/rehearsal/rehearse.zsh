@@ -100,6 +100,14 @@ CHECK+="I refused before any reboot: $([[ -f $S/rebooted ]] && print 'rebooted (
 touch $S/no-session; step I-not-established STOP I
 CHECK+="I not established: observable and next I/D printed: $(yn grep -q 'the observable: query user shows no Active console session' $LAST), $(yn grep -q 'next: zsh scripts/verify-643/steps.zsh D' $LAST)"
 rm -f $S/no-session; step I PASS I
+# Correction 1: a driver STOP keeps the VM (no D) and names V; V on the existing, provisioned VM only re-uploads and
+# re-runs the idempotent provisioning.
+print -r -- 'STOP the scheduled task could not be registered or started: Register-ScheduledTask : No mapping between account names and security IDs was done. (stand-in)' > $S/want-B
+step B-driver-stop STOP B; rm -f $S/want-B
+CHECK+="B driver STOP: tells Main not to run D: $(yn grep -q 'next: do NOT run D' $LAST); names V for the fix: $(yn grep -q 'next: zsh scripts/verify-643/steps.zsh V$' $LAST); offers D: $(grep -c 'next: zsh scripts/verify-643/steps.zsh D$' $LAST)"
+c0=$(grep -c 'compute instances create' $S/argv.log); u0=$(grep -c 'tar -xf - -C C:/' $S/argv.log); p0=$(grep -c 'provision.ps1' $S/argv.log); a0=$(grep -c -e 'autologon.ps1' -e 'shutdown /r' $S/argv.log)
+step V-resume-on-existing-VM PASS V
+CHECK+="V on the existing VM: instances create calls $(( $(grep -c 'compute instances create' $S/argv.log) - c0 )); re-uploads by tar $(( $(grep -c 'tar -xf - -C C:/' $S/argv.log) - u0 )); provisioning re-run $(( $(grep -c 'provision.ps1' $S/argv.log) - p0 )); said it resumes $(yn grep -q 'provisioning resumes on it' $LAST); resume next line $(yn grep -q 'V resumed on the existing VM' $LAST); autologon.ps1 or reboot run during V: $(( $(grep -c -e 'autologon.ps1' -e 'shutdown /r' $S/argv.log) - a0 ))"
 step B-tool-failed TOOL-FAILED B
 CHECK+="B TOOL-FAILED: next is C ssh, not C interactive: $(yn grep -q 'next: zsh scripts/verify-643/steps.zsh C ssh' $LAST), $(grep -c 'next: zsh scripts/verify-643/steps.zsh C interactive' $LAST)"
 step C-interactive-refused STOP C interactive

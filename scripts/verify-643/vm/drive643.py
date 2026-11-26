@@ -812,10 +812,38 @@ def read_records(path: Path | None) -> list[dict]:
     return records
 
 
+def prompt_reached(records: list[dict]) -> bool:
+    """Whether a user message in the rollout holds the exact tool command (response_item message role user, or
+    event_msg user_message)."""
+    for record in records:
+        payload = record.get('payload') or {}
+        if record.get('type') == 'response_item' and payload.get('type') == 'message' and payload.get('role') == 'user':
+            texts = [part.get('text') or '' for part in payload.get('content') or [] if isinstance(part, dict)]
+        elif record.get('type') == 'event_msg' and payload.get('type') == 'user_message':
+            texts = [str(payload.get('message') or '')]
+        else:
+            continue
+        if any(TOOL_COMMAND in text for text in texts):
+            return True
+    return False
+
+
 def through_exec(log: Log, work: Path, codex: list[str], since: float) -> tuple[dict, Path | None, list[dict]]:
     """A and B: ``codex exec`` outside graftling, unelevated Codex sandbox, workspace-write, in ``work``."""
-    out = run([*codex, 'exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write', '-C', str(work),
-               say_shell(TOOL_COMMAND, 'CASE-DONE')], 600)
+    # Correction 1: the prompt goes on stdin with '-' as the prompt argument (codex exec --help: "If not provided as
+    # an argument (or if `-` is used), instructions are read from stdin"). No argument holds a newline: on the real
+    # VM codex.CMD (cmd.exe) cut the multi-line argv prompt at its first newline, so the command never reached Codex.
+    # V643_PROMPT_ARGV=1 (rehearsal only) restores the old argv form, to show that it is detected.
+    shown = run([*codex, 'exec', '--help'], 60)
+    helptext = (shown.get('stdout') or '') + (shown.get('stderr') or '') + (shown.get('error') or '')
+    (log.dir / 'codex-exec-help.txt').write_text(helptext, encoding='utf-8')
+    prompt = say_shell(TOOL_COMMAND, 'CASE-DONE')
+    base = [*codex, 'exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write', '-C', str(work)]
+    old_form = os.environ.get('V643_PROMPT_ARGV') == '1'
+    argv = [*base, prompt] if old_form else [*base, '-']
+    log.save('exec-argv.json', argv)
+    newline_args = sum(1 for item in argv if '\n' in item or '\r' in item)
+    out = run(argv, 600, stdin=subprocess.DEVNULL) if old_form else run(argv, 600, input=prompt + '\n')
     (log.dir / 'exec-stdout.jsonl').write_text(out.get('stdout') or '', encoding='utf-8')
     (log.dir / 'exec-stderr.txt').write_text((out.get('stderr') or '') + (out.get('error') or ''), encoding='utf-8')
     thread = None
@@ -830,7 +858,13 @@ def through_exec(log: Log, work: Path, codex: list[str], since: float) -> tuple[
     if path is None:
         path = newest_rollout(since)
         records = read_records(path)
-    facts = {'launcher': 'codex exec (outside graftling)', 'codex_exit': out.get('exit'), 'thread': thread}
+    facts = {'launcher': 'codex exec (outside graftling)',
+             'prompt_delivery': ('argv (the old form, rehearsal knob V643_PROMPT_ARGV)' if old_form else
+                                 "stdin, with '-' as the prompt argument"),
+             'arguments_with_a_newline': newline_args,
+             'exec_help_documents_dash_stdin': 'yes' if re.search(r'`-` is used|\(or if .-. is used\)', helptext) else
+                                               'no (codex-exec-help.txt kept)',
+             'codex_exit': out.get('exit'), 'thread': thread}
     if out.get('exit') is None or not path:
         facts['stop'] = (f'codex exec did not run or wrote no rollout (exit {out.get("exit")}): '
                          f'{((out.get("stderr") or "") + (out.get("error") or "")).strip()[-300:]}')
@@ -943,8 +977,8 @@ def run_case(case: str, fresh: bool = True) -> int:
         facts, path, records = (through_graftling(log, work, codex) if graft else
                                 through_exec(log, work, codex, since))
         wall = time.monotonic() - began
-        for name in ('launcher', 'codex_exit', 'thread', 'owner_pid', 'session', 'outcome', 'last_message',
-                     'runtime_job'):
+        for name in ('launcher', 'prompt_delivery', 'arguments_with_a_newline', 'exec_help_documents_dash_stdin',
+                     'codex_exit', 'thread', 'owner_pid', 'session', 'outcome', 'last_message', 'runtime_job'):
             if name in facts:
                 line(name.replace('_', ' '), facts[name])
         if graft and facts.get('process'):
@@ -955,6 +989,9 @@ def run_case(case: str, fresh: bool = True) -> int:
             shutil.copyfile(path, target / path.name)
         line('rollout', f'{path.name} (kept in rollouts/)' if path else 'none found')
         calls = tool_calls(records)
+        reached = prompt_reached(records) if path is not None else None
+        line('prompt reached Codex', {True: 'yes', False: 'no', None: 'unknown (no rollout)'}[reached] +
+             ' (a user message in the rollout holds the exact tool command)')
         line('tool calls in the rollout', len(calls))
         for index, call in enumerate(calls, 1):
             line(f'call {index}', f"{call['tool']} {call['command'][:80]!r} -> exit {call['exit_code']}"
@@ -969,6 +1006,8 @@ def run_case(case: str, fresh: bool = True) -> int:
             verdict = f'STOP {facts["stop"]}'
         elif path is None:
             verdict = 'STOP no Codex rollout found; whether a tool call was made is unknown'
+        elif not calls and reached is False:
+            verdict = 'STOP prompt-not-delivered (no user message in the rollout holds the tool command)'
         elif not calls:
             verdict = 'NO-TOOL-CALL'
         else:
@@ -1032,6 +1071,24 @@ def task_state(name: str) -> str:
     return (out.get('stdout') or out.get('error') or '').strip()
 
 
+def task_script(case: str, name: str, script: Path | str, minutes: int) -> str:
+    """The PowerShell that registers and starts the task. Correction 1: the principal is the SID of this process's
+    own token (WindowsIdentity.GetCurrent().User.Value), not USERDOMAIN\\USERNAME, which Register-ScheduledTask
+    could not map under the SSH network logon (HRESULT 0x80070534, ERROR_NONE_MAPPED). Only booleans are printed."""
+    return (f"$ErrorActionPreference = 'Stop'\n"
+            f"$me = [Security.Principal.WindowsIdentity]::GetCurrent()\n"
+            f"$sid = $me.User.Value\n"
+            f"'PRINCIPAL from the token (SID of the current identity): ' + [bool]($sid -like 'S-1-5-*')\n"
+            f"'PRINCIPAL USERDOMAIN equals COMPUTERNAME: ' + ($env:USERDOMAIN -eq $env:COMPUTERNAME)\n"
+            f"$a = New-ScheduledTaskAction -Execute '{sys.executable}' -Argument '\"{script}\" task {case}' "
+            f"-WorkingDirectory '{HOME}'\n"
+            f"$p = New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Highest\n"
+            f"$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes {minutes}) "
+            f"-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew\n"
+            f"Register-ScheduledTask -TaskName '{name}' -Action $a -Principal $p -Settings $s -Force | Out-Null\n"
+            f"Start-ScheduledTask -TaskName '{name}'\n'started'")
+
+
 def schedule(case: str, seconds: float) -> int:
     """B and C-interactive: ``task <case>`` as a scheduled task in this user's interactive console session."""
     directory = HOME / 'out' / case
@@ -1046,19 +1103,14 @@ def schedule(case: str, seconds: float) -> int:
     name = f'v643-{case}'
     script = Path(__file__).resolve()
     if WINDOWS:
-        limit = int(seconds // 60) + 5
-        out = ps(f"$ErrorActionPreference = 'Stop'\n"
-                 f"$a = New-ScheduledTaskAction -Execute '{sys.executable}' -Argument '\"{script}\" task {case}' "
-                 f"-WorkingDirectory '{HOME}'\n"
-                 f"$p = New-ScheduledTaskPrincipal -UserId ($env:USERDOMAIN + '\\' + $env:USERNAME) -LogonType "
-                 f"Interactive -RunLevel Highest\n"
-                 f"$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes {limit}) "
-                 f"-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew\n"
-                 f"Register-ScheduledTask -TaskName '{name}' -Action $a -Principal $p -Settings $s -Force | Out-Null\n"
-                 f"Start-ScheduledTask -TaskName '{name}'\n'started'")
+        out = ps(task_script(case, name, script, int(seconds // 60) + 5))
+        for text in (out.get('stdout') or '').splitlines():
+            if text.startswith('PRINCIPAL '):
+                print(clean(text.strip()), flush=True)
         if out.get('exit') != 0:
+            # The first 600 characters: the end of PowerShell's error record ('...s done.') hid the message.
             print(clean(f'RESULT {case} STOP the scheduled task could not be registered or started: '
-                        f'{(out.get("stderr") or out.get("error") or "").strip()[-400:]}'), flush=True)
+                        f'{" ".join((out.get("stderr") or out.get("error") or "").split())[:600]}'), flush=True)
             ps(f"Unregister-ScheduledTask -TaskName '{name}' -Confirm:$false -ErrorAction SilentlyContinue")
             return 2
         print(clean(f'scheduled task {name} registered (LogonType Interactive, RunLevel Highest) and started: '

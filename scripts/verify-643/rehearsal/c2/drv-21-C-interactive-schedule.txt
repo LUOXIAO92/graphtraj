@@ -1,0 +1,23 @@
+$ <venv python> scripts/verify-643/vm/drive643.py schedule C-interactive 180   (env names: <KEY_ENV>)
+session of the VM user: ACTIVE 1 console; query user: USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME | <VM_USER> session console id 1 state Active
+stand-in (not Windows): task C-interactive started as a plain subprocess, not a scheduled task
+--- the task's console (out/C-interactive/console.txt):
+[C-interactive] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE C-interactive launcher pid: 24746
+CASE C-interactive launcher parent_chain: python(24746) <- python(24745) <- zsh(24511) <- zsh(24508)
+CASE C-interactive launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+CASE C-interactive codex: /private/tmp/claude-501/v643drv.fDGnMf/work/codex
+CASE C-interactive launcher: graftling AgentControl + CodexDriver child
+CASE C-interactive owner pid: 24747
+CASE C-interactive session: thread-1
+CASE C-interactive outcome: completed
+CASE C-interactive last message: tool ran
+CASE C-interactive runtime job: absent
+CASE C-interactive graftling process record: {"owned_at": 1795710565.15902, "runtime_pid": 24748, "tool_descendants": "/private/tmp/claude-501/v643drv.fDGnMf/work/agents-C-interactive/native/agent-663765507f8148aa9e4890d560558bf3/tool-descendants-8fc318e4621d40b3a61d311ae82f77fc.json", "tool_marker": "6b137d39617e4e2eb99d1e3f353f34aa", "worker_pid": 24747}
+CASE C-interactive rollout: none found
+CASE C-interactive prompt reached Codex: unknown (no rollout) (a user message in the rollout holds the exact tool command)
+CASE C-interactive tool calls in the rollout: 0
+CASE C-interactive marker file: present, content 'tool-ran'
+CASE C-interactive wall time: 2.9 s
+RESULT C-interactive TOOL-RAN
+(exit 0)

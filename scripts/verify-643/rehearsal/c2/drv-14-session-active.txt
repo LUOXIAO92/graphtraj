@@ -1,0 +1,6 @@
+$ <venv python> scripts/verify-643/vm/drive643.py session   (env names: V643_QUSER_FILE)
+session poll at 01:29:14 (query user; the user name is never printed)
+SESSION line: USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME
+SESSION line: <VM_USER> session console id 1 state Active
+SESSION ACTIVE 1 console
+(exit 0)

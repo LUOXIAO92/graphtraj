@@ -1,0 +1,7 @@
+$ <venv python> scripts/verify-643/vm/drive643.py case A   (env names: )
+[A] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE A launcher pid: 24557
+CASE A launcher parent_chain: python(24557) <- zsh(24511) <- zsh(24508)
+CASE A launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+RESULT A STOP the key variable is not set for this user; run step K first
+(exit 2)

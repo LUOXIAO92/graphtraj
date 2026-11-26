@@ -1,0 +1,24 @@
+$ <venv python> scripts/verify-643/vm/drive643.py schedule B 120   (env names: <KEY_ENV>)
+session of the VM user: ACTIVE 1 console; query user: USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME | <VM_USER> session console id 1 state Active
+stand-in (not Windows): task B started as a plain subprocess, not a scheduled task
+--- the task's console (out/B/console.txt):
+[B] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE B launcher pid: 24721
+CASE B launcher parent_chain: python(24721) <- python(24720) <- zsh(24511) <- zsh(24508)
+CASE B launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+CASE B codex: /tmp/claude-501/v643drv.fDGnMf/bin/codex
+CASE B launcher: codex exec (outside graftling)
+CASE B prompt delivery: stdin, with '-' as the prompt argument
+CASE B arguments with a newline: 0
+CASE B exec help documents dash stdin: yes
+CASE B codex exit: 0
+CASE B thread: 01a2559884382000
+CASE B rollout: rollout-2026-11-27T00-00-00-01a2559884382000.jsonl (kept in rollouts/)
+CASE B prompt reached Codex: yes (a user message in the rollout holds the exact tool command)
+CASE B tool calls in the rollout: 1
+CASE B call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit 0
+CASE B marker file: present, content 'tool-ran'
+CASE B wall time: 0.1 s
+CASE B codex sandbox runner (OBSERVED, never blocks): codex sandbox windows --full-auto -- powershell ... : exit 1; marker absent; 0.0 s
+RESULT B TOOL-RAN
+(exit 0)

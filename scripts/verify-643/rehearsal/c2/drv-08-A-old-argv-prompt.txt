@@ -1,0 +1,20 @@
+$ <venv python> scripts/verify-643/vm/drive643.py case A   (env names: <KEY_ENV>)
+[A] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE A launcher pid: 24609
+CASE A launcher parent_chain: python(24609) <- zsh(24511) <- zsh(24508)
+CASE A launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+CASE A codex: /tmp/claude-501/v643drv.fDGnMf/bin/codex
+CASE A launcher: codex exec (outside graftling)
+CASE A prompt delivery: argv (the old form, rehearsal knob V643_PROMPT_ARGV)
+CASE A arguments with a newline: 1
+CASE A exec help documents dash stdin: yes
+CASE A codex exit: 0
+CASE A thread: 01a2544766823000
+CASE A rollout: rollout-2026-11-27T00-00-00-01a2544766823000.jsonl (kept in rollouts/)
+CASE A prompt reached Codex: no (a user message in the rollout holds the exact tool command)
+CASE A tool calls in the rollout: 0
+CASE A marker file: absent
+CASE A wall time: 0.1 s
+CASE A codex sandbox runner (OBSERVED, never blocks): codex sandbox windows --full-auto -- powershell ... : exit 1; marker absent; 0.0 s
+RESULT A STOP prompt-not-delivered (no user message in the rollout holds the tool command)
+(exit 2)

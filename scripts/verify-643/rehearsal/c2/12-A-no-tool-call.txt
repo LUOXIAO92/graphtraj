@@ -1,0 +1,28 @@
+$ zsh scripts/verify-643/steps.zsh A
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [A] Case a: codex exec over SSH, outside graftling, [windows] sandbox = unelevated (bound 20 min). Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+$ gcloud compute ssh ... --command="<venv python> C:\v643\drive643.py case A"   (bound 1200s)
+[A] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' (stand-in)
+CASE A launcher session_id: 0 (stand-in)
+CASE A launcher in_job: True (stand-in)
+CASE A call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit NO-TOOL-CALL (stand-in)
+CASE A marker file: absent
+RESULT A NO-TOOL-CALL
+== evidence of A: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked; replacements: {"<MODEL>": 2, "<PROJECT>": 1}; files 3
+  an earlier fetch of A kept as A-prev-20261127013336
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v643/out A" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<BASE_URL>": 8, "<BASE_URL_HOST>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<MODEL>": 4, "<PROJECT>": 4, "<PROVIDER_ID>": 4, "<PROVIDER_NAME>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case A: one line per observable (4):
+  CASE A launcher session_id: 0 (stand-in)
+  CASE A launcher in_job: True (stand-in)
+  CASE A call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit NO-TOOL-CALL (stand-in)
+  CASE A marker file: absent
+next: the model made no tool call; rerun A once before going on
+next: zsh scripts/verify-643/steps.zsh A
+next: zsh scripts/verify-643/steps.zsh I
+next: zsh scripts/verify-643/steps.zsh D
+VERDICT 643 A: NO-TOOL-CALL (evidence PASS)
+(exit 0)

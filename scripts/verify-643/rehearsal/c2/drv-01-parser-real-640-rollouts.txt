@@ -1,0 +1,7 @@
+$ python3 -I rehearsal/check_parser643.py vm ../verify-640/vm <640 realhost evidence-live>/R-unelevated/rollouts <...>/R-unelevated-prev-*/rollouts
+rollouts/rollout-2026-11-26T15-19-50-01a21871-06a...: exec_command function_calls 4; 643 parser 4 call(s), exit codes [-1073741502]; 640 parser exit codes ['None']
+rollouts/rollout-2026-11-26T15-28-29-01a21878-f40...: exec_command function_calls 2; 643 parser 2 call(s), exit codes [-1073741502]; 640 parser exit codes ['None']
+rollouts/rollout-2026-11-26T15-28-29-01a21878-f4b...: exec_command function_calls 0; 643 parser 0 call(s), exit codes []; 640 parser exit codes []
+rollouts/rollout-2026-11-26T15-28-52-01a21879-4b5...: exec_command function_calls 0; 643 parser 0 call(s), exit codes []; 640 parser exit codes []
+PARSER PASS: 6 of 6 exec_command calls read as -1073741502
+(exit 0)

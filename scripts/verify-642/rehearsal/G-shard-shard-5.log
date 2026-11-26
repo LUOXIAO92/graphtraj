@@ -1,0 +1,7 @@
+...                                                                      [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_tool_name_592.py::test_no_production_line_names_the_old_tool_or_feature
+PASSED tests/test_tool_name_592.py::test_every_allowed_look_alike_is_still_there
+PASSED tests/test_tool_name_592.py::test_the_claude_hook_copy_names_subagents_and_tasks
+3 passed, 477 deselected in 2.46s

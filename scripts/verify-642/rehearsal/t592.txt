@@ -1,0 +1,21 @@
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY642_OUT VERIFY642_T VERIFY642_NO_PS
+== [t592] Main. tests/test_tool_name_592.py on HEAD a5c88dacbbaa3900649e267e33f8167822645fc6 + graftling 0.10.2 (wheel). pytest temp under TMPDIR=<TMPDIR> (outside the Harness). Dialog: none. No login.
+.........                                                                [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_tool_name_592.py::test_no_production_line_names_the_old_tool_or_feature
+PASSED tests/test_tool_name_592.py::test_every_allowed_look_alike_is_still_there
+PASSED tests/test_tool_name_592.py::test_the_guard_sees_the_forms_a_half_rename_leaves
+PASSED tests/test_tool_name_592.py::test_the_mcp_server_lists_subagents_and_tasks_only
+PASSED tests/test_tool_name_592.py::test_the_old_tool_name_is_unknown_to_graphtraj_mcp
+PASSED tests/test_tool_name_592.py::test_the_gateway_feature_is_subagents
+PASSED tests/test_tool_name_592.py::test_the_claude_hook_copy_names_subagents_and_tasks
+PASSED tests/test_tool_name_592.py::test_role_system_text_names_subagents
+PASSED tests/test_tool_name_592.py::test_skills_and_manuals_say_subagents
+9 passed in 0.88s
+exit=0
+
+RESULT 642 t592: PASS | 9 passed in 0.88s | record: <TMPDIR>/r642/T/t592-20261126T224325 | REHEARSAL (not evidence)
+next (paste): zsh <Harness>/.graphtraj/core/worktrees/642-tool-name-592-follows-627-activity/scripts/verify-642/steps.zsh G
+STEP-END t592 rc=0

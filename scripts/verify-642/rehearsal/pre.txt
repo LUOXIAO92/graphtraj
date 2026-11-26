@@ -1,0 +1,17 @@
+credential scrub: removed from this script's environment (names only): CLOUDSDK_PROXY_PASSWORD
+REHEARSAL (not acceptance evidence): VERIFY642_OUT VERIFY642_T VERIFY642_NO_PS
+== [pre] Main. Preflight, read only (creates <TMPDIR>/r642/T and <TMPDIR>/r642/out). Dialog: none. No login.
+zsh 5.9 runs <Harness>/.graphtraj/core/worktrees/642-tool-name-592-follows-627-activity/scripts/verify-642/steps.zsh
+candidate HEAD a5c88dacbbaa3900649e267e33f8167822645fc6 (642: test_tool_name_592 also allows Task 627's inspector member-count plural in main.tsx)
+PASS: base GraphTraj c18b4bebd42d9c7801fd5ba26a290d585a021118 is an ancestor of HEAD
+PASS: graftling v0.10.2 = 57bca73657d3135a4504904fcc3f1898c2419766 in <Harness>/graftling (wheel source)
+PASS: no uncommitted change in src, tests, pyproject.toml, the step file
+PASS: TMPDIR=<TMPDIR> is outside the Harness <Harness>
+PASS: click present in <Harness>/.venv-runtime/lib/python3.13/site-packages
+PASS: yaml present in <Harness>/.venv-runtime/lib/python3.13/site-packages
+PASS: websockets present in <Harness>/.venv-runtime/lib/python3.13/site-packages
+PASS: <HOME>/miniconda3/bin/python3.13: Python 3.13.11
+writes: <TMPDIR>/r642/T and <TMPDIR>/r642/out only. No network. dialog: none.
+RESULT 642 pre: PASS
+next (paste): zsh <Harness>/.graphtraj/core/worktrees/642-tool-name-592-follows-627-activity/scripts/verify-642/steps.zsh t592
+STEP-END pre rc=0

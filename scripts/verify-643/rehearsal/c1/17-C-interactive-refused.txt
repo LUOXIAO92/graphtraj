@@ -1,0 +1,10 @@
+$ zsh scripts/verify-643/steps.zsh C interactive
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== [C interactive] Case c: a graftling Codex child in VM_USER's interactive console session (scheduled task; bound 1 min). Login: gcloud. Dialog: none.
+C interactive is required only when case B's tool ran; B's verdict on the VM: TOOL-FAILED -1073741502
+next: zsh scripts/verify-643/steps.zsh C ssh
+next: zsh scripts/verify-643/steps.zsh D
+STOP: C interactive refused: case B's tool did not run (B: TOOL-FAILED -1073741502); next: zsh scripts/verify-643/steps.zsh C ssh
+VERDICT 643 C interactive: STOP
+(exit 1)

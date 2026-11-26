@@ -1,0 +1,6 @@
+$ zsh scripts/verify-643/steps.zsh A
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+== [A] Case a: codex exec over SSH, outside graftling, [windows] sandbox = unelevated (bound 20 min). Login: gcloud. Dialog: none.
+STOP: the Task firewall rules are missing; run: zsh scripts/verify-643/steps.zsh V   (or delete everything: zsh scripts/verify-643/steps.zsh D)
+VERDICT 643 A: STOP
+(exit 1)

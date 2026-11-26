@@ -1,0 +1,3 @@
+$ <venv python> scripts/verify-643/vm/drive643.py verdict C-interactive   (env names: )
+VERDICT-OF C-interactive none
+(exit 0)

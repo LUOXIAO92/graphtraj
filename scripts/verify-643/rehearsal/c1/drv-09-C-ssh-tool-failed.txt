@@ -1,0 +1,20 @@
+$ <venv python> scripts/verify-643/vm/drive643.py case C-ssh   (env names: <KEY_ENV>)
+[C-ssh] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE C-ssh launcher pid: 20021
+CASE C-ssh launcher parent_chain: python(20021) <- zsh(18124) <- zsh(18120)
+CASE C-ssh launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+CASE C-ssh codex: /private/tmp/claude-501/v643drv.JFFBxp/work/codex
+CASE C-ssh launcher: graftling AgentControl + CodexDriver child
+CASE C-ssh owner pid: 20022
+CASE C-ssh session: thread-1
+CASE C-ssh outcome: completed
+CASE C-ssh last message: tool ran
+CASE C-ssh runtime job: absent
+CASE C-ssh graftling process record: {"owned_at": 1795708702.560281, "runtime_pid": 20023, "tool_descendants": "/private/tmp/claude-501/v643drv.JFFBxp/work/agents-C-ssh/native/agent-f9c5a166d24d463697196d7ee593678e/tool-descendants-fd5897599c634dcca838995a80f0bc26.json", "tool_marker": "292517f599aa4616ace1357e41ef28d4", "worker_pid": 20022}
+CASE C-ssh rollout: rollout-failed.jsonl (kept in rollouts/)
+CASE C-ssh tool calls in the rollout: 1
+CASE C-ssh call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit -1073741502; exit code -1073741502: Chunk ID: f80e91 Wall time: 0.0001 seconds Process exited with code -1073741502 Original token count: 0 Output:
+CASE C-ssh marker file: absent
+CASE C-ssh wall time: 2.9 s
+RESULT C-ssh TOOL-FAILED -1073741502
+(exit 0)

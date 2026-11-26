@@ -1,0 +1,5 @@
+$ zsh scripts/verify-643/steps.zsh C
+scrubbed at start: 5 credential-class or provider variable(s) removed (names not shown)
+usage: zsh scripts/verify-643/steps.zsh C interactive|ssh
+VERDICT 643 C: STOP
+(exit 2)

@@ -1,0 +1,20 @@
+$ <venv python> scripts/verify-643/vm/drive643.py schedule B 120   (env names: <KEY_ENV>)
+session of the VM user: ACTIVE 1 console; query user: USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME | <VM_USER> session console id 1 state Active
+stand-in (not Windows): task B started as a plain subprocess, not a scheduled task
+--- the task's console (out/B/console.txt):
+[B] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE B launcher pid: 20073
+CASE B launcher parent_chain: python(20073) <- python(20072) <- zsh(18124) <- zsh(18120)
+CASE B launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+CASE B codex: /tmp/claude-501/v643drv.JFFBxp/bin/codex
+CASE B launcher: codex exec (outside graftling)
+CASE B codex exit: 0
+CASE B thread: 01a2708768499000
+CASE B rollout: rollout-2026-11-27T00-00-00-01a2708768499000.jsonl (kept in rollouts/)
+CASE B tool calls in the rollout: 1
+CASE B call 1: exec_command 'Set-Content -Path marker-643.txt -Value tool-ran' -> exit -1073741502; exit code -1073741502: Chunk ID: a0e20a Wall time: 0.0001 seconds Process exited with code -1073741502 Original token count: 0 Output:
+CASE B marker file: absent
+CASE B wall time: 0.0 s
+CASE B codex sandbox runner (OBSERVED, never blocks): codex sandbox windows --full-auto -- powershell ... : exit 1; marker absent; 0.0 s
+RESULT B TOOL-FAILED -1073741502
+(exit 0)

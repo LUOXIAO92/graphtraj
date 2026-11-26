@@ -1,0 +1,4 @@
+$ <venv python> scripts/verify-643/vm/drive643.py schedule B 60   (env names: <KEY_ENV>)
+session of the VM user: NONE; query user: No User exists for *
+RESULT B STOP the VM user has no Active console session (run step I first)
+(exit 2)

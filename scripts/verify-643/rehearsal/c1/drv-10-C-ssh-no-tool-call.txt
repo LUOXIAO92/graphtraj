@@ -1,0 +1,19 @@
+$ <venv python> scripts/verify-643/vm/drive643.py case C-ssh   (env names: <KEY_ENV>)
+[C-ssh] the tool command 'Set-Content -Path marker-643.txt -Value tool-ran' with [windows] sandbox = "unelevated" in a fresh work dir
+CASE C-ssh launcher pid: 20033
+CASE C-ssh launcher parent_chain: python(20033) <- zsh(18124) <- zsh(18120)
+CASE C-ssh launcher windows: NOT-WINDOWS (rehearsal): session, window station, desktop, token and job are Windows-only
+CASE C-ssh codex: /private/tmp/claude-501/v643drv.JFFBxp/work/codex
+CASE C-ssh launcher: graftling AgentControl + CodexDriver child
+CASE C-ssh owner pid: 20034
+CASE C-ssh session: thread-1
+CASE C-ssh outcome: completed
+CASE C-ssh last message: tool ran
+CASE C-ssh runtime job: absent
+CASE C-ssh graftling process record: {"owned_at": 1795708705.625084, "runtime_pid": 20035, "tool_descendants": "/private/tmp/claude-501/v643drv.JFFBxp/work/agents-C-ssh/native/agent-2f1d19786d304bbca70434fcb776cec6/tool-descendants-ce03ef2b24a445f2bfb7cb62eb08b6e9.json", "tool_marker": "d3f6e2af9f264533962627db50ecefe3", "worker_pid": 20034}
+CASE C-ssh rollout: rollout-no-call.jsonl (kept in rollouts/)
+CASE C-ssh tool calls in the rollout: 0
+CASE C-ssh marker file: absent
+CASE C-ssh wall time: 2.9 s
+RESULT C-ssh NO-TOOL-CALL
+(exit 0)

@@ -1,0 +1,34 @@
+Task 643 driver rehearsal on macOS (POSIX branches; graftling 2ee706eb7493 cloned from a bundle of dev)
+--- runs
+drv-01 parser-real-640-rollouts: expected /PARSER PASS/, got 'PARSER PASS: 6 of 6 exec_command calls read as -1073741502' -> yes
+drv-02 r0-no-key: expected /RESULT R0 STOP/, got 'RESULT R0 STOP' -> yes
+drv-03 r0-pass: expected /RESULT R0 PASS/, got 'RESULT R0 PASS' -> yes
+drv-04 A-no-key: expected /RESULT A STOP the key variable is not set/, got 'RESULT A STOP the key variable is not set for this user; run step K first' -> yes
+drv-05 A-tool-ran: expected /RESULT A TOOL-RAN/, got 'RESULT A TOOL-RAN' -> yes
+drv-06 A-tool-failed: expected /RESULT A TOOL-FAILED -1073741502/, got 'RESULT A TOOL-FAILED -1073741502' -> yes
+drv-07 A-no-tool-call: expected /RESULT A NO-TOOL-CALL/, got 'RESULT A NO-TOOL-CALL' -> yes
+drv-08 C-ssh-tool-ran: expected /RESULT C-ssh TOOL-RAN/, got 'RESULT C-ssh TOOL-RAN' -> yes
+drv-09 C-ssh-tool-failed: expected /RESULT C-ssh TOOL-FAILED -1073741502/, got 'RESULT C-ssh TOOL-FAILED -1073741502' -> yes
+drv-10 C-ssh-no-tool-call: expected /RESULT C-ssh NO-TOOL-CALL/, got 'RESULT C-ssh NO-TOOL-CALL' -> yes
+drv-11 session-none: expected /SESSION NONE/, got 'SESSION NONE' -> yes
+drv-12 session-disconnected: expected /SESSION NONE/, got 'SESSION NONE' -> yes
+drv-13 session-active: expected /SESSION ACTIVE 1 console/, got 'SESSION ACTIVE 1 console' -> yes
+drv-14 B-schedule-no-session: expected /RESULT B STOP the VM user has no Active console session/, got 'RESULT B STOP the VM user has no Active console session (run step I first)' -> yes
+drv-15 B-schedule-tool-failed: expected /RESULT B TOOL-FAILED -1073741502/, got 'RESULT B TOOL-FAILED -1073741502' -> yes
+drv-16 verdict-B: expected /VERDICT-OF B TOOL-FAILED -1073741502/, got 'VERDICT-OF B TOOL-FAILED -1073741502' -> yes
+drv-17 B-schedule-tool-ran: expected /RESULT B TOOL-RAN/, got 'RESULT B TOOL-RAN' -> yes
+drv-18 verdict-B-after-rerun: expected /VERDICT-OF B TOOL-RAN/, got 'VERDICT-OF B TOOL-RAN' -> yes
+drv-19 verdict-C-interactive-absent: expected /VERDICT-OF C-interactive none/, got 'VERDICT-OF C-interactive none' -> yes
+drv-20 C-interactive-schedule: expected /RESULT C-interactive TOOL-RAN/, got 'RESULT C-interactive TOOL-RAN' -> yes
+drv-21 scan-A: expected /SCAN PASS/, got 'SCAN PASS key checked, autologon password checked; replacements: {"<BASE_URL>": 1, "<KEY_ENV>": 1, "<MODEL>": 2, "<PROVIDER_ID>": 3, "<PROVIDER_NAME>": 1}; files 9' -> yes
+drv-22 scan-finds-planted-key: expected /SCAN FAIL/, got 'SCAN FAIL the key or the autologon password is in 1 file(s) (value not printed): ['planted.txt']' -> yes
+drv-23 scan-finds-planted-password: expected /SCAN FAIL/, got 'SCAN FAIL the key or the autologon password is in 1 file(s) (value not printed): ['planted.txt']' -> yes
+--- checks
+A TOOL-RAN: marker line 1, call line with exit 0 1, rollout kept 1, sandbox runner OBSERVED line 1
+A TOOL-FAILED: call line with exit -1073741502 1, marker absent 1, config.toml has [windows] sandbox = unelevated 1
+every case prints the launcher lines (pid, parent chain, Win32 facts NOT-WINDOWS here): 3 of 3; the verdict is the last line: 1
+C-ssh through graftling: outcome line 1, runtime_job line 1, graftling records kept 5 file(s)
+session lines never show the user name: 0 hit(s)
+B through the task body: done.json present, task-output.txt present, case lines printed by schedule 13
+consoles holding the key or the password: 0; committed-or-committable files holding a random value, the key or the password: 0
+VM-side evidence (out/) files still holding the model or base-URL host after the scans: 6 (only A and I were scanned here)

@@ -1,0 +1,7 @@
+# SKIPPED/FAILED/ERROR lines (line numbers removed): base eb5ad8e (<) vs candidate bbcea6d9 (>), sorted
+11a12
+> SKIPPED [1] tests/test_claude_windows_647.py: Windows only: the native refusal
+diff exit 1
+FAILED/ERROR lines: base 0, candidate 0
+base:      989 passed, 44 skipped in 264.00s (0:04:24)
+candidate: 994 passed, 45 skipped in 262.15s (0:04:22)

@@ -1,0 +1,12 @@
+# The tests Task 647 (W8 + W9) adds (graftling tests/test_claude_windows_647.py) and the W8 test it removes from
+# scripts/verify-632/windows-expected.txt. On the Windows runner each must PASS. The stand-in Claude Code is the
+# runner's own python.exe (a real executable: the host's parent check compares image paths); the venv case uses a
+# real venv made on the runner, whose Scripts\python.exe is CPython's venv launcher. No real Claude Code, model
+# or provider credential is involved.
+tests/test_claude_windows_647.py::test_claude_child_is_refused_on_native_windows[native]
+tests/test_claude_windows_647.py::test_claude_child_is_refused_on_native_windows[simulated]
+tests/test_claude_windows_647.py::test_marketplace_launcher_refuses_under_a_windows_sh
+tests/test_claude_windows_647.py::test_mod_starts_a_windows_venvs_base_interpreter
+tests/test_claude_windows_647.py::test_host_refuses_a_parent_that_is_not_the_selected_claude
+tests/test_claude_windows_647.py::test_generated_plugin_host_serves_one_call_and_ends_at_stdin_eof
+tests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable

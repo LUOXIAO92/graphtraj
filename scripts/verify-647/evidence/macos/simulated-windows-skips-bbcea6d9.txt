@@ -1,0 +1,127 @@
+# graftling bbcea6d9, macOS, simulated Windows skips (verify-632/evidence/macos/simulate_windows_skips.py), TMPDIR=/tmp/claude-501
+$ clean.sh env PYTHONPATH=tests:<verify-632/evidence/macos> ../venv-647/bin/python -m pytest -p no:cacheprovider -q -rs -p simulate_windows_skips -o junit_family=xunit1 --junitxml=<junit>
+........................................................................ [  6%]
+.ssssss.s...s.............s................................s.....sssssss [ 13%]
+ssss..........................................sssssss.ss......sssss..... [ 20%]
+.................................................................sssssss [ 27%]
+sssss.........sss..ssssss.................s................sssssssssssss [ 34%]
+ssssssssssssssssssssssssss.ssssssssss...............ssssssss............ [ 41%]
+.....................ssssssss..ss....................................... [ 48%]
+..................................s..........................ssssssss.s. [ 55%]
+..ss............................................................ssssssss [ 62%]
+ssssssssssssssssssss............................sssss.........s.ssssssss [ 69%]
+ss...................................................................... [ 76%]
+..sssssss..ss.............................................ssssssssssssss [ 83%]
+.sssssssssssssssssss..............ssssss.............ssssssssss.ssss.sss [ 90%]
+s....................................................................... [ 97%]
+....ss...sssssssssss...sssss...                                          [100%]
+- generated xml file: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/647-graftling-windows-claude/scripts/verify-647/evidence/macos/simulated-windows-skips-bbcea6d9-junit.xml -
+=========================== short test summary info ============================
+SKIPPED [11] tests/posix_only.py:37: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_approval_integration.py:43: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/posix_only.py:37: POSIX-only: a Claude child is refused on native Windows (647, W9)
+SKIPPED [1] tests/test_channel_windows_636.py:181: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:291: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:303: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:344: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:425: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:469: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:495: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:519: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:530: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:547: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:560: Windows-only: the named-pipe owner connection (636)
+SKIPPED [85] tests/posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_claude_gateway_login_613.py:111: POSIX-only: a Claude child is refused on native Windows (647, W9), before this check
+SKIPPED [1] tests/test_claude_gateway_login_613.py:122: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [2] tests/test_claude_gateway_login_613.py:139: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [1] tests/test_claude_marketplace_plugin.py:71: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [2] tests/test_claude_marketplace_plugin.py:86: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_claude_marketplace_plugin.py:136: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_claude_marketplace_plugin.py:160: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_claude_marketplace_plugin.py:172: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [2] tests/test_claude_marketplace_plugin.py:192: POSIX-only: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+SKIPPED [1] tests/test_claude_marketplace_plugin.py:217: POSIX-only: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+SKIPPED [1] tests/test_claude_permission_mode_578.py:81: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [2] tests/test_claude_permission_mode_578.py:95: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_permission_mode_578.py:114: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [4] tests/test_claude_permission_mode_578.py:122: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [3] tests/test_claude_review.py:165: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:176: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:187: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:206: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:220: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [3] tests/test_claude_review.py:232: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:251: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [3] tests/test_claude_review.py:258: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [4] tests/test_claude_review.py:277: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:302: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:327: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:344: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:355: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:377: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:391: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:408: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [2] tests/test_claude_review.py:425: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [4] tests/test_claude_review.py:440: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:466: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:477: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:490: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [3] tests/test_claude_review.py:501: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:513: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_review.py:532: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_send_closing_546.py:18: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sessions
+SKIPPED [1] tests/test_claude_windows_647.py:59: Windows only: the native refusal
+SKIPPED [1] tests/test_codex_review_relay.py:68: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_codex_review_relay.py:88: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [2] tests/test_codex_review_relay.py:101: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_codex_review_relay.py:119: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_codex_review_relay.py:130: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_codex_review_relay.py:138: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_codex_review_relay.py:148: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [2] tests/test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:58: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:79: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:193: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:209: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_standalone_host.py:596: POSIX-only: a read-only directory made with chmod 0o555 and checked with os.geteuid
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [26] tests/posix_only.py:37: POSIX-only: the host runs in its own process group (start_new_session) stopped with os.killpg and SIGKILL; its lock holder uses fcntl
+SKIPPED [1] tests/test_locks_durable_634.py:162: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:190: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:216: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:233: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_process_tree_635.py:333: POSIX-only: checks the process group (os.getpgid) and its POSIX signals
+SKIPPED [2] tests/test_process_tree_635.py:364: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:380: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:400: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:415: Windows only: Job Objects
+SKIPPED [1] tests/test_process_windows_633.py:141: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_provider_listing_609.py:137: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:145: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:286: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:302: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:311: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:354: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:366: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:376: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_provider_listing_609.py:391: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_unified_data_root_577.py:211: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_unified_data_root_577.py:224: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [3] tests/test_unified_data_root_577.py:235: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests/test_unified_data_root_577.py:277: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_unified_data_root_577.py:298: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_unified_data_root_577.py:307: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_unified_data_root_577.py:325: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_unified_data_root_577.py:386: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests/test_windows_emulation_619.py:106: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+SKIPPED [1] tests/test_windows_emulation_619.py:117: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+SKIPPED [1] tests/test_windows_emulation_619.py:137: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+SKIPPED [1] tests/test_windows_emulation_619.py:155: POSIX-only: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+775 passed, 264 skipped in 107.01s (0:01:47)
+exit 0

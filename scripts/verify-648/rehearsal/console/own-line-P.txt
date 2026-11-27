@@ -1,0 +1,61 @@
+$ VERIFY648_GRAFTLING=/tmp/claude-501/rh648/own-line/graftling VERIFY648_GREMOTE=/tmp/claude-501/rh648/own-line/gremote.git VERIFY648_GH=/tmp/claude-501/rh648/own-line/gh/gh VERIFY648_EVIDENCE=/tmp/claude-501/rh648/own-line/evidence VERIFY648_POLL_S=1 VERIFY648_APPEAR_S=10 VERIFY648_DONE_S=30 VERIFY648_EXPECTED=/tmp/claude-501/rh648/own-line-list.txt zsh steps.zsh P
+scrubbed at start: 5 credential-class or provider variables (names not printed)
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/648-graftling-windows-pi to graftling /tmp/claude-501/rh648/own-line/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/rh648/own-line/graftling; head f759fd6c1611ab4fe812de0eac1663d0551b6352 contains graftling dev eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866 (prerequisites: eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866; any other than the base an ancestor of it)
+--- bundle commits on eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+  f759fd6 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Pi on Windows: the host as Pi's direct child from a venv; no Pi child (648)
+PASS: author and committer are the noreply identity
+--- files changed since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+   .github/workflows/windows.yml  |   2 +-
+   PUBLIC_API.md                  |  14 +-
+   README.md                      |   3 +
+   src/graftling/control.py       |   3 +
+   src/graftling/pi/driver.py     |  23 +++
+   src/graftling/pi/extension.mjs |  33 ++++-
+   src/graftling/pi/host.py       |   6 +-
+   tests/test_approval_layers.py  |   2 +
+   tests/test_pi_windows_648.py   | 326 +++++++++++++++++++++++++++++++++++++++++
+   9 files changed, 403 insertions(+), 9 deletions(-)
+PASS: changed paths are within the allowed set: src/graftling/pi/extension.mjs, src/graftling/pi/driver.py, src/graftling/pi/host.py, src/graftling/control.py, PUBLIC_API.md, README.md, tests/test_pi_windows_648.py, tests/test_approval_layers.py, .github/workflows/windows.yml
+--- .github/workflows/windows.yml at f759fd6c1611ab4fe812de0eac1663d0551b6352 against eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing', 'agent/639-graftling-windows-codex', 'agent/648-graftling-windows-pi']
+PASS: the workflow is the base one with only its push branches line changed
+--- .github/workflows/windows.yml at eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866 (632's accepted workflow with 633's to 638's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing', 'agent/639-graftling-windows-codex']; judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: the 11 W10 tests of new-tests.txt are defined at f759fd6c1611ab4fe812de0eac1663d0551b6352 (tests/test_pi_windows_648.py, tests/test_approval_layers.py)
+PASS: /tmp/claude-501/rh648/own-line-list.txt parses: 2 expected Windows failures and 0 expected hangs (W10 (648) 1, W8 (not registered; outside this round) 1), 19 allowed environment skips
+FAIL: the list's W10 (648) entries are ['fail\ttests/test_pi_windows_648.py::test_pi_host_from_a_venv_runs_as_a_direct_child_of_pi'], not []
+FAIL: W10 tests listed as expected failures or hangs: ['tests/test_pi_windows_648.py::test_pi_host_from_a_venv_runs_as_a_direct_child_of_pi']
+  (judged as it stands now: f0347f676d12 sha256 prefix; Tasks 647 and 649 edit their own lines)
+NOTE: judged against /tmp/claude-501/rh648/own-line-list.txt (rehearsal)
+STOP: the expected list does not meet the checks above; nothing pushed
+VERDICT 648 P: STOP
+[exit 1]
+--- after P: remote absent

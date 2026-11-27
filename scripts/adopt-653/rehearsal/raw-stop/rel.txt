@@ -1,0 +1,2 @@
+before: dev e6a51445050d204be79e005fa84082938d9b8ec5 (in <SCRATCH>/gdev) | main 57bca73657d3135a4504904fcc3f1898c2419766 (in <SCRATCH>/g) | v0.11.0 absent
+STOP: graftling dev is e6a51445050d204be79e005fa84082938d9b8ec5, no longer 9650361e13d6ef9981c753038469ff3b9e44cfa6 (moved since dispatch: e6a5144 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.

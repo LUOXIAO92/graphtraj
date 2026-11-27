@@ -1,0 +1,12 @@
+Main transcripts read: <SCRATCH>/projects/-fake/11111111-2222-3333-4444-555555555653.jsonl
+[Main 11111111-2222-3333-4444-555555555653] scanned 1 file(s); split: after 2026-11-27T18:31:47Z (1795804307)
+[Main 11111111-2222-3333-4444-555555555653] calls at or before the split (not judged): none
+[Main 11111111-2222-3333-4444-555555555653] undated calls (no record time in any file): none
+[Main 11111111-2222-3333-4444-555555555653] calls of mcp__graphtraj__subagents after the split: 1; ok 1; others: []
+[Main 11111111-2222-3333-4444-555555555653] calls of mcp__graphtraj__tasks after the split: 1; ok 1; others: []
+CHECK 593 [Main 11111111-2222-3333-4444-555555555653] mcp__graphtraj__subagents called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+CHECK 593 [Main 11111111-2222-3333-4444-555555555653] mcp__graphtraj__tasks called and answered without error or refusal: PASS (ok 1, errors/refusals 0)
+INFO 593 [Main 11111111-2222-3333-4444-555555555653] old-name calls after the split: none
+CHECK 653 Mr Main called mcp__graphtraj__subagents and mcp__graphtraj__tasks after I without error (rec593.py above): PASS
+[Mr] tool calls after the split (3): ['ToolSearch', 'mcp__graphtraj__subagents', 'mcp__graphtraj__tasks']
+INFO 616 [Mr] ToolSearch {"query": "select:mcp__graphtraj__subagents", "max_results": 1}: ALLOWED (Claude Code loads the deferred schema of the same mcp__graphtraj tool; 614)

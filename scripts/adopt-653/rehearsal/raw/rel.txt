@@ -1,0 +1,8 @@
+before: dev 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (in <SCRATCH>/gdev) | main 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (in <SCRATCH>/g) | v0.11.0 67b0fe9aacc868c9c6b5a2818adc8449514221c4
+already released: v0.11.0 = main = dev = 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (nothing to do)
+v0.11.0 -> 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | dev 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | main 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | type tag | tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+CHECK 653 rel v0.11.0 peels to 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
+CHECK 653 rel graftling main == dev == v0.11.0^{} == 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
+CHECK 653 rel v0.11.0 is an annotated tag with the noreply tagger: PASS
+CHECK 653 rel v0.11.0 message names Windows, compatible and the user's decision of 2026-11-28: PASS
+CHECK 653 rel version at v0.11.0 is 0.11.0: PASS (__version__ = "0.11.0")

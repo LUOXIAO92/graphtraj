@@ -1,0 +1,1 @@
+plugin dialog expected at claude --continue: yes (one: the plugin/hooks trust dialog for graphtraj-claude-host, because hooks/host_context.mjs changes; the USER chooses trust)

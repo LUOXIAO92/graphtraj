@@ -1,0 +1,1 @@
+STOP: the Windows workflow has not passed (<SCRATCH>/out/raw/WIN.ok absent): run P (or W/X). Nothing pushed.

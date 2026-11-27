@@ -1,0 +1,8 @@
+[
+  "<SCRATCH>/project/.claude/settings.local.json",
+  "<SCRATCH>/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json",
+  "<SCRATCH>/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json",
+  "<SCRATCH>/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs",
+  "<SCRATCH>/project/.graphtraj/claude-host/config.json",
+  "<SCRATCH>/project/.mcp.json"
+]

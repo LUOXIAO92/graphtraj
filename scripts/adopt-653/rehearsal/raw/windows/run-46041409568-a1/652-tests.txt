@@ -1,0 +1,7 @@
+--- the 652 tests that must pass on Windows: 5
+  PASSED tests/test_claude_host_messages_652.py::test_host_names_the_unloaded_plugin_and_a_nested_caller
+  PASSED tests/test_claude_host_messages_652.py::test_marketplace_module_on_native_windows_names_configuration_write[project]
+  PASSED tests/test_claude_host_messages_652.py::test_marketplace_module_on_native_windows_names_configuration_write[data-root]
+  PASSED tests/test_claude_windows_647.py::test_mod_starts_a_windows_venvs_base_interpreter
+  PASSED tests/test_claude_windows_647.py::test_marketplace_launcher_refuses_under_a_windows_sh
+NEWTESTS PASS 5 of 5 652 tests passed

@@ -1,0 +1,48 @@
+JOB dsh-windows-tests | completed | success | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568/job/140649777810
+JOB windows-tests | completed | success | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568/job/140649778126
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | setup: must succeed
+  step  3 | success   | Check out the commit under test | setup: must succeed
+  step  4 | success   | Fail unless the linked package documents are symbolic links | setup: must succeed
+  step  5 | success   | Set up Node 22.18.0 x64 | setup: must succeed
+  step  6 | success   | Set up Python 3.13.7 x64 | setup: must succeed
+  step  7 | success   | Install graftling and pinned test tools | setup: must succeed
+  step  8 | success   | Show runner, Python and pytest versions | setup: must succeed
+  step  9 | success   | Run the graftling test suite | suite: success or failure (results judged from JUnit)
+  step 10 | success   | Retain JUnit results | upload: must succeed
+  step 18 | success   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 19 | success   | Post Set up Node 22.18.0 x64 | other: success or skipped
+  step 20 | success   | Post Check out the commit under test | other: success or skipped
+  step 21 | success   | Complete job | other: success or skipped
+JOB claude-real-entry | completed | success | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568/job/140649778142
+JUDGE PASS 7 setup steps and the upload succeeded; the suite step ran
+JOB dsh-windows-tests | completed | success | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568/job/140649777810
+  step  1 | success   | Set up job
+  step  2 | success   | Keep symbolic links on this runner
+  step  3 | success   | Check out the commit under test
+  step  4 | success   | Set up Node 24.22.3 x64
+  step  5 | success   | Set up Python 3.13.7 x64
+  step  6 | success   | Install graftling and pinned test tools
+  step  7 | success   | Restore the npm download cache
+  step  8 | success   | Install DSH with npm
+  step  9 | success   | Run graftling's DSH test files against the installed DSH
+  step 10 | success   | Retain the DSH test results
+  step 17 | success   | Post Restore the npm download cache
+  step 18 | success   | Post Set up Python 3.13.7 x64
+  step 19 | success   | Post Set up Node 24.22.3 x64
+  step 20 | success   | Post Check out the commit under test
+  step 21 | success   | Complete job
+JOBSTATE PASS dsh-windows-tests: every step succeeded
+JOB claude-real-entry | completed | success | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568/job/140649778142
+  step  1 | success   | Set up job
+  step  2 | success   | Keep symbolic links on this runner
+  step  3 | success   | Check out the commit under test
+  step  4 | success   | Set up Python 3.13.7 x64
+  step  5 | success   | Install graftling and pinned test tools
+  step  6 | success   | Fetch Claude Code for win32-x64
+  step  7 | success   | Run real Claude Code against graftling
+  step  8 | success   | Retain the real Claude Code evidence
+  step 15 | success   | Post Set up Python 3.13.7 x64
+  step 16 | success   | Post Check out the commit under test
+  step 17 | success   | Complete job
+JOBSTATE PASS claude-real-entry: every step succeeded

@@ -1,0 +1,5 @@
+SAME    .mcp.json
+    graphtraj.env kept: [] | other servers (names): []
+SAME    .claude/settings.local.json
+SAME    .graphtraj/claude-host/config.json
+predictions written to <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/ventries

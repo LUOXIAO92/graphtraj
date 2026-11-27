@@ -1,0 +1,98 @@
+members_idle [I]: Task 653's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses <SCRATCH>/project/.venv-runtime)
+members_idle [I]: no member execution is active: PASS
+I start 2026-11-28 03:31:45
+other backups before the install (never written):
+  I kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795804265 | entries 3
+
+### backup: venv (manifest + cp -Rp), hook copy, entry files (mode 600), the tools R needs; COMPLETE marker
+manifest <SCRATCH>/scr/backup/venv.manifest: 1002 entries
+
+SAME entries=1002 differences=0 (<SCRATCH>/scr/backup/venv)
+manifest <SCRATCH>/scr/backup/plugin.manifest: 5 entries
+backup COMPLETE: <SCRATCH>/scr/backup
+CHECK 653 I entry files unchanged since V: PASS
+members_idle [I-before-pip]: Task 653's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses <SCRATCH>/project/.venv-runtime)
+members_idle [I-before-pip]: no member execution is active: PASS
+graphtraj-0.1.0-py3-none-any.whl: OK
+graftling-0.11.0-py3-none-any.whl: OK
+
+### ONE pip install --force-reinstall --no-deps --no-index graphtraj-0.1.0-py3-none-any.whl graftling-0.11.0-py3-none-any.whl
+Processing <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41/graphtraj-0.1.0-py3-none-any.whl
+Processing <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0/graftling-0.11.0-py3-none-any.whl
+Installing collected packages: graphtraj, graftling
+  Attempting uninstall: graphtraj
+    Found existing installation: graphtraj 0.1.0
+    Uninstalling graphtraj-0.1.0:
+      Successfully uninstalled graphtraj-0.1.0
+  Attempting uninstall: graftling
+    Found existing installation: graftling 0.10.2
+    Uninstalling graftling-0.10.2:
+      Successfully uninstalled graftling-0.10.2
+
+Successfully installed graftling-0.11.0 graphtraj-0.1.0
+CHECK 653 I one pip install of both wheels (graphtraj afaaca41, graftling v0.11.0): PASS
+graphtraj direct_url: {"archive_info": {"hash": "sha256=9bc3bd4ef606de9d5be856e281f8f0ed28803fcf16be3d276d2793250594d998", "hashes": {"sha256": "9bc3bd4ef606de9d5be856e281f8f0ed28803fcf16be3d276d2793250594d998"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.11.0 direct_url: {"archive_info": {"hash": "sha256=8374a9061e369daa36b2ede1d2710b6c59c035f6827aa6105e276ce47e3c36d8", "hashes": {"sha256": "8374a9061e369daa36b2ede1d2710b6c59c035f6827aa6105e276ce47e3c36d8"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0/graftling-0.11.0-py3-none-any.whl"}
+CHECK 653 I graphtraj direct_url is wheels-afaaca41: PASS
+CHECK 653 I graftling direct_url is wheels-0.11.0: PASS
+CHECK 653 I graftling 0.10.2 dist-info gone: PASS
+CHECK 653 I installed graphtraj equals the afaaca41 wheel: PASS
+CHECK 653 I installed graphtraj files equal the wheel: PASS
+CHECK 653 I installed graftling equals the v0.11.0 wheel: PASS
+CHECK 653 I installed graftling files equal the wheel: PASS
+diff -r archive manuals vs <SCRATCH>/project/.venv-runtime/share/graphtraj/manuals (the marker excepted): none
+CHECK 653 I share/graphtraj/manuals equals git archive afaaca41's manuals (7 product files): PASS
+CHECK 653 I production pip check: PASS (WARNING: The directory '<HOME>/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+CHECK 653 I production bin subagents, subagents-mcp, graphtraj-mcp (this venv's python): PASS
+CHECK 503 layout python is the venv: PASS (<SCRATCH>/project/.venv-runtime vs <SCRATCH>/project/.venv-runtime)
+CHECK 503 layout one distribution: PASS (1 found: [('0.11.0', '<SCRATCH>/project/.venv-runtime/lib/python3.13/site-packages/graftling-0.11.0.dist-info')])
+CHECK 503 layout one package: PASS (graftling dir: True; dist-info: ['graftling-0.11.0.dist-info']; other graftling entries: none)
+CHECK 503 layout wheel install: PASS (INSTALLER='pip' direct_url=file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0/graftling-0.11.0-py3-none-any.whl editable=False)
+CHECK 503 layout no source link: PASS (links none; sys.path entries with graftling outside the venv none)
+CHECK 503 layout imported here: PASS (<SCRATCH>/project/.venv-runtime/lib/python3.13/site-packages/graftling/__init__.py version 0.11.0)
+CHECK 503 layout graphtraj clean: PASS (0 graftling/ files in graphtraj RECORD)
+503 layout: PASS (0 failed)
+CHECK 653 I one graftling 0.11.0 in production (onegraft.py): PASS
+production graphtraj graftling: 0.1.0 0.11.0
+CHECK 653 I production reports graphtraj 0.1.0 and graftling 0.11.0: PASS
+  0.11.0 marker in <SCRATCH>/project/.venv-runtime/lib/python3.13/site-packages/graftling: __init__.py version 0.11.0 x1 | claude/host_context.mjs WINDOWS_UNSUPPORTED x1, BOOT x1 | claude/settings.py native_claude x1 | claude/native_host.py 'so Claude Code has not loaded it' x1
+CHECK 653 I production 0.11.0's code is in <SCRATCH>/project/.venv-runtime/lib/python3.13/site-packages/graftling (version; 647's BOOT and 652's WINDOWS_UNSUPPORTED in host_context.mjs; native_claude; 652's unloaded-plugin message): PASS
+
+### the hook copy: regenerated ONLY through the product (configuration --write from the installed code; never edited by hand)
+configuration --write rc=0 (output: <SCRATCH>/out/raw/I-configuration.txt)
+CHECK 653 I configuration --write rc 0: PASS
+CHECK 653 I the hook copy equals V's validated regeneration (<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/vplug/graphtraj-claude-host): PASS
+SAME    .claude-plugin/plugin.json (expected SAME)
+SAME    hooks/hooks.json (expected SAME)
+CHANGED hooks/host_context.mjs: 3 lines removed, 67 added | graftling template v0.10.2 -> v0.11.0: 3 removed, 67 added
+RESULT plugin653: exactly the template change
+CHECK 653 I the hook copy changed from the backup EXACTLY by graftling's v0.10.2..v0.11.0 host_context.mjs change (plugin653.py above; at claude --continue the plugin/hooks trust dialog: trust): PASS
+CHECK 653 I .mcp.json byte-identical to the backup (V predicted SAME): PASS
+CHECK 653 I .claude/settings.local.json byte-identical to the backup (V predicted SAME): PASS
+CHECK 653 I .graphtraj/claude-host/config.json byte-identical to the backup (V predicted SAME): PASS
+
+### real entries of production (run in the isolated <SCRATCH>/vproject)
+I-production server: <SCRATCH>/project/.venv-runtime/bin/graphtraj-mcp | serverInfo: {'name': 'graphtraj', 'version': '0.1.0'} | tools: ['subagents', 'tasks']
+I-production tools/call agents: {"jsonrpc": "2.0", "id": 3, "error": {"code": -32602, "message": "Unknown tool: agents"}}
+CHECK 593 I-production MCP tools/list is exactly subagents, tasks: PASS
+CHECK 593 I-production MCP tool agents is unknown (error answer, no alias): PASS
+CHECK 653 I-production graphtraj-mcp tools/list is exactly subagents, tasks and 'agents' is unknown (mcp593.py above): PASS
+I-production server: <SCRATCH>/project/.venv-runtime/bin/graphtraj-mcp | tools: ['subagents', 'tasks']
+I-production subagents discover query 'start an agent': error False | features ['create']
+CHECK 617 I-production subagents discover 'start an agent' answers exactly [create] (615): PASS (['create'])
+I-production subagents discover query 'list models': error False | features ['models']
+CHECK 617 I-production subagents discover 'list models' still finds models: PASS (['models'])
+CHECK 653 I-production 617's q617.py mcp (still holds on 0.11.0): discover 'start an agent' = [create], 'list models' finds models: PASS
+Codex hooks entry configuration: ['<SCRATCH>/project/.venv-runtime/bin/python -m graphtraj.runtimes.codex.stop_hook'] ['SessionEnd', 'SessionStart', 'Stop']
+CHECK 653 Codex hooks entry of <SCRATCH>/project/.venv-runtime names its python for SessionStart/Stop/SessionEnd: PASS
+CHECK 653 Codex hooks entry of <SCRATCH>/project/.venv-runtime runs (neutral event answers {}): PASS ({})
+CHECK 653 I no process started on <SCRATCH>/project/.venv-runtime during the install: PASS
+other backups after the install:
+  I kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795804265 | entries 3
+CHECK 653 I other backups under <SCRATCH>/project/tmp untouched: same presence, COMPLETE, mtime and entry count before and after: PASS

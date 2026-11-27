@@ -1,0 +1,91 @@
+CHECK 653 00 runs under zsh: PASS (zsh 5.9)
+uv: <HOME>/miniconda3/bin/uv -> <HOME>/miniconda3/bin/uv | uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin)
+CHECK 653 00 this uv's 'uv tool install --help' lists --managed-python: PASS
+TMPDIR=/tmp/claude-501 (outside the Harness)
+CHECK 653 00 TMPDIR outside the Harness: PASS
+CHECK 653 00 <SCRATCH>/uvtool-653 absent: PASS
+gh: <SCRATCH>/stub/gh | gh version 0.0.0 (stand-in) | auth status:   Logged in to github.com account fixture (stand-in) 
+CHECK 653 00 gh auth status rc 0 (gh's stored login; P, W, X read and dispatch the Actions run with it): PASS
+
+### graftling repository <SCRATCH>/g (read only)
+dev: 9650361e13d6ef9981c753038469ff3b9e44cfa6 in <SCRATCH>/gdev | main: 57bca73657d3135a4504904fcc3f1898c2419766 in <SCRATCH>/g | origin: <SCRATCH>/origin.git
+CHECK 653 00 graftling dev = 9650361e13d6ef9981c753038469ff3b9e44cfa6: PASS
+CHECK 653 00 graftling main = 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2): PASS
+CHECK 653 00 origin of <SCRATCH>/g is <SCRATCH>/origin.git: PASS
+CHECK 653 00 dev is checked out in <SCRATCH>/gdev and main in <SCRATCH>/g: PASS
+CHECK 653 00 both worktrees clean (git status --porcelain empty): PASS
+CHECK 653 00 v0.11.0 absent locally: PASS
+CHECK 653 00 local agent/653-graftling-0.11.0 absent or the release commit: PASS (absent)
+
+### GitHub <SCRATCH>/origin.git (git ls-remote, read only)
+GitHub main: 57bca73657d3135a4504904fcc3f1898c2419766 | dev: 57bca73657d3135a4504904fcc3f1898c2419766 | v0.11.0: absent | agent/653-graftling-0.11.0: absent
+CHECK 653 00 GitHub main = 57bca73657d3135a4504904fcc3f1898c2419766: PASS
+CHECK 653 00 GitHub v0.11.0 absent: PASS
+CHECK 653 00 GitHub dev (57bca73657d3135a4504904fcc3f1898c2419766) is 9650361e13d6ef9981c753038469ff3b9e44cfa6 or its ancestor, so rp fast-forwards it: PASS
+CHECK 653 00 GitHub agent/653-graftling-0.11.0 absent or the release commit (P pushes it, fast-forward only): PASS (absent)
+
+### bundle <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/adopt-653/graftling-0.11.0.bundle
+sha256: 660b394a384a1e645805bf4bc62f6411abcb46a0eb8ec59049e81ba51bcfb30e
+CHECK 653 00 bundle sha256 = 660b394a384a1e645805bf4bc62f6411abcb46a0eb8ec59049e81ba51bcfb30e: PASS
+CHECK 653 00 bundle verifies against <SCRATCH>/g (its prerequisite 9650361e13d6ef9981c753038469ff3b9e44cfa6 is there): PASS
+list-heads: 67b0fe9aacc868c9c6b5a2818adc8449514221c4 refs/heads/agent/653-graftling-0.11.0
+CHECK 653 00 bundle head = 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (agent/653-graftling-0.11.0): PASS
+
+### the release commit, read from a scratch clone <SCRATCH>/scr/g00.git (objects shared from <SCRATCH>/g, which is not written)
+67b0fe9aacc868c9c6b5a2818adc8449514221c4: graftling 0.11.0 (653) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | committer LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | parent 9650361e13d6ef9981c753038469ff3b9e44cfa6
+CHECK 653 00 67b0fe9aacc868c9c6b5a2818adc8449514221c4 is one commit on 9650361e13d6ef9981c753038469ff3b9e44cfa6: PASS
+CHECK 653 00 release commit author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+changed files: CHANGELOG.md PUBLIC_API.md src/graftling/__init__.py src/graftling/claude-plugin/.claude-plugin/plugin.json src/graftling/dsh/package.json src/graftling/pi/package.json 
+CHECK 653 00 the release commit changes exactly the 4 version files, CHANGELOG.md and PUBLIC_API.md (so windows.yml and the tests are 652's): PASS
+version at 67b0fe9aacc868c9c6b5a2818adc8449514221c4: __version__ = "0.11.0"
+CHANGELOG first heading: ## 0.11.0 (compatible; minor release by the user's decision of 2026-11-28)
+CHECK 653 00 CHANGELOG at 67b0fe9aacc868c9c6b5a2818adc8449514221c4 starts '## 0.11.0 (compatible; minor release by the user's decision of 2026-11-28)' and has no '## Unreleased': PASS
+README install line: uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+C5 runs:             uv tool install --managed-python "git+https://github.com/LUOXIAO92/graftling.git"
+CHECK 653 00 README's first install line at 67b0fe9aacc868c9c6b5a2818adc8449514221c4 is C5's tagless command: PASS
+
+### the Windows judgement's inputs (read only)
+PASS: <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/verify-632/windows-expected.txt parses: 0 expected Windows failures and 0 expected hangs (none), 19 allowed environment skips
+CHECK 653 00 windows-expected.txt parses (<Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/verify-632/windows-expected.txt): PASS
+CHECK 653 00 652's new-tests.txt is readable (5 node ids; each must PASS on Windows): PASS
+
+### production <SCRATCH>/project/.venv-runtime (read only)
+production graphtraj graftling: 0.1.0 0.10.2
+graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473", "hashes": {"sha256": "ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.10.2 direct_url: {"archive_info": {"hash": "sha256=300559ab2221d4d257ceeac10678e2a1de8abc40e0ce495abeb9acf072b9f1ee", "hashes": {"sha256": "300559ab2221d4d257ceeac10678e2a1de8abc40e0ce495abeb9acf072b9f1ee"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2/graftling-0.10.2-py3-none-any.whl"}
+CHECK 653 00 production is graphtraj 0.1.0 (616's wheels-4ef36426) + graftling 0.10.2 (625's wheels-0.10.2): PASS
+CHECK 653 00 616's wheels-4ef36426 (R's graphtraj) verifies, sha256 ac805ac9b3fb88f3...: PASS
+CHECK 653 00 625's wheels-0.10.2 (R's graftling) verifies, sha256 300559ab2221d4d2...: PASS
+CHECK 653 00 production pip check: PASS (WARNING: The directory '<HOME>/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
+production bin: subagents subagents-mcp graphtraj-mcp agent-runner 
+CHECK 653 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
+
+### backups under <SCRATCH>/project/tmp (information; none is required; never written)
+  00 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795804265 | entries 3
+CHECK 653 00 backup <SCRATCH>/scr/backup absent: PASS
+
+### this Worktree <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption (GraphTraj adoption commit afaaca41 + scripts/adopt-653/)
+product guard: HEAD 4dcb359e042a8a38588a5c048f75a7db52ce70b5 | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+CHECK 653 00 TARGET afaaca41 = GraphTraj dev 5a17543e + pyproject.toml (range "graftling>=0.10.0,<0.12",); HEAD differs from TARGET only under scripts/adopt-653/; clean: PASS
+graphtraj product changes 4ef36426 (production) .. afaaca41 (information): manuals/task-delivery/references/command-inputs.md pyproject.toml src/graphtraj/graph/github_backup.py src/graphtraj/interfaces/tools.py | desktop/src files changed: 21 (not in the graphtraj wheel; B checks)
+CHECK 653 00 Task 653 ready (current_definition 20261128T030645.311984+0900.md exists): PASS
+hook copy and entry files (hashes; V and I compare against them):
+  d35a47ddcc32cd8b26e785d0da6071ec2b9f5e5e7585875e9cbc1ca03156dddb  <SCRATCH>/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs
+  02299ad72cd0f6316f21f1fccc367b7a4a8e9985e45e9bc4b30b97810f55e9fe  <SCRATCH>/project/.claude/skills/graphtraj-claude-host/hooks/hooks.json
+  ca13e022a2e263a9b635da3e31baea516867694661561dc9e7db923b10f5326b  <SCRATCH>/project/.claude/skills/graphtraj-claude-host/.claude-plugin/plugin.json
+  d6e603eb4281e5ed0a70f74f476c3bc2374e70b5fda463f1ef72a0196252514e  <SCRATCH>/project/.mcp.json
+  981985dfe9c8b6975d4d1ec698932f807dd5ba8b315ff37cd7d9e88e97baa112  <SCRATCH>/project/.claude/settings.local.json
+  f2bd0213a97127d5fc81edbae5d7841078684b84eba69d158fe3420cfb3c72ab  <SCRATCH>/project/.graphtraj/claude-host/config.json
+
+### Claude: version and one claude -p probe (the Claude login the user approved, named in Task 653's definition (production adoption))
+claude: <SCRATCH>/stub/claude -> <SCRATCH>/stub/claude | version: 2.1.330 (stub Claude Code, rehearsal fixture) | recorded at 00: 2.1.330 (stub Claude Code, rehearsal fixture)
+claude -p probe: model claude-opus-5-5 | apiKeySource none | answer 'READY-653 claude-opus-5-5 (stub, rehearsal fixture)' (stream: <SCRATCH>/scr/00-probe.jsonl)
+CHECK 653 00 claude -p answers READY-653 on claude-opus-5-5 through the Claude login (apiKeySource none: no API key): PASS
+
+### Main's Session (I, M, Mr need it)
+no host serving <SCRATCH>/project/.graphtraj/claude-host/config.json found by ps
+source: newest transcript 11111111-2222-3333-4444-555555555653.jsonl
+MAIN=11111111-2222-3333-4444-555555555653 (saved to <SCRATCH>/scr/main.session)
+CHECK 653 00 Main's Session id found: PASS
+members_idle [00]: Task 653's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+members_idle [00]: no member execution is active: PASS

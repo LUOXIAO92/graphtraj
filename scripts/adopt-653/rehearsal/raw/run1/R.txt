@@ -1,0 +1,20 @@
+members_idle [R]: Task 653's Leader and Engineer must have ended their turns; member Workers and swarm batches running now: 0
+guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
+guard: zombies (information): 0
+guard: BLOCKING 0 (no process uses <SCRATCH>/project/.venv-runtime)
+members_idle [R]: no member execution is active: PASS
+
+SAME entries=1002 differences=0 (<SCRATCH>/project/.venv-runtime)
+CHECK 653 R venv equals the pre-install bytes: PASS
+
+SAME entries=5 differences=0 (<SCRATCH>/project/.claude/skills/graphtraj-claude-host)
+CHECK 653 R hook copy restored: PASS
+<SCRATCH>/project/.mcp.json: OK
+<SCRATCH>/project/.claude/settings.local.json: OK
+<SCRATCH>/project/.graphtraj/claude-host/config.json: OK
+CHECK 653 R entry files restored: PASS
+graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473", "hashes": {"sha256": "ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/616-graphtraj-614-production-adoption/adoption/wheels-4ef36426/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.10.2 direct_url: {"archive_info": {"hash": "sha256=300559ab2221d4d257ceeac10678e2a1de8abc40e0ce495abeb9acf072b9f1ee", "hashes": {"sha256": "300559ab2221d4d257ceeac10678e2a1de8abc40e0ce495abeb9acf072b9f1ee"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2/graftling-0.10.2-py3-none-any.whl"}
+CHECK 653 R graphtraj from 616's wheels-4ef36426 again (sha256 ac805ac9b3fb88f3... in direct_url): PASS
+CHECK 653 R graftling 0.10.2 from 625's wheel again (sha256 300559ab2221d4d2... in direct_url): PASS
+CHECK 653 R pip check: PASS (WARNING: The directory '<HOME>/Library/Caches/pip' or its parent directory is not owned or is not writable by th)

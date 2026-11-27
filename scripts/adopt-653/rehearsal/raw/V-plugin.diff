@@ -1,0 +1,81 @@
+diff -r <SCRATCH>/project/.claude/skills/graphtraj-claude-host/hooks/host_context.mjs <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/vplug/graphtraj-claude-host/hooks/host_context.mjs
+151c151,152
+< // python3 on PATH, as its MCP server's bin/graftling-host does.
+---
+> // python3 on PATH, as its MCP server's bin/graftling-host does. It does not run
+> // on native Windows (WINDOWS_UNSUPPORTED).
+155a157,180
+> // The marketplace plugin on native Windows (652). Its MCP server's sh launcher cannot
+> // keep the process Claude Code started, and Claude Code 2.1.314 failed that server
+> // there before any sh ran, so this module, which Claude Code runs there, says it: in
+> // the transcript, in /agents-context and as one line in host.log, where the launcher
+> // writes its own refusals.
+> const WINDOWS_UNSUPPORTED = 'graftling plugin: the subagents host did not start: the graftling '
+>   + 'marketplace plugin is not supported on native Windows. Disable it and generate this '
+>   + "project's plugin files with configuration --write instead (graftling's install/claude-code.md, "
+>   + 'Generate the plugin files); then restart Claude Code.';
+> 
+> // host.log as the launcher finds it: GRAFTLING_DATA_ROOT when absolute (a drive or
+> // / path), else <Session cwd>/.agents-control. The line is appended; a failed write
+> // leaves the transcript line.
+> async function logUnsupported($) {
+>   const root = await $.env.get('GRAFTLING_DATA_ROOT');
+>   const directory = root && /^([A-Za-z]:[\\/]|[\\/])/.test(root) ? root
+>     : `${String(await $.session.cwd()).replace(/[\\/]+$/, '')}/.agents-control`;
+>   const path = `${directory}/host.log`;
+>   try {
+>     const before = await $.fs.exists(path) ? await $.fs.read(path) : '';
+>     await $.fs.write(path, `${before}${new Date().toISOString()} ${WINDOWS_UNSUPPORTED}\n`);
+>   } catch {}
+> }
+> 
+172a198,222
+> // On Windows a venv's Scripts\python.exe is CPython's venv launcher: it starts the
+> // base python.exe as its child, so the host would see the launcher, not Claude Code,
+> // as this call's parent and refuse it. There the base interpreter is started itself:
+> // -I keeps the working directory and PYTHON* variables out of sys.path, and BOOT adds
+> // only the venv's site-packages (venv, the argument after it) before running the host.
+> const BOOT = 'import runpy, site, sys, sysconfig; venv = sys.argv.pop(1); '
+>   + "site.addsitedir(sysconfig.get_path('purelib', vars={'base': venv, 'platbase': venv})); "
+>   + "sys.argv[0] = 'graftling.claude.host'; runpy.run_module('graftling.claude.host', run_name='__main__', alter_sys=True)";
+> 
+> // The argv start that runs graftling.claude.host with `python` (647).
+> async function hostCommand($, python) {
+>   const module = [python, '-m', 'graftling.claude.host'];
+>   if ((await $.env.get('OS')) !== 'Windows_NT') return module;
+>   // <venv>\Scripts\python.exe -> <venv>; a python without pyvenv.cfg there is no venv.
+>   const venv = String(python).replace(/[\\/]+[^\\/]+[\\/]+[^\\/]+$/, '');
+>   if (venv === String(python) || !(await $.fs.exists(`${venv}/pyvenv.cfg`))) return module;
+>   const home = /^\s*home\s*=\s*(.+?)\s*$/m.exec(await $.fs.read(`${venv}/pyvenv.cfg`))?.[1];
+>   const base = home && `${home.replace(/[\\/]+$/, '')}${home.includes('\\') ? '\\' : '/'}python.exe`;
+>   if (!base || !(await $.fs.exists(base))) {
+>     throw new Error(`graftling: ${venv}/pyvenv.cfg names no base interpreter `
+>       + `(home = ${home ?? 'missing'}), so the host cannot be reached without the venv launcher.`);
+>   }
+>   return [base, '-I', '-c', BOOT, venv];
+> }
+> 
+178c228
+<     command = [await pluginPython($), '-m', 'graftling.claude.host', 'context',
+---
+>     command = [...await hostCommand($, await pluginPython($)), 'context',
+184c234
+<     command = [python, '-m', 'graftling.claude.host', 'context', '--config', config];
+---
+>     command = [...await hostCommand($, python), 'context', '--config', config];
+309a360,369
+>     // The marketplace plugin on native Windows: no host, so nothing to associate or push.
+>     if (PLUGIN && (await $.env.get('OS')) === 'Windows_NT') {
+>       state.inert = true;
+>       state.unsupported = true;
+>       await logUnsupported($);
+>       try { await $.ui.log(WINDOWS_UNSUPPORTED); } catch {}
+>       await $.command.register({name: 'agents-context',
+>         description: 'Show current native Session and agents registration without a model turn', immediate: true});
+>       return next(event);
+>     }
+317a378,381
+>     if (state.unsupported) {
+>       await $.ui.log(WINDOWS_UNSUPPORTED);
+>       return {};
+>     }

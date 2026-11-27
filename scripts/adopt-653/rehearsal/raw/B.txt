@@ -1,0 +1,51 @@
+product guard: HEAD 4dcb359e042a8a38588a5c048f75a7db52ce70b5 | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+CHECK 653 B setuptools importable offline in <HOME>/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
+
+### graftling: git archive v0.11.0 (67b0fe9aacc868c9c6b5a2818adc8449514221c4) -> <SCRATCH>/scr/gsrc
+  src/graftling/__init__.py: __version__ = "0.11.0"
+  src/graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.11.0",
+  src/graftling/dsh/package.json:   "version": "0.11.0",
+  src/graftling/pi/package.json:   "version": "0.11.0",
+CHECK 653 B archive version strings (__init__.py and the 3 json) all 0.11.0: PASS
+CHANGELOG first heading: ## 0.11.0 (compatible; minor release by the user's decision of 2026-11-28)
+CHECK 653 B CHANGELOG heading '## 0.11.0 (compatible; minor release by the user's decision of 2026-11-28)' and no '## Unreleased': PASS
+CHECK 653 B PUBLIC_API records the 0.11.0 classification: PASS
+graftling wheel: graftling-0.11.0-py3-none-any.whl
+  METADATA Version: 0.11.0
+  graftling/__init__.py: __version__ = "0.11.0"
+  graftling/claude-plugin/.claude-plugin/plugin.json:   "version": "0.11.0",
+  graftling/dsh/package.json:   "version": "0.11.0",
+  graftling/pi/package.json:   "version": "0.11.0",
+CHECK 653 B graftling wheel reports 0.11.0 (METADATA, __init__.py, the 3 json): PASS
+  [console_scripts]: subagents subagents-mcp 
+CHECK 653 B graftling console scripts are exactly subagents, subagents-mcp: PASS
+graftling graftling-0.11.0-py3-none-any.whl vs <SCRATCH>/scr/gsrc/src: files 106 same=106 differing=0 | expected none | expected but equal: none
+CHECK 653 B graftling wheel equals git archive v0.11.0: PASS
+CHECK 653 B the graftling wheel's files equal git archive v0.11.0: PASS
+  0.11.0 marker in <SCRATCH>/scr/wheelview/graftling: __init__.py version 0.11.0 x1 | claude/host_context.mjs WINDOWS_UNSUPPORTED x1, BOOT x1 | claude/settings.py native_claude x1 | claude/native_host.py 'so Claude Code has not loaded it' x1
+CHECK 653 B graftling wheel 0.11.0's code is in <SCRATCH>/scr/wheelview/graftling (version; 647's BOOT and 652's WINDOWS_UNSUPPORTED in host_context.mjs; native_claude; 652's unloaded-plugin message): PASS
+graftling wheel build/ or __pycache__/ entries: 0
+CHECK 653 B no build/ or __pycache__ in the graftling wheel: PASS
+
+### graphtraj: git archive afaaca41e5c148048e0ce8bb0d1d7c352505a9f3 -> <SCRATCH>/scr/tsrc
+graphtraj wheel: graphtraj-0.1.0-py3-none-any.whl
+graphtraj graphtraj-0.1.0-py3-none-any.whl vs <SCRATCH>/scr/tsrc/src: files 142 same=142 differing=0 | expected none | expected but equal: none
+CHECK 653 B graphtraj wheel equals git archive afaaca41: PASS
+CHECK 653 B the graphtraj wheel's graphtraj/ files equal git archive afaaca41: PASS
+graphtraj wheel entries from desktop/ (.tsx, .css): 0
+CHECK 653 B the graphtraj wheel ships nothing from desktop/src (626/627 change only the desktop app, outside the wheel): PASS
+data files in the pyproject: 7 | in the wheel: 7 | differing or missing: 0
+data files changed since production (616s wheels-4ef36426; information, 641/642: command-inputs.md): ['share/graphtraj/manuals/task-delivery/references/command-inputs.md']
+Requires-Dist: ['PyYAML<7,>=6', 'click<9,>=8.1', 'graftling<0.12,>=0.10.0', 'websockets<17,>=15'] | 616 wheel: ['PyYAML<7,>=6', 'click<9,>=8.1', 'graftling<0.11,>=0.10.0', 'websockets<17,>=15']
+CHECK 653 B graphtraj data files equal the archive manuals (7 files): PASS
+CHECK 653 B graphtraj entry_points.txt identical to 616s wheels-4ef36426: PASS
+CHECK 653 B graphtraj Requires-Dist other than graftling identical to 616s wheels-4ef36426: PASS
+CHECK 653 B graphtraj requires graftling graftling<0.12,>=0.10.0: includes 0.11.0 and 0.10.2, excludes 0.12.0: PASS
+graphtraj wheel build/ or __pycache__/ entries: 0
+CHECK 653 B no build/ or __pycache__ in the graphtraj wheel: PASS
+
+### the wheels G, V and I install: <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0 and <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41
+graftling-0.11.0-py3-none-any.whl: OK
+graphtraj-0.1.0-py3-none-any.whl: OK
+CHECK 653 B <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0 and <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41 hold the wheels with SHA256SUMS and COMMIT: PASS
+wheel sha256: graftling 8374a9061e369daa36b2ede1d2710b6c59c035f6827aa6105e276ce47e3c36d8  graftling-0.11.0-py3-none-any.whl | graphtraj 9bc3bd4ef606de9d5be856e281f8f0ed28803fcf16be3d276d2793250594d998  graphtraj-0.1.0-py3-none-any.whl

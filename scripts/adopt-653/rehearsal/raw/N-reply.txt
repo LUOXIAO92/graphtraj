@@ -1,0 +1,1 @@
+member reply (fixture): last_message "DONE-653"; status: {"configuration": "opus_coding_team.advisor", "model": "claude-opus-5-5"}

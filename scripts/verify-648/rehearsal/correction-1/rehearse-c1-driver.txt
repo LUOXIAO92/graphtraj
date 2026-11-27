@@ -1,0 +1,16 @@
+--- ancestor-00.txt
+VERDICT 648 00: PASS (P ready: yes; remote branch ancestor; candidate graftling 57153234f90829e6629765e5b985f20c1491353c)
+[exit 0]
+--- ancestor-P.txt
+VERDICT 648 P: PASS (run 51000000000 attempt 1 on 57153234f90829e6629765e5b985f20c1491353c; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1047 tests: 807 passed, 0 failed as listed, 0 hangs as listed, 219 POSIX-only skips, 21 environment skips; W10 tests: 11 of 11 W10 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- ancestor-00-again.txt
+VERDICT 648 00: PASS (P ready: yes; remote branch equal; candidate graftling 57153234f90829e6629765e5b985f20c1491353c)
+[exit 0]
+--- ancestor-W.txt
+VERDICT 648 W: PASS (run 51000000000 attempt 1 on 57153234f90829e6629765e5b985f20c1491353c; mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1047 tests: 807 passed, 0 failed as listed, 0 hangs as listed, 219 POSIX-only skips, 21 environment skips; W10 tests: 11 of 11 W10 tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 0]
+--- venv-fails-P.txt
+VERDICT 648 P: FAIL (run 51000000000 attempt 1 on 57153234f90829e6629765e5b985f20c1491353c; mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: FAIL 1 unexpected failures; W10 tests: FAIL 10 of 11 W10 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]
+UNCHANGED (the rehearsal wrote only scratch clones)

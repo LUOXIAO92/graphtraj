@@ -1,0 +1,17 @@
+# Temporary measurement (not committed code): graftling.pi.driver.require_platform also refused when X648_FORCE=1
+# was set (in-process and inherited by subprocess hosts), and the candidate suite ran with 632's
+# simulate_windows_skips plugin. Before the fix to tests/test_approval_layers.py and without the refusal in
+# PiDriver.prepare, 7 tests failed (first block); with the committed design, none (second block). The temporary
+# line was removed before commit f759fd6c (grep for X648 in src finds nothing).
+## first measurement (refusal also in prepare)
+>       assert not failed, created
+FAILED tests/test_agents_connections_presets.py::test_pi_driver_applies_model_and_effort_and_resolves_another_provider
+FAILED tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[pi]
+FAILED tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[pi]
+FAILED tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[pi]
+FAILED tests/test_approval_layers.py::test_workspace_changes_only_the_cwd_of_every_native_driver[pi]
+FAILED tests/test_pi_dsh_child_tools_551.py::test_pi_driver_keeps_the_choice_only_when_given
+FAILED tests/test_pi_standalone_host.py::test_child_model_is_not_bound_to_the_parent_model
+7 failed, 765 passed, 261 skipped in 109.81s (0:01:49)
+## final design
+772 passed, 261 skipped in 108.24s (0:01:48)

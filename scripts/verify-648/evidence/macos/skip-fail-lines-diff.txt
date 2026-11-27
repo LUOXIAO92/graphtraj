@@ -1,0 +1,2 @@
+24a25
+> SKIPPED tests/test_pi_windows_648.py:289: Windows only: a venv launcher and a .cmd shim

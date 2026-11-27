@@ -1,0 +1,17 @@
+# The tests Task 648 (W10) adds (graftling tests/test_pi_windows_648.py) and the tests it changes to keep running on
+# Windows (tests/test_approval_layers.py: its stand-in Pi driver skips the Pi child refusal, as it already replaces
+# prepare and start). On the Windows runner each must PASS. The Pi is a stand-in: npm's pi.cmd shape starting node with
+# a stand-in entry that loads graftling's real extension.mjs; the venv test makes its venv on the runner.
+# No existing test was opened: the other POSIX-only Pi host tests give node a '#!' fake Python as GRAFTLING_PYTHON,
+# which node cannot start without a shell on Windows.
+tests/test_pi_windows_648.py::test_require_platform_refuses_only_windows[posix]
+tests/test_pi_windows_648.py::test_require_platform_refuses_only_windows[windows]
+tests/test_pi_windows_648.py::test_a_pi_child_create_is_refused_on_windows_before_selection_or_launch
+tests/test_pi_windows_648.py::test_a_pi_child_driver_of_another_host_is_refused_on_windows_first[posix]
+tests/test_pi_windows_648.py::test_a_pi_child_driver_of_another_host_is_refused_on_windows_first[windows]
+tests/test_pi_windows_648.py::test_direct_python_changes_only_a_windows_venv_python
+tests/test_pi_windows_648.py::test_pi_host_through_the_shim_serves_an_mcp_call_and_ends_at_stdin_eof
+tests/test_pi_windows_648.py::test_pi_host_from_a_venv_runs_as_a_direct_child_of_pi
+tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[pi]
+tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[pi]
+tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[pi]

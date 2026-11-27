@@ -1,0 +1,127 @@
+$ VERIFY648_GRAFTLING=/tmp/claude-501/rh648/setup-fail/graftling VERIFY648_GREMOTE=/tmp/claude-501/rh648/setup-fail/gremote.git VERIFY648_GH=/tmp/claude-501/rh648/setup-fail/gh/gh VERIFY648_EVIDENCE=/tmp/claude-501/rh648/setup-fail/evidence VERIFY648_POLL_S=1 VERIFY648_APPEAR_S=10 VERIFY648_DONE_S=30 zsh steps.zsh P
+scrubbed at start: 5 credential-class or provider variables (names not printed)
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/648-graftling-windows-pi to graftling /tmp/claude-501/rh648/setup-fail/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/rh648/setup-fail/graftling; head f759fd6c1611ab4fe812de0eac1663d0551b6352 contains graftling dev eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866 (prerequisites: eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866; any other than the base an ancestor of it)
+--- bundle commits on eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+  f759fd6 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Pi on Windows: the host as Pi's direct child from a venv; no Pi child (648)
+PASS: author and committer are the noreply identity
+--- files changed since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+   .github/workflows/windows.yml  |   2 +-
+   PUBLIC_API.md                  |  14 +-
+   README.md                      |   3 +
+   src/graftling/control.py       |   3 +
+   src/graftling/pi/driver.py     |  23 +++
+   src/graftling/pi/extension.mjs |  33 ++++-
+   src/graftling/pi/host.py       |   6 +-
+   tests/test_approval_layers.py  |   2 +
+   tests/test_pi_windows_648.py   | 326 +++++++++++++++++++++++++++++++++++++++++
+   9 files changed, 403 insertions(+), 9 deletions(-)
+PASS: changed paths are within the allowed set: src/graftling/pi/extension.mjs, src/graftling/pi/driver.py, src/graftling/pi/host.py, src/graftling/control.py, PUBLIC_API.md, README.md, tests/test_pi_windows_648.py, tests/test_approval_layers.py, .github/workflows/windows.yml
+--- .github/workflows/windows.yml at f759fd6c1611ab4fe812de0eac1663d0551b6352 against eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing', 'agent/639-graftling-windows-codex', 'agent/648-graftling-windows-pi']
+PASS: the workflow is the base one with only its push branches line changed
+--- .github/workflows/windows.yml at eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866 (632's accepted workflow with 633's to 638's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing', 'agent/639-graftling-windows-codex']; judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: the 11 W10 tests of new-tests.txt are defined at f759fd6c1611ab4fe812de0eac1663d0551b6352 (tests/test_pi_windows_648.py, tests/test_approval_layers.py)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-632/windows-expected.txt parses: 1 expected Windows failures and 0 expected hangs (W8 (not registered; outside this round) 1), 19 allowed environment skips
+PASS: the list's W10 (648) entries are as 648 committed them: none
+PASS: none of the 11 W10 tests is listed; other Tasks' entries (1 in all) are judged as the list stands now
+  (judged as it stands now: 64593bbeaaa3 sha256 prefix; Tasks 647 and 649 edit their own lines)
+PASS: agent/648-graftling-windows-pi is absent on graftling /tmp/claude-501/rh648/setup-fail/gremote.git
+PASS: /tmp/claude-501/rh648/setup-fail/graftling has no local agent/648-graftling-windows-pi (P creates it from the bundle)
+$ git -C /tmp/claude-501/rh648/setup-fail/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-648/graftling-648.bundle refs/heads/agent/648-graftling-windows-pi:refs/heads/agent/648-graftling-windows-pi
+  From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-648/graftling-648.bundle
+   * [new branch]      agent/648-graftling-windows-pi -> agent/648-graftling-windows-pi
+PASS: /tmp/claude-501/rh648/setup-fail/graftling local agent/648-graftling-windows-pi = f759fd6c1611ab4fe812de0eac1663d0551b6352
+$ git -C /tmp/claude-501/rh648/setup-fail/graftling push /tmp/claude-501/rh648/setup-fail/gremote.git refs/heads/agent/648-graftling-windows-pi:refs/heads/agent/648-graftling-windows-pi   (f759fd6c1611ab4fe812de0eac1663d0551b6352)
+  To /tmp/claude-501/rh648/setup-fail/gremote.git
+   * [new branch]      agent/648-graftling-windows-pi -> agent/648-graftling-windows-pi
+PASS: graftling /tmp/claude-501/rh648/setup-fail/gremote.git agent/648-graftling-windows-pi = f759fd6c1611ab4fe812de0eac1663d0551b6352
+looking for the .github/workflows/windows.yml run (event push) of f759fd6c1611ab4fe812de0eac1663d0551b6352 on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+run 51000000000 present after 1s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+waiting for run 51000000000 (completion bound 30s, poll 1s)
+  [19:49:04] run 51000000000: completed failure
+--- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head f759fd6c1611ab4fe812de0eac1663d0551b6352 | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | setup: must succeed
+  step  3 | success   | Check out the commit under test | setup: must succeed
+  step  4 | success   | Fail unless the linked package documents are symbolic links | setup: must succeed
+  step  5 | success   | Set up Node 22.18.0 x64 | setup: must succeed
+  step  7 | success   | Set up Python 3.13.7 x64 | setup: must succeed
+  step  8 | failure   | Install graftling and pinned test tools | setup: must succeed
+  step  9 | skipped   | Show runner, Python and pytest versions | setup: must succeed
+  step 10 | skipped   | Run the graftling test suite | suite: success or failure (results judged from JUnit)
+  step 11 | success   | Retain JUnit results | upload: must succeed
+  step 12 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 13 | skipped   | Post Set up Node 22.18.0 x64 | other: success or skipped
+  step 14 | success   | Post Check out the commit under test | other: success or skipped
+  step 15 | success   | Complete job | other: success or skipped
+--- job log saved: /tmp/claude-501/rh648/setup-fail/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
+  per-file pytest summaries: 1
+$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-f759fd6c1611ab4fe812de0eac1663d0551b6352-1 -D /tmp/claude-501/rh648/setup-fail/evidence/run-51000000000-a1/junit
+test files in f759fd6c1611ab4fe812de0eac1663d0551b6352: 67
+--- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-632/windows-expected.txt
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+run_test_files exit code: missing
+merged JUnit files: 0
+collected in JUnit: 0 | passed 0 | failed 0 | errors 0 | skipped 0
+--- POSIX-only skips: 0 in 0 modules
+--- allowed environment skips (not Windows-specific): 0
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 1; observed failures and errors: 0 (0 as expected)
+--- unexpected failures: 0
+    origins of the unexpected failures: 
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 1
+  ABSENT tests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable | 
+observed list written: /tmp/claude-501/rh648/setup-fail/evidence/run-51000000000-a1/observed-expected.txt
+--- the W10 tests (648) in this run: 11 expected to pass
+  ABSENT tests/test_pi_windows_648.py::test_require_platform_refuses_only_windows[posix]
+  ABSENT tests/test_pi_windows_648.py::test_require_platform_refuses_only_windows[windows]
+  ABSENT tests/test_pi_windows_648.py::test_a_pi_child_create_is_refused_on_windows_before_selection_or_launch
+  ABSENT tests/test_pi_windows_648.py::test_a_pi_child_driver_of_another_host_is_refused_on_windows_first[posix]
+  ABSENT tests/test_pi_windows_648.py::test_a_pi_child_driver_of_another_host_is_refused_on_windows_first[windows]
+  ABSENT tests/test_pi_windows_648.py::test_direct_python_changes_only_a_windows_venv_python
+  ABSENT tests/test_pi_windows_648.py::test_pi_host_through_the_shim_serves_an_mcp_call_and_ends_at_stdin_eof
+  ABSENT tests/test_pi_windows_648.py::test_pi_host_from_a_venv_runs_as_a_direct_child_of_pi
+  ABSENT tests/test_approval_layers.py::test_native_request_falls_back_to_the_parent_and_approval_passes[pi]
+  ABSENT tests/test_approval_layers.py::test_a_decline_is_forwarded_to_the_runtime[pi]
+  ABSENT tests/test_approval_layers.py::test_no_text_rule_refuses_an_approval_that_looks_like_credential_egress[pi]
+evidence: /tmp/claude-501/rh648/setup-fail/evidence/run-51000000000-a1 (git-ignored unless a rehearsal root was given; copy it into tracked files in a new commit)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-648/steps.zsh W 51000000000    (observe again; no push, no re-run)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-648/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
+next: correction round: compare /tmp/claude-501/rh648/setup-fail/evidence/run-51000000000-a1/observed-expected.txt with /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-632/windows-expected.txt and read /tmp/claude-501/rh648/setup-fail/evidence/run-51000000000-a1/w10-tests.txt; after a new bundle: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-648/steps.zsh 00 then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/648-graftling-windows-pi/scripts/verify-648/steps.zsh P
+VERDICT 648 P: FAIL (run 51000000000 attempt 1 on f759fd6c1611ab4fe812de0eac1663d0551b6352; mechanics: FAIL step 'Install graftling and pinned test tools' is failure; step 'Show runner, Python and pytest versions' is skipped; step 'Run the graftling test suite' is skipped (did not run the suite to its end); run_test_files exit code missing: the driver did not finish (0 or 1 expected); no per-file records (files.json): [Errno 2] No such file or directory: '/tmp/claude-501/rh648/setup-fail/evidence/run-51000000000-a1/junit/files.json'; results: FAIL JUnit holds no test; 1 listed failures skipped or absent; W10 tests: FAIL 0 of 11 W10 tests passed; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]

@@ -147,7 +147,7 @@ Everything runs through `zsh steps.zsh <step>` against scratch copies under `$TM
   - P's push to the scratch origin and the real judge: `VERDICT 653 P: PASS`, with 1061 tests (793 passed, 224 POSIX-only skips, 44 environment skips), 5/5 652 tests, dsh-windows-tests, and claude-real-entry with 5 items. W was rehearsed as well;
   - rel, rp and gh;
   - B, including no desktop entries and the range check;
-  - **G through `run_test_shards.py`**. It waited behind a fixture "other suite" and ended `RESULT 653 G/GR: PASS | 31 passed, 3750 deselected | … | test interpreter graftling: 0.11.0`. The PASSED lines include the repository-fixture test `test_runtime_distribution.py::test_wheels_have_separate_owners` (TARGET's wheel against the installed 0.11.0), 641's `test_github_backup.py` (20), the intent tests and the MCP tests;
+  - **G through `run_test_shards.py`**. It waited behind a fixture "other suite" and ended `RESULT 653 G/GR: PASS | 31 passed, 3750 deselected | … | test interpreter graftling: 0.11.0`. The PASSED lines include the repository-fixture test `test_runtime_distribution.py::test_wheels_have_separate_owners` (TARGET's wheel against the installed 0.11.0), 641's `test_github_backup.py` (21), the intent tests and the MCP tests;
   - **C5** from tagless `git+file://`: 0.11.0, commit_id 67b0fe9a, uv-managed CPython 3.14.7, `subagents --help` rc 0, the marker;
   - **V:** `CHANGED hooks/host_context.mjs: 3 lines removed, 67 added | template: 3 removed, 67 added`, `RESULT plugin653: exactly the template change`, and 3× SAME entries;
   - **I:** one pip call for both wheels; `configuration --write`; the hook copy equals V's; the entries byte-identical; the other backups unchanged;

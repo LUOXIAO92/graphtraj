@@ -1,0 +1,3 @@
+# Evidence the real steps (P, W, X, M) write; never committed (it can hold temporary paths and runner facts).
+evidence/
+__pycache__/

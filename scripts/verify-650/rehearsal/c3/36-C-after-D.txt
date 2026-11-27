@@ -1,0 +1,6 @@
+$ zsh scripts/verify-650/steps.zsh C
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [C] The Claude Code host: cases venv, claude, claude-refuse, claude-caller, claude-probe, claude-market in VM_USER's console session (a scheduled task each; bound 1 min each, 6 min at most). Login: gcloud. Dialog: none.
+STOP: the Task firewall rules are missing; run: zsh scripts/verify-650/steps.zsh V   (or delete everything: zsh scripts/verify-650/steps.zsh D)
+VERDICT 650 C: STOP
+(exit 1)

@@ -169,10 +169,47 @@ if ((NpmVersion '@deepseek-ai/dsh') -ne $Pins.dsh) {
 $where = (& where.exe dsh) -join ', '
 [Console]::Out.WriteLine("  where dsh: $where")
 
-$Site = (& $VenvPy -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])').Trim()
+# No double quote inside a native argument: Windows PowerShell 5.1 drops them (correction 2; line 129's form).
+$Site = ([string](& $VenvPy -c "import sysconfig; print(sysconfig.get_path('purelib'))")).Trim()
+if (-not $Site -or -not (Test-Path -LiteralPath $Site -PathType Container)) { Fail "the uv tool venv's site-packages was not found (sysconfig purelib: '$Site')" }
+foreach ($part in @('graftling\pi', 'graftling\dsh')) {
+  if (-not (Test-Path -LiteralPath (Join-Path $Site $part) -PathType Container)) { Fail "$part is missing in the uv tool venv's site-packages ($Site)" }
+}
 Say "pi install of graftling's Pi package ($Site\graftling\pi)"
 $code = Logged 'pi-install.txt' { & (Join-Path $NpmBin 'pi.cmd') install (Join-Path $Site 'graftling\pi') }
 if ($code -ne 0) { Fail "pi install exit $code (out\V\pi-install.txt)" }
+# Correction 2: this npm skips install scripts of global installs (`npm warn install-scripts`). The skipped names are
+# recorded as an observation (DSH stays as npm installed it: no reinstall, no scripts allowed). pnpm, needed by
+# `dsh plugin add`, is made runnable by running its own skipped script (preinstall/postinstall: node install.js) when
+# `pnpm --version` does not answer.
+$skipped = @(foreach ($log in @('npm-pnpm.txt', 'npm-_earendil-works_pi-coding-agent.txt', 'npm-dsh.txt')) {
+  $path = Join-Path $Out $log
+  if (Test-Path $path) {
+    Select-String -Path $path -Pattern 'npm warn install-scripts\s+(\S+@\S+) \(' | ForEach-Object { "$log : $($_.Matches[0].Groups[1].Value)" }
+  }
+})
+Set-Content -Encoding UTF8 -Path (Join-Path $Out 'npm-skipped-scripts.txt') -Value ($(if ($skipped) { $skipped } else { 'no install-scripts warning found in the npm logs' }))
+[Console]::Out.WriteLine("  npm skipped install scripts of: $(($skipped | ForEach-Object { ($_ -split ' : ')[1] }) -join ', ') (out\V\npm-skipped-scripts.txt)")
+$PnpmCmd = Join-Path $NpmBin 'pnpm.cmd'
+function PnpmVersion {
+  try { $text = ((& $PnpmCmd --version 2>&1) | Out-String).Trim() } catch { return '' }
+  if ($LASTEXITCODE -eq 0 -and $text -match '^\d+\.\d+\.\d+$') { return $text }
+  return ''
+}
+$pv = PnpmVersion
+if ($pv) {
+  [Console]::Out.WriteLine("  pnpm answers --version: $pv (no repair needed)")
+} else {
+  $PnpmDir = Join-Path $NpmBin 'node_modules\pnpm'
+  $scripts = (Get-Content -Raw (Join-Path $PnpmDir 'package.json') | ConvertFrom-Json).scripts
+  if ($scripts.postinstall -ne 'node install.js') { Fail "pnpm does not answer --version and its postinstall is '$($scripts.postinstall)', not 'node install.js'" }
+  Push-Location $PnpmDir
+  $code = Logged 'pnpm-install-js.txt' { & $Node install.js }
+  Pop-Location
+  $pv = PnpmVersion
+  if (-not $pv) { Fail "pnpm still does not answer --version after running its skipped script 'node install.js' (exit $code; out\V\pnpm-install-js.txt)" }
+  [Console]::Out.WriteLine("  pnpm repaired by its own skipped script (node install.js, exit $code): --version $pv")
+}
 Say "dsh plugin add of graftling's DSH plugin to the headless profile ($Site\graftling\dsh)"
 $code = Logged 'dsh-plugin-add.txt' { & (Join-Path $NpmBin 'dsh.cmd') plugin --profile headless add (Join-Path $Site 'graftling\dsh') }
 if ($code -ne 0) { Fail "dsh plugin add exit $code (out\V\dsh-plugin-add.txt)" }

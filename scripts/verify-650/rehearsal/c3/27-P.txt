@@ -1,0 +1,117 @@
+$ zsh scripts/verify-650/steps.zsh P
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [P] The Pi host: cases pi, pi-refuse, pi-caller, pi-nonascii, pi-kill in VM_USER's console session (a scheduled task each; bound 1 min each, 5 min at most). Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== case pi: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd schedule pi 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v650-pi registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/pi/console.txt):
+CASE pi launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+CASE pi first item: PASS (stand-in)
+CASE pi second item: OBSERVED (stand-in)
+RESULT pi PASS
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd cleanup pi"   (bound 180s)
+  CLEANUP pi: 0 leftover process(es) ended
+== evidence of pi: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of pi kept as pi-prev-20261127234938
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out pi" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<CLAUDE_BASE_URL>": 8, "<CLAUDE_BASE_URL_HOST>": 4, "<CLAUDE_HAIKU_MODEL>": 4, "<CLAUDE_MODEL>": 4, "<DSH_CHILD_BASE_URL>": 8, "<DSH_CHILD_BASE_URL_HOST>": 4, "<DSH_CHILD_MODEL>": 4, "<DSH_MAIN_ARG>": 4, "<DSH_MAIN_KEY_VAR>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<PI_KEY_VAR>": 4, "<PI_MODEL>": 4, "<PI_PROVIDER>": 4, "<PROJECT>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case pi: one line per item (3):
+  CASE pi launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+  CASE pi first item: PASS (stand-in)
+  CASE pi second item: OBSERVED (stand-in)
+--- RESULT pi PASS
+== case pi-refuse: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd schedule pi-refuse 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v650-pi-refuse registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/pi-refuse/console.txt):
+CASE pi-refuse launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+CASE pi-refuse first item: PASS (stand-in)
+CASE pi-refuse second item: OBSERVED (stand-in)
+RESULT pi-refuse PASS
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd cleanup pi-refuse"   (bound 180s)
+  CLEANUP pi-refuse: 0 leftover process(es) ended
+== evidence of pi-refuse: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of pi-refuse kept as pi-refuse-prev-20261127234945
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out pi-refuse" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<CLAUDE_BASE_URL>": 8, "<CLAUDE_BASE_URL_HOST>": 4, "<CLAUDE_HAIKU_MODEL>": 4, "<CLAUDE_MODEL>": 4, "<DSH_CHILD_BASE_URL>": 8, "<DSH_CHILD_BASE_URL_HOST>": 4, "<DSH_CHILD_MODEL>": 4, "<DSH_MAIN_ARG>": 4, "<DSH_MAIN_KEY_VAR>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<PI_KEY_VAR>": 4, "<PI_MODEL>": 4, "<PI_PROVIDER>": 4, "<PROJECT>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case pi-refuse: one line per item (3):
+  CASE pi-refuse launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+  CASE pi-refuse first item: PASS (stand-in)
+  CASE pi-refuse second item: OBSERVED (stand-in)
+--- RESULT pi-refuse PASS
+== case pi-caller: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd schedule pi-caller 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v650-pi-caller registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/pi-caller/console.txt):
+CASE pi-caller launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+CASE pi-caller first item: PASS (stand-in)
+CASE pi-caller second item: OBSERVED (stand-in)
+RESULT pi-caller PASS
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd cleanup pi-caller"   (bound 180s)
+  CLEANUP pi-caller: 0 leftover process(es) ended
+== evidence of pi-caller: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of pi-caller kept as pi-caller-prev-20261127234951
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out pi-caller" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<CLAUDE_BASE_URL>": 8, "<CLAUDE_BASE_URL_HOST>": 4, "<CLAUDE_HAIKU_MODEL>": 4, "<CLAUDE_MODEL>": 4, "<DSH_CHILD_BASE_URL>": 8, "<DSH_CHILD_BASE_URL_HOST>": 4, "<DSH_CHILD_MODEL>": 4, "<DSH_MAIN_ARG>": 4, "<DSH_MAIN_KEY_VAR>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<PI_KEY_VAR>": 4, "<PI_MODEL>": 4, "<PI_PROVIDER>": 4, "<PROJECT>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case pi-caller: one line per item (3):
+  CASE pi-caller launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+  CASE pi-caller first item: PASS (stand-in)
+  CASE pi-caller second item: OBSERVED (stand-in)
+--- RESULT pi-caller PASS
+== case pi-nonascii: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd schedule pi-nonascii 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v650-pi-nonascii registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/pi-nonascii/console.txt):
+CASE pi-nonascii launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+CASE pi-nonascii first item: PASS (stand-in)
+CASE pi-nonascii second item: OBSERVED (stand-in)
+RESULT pi-nonascii PASS
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd cleanup pi-nonascii"   (bound 180s)
+  CLEANUP pi-nonascii: 0 leftover process(es) ended
+== evidence of pi-nonascii: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out pi-nonascii" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<CLAUDE_BASE_URL>": 8, "<CLAUDE_BASE_URL_HOST>": 4, "<CLAUDE_HAIKU_MODEL>": 4, "<CLAUDE_MODEL>": 4, "<DSH_CHILD_BASE_URL>": 8, "<DSH_CHILD_BASE_URL_HOST>": 4, "<DSH_CHILD_MODEL>": 4, "<DSH_MAIN_ARG>": 4, "<DSH_MAIN_KEY_VAR>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<PI_KEY_VAR>": 4, "<PI_MODEL>": 4, "<PI_PROVIDER>": 4, "<PROJECT>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case pi-nonascii: one line per item (3):
+  CASE pi-nonascii launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+  CASE pi-nonascii first item: PASS (stand-in)
+  CASE pi-nonascii second item: OBSERVED (stand-in)
+--- RESULT pi-nonascii PASS
+== case pi-kill: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd schedule pi-kill 60"   (bound 360s)
+session of the VM user: ACTIVE 1 console (stand-in)
+scheduled task v650-pi-kill registered (LogonType Interactive, RunLevel Highest) and started (stand-in)
+--- the task's console (out/pi-kill/console.txt):
+CASE pi-kill launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+CASE pi-kill first item: PASS (stand-in)
+CASE pi-kill second item: OBSERVED (stand-in)
+RESULT pi-kill PASS
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd cleanup pi-kill"   (bound 180s)
+  CLEANUP pi-kill: 0 leftover process(es) ended
+== evidence of pi-kill: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out pi-kill" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<CLAUDE_BASE_URL>": 8, "<CLAUDE_BASE_URL_HOST>": 4, "<CLAUDE_HAIKU_MODEL>": 4, "<CLAUDE_MODEL>": 4, "<DSH_CHILD_BASE_URL>": 8, "<DSH_CHILD_BASE_URL_HOST>": 4, "<DSH_CHILD_MODEL>": 4, "<DSH_MAIN_ARG>": 4, "<DSH_MAIN_KEY_VAR>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<PI_KEY_VAR>": 4, "<PI_MODEL>": 4, "<PI_PROVIDER>": 4, "<PROJECT>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case pi-kill: one line per item (3):
+  CASE pi-kill launcher: OBSERVED session 1 (console session 1); in a job True (Task Scheduler's: flags 0x3000 (SILENT_BREAKAWAY_OK, KILL_ON_JOB_CLOSE), active 1) (stand-in)
+  CASE pi-kill first item: PASS (stand-in)
+  CASE pi-kill second item: OBSERVED (stand-in)
+--- RESULT pi-kill PASS
+=== step P: pi PASS, pi-refuse PASS, pi-caller PASS, pi-nonascii PASS, pi-kill PASS (evidence: pi PASS, pi-refuse PASS, pi-caller PASS, pi-nonascii PASS, pi-kill PASS)
+next: zsh scripts/verify-650/steps.zsh S
+next: zsh scripts/verify-650/steps.zsh D
+VERDICT 650 P: PASS (pi PASS, pi-refuse PASS, pi-caller PASS, pi-nonascii PASS, pi-kill PASS; evidence: pi PASS, pi-refuse PASS, pi-caller PASS, pi-nonascii PASS, pi-kill PASS)
+(exit 0)

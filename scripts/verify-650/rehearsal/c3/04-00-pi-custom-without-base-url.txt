@@ -1,0 +1,7 @@
+$ zsh scripts/verify-650/steps.zsh 00
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [00] Preflight, read only. Login: gcloud (account not shown). Dialog: none.
+PASS: run by zsh 5.9
+STOP: settings variable PI_BASE_URL is missing or not an http(s) URL (PI_ROUTE=custom needs it)
+VERDICT 650 00: STOP
+(exit 1)

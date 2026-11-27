@@ -11,12 +11,17 @@
 #   client over stdio) and the in-process host tests of test_dsh_standalone_host.
 # - DSH child: create, turn, resume and end with the stand-in service (test_dsh_standalone_child; a model turn needs a
 #   key: Task 650), its launch preparation against the installed DSH (search and endpoint rows).
-# Node ids as xunit1 JUnit gives them, rebuilt from the final candidate 5b7bd91d's macOS run
-# (evidence/macos/suite-cand-5b7bd91d.txt): 37, the 35 of the superseded runs plus the two directPython tests.
+# - Correction 1 (run 45996884900): graftling's DSH patch rows and the fixture name their modules as file URLs on
+#   Windows (DSH's Loader imports names as ES module specifiers), and the linked plugin runs as its installation's
+#   Python (test_the_linked_plugin_runs_the_python_of_its_installation, test_profile_patch_rows_..., 
+#   test_dsh_child_runs_with_graphtraj_unimportable).
+# Node ids as xunit1 JUnit gives them, rebuilt from candidate 0e5c92a6's macOS run (evidence/macos/suite-cand-0e5c92a6.txt):
+# 40, the 37 of 5b7bd91d plus the three above.
 tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
 tests/test_dsh_live.py::test_standalone_driver_with_only_independent_package
 tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client
 tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes
+tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
 tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers
 tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route
 tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.0-rc.2]
@@ -25,6 +30,7 @@ tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_s
 tests/test_dsh_standalone_child.py::test_claude_host_routes_a_dsh_child_with_its_own_choices
 tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once
 tests/test_dsh_standalone_child.py::test_dsh_child_launch_needs_no_graphtraj_setting
+tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable
 tests/test_dsh_standalone_child.py::test_delivered_plugin_loads_from_dsh_agent_package_alone
 tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1/messages]
 tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1/messages]
@@ -42,6 +48,7 @@ tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_wind
 tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh]
 tests/test_dsh_windows_649.py::test_a_windows_executable_that_is_no_npm_shim_is_resolved_as_before
 tests/test_dsh_windows_649.py::test_posix_ignores_the_npm_shim
+tests/test_dsh_windows_649.py::test_profile_patch_rows_name_graftling_modules_as_file_urls_on_windows
 tests/test_dsh_windows_649.py::test_dsh_plugin_runs_a_windows_venv_python_as_its_base_interpreter
 tests/test_dsh_windows_649.py::test_a_venv_python_the_dsh_plugin_starts_is_a_direct_child_running_as_the_venv
 tests/test_dsh_windows_649.py::test_installed_dsh_is_found_through_its_npm_shim

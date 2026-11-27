@@ -5,7 +5,7 @@
 # (as GraphTraj b5653bac has it: no `fail` entry), the DSH job against scripts/verify-649/dsh-expected.txt.
 # Modelled on verify-639/rehearsal/rehearse.zsh.
 # Usage: zsh rehearse.zsh <scratch dir outside the Harness> <JUnit of the candidate's macOS run with simulated Windows
-#        skips: scripts/verify-649/evidence/macos/simulated-windows-skips-5b7bd91d-junit.xml>
+#        skips: scripts/verify-649/evidence/macos/simulated-windows-skips-0e5c92a6-junit.xml>
 emulate -L zsh
 setopt pipe_fail no_unset
 S=${1:?scratch dir}; JUNIT=${2:?junit file}; HERE=${0:A:h}; STEPS=$HERE/../steps.zsh
@@ -13,7 +13,7 @@ PY=/Users/luoxiao/miniconda3/bin/python3.13
 REAL=/Users/luoxiao/workspace/you-are-a-product-architect-delivery/graftling
 BRANCH=agent/649-graftling-windows-dsh
 BASE=57153234f90829e6629765e5b985f20c1491353c
-PREV=21818f59d73a4954b981302b4e8ed5dd20aaf465
+PREV=5b7bd91d6ed5d23b541ac89fb5f0066d2057567a   # the remote's branch head since run 45996884900
 BUNDLE=$HERE/../graftling-649.bundle
 LIST=$HERE/../../verify-632/windows-expected.txt
 NOREPLY=(-c user.name=LUOXIAO92 -c user.email=89069722+LUOXIAO92@users.noreply.github.com)
@@ -39,7 +39,7 @@ print(case.get("file").replace(chr(92), "/") + "::" + case.get("name"))' $S/juni
 { cat $LIST; print -r -- "fail	$LISTED	tests/test_agent_control.py:1	rehearsal	rehearsal-only listed failure"; } > $S/listed.txt
 fails_of() { awk -F'\t' '$1=="fail" {print $2}' $1; }
 diverged_commit() { git -C $1 commit-tree -p $BASE -m diverged "$BASE^{tree}"; }
-fresh() {  # fresh <scenario>: a new bare remote (with the branch at phase A's head, as on GitHub), scratch clone, gh
+fresh() {  # fresh <scenario>: a new bare remote (with the branch at PREV, as on GitHub), scratch clone, gh
   rm -rf $S/$1; mkdir -p $S/$1/gh
   git clone -q --bare --no-hardlinks $REAL $S/$1/gremote.git
   git -C $S/$1/gremote.git update-ref refs/heads/$BRANCH $PREV
@@ -68,7 +68,7 @@ real_state() { git -C $REAL for-each-ref --format='%(refname) %(objectname)' ref
 BEFORE=$(real_state)
 HEAD_SHA=$(git bundle list-heads $BUNDLE refs/heads/$BRANCH | cut -d' ' -f1)
 
-# PASS: the remote branch at phase A's head (as on GitHub), fast-forwarded; windows-tests as listed; the DSH job passes.
+# PASS: the remote branch at PREV (as on GitHub), fast-forwarded; windows-tests as listed; the DSH job passes.
 fresh matched; step matched matched-00.txt 00; step matched matched-P.txt P; step matched matched-00-again.txt 00
 print -r -- "--- after P: remote $(git -C $S/matched/gremote.git rev-parse $BRANCH) (bundle head $HEAD_SHA; was $PREV)" >> $OUT/matched-P.txt
 step matched matched-W-sha.txt W $HEAD_SHA
@@ -99,7 +99,7 @@ fresh guard; git -C $S/guard/graftling branch -q $BRANCH $(diverged_commit $S/gu
 fresh diverged; git -C $S/diverged/gremote.git update-ref refs/heads/$BRANCH $(diverged_commit $S/diverged/gremote.git)
 step diverged diverged-P.txt P
 print -r -- "--- after P: remote $(git -C $S/diverged/gremote.git rev-parse $BRANCH) (the diverged commit; unchanged)" >> $OUT/diverged-P.txt
-# PASS: local branch at phase A's head (as <Harness>/graftling has it): P fast-forwards it from the bundle.
+# PASS: local branch at PREV (as <Harness>/graftling has it): P fast-forwards it from the bundle.
 fresh ff-local; git -C $S/ff-local/graftling branch -q $BRANCH $PREV
 step ff-local ff-local-00.txt 00; step ff-local ff-local-P.txt P
 print -r -- "--- after P: clone $(git -C $S/ff-local/graftling rev-parse $BRANCH), remote $(git -C $S/ff-local/gremote.git rev-parse $BRANCH)" >> $OUT/ff-local-P.txt
@@ -117,8 +117,8 @@ git -C $S/badsrc branch -q -f $BRANCH rehearsal-bad
 git -C $S/badsrc bundle create -q $S/bad.bundle ^$BASE ^$PREV refs/heads/$BRANCH
 BAD=$S/bad.bundle; fresh disallowed; step disallowed disallowed-00.txt 00; step disallowed disallowed-P.txt P; unset BAD
 print -r -- "--- after P: remote $(git -C $S/disallowed/gremote.git rev-parse -q --verify $BRANCH)" >> $OUT/disallowed-P.txt
-# STOP: a bundle based on dev without phase A's head: the push would not fast-forward from 21818f59.
-git -C $S/badsrc checkout -q --detach $BASE && git -C $S/badsrc $NOREPLY commit -q --allow-empty -m 'rehearsal: not on 21818f59'
+# STOP: a bundle based on dev without the remote's head: the push would not fast-forward from PREV.
+git -C $S/badsrc checkout -q --detach $BASE && git -C $S/badsrc $NOREPLY commit -q --allow-empty -m 'rehearsal: not on PREV'
 git -C $S/badsrc branch -q -f $BRANCH HEAD && git -C $S/badsrc bundle create -q $S/noprev.bundle ^$BASE refs/heads/$BRANCH
 BAD=$S/noprev.bundle; fresh noprev; step noprev noprev-00.txt 00; unset BAD
 # 00 not ready, P STOP: an expected list whose DSH-related lines differ from b5653bac's (this Task changes none).

@@ -4,7 +4,7 @@
 # the format is verify-632/windows-expected.txt's.
 #
 # No failure and no hang is expected. A skip starting "POSIX-only: " needs no entry. Every other skip must be listed
-# below; each of them also happens on macOS with DSH 0.2.2-rc.5 installed (evidence/macos/suite-cand-5b7bd91d.txt).
+# below; each of them also happens on macOS with DSH 0.2.2-rc.5 installed (evidence/macos/suite-cand-0e5c92a6.txt).
 #
 # The windows-tests job (no DSH installed) keeps scripts/verify-632/windows-expected.txt, whose DSH lines still apply
 # there: this Task changes none of them.

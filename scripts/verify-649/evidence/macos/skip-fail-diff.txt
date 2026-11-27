@@ -1,4 +1,4 @@
-# SKIPPED/FAILED/ERROR lines, base 57153234 (<) against final candidate 5b7bd91d (>), sorted; only line shifts (imports added) and the 3 new Windows-only skips
+# SKIPPED/FAILED/ERROR lines, base 57153234 (<) against candidate 0e5c92a6 (>), sorted; only line shifts (imports added) and the 3 new Windows-only skips
 13,18c13,18
 < SKIPPED [1] tests/test_dsh_official.py:13: Requires assigned official host slot.
 < SKIPPED [1] tests/test_dsh_official.py:160: Requires retained interrupted official Session.
@@ -18,4 +18,4 @@
 ---
 > SKIPPED [2] tests/test_dsh_mcp.py:60: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
 32a33
-> SKIPPED [3] tests/test_dsh_windows_649.py:181: Windows only: the npm .cmd shim and the DSH service's Job Object (649)
+> SKIPPED [3] tests/test_dsh_windows_649.py:206: Windows only: the npm .cmd shim and the DSH service's Job Object (649)

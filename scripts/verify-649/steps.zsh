@@ -2,7 +2,8 @@
 [ -n "$ZSH_VERSION" ] || exec /bin/zsh "$0" "$@"
 # Task 649 (W11, phase B) Main-run steps: publish graftling's DSH support on Windows (graftling finds the DSH package
 # behind npm's dsh.cmd shim; a gating job, dsh-windows-tests, in .github/workflows/windows.yml; from the bundle) to
-# LUOXIAO92/graftling as agent/649-graftling-windows-dsh, fast-forward from phase A's 21818f59 and containing graftling
+# LUOXIAO92/graftling as agent/649-graftling-windows-dsh, fast-forward from 5b7bd91d (phase B round 1, on the remote
+# since run 45996884900; correction 1 adds the file-URL patch rows and the install-test fix) and containing graftling
 # dev 5715323 (647, 648). GitHub Actions then runs "Windows tests" on GitHub-hosted windows-latest x64 runners for the
 # candidate commit: the unchanged windows-tests job (632) and dsh-windows-tests, which installs DSH 0.2.2-rc.5 with npm
 # on Node 24.22.3 and runs every tests/test_*dsh*.py against it. The step waits for the run in this process, downloads
@@ -15,7 +16,7 @@
 # and every other credential-class variable are removed at start. No step raises a native dialog (GH_PROMPT_DISABLED=1,
 # GIT_TERMINAL_PROMPT=0; a credential helper that needs a dialog fails the push instead, and the step STOPs).
 # REAL ENTRY: the push run of windows.yml started by pushing agent/649-graftling-windows-dsh to LUOXIAO92/graftling
-# (the candidate adds exactly that branch to the workflow's push trigger; the branch is already there at 21818f59, so
+# (the candidate adds exactly that branch to the workflow's push trigger; the branch is already there at 5b7bd91d, so
 # the push is a fast-forward). The DSH job installs DSH from npm and starts it on the runner with no provider variable
 # and an empty DSH_HOME; no model, key or provider is involved.
 # Nothing of GraphTraj is pushed.
@@ -25,7 +26,7 @@
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
 #       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its prerequisites
-#       are graftling dev 5715323 (W0-W8, 645, 648) and phase A's 21818f59 or ancestors of either, and the head contains
+#       are graftling dev 5715323 (W0-W8, 645, 648) and the remote's 5b7bd91d or ancestors of either, and the head contains
 #       both and is shown; read through a temporary repository that borrows <Harness>/graftling's objects (nothing is
 #       written there): noreply identity; the paths changed since 5715323 are within ALLOWED (below); the workflow is
 #       5715323's with its push branches line gaining exactly agent/649-graftling-windows-dsh and the dsh-windows-tests
@@ -85,8 +86,9 @@ STEP=${1:-}
 BRANCH=agent/649-graftling-windows-dsh
 # graftling dev 5715323: W0 (632) to W7 (639), 645, W8/W9 (647) and W10 (648) integrated.
 BASE=57153234f90829e6629765e5b985f20c1491353c
-# Phase A's head, already on LUOXIAO92/graftling and in <Harness>/graftling: the bundle head must fast-forward from it.
-PREV=21818f59d73a4954b981302b4e8ed5dd20aaf465
+# The branch head already on LUOXIAO92/graftling and in <Harness>/graftling (phase B round 1, run 45996884900; it
+# contains phase A's 21818f59): the bundle head must fast-forward from it.
+PREV=5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
 # GraphTraj dev with 647's and 648's expected list; this Task changes none of its DSH-related lines.
 LIST_BASE=b5653bac
 REPO=LUOXIAO92/graftling
@@ -111,11 +113,13 @@ EXPECTED=${VERIFY649_EXPECTED:-$WT/scripts/verify-632/windows-expected.txt}
 EVID=${VERIFY649_EVIDENCE:-$HERE/evidence/live}
 DSH_EXPECTED=$HERE/dsh-expected.txt
 NEWTESTS=$HERE/dsh-new-tests.txt
-# The only paths the candidate may change since BASE (phase A's probe script is added and removed again).
+# The only paths the candidate may change since BASE (phase A's probe script is added and removed again; correction 1
+# adds dsh/execution.py, the delivered-plugin fixture and the plugin install test).
 ALLOWED=(.github/workflows/windows.yml src/graftling/dsh/settings.py src/graftling/dsh/driver.py src/graftling/dsh/plugin.mjs
-         src/graftling/models.py
-         tests/conftest.py tests/test_dsh_live.py tests/test_dsh_mcp.py tests/test_dsh_official.py
-         tests/test_dsh_providers_608.py tests/test_dsh_standalone_child.py tests/test_dsh_windows_649.py
+         src/graftling/dsh/execution.py src/graftling/models.py
+         tests/conftest.py tests/fixtures/dsh_mcp_plugin.mjs tests/test_dsh_live.py tests/test_dsh_mcp.py
+         tests/test_dsh_official.py tests/test_dsh_plugin_install_python.py tests/test_dsh_providers_608.py
+         tests/test_dsh_standalone_child.py tests/test_dsh_windows_649.py
          tests/test_pi_dsh_child_tools_551.py tests/test_pi_dsh_owner_tools_no_ask_551.py)
 # The windows-tests job's steps by their exact `name:` in $WORKFLOW (unchanged from 632).
 SETUP=("Keep symbolic links on this runner"
@@ -172,23 +176,24 @@ GSHA=
 bundle_head() { allow $GIT bundle list-heads $BUNDLE refs/heads/$BRANCH | cut -d' ' -f1; }
 # Every prerequisite the bundle lists, one per line (as verify-634).
 bundle_prereqs() { gg bundle verify $BUNDLE 2>&1 | awk '/^The bundle requires/ {on = 1; next} /^The bundle (uses|contains)/ {on = 0} on && NF {print $1}'; }
-check_bundle() {  # the bundle verifies against $GRAFT; BASE is a prerequisite, any other is PREV or an ancestor of
-  # BASE or PREV; the head contains both (a fast-forward from PREV, which is on the remote); sets GSHA
+check_bundle() {  # the bundle verifies against $GRAFT; each prerequisite is BASE, PREV or an ancestor of either;
+  # the head contains both (a fast-forward from PREV, which is on the remote); sets GSHA
   [[ -f $BUNDLE ]] || stop "no bundle at $BUNDLE"
   gg bundle verify $BUNDLE > /dev/null 2>&1 || { gg bundle verify $BUNDLE 2>&1 | sed 's/^/  /'; stop "the bundle does not verify against $GRAFT"; }
   GSHA=$(bundle_head)
   [[ $GSHA == [0-9a-f](#c40) ]] || stop "the bundle has no refs/heads/$BRANCH"
   local -a prereqs=(${(f)"$(bundle_prereqs)"})
   local prereq
-  (( ${prereqs[(Ie)$BASE]} )) || stop "the bundle's prerequisites are ${prereqs:-none}, without graftling dev $BASE"
+  # BASE itself need not be listed: it is an ancestor of PREV once PREV contains it (checked below through the head).
+  (( ${#prereqs} )) || stop "the bundle lists no prerequisite: it would not be a fast-forward of graftling dev $BASE"
   for prereq in $prereqs; do
     [[ $prereq == $BASE || $prereq == $PREV ]] && continue
     gg merge-base --is-ancestor $prereq $BASE 2> /dev/null || gg merge-base --is-ancestor $prereq $PREV 2> /dev/null \
-      || stop "the bundle's prerequisite $prereq is not an ancestor of graftling dev $BASE or of phase A's $PREV"
+      || stop "the bundle's prerequisite $prereq is not an ancestor of graftling dev $BASE or of the remote's $PREV"
   done
   ancestor_of_head $BASE || stop "graftling dev $BASE is not an ancestor of the bundle head $GSHA"
-  ancestor_of_head $PREV || stop "phase A's $PREV is not an ancestor of the bundle head $GSHA: the push would not fast-forward"
-  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA contains graftling dev $BASE and phase A's $PREV (prerequisites: ${prereqs})"
+  ancestor_of_head $PREV || stop "the remote's $PREV is not an ancestor of the bundle head $GSHA: the push would not fast-forward"
+  print -r -- "PASS: bundle verifies against $GRAFT; head $GSHA contains graftling dev $BASE and the remote's $PREV (prerequisites: ${prereqs})"
 }
 # check_head: read the bundle head through a temporary repository borrowing $GRAFT's objects (read only there);
 # returns the number of FAILs.

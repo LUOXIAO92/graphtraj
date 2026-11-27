@@ -1,16 +1,17 @@
-$ VERIFY649_GRAFTLING=/tmp/claude-501/t649/rehearsal3/dsh-list/graftling VERIFY649_GREMOTE=/tmp/claude-501/t649/rehearsal3/dsh-list/gremote.git VERIFY649_GH=/tmp/claude-501/t649/rehearsal3/dsh-list/gh/gh VERIFY649_EVIDENCE=/tmp/claude-501/t649/rehearsal3/dsh-list/evidence VERIFY649_POLL_S=1 VERIFY649_APPEAR_S=10 VERIFY649_DONE_S=30 VERIFY649_EXPECTED=/tmp/claude-501/t649/rehearsal3/dsh-list.txt zsh steps.zsh 00
+$ VERIFY649_GRAFTLING=/tmp/claude-501/t649/rehearsal4/dsh-list/graftling VERIFY649_GREMOTE=/tmp/claude-501/t649/rehearsal4/dsh-list/gremote.git VERIFY649_GH=/tmp/claude-501/t649/rehearsal4/dsh-list/gh/gh VERIFY649_EVIDENCE=/tmp/claude-501/t649/rehearsal4/dsh-list/evidence VERIFY649_POLL_S=1 VERIFY649_APPEAR_S=10 VERIFY649_DONE_S=30 VERIFY649_EXPECTED=/tmp/claude-501/t649/rehearsal4/dsh-list.txt zsh steps.zsh 00
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
 == [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
 PASS: run by zsh 5.9
-git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/t649/rehearsal3/dsh-list/gh/gh | TMPDIR for started processes: /tmp/claude-501
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/t649/rehearsal4/dsh-list/gh/gh | TMPDIR for started processes: /tmp/claude-501
 $ gh auth status --hostname github.com   (token lines removed)
   github.com
     ✓ Logged in to github.com account stand-in-user (verify-632 fake)
     - Active account: true
-PASS: /tmp/claude-501/t649/rehearsal3/dsh-list/graftling origin is https://github.com/LUOXIAO92/graftling.git
-NOTE: rehearsal remote /tmp/claude-501/t649/rehearsal3/dsh-list/gremote.git is used instead of graftling origin
-PASS: bundle verifies against /tmp/claude-501/t649/rehearsal3/dsh-list/graftling; head 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a contains graftling dev 57153234f90829e6629765e5b985f20c1491353c and phase A's 21818f59d73a4954b981302b4e8ed5dd20aaf465 (prerequisites: 21818f59d73a4954b981302b4e8ed5dd20aaf465 57153234f90829e6629765e5b985f20c1491353c bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b)
+PASS: /tmp/claude-501/t649/rehearsal4/dsh-list/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/t649/rehearsal4/dsh-list/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/t649/rehearsal4/dsh-list/graftling; head 0e5c92a602005ba0c0e53b887ff612dfd28180fd contains graftling dev 57153234f90829e6629765e5b985f20c1491353c and the remote's 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a (prerequisites: 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a)
 --- bundle commits on 57153234f90829e6629765e5b985f20c1491353c:
+  0e5c92a LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | DSH on Windows: graftling's patch rows name their modules as file URLs; the install test reads what Python runs (649 correction 1)
   5b7bd91 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: a real venv's python started through the DSH plugin is node's direct child running as the venv (649)
   5bde58a LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | DSH on Windows: the plugin starts a venv's base interpreter, so host and MCP server are DSH's direct children (649)
   6a0f15e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 5715323 (648) into agent/649-graftling-windows-dsh
@@ -19,23 +20,26 @@ PASS: bundle verifies against /tmp/claude-501/t649/rehearsal3/dsh-list/graftling
   21818f5 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows CI: probe whether DSH runs on Windows, without a credential (649, phase A)
 PASS: author and committer are the noreply identity
 --- files changed since 57153234f90829e6629765e5b985f20c1491353c:
-   .github/workflows/windows.yml               |  99 ++++++++++-
+   .github/workflows/windows.yml               |  99 +++++++++-
    src/graftling/dsh/driver.py                 |   5 +-
-   src/graftling/dsh/plugin.mjs                |  29 +++-
+   src/graftling/dsh/execution.py              |  17 +-
+   src/graftling/dsh/plugin.mjs                |  29 ++-
    src/graftling/dsh/settings.py               |  34 +++-
    src/graftling/models.py                     |   4 +-
    tests/conftest.py                           |   3 +-
+   tests/fixtures/dsh_mcp_plugin.mjs           |   5 +-
    tests/test_dsh_live.py                      |   3 +-
    tests/test_dsh_mcp.py                       |  10 +-
    tests/test_dsh_official.py                  |   4 +-
+   tests/test_dsh_plugin_install_python.py     |  24 ++-
    tests/test_dsh_providers_608.py             |   4 +-
-   tests/test_dsh_standalone_child.py          |  12 +-
-   tests/test_dsh_windows_649.py               | 258 ++++++++++++++++++++++++++++
+   tests/test_dsh_standalone_child.py          |  21 ++-
+   tests/test_dsh_windows_649.py               | 283 ++++++++++++++++++++++++++++
    tests/test_pi_dsh_child_tools_551.py        |   3 +-
    tests/test_pi_dsh_owner_tools_no_ask_551.py |   4 +-
-   14 files changed, 442 insertions(+), 30 deletions(-)
-PASS: changed paths are within the allowed set: .github/workflows/windows.yml, src/graftling/dsh/settings.py, src/graftling/dsh/driver.py, src/graftling/dsh/plugin.mjs, src/graftling/models.py, tests/conftest.py, tests/test_dsh_live.py, tests/test_dsh_mcp.py, tests/test_dsh_official.py, tests/test_dsh_providers_608.py, tests/test_dsh_standalone_child.py, tests/test_dsh_windows_649.py, tests/test_pi_dsh_child_tools_551.py, tests/test_pi_dsh_owner_tools_no_ask_551.py
---- .github/workflows/windows.yml at 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a against 57153234f90829e6629765e5b985f20c1491353c
+   17 files changed, 513 insertions(+), 39 deletions(-)
+PASS: changed paths are within the allowed set: .github/workflows/windows.yml, src/graftling/dsh/settings.py, src/graftling/dsh/driver.py, src/graftling/dsh/plugin.mjs, src/graftling/dsh/execution.py, src/graftling/models.py, tests/conftest.py, tests/fixtures/dsh_mcp_plugin.mjs, tests/test_dsh_live.py, tests/test_dsh_mcp.py, tests/test_dsh_official.py, tests/test_dsh_plugin_install_python.py, tests/test_dsh_providers_608.py, tests/test_dsh_standalone_child.py, tests/test_dsh_windows_649.py, tests/test_pi_dsh_child_tools_551.py, tests/test_pi_dsh_owner_tools_no_ask_551.py
+--- .github/workflows/windows.yml at 0e5c92a602005ba0c0e53b887ff612dfd28180fd against 57153234f90829e6629765e5b985f20c1491353c
 PASS: push branches are exactly dev's plus agent/649-graftling-windows-dsh
 PASS: the base workflow is unchanged up to its end apart from the push branches line
 PASS: jobs are windows-tests and dsh-windows-tests
@@ -112,14 +116,14 @@ PASS: total limit 4200 s is inside the step's 75 minutes
 PASS: suite step timeout-minutes 75
 PASS: upload runs always() with retention 7 days
 PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 57153234f90829e6629765e5b985f20c1491353c
-PASS: the 37 tests of dsh-new-tests.txt are defined at 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
-PASS: /tmp/claude-501/t649/rehearsal3/dsh-list.txt parses: 0 expected Windows failures and 0 expected hangs (none), 19 allowed environment skips
+PASS: the 40 tests of dsh-new-tests.txt are defined at 0e5c92a602005ba0c0e53b887ff612dfd28180fd
+PASS: /tmp/claude-501/t649/rehearsal4/dsh-list.txt parses: 0 expected Windows failures and 0 expected hangs (none), 19 allowed environment skips
 FAIL: DSH-related line added: 'skip-allowed\tInstalled DSH and Node are required (changed).\tconftest.unsupported_dsh / test_dsh_live.py: no DSH on the runner'
 FAIL: DSH-related line removed: 'skip-allowed\tInstalled DSH and Node are required.\tconftest.unsupported_dsh / test_dsh_live.py: no DSH on the runner'
 PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/dsh-expected.txt parses: 0 expected Windows failures and 0 expected hangs (none), 7 allowed environment skips
-NOTE: judged against /tmp/claude-501/t649/rehearsal3/dsh-list.txt (rehearsal)
-PASS: /tmp/claude-501/t649/rehearsal3/dsh-list/graftling has no local agent/649-graftling-windows-dsh (P creates it from the bundle)
-PASS: graftling /tmp/claude-501/t649/rehearsal3/dsh-list/gremote.git has agent/649-graftling-windows-dsh at 21818f59d73a4954b981302b4e8ed5dd20aaf465, an ancestor of the bundle head (fast-forward)
+NOTE: judged against /tmp/claude-501/t649/rehearsal4/dsh-list.txt (rehearsal)
+PASS: /tmp/claude-501/t649/rehearsal4/dsh-list/graftling has no local agent/649-graftling-windows-dsh (P creates it from the bundle)
+PASS: graftling /tmp/claude-501/t649/rehearsal4/dsh-list/gremote.git has agent/649-graftling-windows-dsh at 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a, an ancestor of the bundle head (fast-forward)
 next: fix the FAIL lines above (new bundle or list from the Engineer), then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/steps.zsh 00
-VERDICT 649 00: PASS (P ready: no; remote branch ancestor; candidate graftling 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a)
+VERDICT 649 00: PASS (P ready: no; remote branch ancestor; candidate graftling 0e5c92a602005ba0c0e53b887ff612dfd28180fd)
 [exit 0]

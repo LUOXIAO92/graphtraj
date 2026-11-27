@@ -34,7 +34,7 @@ refs/heads/agent/639-graftling-windows-codex 2ee706eb749355afc3f73f03a1b0de4cd48
 refs/heads/agent/645-graftling-windows-codex-limits-docs eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
 refs/heads/agent/647-graftling-windows-claude bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b
 refs/heads/agent/648-graftling-windows-pi 57153234f90829e6629765e5b985f20c1491353c
-refs/heads/agent/649-graftling-windows-dsh 21818f59d73a4954b981302b4e8ed5dd20aaf465
+refs/heads/agent/649-graftling-windows-dsh 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
 refs/heads/dev 57153234f90829e6629765e5b985f20c1491353c
 refs/heads/main 57bca73657d3135a4504904fcc3f1898c2419766
 after:
@@ -73,7 +73,7 @@ refs/heads/agent/639-graftling-windows-codex 2ee706eb749355afc3f73f03a1b0de4cd48
 refs/heads/agent/645-graftling-windows-codex-limits-docs eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
 refs/heads/agent/647-graftling-windows-claude bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b
 refs/heads/agent/648-graftling-windows-pi 57153234f90829e6629765e5b985f20c1491353c
-refs/heads/agent/649-graftling-windows-dsh 21818f59d73a4954b981302b4e8ed5dd20aaf465
+refs/heads/agent/649-graftling-windows-dsh 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
 refs/heads/dev 57153234f90829e6629765e5b985f20c1491353c
 refs/heads/main 57bca73657d3135a4504904fcc3f1898c2419766
 UNCHANGED (the rehearsal wrote only scratch clones)

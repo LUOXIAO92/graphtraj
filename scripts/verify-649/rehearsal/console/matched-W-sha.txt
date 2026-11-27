@@ -1,12 +1,12 @@
-$ VERIFY649_GRAFTLING=/tmp/claude-501/t649/rehearsal3/matched/graftling VERIFY649_GREMOTE=/tmp/claude-501/t649/rehearsal3/matched/gremote.git VERIFY649_GH=/tmp/claude-501/t649/rehearsal3/matched/gh/gh VERIFY649_EVIDENCE=/tmp/claude-501/t649/rehearsal3/matched/evidence VERIFY649_POLL_S=1 VERIFY649_APPEAR_S=10 VERIFY649_DONE_S=30 zsh steps.zsh W 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
+$ VERIFY649_GRAFTLING=/tmp/claude-501/t649/rehearsal4/matched/graftling VERIFY649_GREMOTE=/tmp/claude-501/t649/rehearsal4/matched/gremote.git VERIFY649_GH=/tmp/claude-501/t649/rehearsal4/matched/gh/gh VERIFY649_EVIDENCE=/tmp/claude-501/t649/rehearsal4/matched/evidence VERIFY649_POLL_S=1 VERIFY649_APPEAR_S=10 VERIFY649_DONE_S=30 zsh steps.zsh W 0e5c92a602005ba0c0e53b887ff612dfd28180fd
 scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
-PASS: bundle verifies against /tmp/claude-501/t649/rehearsal3/matched/graftling; head 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a contains graftling dev 57153234f90829e6629765e5b985f20c1491353c and phase A's 21818f59d73a4954b981302b4e8ed5dd20aaf465 (prerequisites: 21818f59d73a4954b981302b4e8ed5dd20aaf465 57153234f90829e6629765e5b985f20c1491353c bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b)
-== [W] Observe only (no push, no re-run) the newest run of 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a. Login: gh login. Dialog: none. Network: GitHub.
-looking for the .github/workflows/windows.yml run (event any) of 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+PASS: bundle verifies against /tmp/claude-501/t649/rehearsal4/matched/graftling; head 0e5c92a602005ba0c0e53b887ff612dfd28180fd contains graftling dev 57153234f90829e6629765e5b985f20c1491353c and the remote's 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a (prerequisites: 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a)
+== [W] Observe only (no push, no re-run) the newest run of 0e5c92a602005ba0c0e53b887ff612dfd28180fd. Login: gh login. Dialog: none. Network: GitHub.
+looking for the .github/workflows/windows.yml run (event any) of 0e5c92a602005ba0c0e53b887ff612dfd28180fd on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
 run 51000000000 present after 0s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 waiting for run 51000000000 (completion bound 30s, poll 1s)
-  [21:06:21] run 51000000000: completed failure
---- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+  [21:46:28] run 51000000000: completed failure
+--- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head 0e5c92a602005ba0c0e53b887ff612dfd28180fd | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
 JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed
@@ -39,17 +39,17 @@ DSH JOB dsh-windows-tests | completed | success | https://github.com/LUOXIAO92/g
   step 13 | success   | Post Set up Node 24.22.3 x64 | other: success or skipped
   step 14 | success   | Post Check out the commit under test | other: success or skipped
   step 15 | success   | Complete job | other: success or skipped
---- job log saved: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
+--- job log saved: /tmp/claude-501/t649/rehearsal4/matched/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
   per-file pytest summaries: 1
-already present, not downloaded again: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-51000000000-a1/junit
-test files in 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a: 69
+already present, not downloaded again: /tmp/claude-501/t649/rehearsal4/matched/evidence/run-51000000000-a1/junit
+test files in 0e5c92a602005ba0c0e53b887ff612dfd28180fd: 69
 --- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-632/windows-expected.txt
 runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
 run_test_files exit code: 1
 --- test files: 69 recorded | ended 69 | hung 0 | not run 0 | in the commit: 69
   slowest ended files: tests/test_agent_completion.py 2.5 s, tests/test_agent_control.py 2.5 s, tests/test_agents_connections_presets.py 2.5 s, tests/test_agents_request_notices.py 2.5 s, tests/test_agents_server_name.py 2.5 s
 merged JUnit files: 69
-collected in JUnit: 1057 | passed 817 | failed 0 | errors 0 | skipped 240
+collected in JUnit: 1058 | passed 818 | failed 0 | errors 0 | skipped 240
 --- POSIX-only skips: 219 in 24 modules
      8  tests/test_agents_connections_presets.py
      1  tests/test_approval_integration.py
@@ -104,8 +104,8 @@ collected in JUnit: 1057 | passed 817 | failed 0 | errors 0 | skipped 240
     origins of the unexpected failures: 
 --- unexpected passes (listed as failing, passed): 0
 --- listed failures that were skipped or not collected: 0
-observed list written: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-51000000000-a1/observed-expected.txt
-already present, not downloaded again: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-51000000000-a1/dsh
+observed list written: /tmp/claude-501/t649/rehearsal4/matched/evidence/run-51000000000-a1/observed-expected.txt
+already present, not downloaded again: /tmp/claude-501/t649/rehearsal4/matched/evidence/run-51000000000-a1/dsh
 --- DSH install on the runner (information)
   dsh_requested: 0.2.2-rc.5
   npm_exit: 0
@@ -130,7 +130,7 @@ run_test_files exit code: 0
 --- test files: 13 recorded | ended 13 | hung 0 | not run 0 | in the commit: 13
   slowest ended files: tests/test_dsh_live.py 3.0 s, tests/test_dsh_mcp.py 3.0 s, tests/test_dsh_official.py 3.0 s, tests/test_dsh_plugin_install_python.py 3.0 s, tests/test_dsh_providers_608.py 3.0 s
 merged JUnit files: 13
-collected in JUnit: 234 | passed 203 | failed 0 | errors 0 | skipped 31
+collected in JUnit: 235 | passed 204 | failed 0 | errors 0 | skipped 31
 --- POSIX-only skips: 22 in 5 modules
      2  tests/test_dsh_plugin_install_python.py
      1  tests/test_dsh_standalone_child.py
@@ -158,12 +158,13 @@ collected in JUnit: 234 | passed 203 | failed 0 | errors 0 | skipped 31
     origins of the unexpected failures: 
 --- unexpected passes (listed as failing, passed): 0
 --- listed failures that were skipped or not collected: 0
-observed list written: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-51000000000-a1/dsh-observed-expected.txt
---- the DSH tests that must pass on Windows (649): 37
+observed list written: /tmp/claude-501/t649/rehearsal4/matched/evidence/run-51000000000-a1/dsh-observed-expected.txt
+--- the DSH tests that must pass on Windows (649): 40
   PASSED tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
   PASSED tests/test_dsh_live.py::test_standalone_driver_with_only_independent_package
   PASSED tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client
   PASSED tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes
+  PASSED tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
   PASSED tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers
   PASSED tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route
   PASSED tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.0-rc.2]
@@ -172,6 +173,7 @@ observed list written: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-5100
   PASSED tests/test_dsh_standalone_child.py::test_claude_host_routes_a_dsh_child_with_its_own_choices
   PASSED tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once
   PASSED tests/test_dsh_standalone_child.py::test_dsh_child_launch_needs_no_graphtraj_setting
+  PASSED tests/test_dsh_standalone_child.py::test_dsh_child_runs_with_graphtraj_unimportable
   PASSED tests/test_dsh_standalone_child.py::test_delivered_plugin_loads_from_dsh_agent_package_alone
   PASSED tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1/messages]
   PASSED tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1/messages]
@@ -189,6 +191,7 @@ observed list written: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-5100
   PASSED tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh]
   PASSED tests/test_dsh_windows_649.py::test_a_windows_executable_that_is_no_npm_shim_is_resolved_as_before
   PASSED tests/test_dsh_windows_649.py::test_posix_ignores_the_npm_shim
+  PASSED tests/test_dsh_windows_649.py::test_profile_patch_rows_name_graftling_modules_as_file_urls_on_windows
   PASSED tests/test_dsh_windows_649.py::test_dsh_plugin_runs_a_windows_venv_python_as_its_base_interpreter
   PASSED tests/test_dsh_windows_649.py::test_a_venv_python_the_dsh_plugin_starts_is_a_direct_child_running_as_the_venv
   PASSED tests/test_dsh_windows_649.py::test_installed_dsh_is_found_through_its_npm_shim
@@ -197,8 +200,8 @@ observed list written: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-5100
   PASSED tests/test_pi_dsh_child_tools_551.py::test_dsh_installed_preset_rows_are_selectable
   PASSED tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding
   PASSED tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row
-evidence: /tmp/claude-501/t649/rehearsal3/matched/evidence/run-51000000000-a1 (git-ignored unless a rehearsal root was given; copy it into tracked files in a new commit)
+evidence: /tmp/claude-501/t649/rehearsal4/matched/evidence/run-51000000000-a1 (git-ignored unless a rehearsal root was given; copy it into tracked files in a new commit)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/steps.zsh W 51000000000    (observe again; no push, no re-run)
 next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
-VERDICT 649 W: PASS (run 51000000000 attempt 1 on 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a; windows-tests mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1057 tests: 817 passed, 0 failed as listed, 0 hangs as listed, 219 POSIX-only skips, 21 environment skips; DSH job: 9 steps succeeded (DSH installed; every DSH test file passed or skipped); every test file ended or was stopped and recorded as hung; DSH results: 234 tests: 203 passed, 0 failed as listed, 0 hangs as listed, 22 POSIX-only skips, 9 environment skips; DSH tests: 37 of 37 DSH tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+VERDICT 649 W: PASS (run 51000000000 attempt 1 on 0e5c92a602005ba0c0e53b887ff612dfd28180fd; windows-tests mechanics: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1058 tests: 818 passed, 0 failed as listed, 0 hangs as listed, 219 POSIX-only skips, 21 environment skips; DSH job: 9 steps succeeded (DSH installed; every DSH test file passed or skipped); every test file ended or was stopped and recorded as hung; DSH results: 235 tests: 204 passed, 0 failed as listed, 0 hangs as listed, 22 POSIX-only skips, 9 environment skips; DSH tests: 40 of 40 DSH tests passed, listed above; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
 [exit 0]

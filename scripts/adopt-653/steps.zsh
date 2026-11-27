@@ -286,8 +286,8 @@ manuals_check() {  # $1 = label, $2 = installed manuals tree: == the archive's, 
   [[ -z $d ]]; ck $? "$1 share/graphtraj/manuals equals git archive ${TARGET[1,8]}'s manuals ($(find $2 -type f ! -path "$2/.claude/*" 2>/dev/null | wc -l | tr -d ' ') product files)"
 }
 templates() {  # graftling's host_context.mjs at v0.10.2 and v0.11.0 (read from $G), the inputs of plugin653.py
-  mkdir -p $AD && gg -C $G show $GOLDTAG:src/graftling/claude/host_context.mjs > $AD/host_context-$GOLDVERSION.mjs \
-    && gg -C $G show $GTAG:src/graftling/claude/host_context.mjs > $AD/host_context-$GVERSION.mjs
+  mkdir -p $AD && gg -C $G show ${GOLDTAG}:src/graftling/claude/host_context.mjs > $AD/host_context-$GOLDVERSION.mjs \
+    && gg -C $G show ${GTAG}:src/graftling/claude/host_context.mjs > $AD/host_context-$GVERSION.mjs
 }
 plugin_check() {  # $1 = production copy, $2 = candidate copy: exactly the template change (plugin653.py)
   clean $CONDA -I $SD/plugin653.py $1 $2 $AD/host_context-$GOLDVERSION.mjs $AD/host_context-$GVERSION.mjs

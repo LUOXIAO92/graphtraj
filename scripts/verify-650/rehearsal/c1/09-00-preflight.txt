@@ -1,0 +1,23 @@
+$ zsh scripts/verify-650/steps.zsh 00
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [00] Preflight, read only. Login: gcloud (account not shown). Dialog: none.
+PASS: run by zsh 5.9
+PASS: settings file is git-ignored and untracked; variables read (names only): PROJECT, ZONE, MACHINE_TYPE, VCPUS, VM_NAME, VM_LABELS, VM_USER, NETWORK, IMAGE_FAMILY, IMAGE_PROJECT, DISK_GB, KEY_ENV, CLAUDE_BASE_URL, CLAUDE_AUTH_VAR, CLAUDE_MODEL, PI_ROUTE, PI_PROVIDER, PI_MODEL, DSH_CHILD_MODEL, DSH_MAIN_KEY_VAR, PRICE_VM_USD_H, PRICE_WINLIC_USD_VCPU_H, PRICE_DISK_USD_GB_MONTH, PRICE_IP_USD_H, EST_CURRENCY, EST_RATE, BUDGET; optional (assigned, may be empty): CLAUDE_HAIKU_MODEL, CLAUDE_SONNET_MODEL, CLAUDE_OPUS_MODEL, CLAUDE_SUBAGENT_MODEL, CLAUDE_API_TIMEOUT_MS, PI_KEY_VAR, PI_BASE_URL, PI_API, DSH_CHILD_PROVIDER, DSH_CHILD_BASE_URL, DSH_MAIN_BASE_URL, DSH_MAIN_APP_ARGS
+gcloud: Google Cloud SDK 999.0.0 (stand-in) | path: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/650-graftling-windows-runtimes-real/scripts/verify-650/rehearsal/fake-gcloud.zsh | TMPDIR for started processes: /tmp/claude-501
+PASS: gcloud has an active account (not shown)
+PASS: the project is reachable and ACTIVE
+PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive650.py and steps.zsh)
+PASS: the Windows image family resolves to windows-server-fake-dc-v20261111 (family as set, X86_64)
+PASS: no VM of this Task exists yet
+NOTE: project rule(s) opening tcp:22 to everyone (name priority): default-allow-ssh 65534; not changed by this Task
+NOTE: project rule(s) opening tcp:3389 to everyone (name priority): default-allow-rdp 65534; not changed by this Task
+PASS: every project rule opening SSH/RDP to everyone has a priority above 1000; the Task deny rule (1000) takes precedence
+Task firewall rules now: <VM_NAME>-deny absent, <VM_NAME>-ssh absent; V creates missing ones before the VM, D deletes both
+PASS: bundle of graftling dev 0e5c92a made and verified; it contains the candidate 0e5c92a60200 (the VM checks out the candidate)
+PASS: Claude Code pin 2.1.314 >= 2.1.296 (the Windows stdio stop); Pi 1.4.0, DSH 0.2.2-rc.5, pnpm 12.21.0
+PASS: Pi route builtin; the DSH child's provider DSH built-in, base_url set; every host's child is a DSH child (api_key_env = KEY_ENV)
+PASS: no Task SSH key yet (V creates one under local/ssh)
+cost estimate (console only): 21 XXX/hour (USD 0.214/h: VM, Windows licence, disk, IP); the budget covers about 47 h of VM time
+next: zsh scripts/verify-650/steps.zsh V
+VERDICT 650 00: PASS (Task VM: absent)
+(exit 0)

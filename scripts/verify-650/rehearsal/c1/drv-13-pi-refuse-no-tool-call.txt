@@ -1,0 +1,7 @@
+$ env <python> vm/drive650.py case pi-refuse
+[pi-refuse] in this session
+CASE pi-refuse launcher: OBSERVED pid 49609; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[pi] $ python <prompt> pi --provider <PI_PROVIDER> --model <PI_MODEL> -p --mode json <prompt>   (cwd <tmp>/home/work/pi-refuse; bound 420 s)
+[pi] exit 0 after 1.8 s; 3 process(es) seen; trace events 0
+RESULT pi-refuse NO-TOOL-CALL (the model made no subagents create call (2 JSON event(s)))
+(exit 0)

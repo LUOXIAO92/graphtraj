@@ -1,0 +1,9 @@
+$ env <python> vm/drive650.py case pi-kill
+[pi-kill] in this session
+CASE pi-kill launcher: OBSERVED pid 49650; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[pi] $ python <prompt> pi --provider <PI_PROVIDER> --model <PI_MODEL> -p --mode json <prompt>   (cwd <tmp>/home/work/pi-kill; bound 300 s)
+[pi] exit -9 after 1.2 s; 3 process(es) seen; trace events 0
+CASE pi-kill H10 Pi ends without its shutdown handler: PASS node 49653 killed (TerminateProcess); host 49654 gone within 10 s True; host stop event exit status None; holding bash sleep still alive: [] (Pi's own tool, not graftling's)
+wall time 1.4 s
+RESULT pi-kill PASS
+(exit 0)

@@ -1,0 +1,14 @@
+$ env <python> vm/drive650.py schedule claude-refuse 120
+session of the VM user: ACTIVE 1 console; query user: USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME | <VM_USER> session console id 1 state Active
+stand-in (not Windows): task claude-refuse started as a plain subprocess, not a scheduled task
+--- the task's console (out/claude-refuse/console.txt):
+[claude-refuse] in this session
+CASE claude-refuse launcher: OBSERVED pid 49712; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[claude] $ python <prompt> claude -p <prompt> --output-format stream-json --verbose --max-turns 15 --allowedTools mcp__graftling__subagents   (cwd <tmp>/home/work/claude-refuse; bound 420 s)
+[claude] exit 0 after 1.8 s; 2 process(es) seen; trace events 0
+CASE claude-refuse O6 Claude child refused: PASS tool result has unsupported-runtime True, the message True ('A Claude child cannot run on native Windows: Claude Code has no OS sandbox there (stand-in)"}}'); agent records []; other claude.exe processes []
+CASE claude-refuse O7 failIfUnavailable and rule syntax: OBSERVED not exercised: no Claude child starts on native Windows (O6); Claude Code documents that with sandbox.failIfUnavailable it exits at startup there (inference from its documents)
+CASE claude-refuse O5 session end (no child): PASS host.log last line '2026-11-27T00:00:00 subagents host recorded its children stopped.'; channel.json gone; host python alive 10 s after Claude Code exited: []; gone after (s) {49715: 0.0}; trace: no host stop event; claude.exe stopped None; Claude Code 2.1.314 (Claude Code) (stand-in) in print mode (-p): the session ends at the end of the turn, not at /exit
+wall time 2.2 s
+RESULT claude-refuse PASS
+(exit 0)

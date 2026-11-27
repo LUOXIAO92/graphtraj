@@ -1,0 +1,9 @@
+$ env <python> vm/drive650.py case venv
+[venv] in this session
+CASE venv launcher: OBSERVED pid 49479; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+CASE venv H2/I1 uv venv launcher: OBSERVED sys.executable and sys._base_executable differ: False (['<tmp>/venv/bin/python', '<tmp>/venv/bin/python']); a Start-Process of the venv python has child process(es) [] (not Windows: no launcher)
+CASE venv I6 pyvenv.cfg home: OBSERVED home None; holds python.exe False; site-packages <tmp>/venv/site exists True; base executable <mac-path>
+CASE venv D2 graftling finds DSH through the shim: OBSERVED dsh_package(shutil.which("dsh")) -> Traceback (most recent call last): File "<string>", line 1, in <module> import shutil; from graftling.dsh.settings import dsh_package; print(dsh_package(shutil.which('dsh'))) ^^^^^^^^^^^^^^^^^^^^^^^^^...; expected npm/node_modules/@deepseek-ai/dsh/package.json
+wall time 0.1 s
+RESULT venv PASS
+(exit 0)

@@ -1,0 +1,5 @@
+$ env <python> vm/drive650.py case pi
+[pi] in this session
+CASE pi launcher: OBSERVED pid 49731; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+RESULT pi STOP the key variable is not set for this user; run step K first
+(exit 2)

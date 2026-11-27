@@ -1,0 +1,3 @@
+$ env <python> vm/drive650.py scan claude
+SCAN FAIL the key or the autologon password is in 1 file(s) (value not printed): ['agents-control/leak.txt']
+(exit 3)

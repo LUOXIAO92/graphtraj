@@ -1,0 +1,13 @@
+$ env <python> vm/drive650.py case claude-market
+[claude-market] in this session
+CASE claude-market launcher: OBSERVED pid 49570; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+marketplace add exit 0; plugin install exit 0
+[claude-no-sh] $ python <prompt> claude -p Reply with exactly MARKET-650-OK. --output-format stream-json --verbose --max-turns 15   (cwd <tmp>/home/work/claude-market; bound 300 s)
+[claude-no-sh] exit 0 after 0.1 s; 1 process(es) seen; trace events 0
+CASE claude-market O9 marketplace plugin (no sh): OBSERVED no-sh: mcp_servers ['plugin:graftling:subagents=failed']; host.log new lines 'graftling plugin: the subagents host did not start: the graftling marketplace plugin is not supported on native Windows. Use configuration --write (stand-in)'; unsupported line True; a host started False
+[claude-with-sh] $ python <prompt> claude -p Reply with exactly MARKET-650-OK. --output-format stream-json --verbose --max-turns 15   (cwd <tmp>/home/work/claude-market; bound 300 s)
+[claude-with-sh] exit 0 after 0.1 s; 1 process(es) seen; trace events 0
+CASE claude-market O9 marketplace plugin (with sh): OBSERVED with-sh: mcp_servers ['plugin:graftling:subagents=failed']; host.log new lines 'graftling plugin: the subagents host did not start: the graftling marketplace plugin is not supported on native Windows. Use configuration --write (stand-in)'; unsupported line True; a host started False
+wall time 0.5 s
+RESULT claude-market PASS
+(exit 0)

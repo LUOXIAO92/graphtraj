@@ -1,0 +1,32 @@
+Task 650 driver rehearsal (macOS, stand-in Runtimes; random dummy settings, key and password; consoles drv-01-29 in c1/)
+drv-01 npm-summary-real-649: expects 'added 670 packages in 14m' -> yes
+drv-02 parsers-stand-in-data: expects 'parsers: init ['graftling=connected'], uses 2, results 1, models ['m1'], subagent calls 2, models_in ['pm', 'pm2'], records 1' -> yes
+drv-03 venv: expects 'RESULT venv PASS' -> yes
+drv-04 r0: expects 'RESULT r0 PASS' -> yes
+drv-05 claude: expects 'RESULT claude PASS' -> yes
+drv-06 claude-no-tool-call: expects 'RESULT claude NO-TOOL-CALL' -> yes
+drv-07 claude-refuse: expects 'RESULT claude-refuse PASS' -> yes
+drv-08 claude-caller-real-graftling-refusals: expects 'RESULT claude-caller FAIL (O4 context from a Bash-tool caller)' -> yes
+drv-09 claude-probe: expects 'expanded with the variable' -> yes
+drv-10 claude-market: expects 'RESULT claude-market PASS' -> yes
+drv-11 pi: expects 'RESULT pi PASS' -> yes
+drv-12 pi-refuse: expects 'RESULT pi-refuse PASS' -> yes
+drv-13 pi-refuse-no-tool-call: expects 'RESULT pi-refuse NO-TOOL-CALL' -> yes
+drv-14 pi-caller-real-graftling-cli: expects 'RESULT pi-caller FAIL (H7 caller under Pi's bash tool refused)' -> yes
+drv-15 pi-nonascii: expects 'RESULT pi-nonascii PASS' -> yes
+drv-16 pi-kill: expects 'RESULT pi-kill PASS' -> yes
+drv-17 dsh: expects 'RESULT dsh PASS' -> yes
+drv-18 dsh-nonascii: expects 'RESULT dsh-nonascii PASS' -> yes
+drv-19 dsh-stop: expects 'RESULT dsh-stop PASS' -> yes
+drv-20 dsh-kill: expects 'RESULT dsh-kill PASS' -> yes
+drv-21 schedule-claude-refuse: expects 'RESULT claude-refuse PASS' -> yes
+drv-22 schedule-no-session: expects 'RESULT claude STOP the VM user has no Active console session' -> yes
+drv-23 no-key: expects 'RESULT pi STOP the key variable is not set' -> yes
+drv-24 driver-error: expects 'RESULT dsh STOP driver error' -> yes
+drv-25 cleanup-planted-leftover: expects 'CLEANUP dsh-kill: 1 leftover' -> yes
+drv-26 scan-clean-vm-user-replaced: expects 'SCAN PASS' -> yes
+drv-27 scan-no-vm-user-left: expects 'count 0' -> yes
+drv-28 scan-finds-planted-key: expects 'SCAN FAIL the key or the autologon password is in 1 file(s)' -> yes
+drv-29 scan-finds-planted-password: expects 'SCAN FAIL the key or the autologon password is in 1 file(s)' -> yes
+record .pth files left in the venv's site directory after all cases: 0
+consoles holding the dummy key, password, VM user or settings tag: 0; consoles holding a /Users/ path: 0

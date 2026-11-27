@@ -1,0 +1,4 @@
+$ env <python> vm/drive650.py schedule claude 120
+session of the VM user: NONE; query user: No User exists for *
+RESULT claude STOP the VM user has no Active console session (run step I first)
+(exit 2)

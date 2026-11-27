@@ -1,0 +1,13 @@
+$ zsh scripts/verify-650/steps.zsh E claude
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [E] Scan, fetch and scrub the evidence of claude. Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== evidence of claude: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of claude kept as claude-prev-20261127225822
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out claude" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<CLAUDE_BASE_URL>": 8, "<CLAUDE_BASE_URL_HOST>": 4, "<CLAUDE_HAIKU_MODEL>": 4, "<CLAUDE_MODEL>": 4, "<DSH_CHILD_BASE_URL>": 8, "<DSH_CHILD_BASE_URL_HOST>": 4, "<DSH_CHILD_MODEL>": 4, "<DSH_MAIN_ARG>": 4, "<DSH_MAIN_KEY_VAR>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<PI_KEY_VAR>": 4, "<PI_MODEL>": 4, "<PI_PROVIDER>": 4, "<PROJECT>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+next: zsh scripts/verify-650/steps.zsh D
+VERDICT 650 E claude: PASS (PASS (evidence/live/claude, 3 files; scanned on the VM, scrubbed twice))
+(exit 0)

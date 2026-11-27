@@ -1,0 +1,67 @@
+Task 650 steps rehearsal (stand-in gcloud; random dummy settings and key; consoles 01-35 in c1/)
+--- runs
+01 00-missing-settings: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+02 00-empty-required: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+03 00-optional-not-assigned: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+04 00-pi-custom-without-base-url: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+05 00-claude-auth-var: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+06 00-settings-not-ignored: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+07 00-vm-user-ordinary-word: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+08 00-model-ordinary-word: expected STOP, got 'VERDICT 650 00: STOP' (verdict is the last line) -> yes
+09 00-preflight: expected PASS, got 'VERDICT 650 00: PASS (Task VM: absent)' (verdict is the last line) -> yes
+10 C-vm-absent: expected STOP, got 'VERDICT 650 C: STOP' (verdict is the last line) -> yes
+11 D-vm-absent: expected PASS, got 'VERDICT 650 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' (verdict is the last line) -> yes
+12 V-full: expected PASS, got 'VERDICT 650 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' (verdict is the last line) -> yes
+13 K-dummy-key: expected PASS, got 'VERDICT 650 K: PASS (key stored as the VM user's environment variable; R0 proves it with real calls)' -> yes
+14 R0-before-I: expected STOP, got 'VERDICT 650 R0: STOP (STOP the VM user has no Active console session (run step I first); r0 STOP)' (verdict is the last line) -> yes
+15 I-autologon-refused: expected STOP, got 'VERDICT 650 I: STOP' (verdict is the last line) -> yes
+16 I-not-established: expected STOP, got 'VERDICT 650 I: STOP' (verdict is the last line) -> yes
+17 I: expected PASS, got 'VERDICT 650 I: PASS (VM_USER has an Active console session: 1 console; evidence PASS)' (verdict is the last line) -> yes
+18 R0-no-key: expected STOP, got 'VERDICT 650 R0: STOP (STOP the key variable is not set for this user; run step K first; r0 STOP)' (verdict is the last line) -> yes
+19 R0-model-differs: expected FAIL, got 'VERDICT 650 R0: FAIL (r0 FAIL; evidence: r0 PASS)' (verdict is the last line) -> yes
+20 R0: expected PASS, got 'VERDICT 650 R0: PASS (r0 PASS; evidence: r0 PASS)' (verdict is the last line) -> yes
+21 C: expected PASS, got 'VERDICT 650 C: PASS (venv PASS, claude PASS, claude-refuse PASS, claude-caller PASS, claude-probe PASS, claude-market PASS; evidence: venv PASS, claude PASS, claude-refuse PASS, claude-caller PASS, claude-probe PASS, claude-market PASS)' (verdict is the last line) -> yes
+22 C-no-tool-call: expected NO-TOOL-CALL, got 'VERDICT 650 C: NO-TOOL-CALL (venv PASS, claude PASS, claude-refuse NO-TOOL-CALL, claude-caller PASS, claude-probe PASS, claude-market PASS; evidence: venv PASS, claude PASS, claude-refuse PASS, claude-caller PASS, claude-probe PASS, claude-market PASS)' (verdict is the last line) -> yes
+23 case-claude-refuse-rerun: expected PASS, got 'VERDICT 650 case claude-refuse: PASS (claude-refuse PASS; evidence: claude-refuse PASS)' (verdict is the last line) -> yes
+24 P-driver-stop: expected STOP, got 'VERDICT 650 P: STOP (STOP driver error: RuntimeError: pi: the Runtime did not start (stand-in); pi PASS, pi-refuse PASS, pi-caller STOP)' (verdict is the last line) -> yes
+25 V-resume-on-existing-VM: expected PASS, got 'VERDICT 650 V: PASS (VM provisioned; evidence PASS (evidence/live/V, 4 files; scanned on the VM, scrubbed twice))' (verdict is the last line) -> yes
+26 P: expected PASS, got 'VERDICT 650 P: PASS (pi PASS, pi-refuse PASS, pi-caller PASS, pi-nonascii PASS, pi-kill PASS; evidence: pi PASS, pi-refuse PASS, pi-caller PASS, pi-nonascii PASS, pi-kill PASS)' (verdict is the last line) -> yes
+27 S: expected PASS, got 'VERDICT 650 S: PASS (dsh PASS, dsh-nonascii PASS, dsh-stop PASS, dsh-kill PASS; evidence: dsh PASS, dsh-nonascii PASS, dsh-stop PASS, dsh-kill PASS)' (verdict is the last line) -> yes
+28 S-kill-fails: expected FAIL, got 'VERDICT 650 S: FAIL (dsh PASS, dsh-nonascii PASS, dsh-stop PASS, dsh-kill FAIL; evidence: dsh PASS, dsh-nonascii PASS, dsh-stop PASS, dsh-kill PASS)' (verdict is the last line) -> yes
+29 S-env-stop: expected STOP, got 'VERDICT 650 S: STOP (STOP the VM user has no Active console session (run step I first); dsh STOP)' (verdict is the last line) -> yes
+30 case-bad-argument: expected STOP, got 'VERDICT 650 case foo: STOP' (verdict is the last line) -> yes
+31 E-claude: expected PASS, got 'VERDICT 650 E claude: PASS (PASS (evidence/live/claude, 3 files; scanned on the VM, scrubbed twice))' (verdict is the last line) -> yes
+32 E-dsh-stop-one-file-lost: expected FAIL, got 'VERDICT 650 E dsh-stop: FAIL (FAIL (the VM counted 3 evidence files, 2 arrived))' (verdict is the last line) -> yes
+33 D-disk-survives: expected FAIL, got 'VERDICT 650 D: FAIL (still present, by name/tag/labels: disks: 1)' (verdict is the last line) -> yes
+34 D-clean: expected PASS, got 'VERDICT 650 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)' (verdict is the last line) -> yes
+35 C-after-D: expected STOP, got 'VERDICT 650 C: STOP' (verdict is the last line) -> yes
+--- checks
+an empty required variable is named: yes
+an unassigned optional variable is named, empty allowed: yes
+PI_ROUTE=custom without PI_BASE_URL is named: yes
+an ordinary VM_USER (a word in drive650.py) is refused naming VM_USER: yes
+a model value found in the committed files is refused naming it: yes
+C with no VM (and no Task rules) names V: yes
+uploaded by tar: v650/autologon.ps1 v650/drive650.py v650/graftling.bundle v650/mcp_probe.py v650/provision.ps1 v650/setkey.ps1 v650/settings.json v650/trace.ps1 
+Task rules existing when instances create ran: 2 (deny and ssh); their descriptions name Task 650: 2 of 2
+settings.json sent to the VM: scrub placeholders <ACCOUNT> <CLAUDE_BASE_URL> <CLAUDE_BASE_URL_HOST> <CLAUDE_HAIKU_MODEL> <CLAUDE_MODEL> <DSH_CHILD_BASE_URL> <DSH_CHILD_BASE_URL_HOST> <DSH_CHILD_MODEL> <DSH_MAIN_ARG> <DSH_MAIN_KEY_VAR> <KEY_ENV> <MACHINE_TYPE> <PI_KEY_VAR> <PI_MODEL> <PI_PROVIDER> <PROJECT> <REGION> <VM_LABEL> <VM_NAME> <VM_USER> <ZONE>; VM_USER pair True ; pins {'claude': '2.1.314', 'pi': '1.4.0', 'dsh': '0.2.2-rc.5', 'pnpm': '12.21.0'} ; dsh_main app_args 2 word(s); the flag not scrubbed True
+R0 before I: env STOP (no console session), next I then R0, no 'do NOT run D': yes, yes, 0
+I refused before any reboot: no reboot
+I not established: observable and next I/D printed: yes, yes
+R0 without the key names K then R0, no 'do NOT run D': yes, yes, 0
+R0 FAIL names the user's decision, V for a settings fix, then R0: yes, yes, yes
+C: cases scheduled venv claude claude-refuse claude-caller claude-probe claude-market ; a cleanup after each case: 6 of 6
+C NO-TOOL-CALL offers one rerun of that case: yes
+a rerun of a C case points on to P: yes
+P driver STOP: 'do NOT run D' yes; names V yes; rerun P named yes; offers D: 0; cases scheduled: pi pi-refuse pi-caller (none after the STOP)
+V on the existing VM: instances create calls 0; re-uploads by tar 1; provisioning re-run 1; autologon.ps1 or reboot run during V: 0
+S: item lines per case dsh 3 dsh-nonascii 3 dsh-stop 3 dsh-kill 3 
+S with a FAIL still runs every case and names D: yes, yes
+S env STOP: next I and S, no 'do NOT run D': yes, yes, 0
+after D: Task rules left 0, instance absent
+run order by each step's first next line: 00 -> V; V -> K; K -> I; I -> R0; R0 -> C; C -> P; P -> S; S -> D
+gcloud calls: 312; without --project: 0; naming another project than <PROJECT>, other than the public image read: 0; 'config' calls: 0; compute scp calls: 0
+consoles showing either address: 0
+dummy key: in gcloud argv 0, in gcloud environments 0, in files (verify-650 tree incl. local/ and rehearsal, stand-in state, evidence) 0; arrived on gcloud's stdin (length+SHA-256 match) 1 time(s)
+fetched evidence: 157 files; files still holding a scrubbed settings value incl. VM_USER, URL hosts, label value, app-arg word (any case, UTF-8): 0; files holding the sample IPv4/IPv6: 0; placeholders now present: <ACCOUNT> 120, <CLAUDE_BASE_URL_HOST> 120, <CLAUDE_BASE_URL> 240, <CLAUDE_HAIKU_MODEL> 120, <CLAUDE_MODEL> 120, <DSH_CHILD_BASE_URL_HOST> 120, <DSH_CHILD_BASE_URL> 240, <DSH_CHILD_MODEL> 120, <DSH_MAIN_ARG> 120, <DSH_MAIN_KEY_VAR> 120, <IP> 80, <KEY_ENV> 120, <MACHINE_TYPE> 120, <PI_KEY_VAR> 120, <PI_MODEL> 120, <PI_PROVIDER> 120, <PROJECT> 120, <REGION> 120, <VM_LABEL> 120, <VM_NAME> 240, <VM_USER> 121, <ZONE> 120
+committed-or-committable files (tracked + untracked not ignored) holding the dummy settings tag or the dummy key: 0

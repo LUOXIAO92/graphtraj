@@ -1,0 +1,94 @@
+$ VERIFY649_GRAFTLING=/tmp/claude-501/t649/rehearsal/diverged/graftling VERIFY649_GREMOTE=/tmp/claude-501/t649/rehearsal/diverged/gremote.git VERIFY649_GH=/tmp/claude-501/t649/rehearsal/diverged/gh/gh VERIFY649_EVIDENCE=/tmp/claude-501/t649/rehearsal/diverged/evidence VERIFY649_POLL_S=1 VERIFY649_APPEAR_S=10 VERIFY649_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/649-graftling-windows-dsh to graftling /tmp/claude-501/t649/rehearsal/diverged/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/t649/rehearsal/diverged/graftling; head 21818f59d73a4954b981302b4e8ed5dd20aaf465 contains graftling dev eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866 (prerequisites: eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866; any other than the base an ancestor of it)
+--- bundle commits on eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+  21818f5 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows CI: probe whether DSH runs on Windows, without a credential (649, phase A)
+PASS: author and committer are the noreply identity
+--- files changed since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+   .github/dsh_windows_probe.py  | 439 ++++++++++++++++++++++++++++++++++++++++++
+   .github/workflows/windows.yml |  74 ++++++-
+   2 files changed, 512 insertions(+), 1 deletion(-)
+PASS: changed paths are within the allowed set: .github/workflows/windows.yml, .github/dsh_windows_probe.py
+--- .github/workflows/windows.yml at 21818f59d73a4954b981302b4e8ed5dd20aaf465 against eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: push branches are exactly dev's plus agent/649-graftling-windows-dsh
+PASS: the base workflow is unchanged up to its end apart from the push branches line
+PASS: jobs are windows-tests and dsh-windows-probe
+PASS: the windows-tests job is the base one
+PASS: only the dsh-windows-probe job (with its comment) is appended
+PASS: dsh-windows-probe runs on windows-latest
+PASS: dsh-windows-probe timeout-minutes 60
+PASS: PYTHONUTF8=1
+PASS: job env names no credential or provider variable: ['DSH_VERSION', 'NPM_CONFIG_UPDATE_NOTIFIER', 'PIP_DISABLE_PIP_VERSION_CHECK', 'PIP_NO_INPUT', 'PYTHONUTF8']
+PASS: DSH_VERSION 0.2.2-rc.5 (graftling README's tested DSH)
+PASS: steps: Keep symbolic links on this runner | Check out the commit under test | Set up Node 24.22.3 x64 | Set up Python 3.13.7 x64 | Install graftling and pinned test tools | Probe DSH on this runner | Run graftling's DSH test files against the installed DSH | Retain the DSH probe results
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks before the checkout; checkout has persist-credentials: false
+PASS: Node 24.22.3 x64 (DSH 0.2.2-rc.5 needs >=24.9.0)
+PASS: no step prints the whole environment
+PASS: the probe step runs .github/dsh_windows_probe.py into test-results/dsh-probe
+PASS: the DSH test files run always(), their exit code is recorded and does not gate
+PASS: upload always() as graftling-dsh-probe-${{ github.sha }}-${{ github.run_attempt }} with retention 7 days
+--- .github/workflows/windows.yml at the base: the windows-tests job and the whole file by 632's wfcheck
+PASS: push branches line is the base's; judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+--- .github/workflows/windows.yml at the head: the windows-tests job and the whole file by 632's wfcheck
+PASS: push branches line is the head's (with 649); judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-632/windows-expected.txt parses: 1 expected Windows failures and 0 expected hangs (W8 (not registered; outside this round) 1), 19 allowed environment skips
+PASS: the 18 DSH-related lines of the expected list are unchanged (phase A changes none)
+STOP: graftling /tmp/claude-501/t649/rehearsal/diverged/gremote.git has agent/649-graftling-windows-dsh at 9b0e7f5344bc149d459272d8d505fabca355bfec, not an ancestor of the bundle head; never force. Inspect: git -C /tmp/claude-501/t649/rehearsal/diverged/graftling fetch /tmp/claude-501/t649/rehearsal/diverged/gremote.git agent/649-graftling-windows-dsh && git -C /tmp/claude-501/t649/rehearsal/diverged/graftling log --oneline -5 FETCH_HEAD
+VERDICT 649 P: STOP
+[exit 1]
+--- after P: remote 9b0e7f5344bc149d459272d8d505fabca355bfec (the diverged commit; unchanged)

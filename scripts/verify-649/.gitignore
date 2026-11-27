@@ -1,0 +1,4 @@
+# Evidence the real steps (P, W, X) write; copied into tracked files in a later commit, never edited in place.
+evidence/live/
+# Drafts of the graftling files, written here with the Runtime's file tools and copied into the scratch clone.
+.draft/

@@ -1,0 +1,125 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 4 items
+
+tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client FAILED     [ 25%]
+tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes FAILED        [ 50%]
+tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[ready] SKIPPED [ 75%]
+tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[delayed] SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=f9f502c3e6f34af8b8a877e9ffc3c556: found=0 stopped=0 remaining=0 error=No job graftling-f9f502c3e6f34af8b8a877e9ffc3c556 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+================================== FAILURES ===================================
+___________________ test_installed_dsh_official_mcp_client ____________________
+tests\test_dsh_mcp.py:22: in test_installed_dsh_official_mcp_client
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+E   AssertionError: node:internal/modules/cjs/loader:1564
+E       const err = new Error(message);
+E                   ^
+E     
+E     Error: Cannot find module '@deepseek-ai/cordis'
+E     Require stack:
+E     - C:\npm\prefix\dsh.cmd
+E         at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+E         at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+E         at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+E         at require.resolve (node:internal/modules/helpers:175:31)
+E         at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp.mjs:8:56
+E         at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+E         at async node:internal/modules/esm/loader:647:26
+E         at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+E       code: 'MODULE_NOT_FOUND',
+E       requireStack: [ 'C:\\npm\\prefix\\dsh.cmd' ]
+E     }
+E     
+E     Node.js v24.22.3
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.EXE', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp.mjs', 'C:\\npm\\prefix\\dsh.cmd', 'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp_server.py', 'D:\\a\\graftling\\graftling\\src'], returncode=1, stdout='', stderr="node:internal/modules/cjs/loader:1564\n  const err = new Error(message);\n              ^\n\nError: Cannot find module '@deepseek-ai/cordis'\nRequire stack:\n- C:\\npm\\prefix\\dsh.cmd\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at require.resolve (node:internal/modules/helpers:175:31)\n    at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp.mjs:8:56\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n    at async node:internal/modules/esm/loader:647:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ 'C:\\\\npm\\\\prefix\\\\dsh.cmd' ]\n}\n\nNode.js v24.22.3\n").returncode
+_____________________ test_delivered_plugin_native_scopes _____________________
+tests\test_dsh_mcp.py:42: in test_delivered_plugin_native_scopes
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: node:internal/modules/cjs/loader:1564
+E       const err = new Error(message);
+E                   ^
+E     
+E     Error: Cannot find module '@deepseek-ai/cordis'
+E     Require stack:
+E     - C:\npm\prefix\dsh.cmd
+E         at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+E         at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+E         at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+E         at require.resolve (node:internal/modules/helpers:175:31)
+E         at load (file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:11:51)
+E         at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:12:27
+E         at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+E         at async node:internal/modules/esm/loader:647:26
+E         at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+E       code: 'MODULE_NOT_FOUND',
+E       requireStack: [ 'C:\\npm\\prefix\\dsh.cmd' ]
+E     }
+E     
+E     Node.js v24.22.3
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.EXE', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp_plugin.mjs', 'C:\\npm\\prefix\\dsh.cmd', 'D:\\a\\graftling\\graftling\\src\\graftling\\dsh\\plugin.mjs', 'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp_server.py'], returncode=1, stdout='', stderr="node:internal/modules/cjs/loader:1564\n  const err = new Error(message);\n              ^\n\nError: Cannot find module '@deepseek-ai/cordis'\nRequire stack:\n- C:\\npm\\prefix\\dsh.cmd\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at require.resolve (node:internal/modules/helpers:175:31)\n    at load (file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:11:51)\n    at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:12:27\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n    at async node:internal/modules/esm/loader:647:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ 'C:\\\\npm\\\\prefix\\\\dsh.cmd' ]\n}\n\nNode.js v24.22.3\n").returncode
+- generated xml file: D:\a\graftling\graftling\test-results\dsh-probe\tests\junit\test_dsh_mcp.xml -
+============================ slowest 10 durations =============================
+0.05s call     tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[ready]
+0.05s call     tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client
+0.05s call     tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes
+0.04s call     tests/test_dsh_mcp.py::test_browser_module_keeps_native_tool_card[delayed]
+0.01s setup    tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client - AssertionError: node:internal/modules/cjs/loader:1564
+    const err = new Error(message);
+                ^
+  
+  Error: Cannot find module '@deepseek-ai/cordis'
+  Require stack:
+  - C:\npm\prefix\dsh.cmd
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at require.resolve (node:internal/modules/helpers:175:31)
+      at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp.mjs:8:56
+      at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+      at async node:internal/modules/esm/loader:647:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: [ 'C:\\npm\\prefix\\dsh.cmd' ]
+  }
+  
+  Node.js v24.22.3
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.EXE', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp.mjs', 'C:\\npm\\prefix\\dsh.cmd', 'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp_server.py', 'D:\\a\\graftling\\graftling\\src'], returncode=1, stdout='', stderr="node:internal/modules/cjs/loader:1564\n  const err = new Error(message);\n              ^\n\nError: Cannot find module '@deepseek-ai/cordis'\nRequire stack:\n- C:\\npm\\prefix\\dsh.cmd\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at require.resolve (node:internal/modules/helpers:175:31)\n    at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp.mjs:8:56\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n    at async node:internal/modules/esm/loader:647:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ 'C:\\\\npm\\\\prefix\\\\dsh.cmd' ]\n}\n\nNode.js v24.22.3\n").returncode
+FAILED tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes - AssertionError: node:internal/modules/cjs/loader:1564
+    const err = new Error(message);
+                ^
+  
+  Error: Cannot find module '@deepseek-ai/cordis'
+  Require stack:
+  - C:\npm\prefix\dsh.cmd
+      at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+      at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+      at require.resolve (node:internal/modules/helpers:175:31)
+      at load (file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:11:51)
+      at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:12:27
+      at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+      at async node:internal/modules/esm/loader:647:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: [ 'C:\\npm\\prefix\\dsh.cmd' ]
+  }
+  
+  Node.js v24.22.3
+  
+assert 1 == 0
+ +  where 1 = CompletedProcess(args=['C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.EXE', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp_plugin.mjs', 'C:\\npm\\prefix\\dsh.cmd', 'D:\\a\\graftling\\graftling\\src\\graftling\\dsh\\plugin.mjs', 'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe', 'D:\\a\\graftling\\graftling\\tests\\fixtures\\dsh_mcp_server.py'], returncode=1, stdout='', stderr="node:internal/modules/cjs/loader:1564\n  const err = new Error(message);\n              ^\n\nError: Cannot find module '@deepseek-ai/cordis'\nRequire stack:\n- C:\\npm\\prefix\\dsh.cmd\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)\n    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)\n    at require.resolve (node:internal/modules/helpers:175:31)\n    at load (file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:11:51)\n    at file:///D:/a/graftling/graftling/tests/fixtures/dsh_mcp_plugin.mjs:12:27\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n    at async node:internal/modules/esm/loader:647:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ 'C:\\\\npm\\\\prefix\\\\dsh.cmd' ]\n}\n\nNode.js v24.22.3\n").returncode
+SKIPPED [2] tests\test_dsh_mcp.py:58: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+======================== 2 failed, 2 skipped in 0.27s =========================

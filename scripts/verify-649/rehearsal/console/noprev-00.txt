@@ -1,0 +1,14 @@
+$ VERIFY649_GRAFTLING=/tmp/claude-501/t649/rehearsal3/noprev/graftling VERIFY649_GREMOTE=/tmp/claude-501/t649/rehearsal3/noprev/gremote.git VERIFY649_GH=/tmp/claude-501/t649/rehearsal3/noprev/gh/gh VERIFY649_EVIDENCE=/tmp/claude-501/t649/rehearsal3/noprev/evidence VERIFY649_POLL_S=1 VERIFY649_APPEAR_S=10 VERIFY649_DONE_S=30 VERIFY649_BUNDLE=/tmp/claude-501/t649/rehearsal3/noprev.bundle zsh steps.zsh 00
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/t649/rehearsal3/noprev/gh/gh | TMPDIR for started processes: /tmp/claude-501
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-632 fake)
+    - Active account: true
+PASS: /tmp/claude-501/t649/rehearsal3/noprev/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/t649/rehearsal3/noprev/gremote.git is used instead of graftling origin
+STOP: phase A's 21818f59d73a4954b981302b4e8ed5dd20aaf465 is not an ancestor of the bundle head 81b444b878d88f111d15ee8c83fbf2e522f6b33f: the push would not fast-forward
+VERDICT 649 00: STOP
+[exit 1]

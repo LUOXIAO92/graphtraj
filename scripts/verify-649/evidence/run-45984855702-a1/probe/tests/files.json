@@ -1,0 +1,60 @@
+{
+ "file_limit_s": 300.0,
+ "total_limit_s": 1200.0,
+ "files": [
+  {
+   "file": "tests/test_dsh_live.py",
+   "log": "logs\\test_dsh_live.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_live.xml"
+  },
+  {
+   "file": "tests/test_dsh_mcp.py",
+   "log": "logs\\test_dsh_mcp.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_mcp.xml"
+  },
+  {
+   "file": "tests/test_dsh_standalone_child.py",
+   "log": "logs\\test_dsh_standalone_child.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 5.4,
+   "junit": "junit\\test_dsh_standalone_child.xml"
+  },
+  {
+   "file": "tests/test_dsh_providers_608.py",
+   "log": "logs\\test_dsh_providers_608.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 0.9,
+   "junit": "junit\\test_dsh_providers_608.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_child_tools_551.py",
+   "log": "logs\\test_pi_dsh_child_tools_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_pi_dsh_child_tools_551.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_owner_tools_no_ask_551.py",
+   "log": "logs\\test_pi_dsh_owner_tools_no_ask_551.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 0.8,
+   "junit": "junit\\test_pi_dsh_owner_tools_no_ask_551.xml"
+  }
+ ]
+}

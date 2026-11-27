@@ -1,0 +1,4 @@
+node: exit 0 v24.22.3 
+npm: exit 0 11.19.1 
+npm_prefix: exit 0 C:\npm\prefix 
+npm_root: exit 0 C:\npm\prefix\node_modules 

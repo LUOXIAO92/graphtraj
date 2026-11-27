@@ -1,0 +1,20 @@
+# Task 649 (W11): what graftling's DSH test files are expected to do in the dsh-windows-tests job of
+# .github/workflows/windows.yml: a GitHub-hosted Windows x64 runner with DSH 0.2.2-rc.5 installed by npm on Node 24.22.3,
+# every tests/test_*dsh*.py run by .github/run_test_files.py. Read by steps.zsh through verify-632/wincheck.py junit;
+# the format is verify-632/windows-expected.txt's.
+#
+# No failure and no hang is expected. A skip starting "POSIX-only: " needs no entry. Every other skip must be listed
+# below; each of them also happens on macOS with DSH 0.2.2-rc.5 installed (evidence/macos/suite-cand-5b7bd91d.txt).
+#
+# The windows-tests job (no DSH installed) keeps scripts/verify-632/windows-expected.txt, whose DSH lines still apply
+# there: this Task changes none of them.
+
+# --- Opt-in official-host evidence: the variable is unset on the runner, as on macOS.
+skip-allowed	Requires assigned official host slot.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires one explicitly retained native trace.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires final assigned host slot.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires retained interrupted official Session.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires fixed Pi combination and final host slot.	test_dsh_official.py: opt-in variable unset (also on macOS)
+skip-allowed	Requires assigned native startup diagnosis.	test_dsh_startup.py: opt-in variable unset (also on macOS)
+# --- What the installed DSH 0.2.2-rc.5 itself does not ship.
+skip-allowed	Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.	test_dsh_mcp.py: DSH 0.2.2-rc.5 has no dsh-client-ui-slots (also on macOS; run 45984855702 on Windows)

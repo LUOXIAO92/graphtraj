@@ -1,0 +1,10 @@
+{
+ "derived_package_json": "C:\\npm\\package.json",
+ "derived_exists": false,
+ "refusal_at_derived": "DSH 0.2.0-rc.2 or later is required (installed unknown).",
+ "refusal_at_package": null,
+ "conftest_unsupported_dsh": "DSH 0.2.0-rc.2 or later is required (installed unknown).",
+ "prepare_which": "DshError RUNTIME_UNSUPPORTED: DSH 0.2.0-rc.2 or later is required (installed unknown).",
+ "prepare_executable": "DshError RUNTIME_UNSUPPORTED: DSH 0.2.0-rc.2 or later is required (installed unknown).",
+ "catalog_providers": 42
+}

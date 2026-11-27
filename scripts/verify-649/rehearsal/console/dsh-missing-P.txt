@@ -1,0 +1,231 @@
+$ VERIFY649_GRAFTLING=/tmp/claude-501/t649/rehearsal3/dsh-missing/graftling VERIFY649_GREMOTE=/tmp/claude-501/t649/rehearsal3/dsh-missing/gremote.git VERIFY649_GH=/tmp/claude-501/t649/rehearsal3/dsh-missing/gh/gh VERIFY649_EVIDENCE=/tmp/claude-501/t649/rehearsal3/dsh-missing/evidence VERIFY649_POLL_S=1 VERIFY649_APPEAR_S=10 VERIFY649_DONE_S=30 zsh steps.zsh P
+scrubbed at start (names only): DEEPSEEK_BASE_URL CLOUDSDK_PROXY_PASSWORD OPEN_ROUTER_BASE_URL OPENCODE_BASE_URL ALI_BAILIAN_BASE_URL
+== [P] Publish and wait. OUTWARD-FACING: pushes agent/649-graftling-windows-dsh to graftling /tmp/claude-501/t649/rehearsal3/dsh-missing/gremote.git (fast-forward only, never force); the push starts '.github/workflows/windows.yml'. Login: git credential helper, gh login. Dialog: none. Network: GitHub.
+PASS: bundle verifies against /tmp/claude-501/t649/rehearsal3/dsh-missing/graftling; head 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a contains graftling dev 57153234f90829e6629765e5b985f20c1491353c and phase A's 21818f59d73a4954b981302b4e8ed5dd20aaf465 (prerequisites: 21818f59d73a4954b981302b4e8ed5dd20aaf465 57153234f90829e6629765e5b985f20c1491353c bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b)
+--- bundle commits on 57153234f90829e6629765e5b985f20c1491353c:
+  5b7bd91 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Tests: a real venv's python started through the DSH plugin is node's direct child running as the venv (649)
+  5bde58a LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | DSH on Windows: the plugin starts a venv's base interpreter, so host and MCP server are DSH's direct children (649)
+  6a0f15e LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev 5715323 (648) into agent/649-graftling-windows-dsh
+  5f3b4d4 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | DSH on Windows: find the package behind npm's dsh.cmd; DSH tests gate on a Windows runner (649)
+  3b6b7ac LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Merge graftling dev bbcea6d (647) into agent/649-graftling-windows-dsh
+  21818f5 LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Windows CI: probe whether DSH runs on Windows, without a credential (649, phase A)
+PASS: author and committer are the noreply identity
+--- files changed since 57153234f90829e6629765e5b985f20c1491353c:
+   .github/workflows/windows.yml               |  99 ++++++++++-
+   src/graftling/dsh/driver.py                 |   5 +-
+   src/graftling/dsh/plugin.mjs                |  29 +++-
+   src/graftling/dsh/settings.py               |  34 +++-
+   src/graftling/models.py                     |   4 +-
+   tests/conftest.py                           |   3 +-
+   tests/test_dsh_live.py                      |   3 +-
+   tests/test_dsh_mcp.py                       |  10 +-
+   tests/test_dsh_official.py                  |   4 +-
+   tests/test_dsh_providers_608.py             |   4 +-
+   tests/test_dsh_standalone_child.py          |  12 +-
+   tests/test_dsh_windows_649.py               | 258 ++++++++++++++++++++++++++++
+   tests/test_pi_dsh_child_tools_551.py        |   3 +-
+   tests/test_pi_dsh_owner_tools_no_ask_551.py |   4 +-
+   14 files changed, 442 insertions(+), 30 deletions(-)
+PASS: changed paths are within the allowed set: .github/workflows/windows.yml, src/graftling/dsh/settings.py, src/graftling/dsh/driver.py, src/graftling/dsh/plugin.mjs, src/graftling/models.py, tests/conftest.py, tests/test_dsh_live.py, tests/test_dsh_mcp.py, tests/test_dsh_official.py, tests/test_dsh_providers_608.py, tests/test_dsh_standalone_child.py, tests/test_dsh_windows_649.py, tests/test_pi_dsh_child_tools_551.py, tests/test_pi_dsh_owner_tools_no_ask_551.py
+--- .github/workflows/windows.yml at 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a against 57153234f90829e6629765e5b985f20c1491353c
+PASS: push branches are exactly dev's plus agent/649-graftling-windows-dsh
+PASS: the base workflow is unchanged up to its end apart from the push branches line
+PASS: jobs are windows-tests and dsh-windows-tests
+PASS: the windows-tests job is the base one
+PASS: only the dsh-windows-tests job (with its comment) is appended
+PASS: dsh-windows-tests runs on windows-latest
+PASS: dsh-windows-tests timeout-minutes 75
+PASS: PYTHONUTF8=1
+PASS: job env names no credential or provider variable: ['DSH_VERSION', 'NPM_CONFIG_UPDATE_NOTIFIER', 'PIP_DISABLE_PIP_VERSION_CHECK', 'PIP_NO_INPUT', 'PYTHONUTF8']
+PASS: DSH_VERSION 0.2.2-rc.5 (graftling README's tested DSH)
+PASS: steps: Keep symbolic links on this runner | Check out the commit under test | Set up Node 24.22.3 x64 | Set up Python 3.13.7 x64 | Install graftling and pinned test tools | Restore the npm download cache | Install DSH with npm | Run graftling's DSH test files against the installed DSH | Retain the DSH test results
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks before the checkout; checkout has persist-credentials: false
+PASS: Node 24.22.3 x64 (DSH 0.2.2-rc.5 needs >=24.9.0)
+PASS: no step prints the whole environment
+PASS: the npm download cache is actions/cache over npm's cache directory only
+PASS: the install step runs npm install -g @deepseek-ai/dsh@$DSH_VERSION and exits with npm's code (gating)
+PASS: every tests/test_*dsh*.py runs through .github/run_test_files.py, gating, after a successful install
+PASS: upload always() as graftling-dsh-windows-${{ github.sha }}-${{ github.run_attempt }} with retention 7 days
+--- .github/workflows/windows.yml at the base: the windows-tests job and the whole file by 632's wfcheck
+PASS: push branches line is the base's; judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+--- .github/workflows/windows.yml at the head: the windows-tests job and the whole file by 632's wfcheck
+PASS: push branches line is the head's (with 649); judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since 57153234f90829e6629765e5b985f20c1491353c
+PASS: the 37 tests of dsh-new-tests.txt are defined at 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-632/windows-expected.txt parses: 0 expected Windows failures and 0 expected hangs (none), 19 allowed environment skips
+PASS: the 18 DSH-related lines of the expected list are unchanged (windows-tests has no DSH)
+PASS: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/dsh-expected.txt parses: 0 expected Windows failures and 0 expected hangs (none), 7 allowed environment skips
+PASS: graftling /tmp/claude-501/t649/rehearsal3/dsh-missing/gremote.git has agent/649-graftling-windows-dsh at 21818f59d73a4954b981302b4e8ed5dd20aaf465, an ancestor of the bundle head (fast-forward)
+PASS: /tmp/claude-501/t649/rehearsal3/dsh-missing/graftling has no local agent/649-graftling-windows-dsh (P creates it from the bundle)
+$ git -C /tmp/claude-501/t649/rehearsal3/dsh-missing/graftling fetch /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/graftling-649.bundle refs/heads/agent/649-graftling-windows-dsh:refs/heads/agent/649-graftling-windows-dsh
+  From /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/graftling-649.bundle
+   * [new branch]      agent/649-graftling-windows-dsh -> agent/649-graftling-windows-dsh
+PASS: /tmp/claude-501/t649/rehearsal3/dsh-missing/graftling local agent/649-graftling-windows-dsh = 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
+$ git -C /tmp/claude-501/t649/rehearsal3/dsh-missing/graftling push /tmp/claude-501/t649/rehearsal3/dsh-missing/gremote.git refs/heads/agent/649-graftling-windows-dsh:refs/heads/agent/649-graftling-windows-dsh   (5b7bd91d6ed5d23b541ac89fb5f0066d2057567a)
+  To /tmp/claude-501/t649/rehearsal3/dsh-missing/gremote.git
+     21818f5..5b7bd91  agent/649-graftling-windows-dsh -> agent/649-graftling-windows-dsh
+PASS: graftling /tmp/claude-501/t649/rehearsal3/dsh-missing/gremote.git agent/649-graftling-windows-dsh = 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a
+looking for the .github/workflows/windows.yml run (event push) of 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a on LUOXIAO92/graftling (appearance bound 10s, poll 1s)
+run 51000000000 present after 1s: push | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+waiting for run 51000000000 (completion bound 30s, poll 1s)
+  [21:06:54] run 51000000000: completed failure
+--- run 51000000000 | attempt 1 | push | conclusion failure (information only) | head 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000
+JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/52000000000
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | setup: must succeed
+  step  3 | success   | Check out the commit under test | setup: must succeed
+  step  4 | success   | Fail unless the linked package documents are symbolic links | setup: must succeed
+  step  5 | success   | Set up Node 22.18.0 x64 | setup: must succeed
+  step  7 | success   | Set up Python 3.13.7 x64 | setup: must succeed
+  step  8 | success   | Install graftling and pinned test tools | setup: must succeed
+  step  9 | success   | Show runner, Python and pytest versions | setup: must succeed
+  step 10 | failure   | Run the graftling test suite | suite: success or failure (results judged from JUnit)
+  step 11 | success   | Retain JUnit results | upload: must succeed
+  step 12 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 13 | skipped   | Post Set up Node 22.18.0 x64 | other: success or skipped
+  step 14 | success   | Post Check out the commit under test | other: success or skipped
+  step 15 | success   | Complete job | other: success or skipped
+JOB dsh-windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/53000000000
+DSH JOB dsh-windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/51000000000/job/53000000000
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | must succeed
+  step  3 | success   | Check out the commit under test | must succeed
+  step  4 | success   | Set up Node 24.22.3 x64 | must succeed
+  step  5 | success   | Set up Python 3.13.7 x64 | must succeed
+  step  6 | success   | Install graftling and pinned test tools | must succeed
+  step  7 | success   | Restore the npm download cache | must succeed
+  step  8 | success   | Install DSH with npm | must succeed
+  step  9 | success   | Run graftling's DSH test files against the installed DSH | must succeed
+  step 10 | failure   | Retain the DSH test results | must succeed
+  step 11 | success   | Post Restore the npm download cache | other: success or skipped
+  step 12 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 13 | skipped   | Post Set up Node 24.22.3 x64 | other: success or skipped
+  step 14 | success   | Post Check out the commit under test | other: success or skipped
+  step 15 | success   | Complete job | other: success or skipped
+--- job log saved: /tmp/claude-501/t649/rehearsal3/dsh-missing/evidence/run-51000000000-a1/job.log; files ended, hangs, driver exit:
+  per-file pytest summaries: 1
+$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-windows-junit-5b7bd91d6ed5d23b541ac89fb5f0066d2057567a-1 -D /tmp/claude-501/t649/rehearsal3/dsh-missing/evidence/run-51000000000-a1/junit
+test files in 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a: 69
+--- per-file records and results against /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-632/windows-expected.txt
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25 | image_version=20261123.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
+run_test_files exit code: 1
+--- test files: 69 recorded | ended 69 | hung 0 | not run 0 | in the commit: 69
+  slowest ended files: tests/test_agent_completion.py 2.5 s, tests/test_agent_control.py 2.5 s, tests/test_agents_connections_presets.py 2.5 s, tests/test_agents_request_notices.py 2.5 s, tests/test_agents_server_name.py 2.5 s
+merged JUnit files: 69
+collected in JUnit: 1057 | passed 817 | failed 0 | errors 0 | skipped 240
+--- POSIX-only skips: 219 in 24 modules
+     8  tests/test_agents_connections_presets.py
+     1  tests/test_approval_integration.py
+     1  tests/test_approval_layers.py
+     9  tests/test_claude_default_tools_576.py
+     5  tests/test_claude_gateway_login_613.py
+     9  tests/test_claude_marketplace_plugin.py
+     1  tests/test_claude_model_alias_574.py
+     8  tests/test_claude_permission_mode_578.py
+    39  tests/test_claude_review.py
+     1  tests/test_claude_send_closing_546.py
+     8  tests/test_codex_review_relay.py
+     2  tests/test_dsh_plugin_install_python.py
+     1  tests/test_dsh_standalone_child.py
+     9  tests/test_dsh_standalone_host.py
+     1  tests/test_dsh_startup.py
+    28  tests/test_host_shutdown_stop.py
+    11  tests/test_pi_default_host_572.py
+     9  tests/test_pi_dsh_notice_holding.py
+     2  tests/test_pi_standalone_host.py
+    31  tests/test_pi_subagent_child_585.py
+     1  tests/test_process_tree_635.py
+    16  tests/test_provider_listing_609.py
+    14  tests/test_unified_data_root_577.py
+     4  tests/test_windows_emulation_619.py
+  reason x111: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+  reason x49: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in; the peer (claude_cli_fixture.py) also starts its tools in new sess
+  reason x26: the host runs in its own process group (start_new_session) stopped with os.killpg and SIGKILL; its lock holder uses fcntl
+  reason x22: the stand-in executable is a '#!/bin/sh' script
+  reason x4: emulates Windows on a POSIX host (no fcntl, a stand-in msvcrt); the Windows runner checks the same paths for real
+  reason x3: claude-plugin/bin/graftling-host is a sh script run by sh, with '#!/bin/sh' stand-in Pythons
+  reason x1: a Claude child is refused on native Windows (647, W9)
+  reason x1: a Claude child is refused on native Windows (647, W9), before this check
+  reason x1: a read-only directory made with chmod 0o555 and checked with os.geteuid
+  reason x1: checks the process group (os.getpgid) and its POSIX signals
+--- allowed environment skips (not Windows-specific): 21
+  x12: Explicit pinned official SDK comparison
+  x2: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+  x2: Requires one explicitly retained native trace.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Requires assigned native startup diagnosis.
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 0; observed failures and errors: 0 (0 as expected)
+--- unexpected failures: 0
+    origins of the unexpected failures: 
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 0
+observed list written: /tmp/claude-501/t649/rehearsal3/dsh-missing/evidence/run-51000000000-a1/observed-expected.txt
+$ gh run download 51000000000 --repo LUOXIAO92/graftling -n graftling-dsh-windows-5b7bd91d6ed5d23b541ac89fb5f0066d2057567a-1 -D /tmp/claude-501/t649/rehearsal3/dsh-missing/evidence/run-51000000000-a1/dsh
+  no artifact matches any of the names or patterns provided (graftling-dsh-windows-5b7bd91d6ed5d23b541ac89fb5f0066d2057567a-1; have none)
+evidence: /tmp/claude-501/t649/rehearsal3/dsh-missing/evidence/run-51000000000-a1 (git-ignored unless a rehearsal root was given; copy it into tracked files in a new commit)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/steps.zsh W 51000000000    (observe again; no push, no re-run)
+next: zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/steps.zsh X 51000000000    (re-run its failed jobs; only if the failure is transient, not a test result)
+next: correction round: compare /tmp/claude-501/t649/rehearsal3/dsh-missing/evidence/run-51000000000-a1/dsh-observed-expected.txt with /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/dsh-expected.txt and read /tmp/claude-501/t649/rehearsal3/dsh-missing/evidence/run-51000000000-a1/dsh-new-tests.txt
+VERDICT 649 P: FAIL (run 51000000000 attempt 1 on 5b7bd91d6ed5d23b541ac89fb5f0066d2057567a; windows-tests mechanics: PASS 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: PASS 1057 tests: 817 passed, 0 failed as listed, 0 hangs as listed, 219 POSIX-only skips, 21 environment skips; DSH job: FAIL step 'Retain the DSH test results' is failure; no DSH artifact downloaded (graftling-dsh-windows-5b7bd91d6ed5d23b541ac89fb5f0066d2057567a-1); DSH results: FAIL no DSH JUnit files; DSH tests: FAIL no DSH JUnit files; https://github.com/LUOXIAO92/graftling/actions/runs/51000000000)
+[exit 1]

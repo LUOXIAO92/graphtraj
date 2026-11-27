@@ -1,0 +1,43 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 8 items
+
+tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key PASSED [ 12%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[openrouter-False-needs api_key_env] PASSED [ 25%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider'] PASSED [ 37%]
+tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only'] PASSED [ 50%]
+tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog PASSED [ 62%]
+tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child PASSED [ 75%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers FAILED [ 87%]
+tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=fb1bfd090e574fc6b8eb8eeb82698307: found=0 stopped=0 remaining=0 error=No job graftling-fb1bfd090e574fc6b8eb8eeb82698307 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+================================== FAILURES ===================================
+___________ test_the_installed_dsh_serves_the_documented_providers ____________
+tests\test_dsh_providers_608.py:177: in test_the_installed_dsh_serves_the_documented_providers
+    assert served is not None and {'openrouter', 'opencode-go', 'opencode'} <= set(served)
+E   assert (None is not None)
+_____________ test_the_installed_dsh_composes_the_provider_route ______________
+tests\test_dsh_providers_608.py:184: in test_the_installed_dsh_composes_the_provider_route
+    settings = prepare({**dsh, 'executable': installed, 'provider': 'openrouter', 'api_key_env': KEY_ENV,
+src\graftling\dsh\settings.py:196: in prepare
+    raise DshError('RUNTIME_UNSUPPORTED', refusal)
+E   graftling.dsh.errors.DshError: DSH 0.2.0-rc.2 or later is required (installed unknown).
+- generated xml file: D:\a\graftling\graftling\test-results\dsh-probe\tests\junit\test_dsh_providers_608.xml -
+============================ slowest 10 durations =============================
+0.19s call     tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key
+0.07s call     tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers
+0.05s call     tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog
+0.05s call     tests/test_dsh_providers_608.py::test_listing_routes_the_provider_like_its_child
+0.05s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[images-only-True-does not serve provider 'images-only']
+0.05s call     tests/test_dsh_providers_608.py::test_a_provider_dsh_cannot_serve_on_a_named_key_is_refused[no-such-provider-True-does not serve provider 'no-such-provider']
+0.01s setup    tests/test_dsh_providers_608.py::test_a_child_runs_on_the_provider_with_only_its_key
+0.01s setup    tests/test_dsh_providers_608.py::test_prepare_refuses_without_the_installed_catalog
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers - assert (None is not None)
+FAILED tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route - graftling.dsh.errors.DshError: DSH 0.2.0-rc.2 or later is required (installed unknown).
+========================= 2 failed, 6 passed in 0.64s =========================

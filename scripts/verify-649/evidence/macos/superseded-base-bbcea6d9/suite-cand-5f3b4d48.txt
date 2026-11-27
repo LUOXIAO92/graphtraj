@@ -1,0 +1,53 @@
+# graftling 5f3b4d48 (candidate), macOS arm64, DSH 0.2.2-rc.5 and Node installed; TMPDIR=/tmp/claude-501/t649/suite-tmp-cand
+$ env -i HOME USER PATH=<venv>/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin TMPDIR=<outside the Harness> LANG=en_US.UTF-8 <venv>/bin/python -m pytest -p no:cacheprovider -q -rfEsxX --junitxml=<junit> tests
+== cand: 5f3b4d485c1668b999e193d9e66d33e28c19db8b | TMPDIR=/tmp/claude-501/t649/suite-tmp-cand (outside the Harness) | 2026年 11月27日 金曜日 20時27分11秒 JST
+........................................................................ [  6%]
+.................................................................sssssss [ 13%]
+ssss.................................................................... [ 20%]
+.................................................................sssssss [ 27%]
+sssss................................................................... [ 34%]
+....................................s................................... [ 41%]
+.....................ssssssss........................................... [ 48%]
+........................................................................ [ 55%]
+...s.....sss............................................................ [ 61%]
+........................................................sssss........... [ 68%]
+........................................................................ [ 75%]
+........................................................................ [ 82%]
+...........................................sssss.............ss......... [ 89%]
+........................................................................ [ 96%]
+.......................................                                  [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_channel_windows_636.py:181: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:291: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:303: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:344: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:425: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:469: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:495: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:519: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:530: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:547: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:560: Windows-only: the named-pipe owner connection (636)
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [1] tests/test_claude_windows_647.py:59: Windows only: the native refusal
+SKIPPED [2] tests/test_dsh_mcp.py:60: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:15: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:60: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:81: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:162: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:195: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:211: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [3] tests/test_dsh_windows_649.py:88: Windows only: the npm .cmd shim and the DSH service's Job Object (649)
+SKIPPED [1] tests/test_locks_durable_634.py:162: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:190: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:216: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:233: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_process_tree_635.py:364: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:380: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:400: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:415: Windows only: Job Objects
+SKIPPED [1] tests/test_process_windows_633.py:141: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+999 passed, 48 skipped in 269.57s (0:04:29)
+exit 0

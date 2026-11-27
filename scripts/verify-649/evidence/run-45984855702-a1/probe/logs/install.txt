@@ -1,0 +1,29 @@
+
+> koffi@3.1.1 install
+> node ./cnoke.cjs -P . -D src/koffi --prebuild --release
+
+
+> node-pty@1.2.0-beta.15 install
+> node scripts/prebuild.js || node-gyp rebuild
+
+[32m> Checking prebuilds...[0m
+
+> @deepseek-ai/dsh-subprocess-local@0.2.2-rc.5 postinstall
+> node scripts/ensure-spawn-helper.mjs
+
+
+> node-pty@1.2.0-beta.15 postinstall
+> node scripts/post-install.js
+
+[32m> Cleaning release folder...[0m
+[32m> Moving conpty.dll...[0m
+  Using os.arch(): x64
+  Found version 1.25.260303002
+  Copying C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\third_party\conpty\1.25.260303002\win10-x64\conpty.dll -> C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\build\Release\conpty\conpty.dll
+  Copying C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\third_party\conpty\1.25.260303002\win10-x64\OpenConsole.exe -> C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\build\Release\conpty\OpenConsole.exe
+
+> protobufjs@7.6.6 postinstall
+> node scripts/postinstall
+
+
+added 670 packages in 18m

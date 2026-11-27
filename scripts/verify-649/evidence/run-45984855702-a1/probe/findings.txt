@@ -1,0 +1,145 @@
+runner	exit 0	0.6 s	Node, npm, prefix and root
+    node: "v24.22.3"
+    npm: "11.19.1"
+    npm_prefix: "C:\\npm\\prefix"
+    npm_root: "C:\\npm\\prefix\\node_modules"
+    which_node: "C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.EXE"
+    which_npm: "C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\npm.CMD"
+    arch: "AMD64"
+    | node: exit 0 v24.22.3 
+    | npm: exit 0 11.19.1 
+    | npm_prefix: exit 0 C:\npm\prefix 
+    | npm_root: exit 0 C:\npm\prefix\node_modules 
+registry	exit 0	2.6 s	npm view @deepseek-ai/dsh@0.2.2-rc.5 and dist-tags
+    |     "next": "0.2.2-rc.5",
+    |     "latest": "0.2.2-rc.5",
+    |     "alpha": "0.2.3-alpha.2"
+    |   },
+    |   "engines": {
+    |     "node": ">=24.9.0"
+    |   },
+    |   "scripts": {},
+    |   "bin": {
+    |     "dsh": "lib/bin.js"
+    |   }
+    | }
+install	exit None	1074.9 s	npm install -g @deepseek-ai/dsh@0.2.2-rc.5
+    | > node scripts/ensure-spawn-helper.mjs
+    | > node-pty@1.2.0-beta.15 postinstall
+    | > node scripts/post-install.js
+    | [32m> Cleaning release folder...[0m
+    | [32m> Moving conpty.dll...[0m
+    |   Using os.arch(): x64
+    |   Found version 1.25.260303002
+    |   Copying C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\third_party\conpty\1.25.260303002\win10-x64\conpty.dll -> C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\build\Release\conpty\conpty.dll
+    |   Copying C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\third_party\conpty\1.25.260303002\win10-x64\OpenConsole.exe -> C:\npm\prefix\node_modules\@deepseek-ai\dsh\node_modules\node-pty\build\Release\conpty\OpenConsole.ex
+    | > protobufjs@7.6.6 postinstall
+    | > node scripts/postinstall
+    | added 670 packages in 18m
+package	exit 0	14.1 s	installed package platform facts
+    package_dir: "C:\\npm\\prefix\\node_modules\\@deepseek-ai\\dsh"
+    package_json: {"name": "@deepseek-ai/dsh", "version": "0.2.2-rc.5", "os": null, "cpu": null, "engines": {"node": ">=24.9.0"}, "bin": {"dsh": "lib/bin.js"}, "scripts": {}, "optionalDependencies": null, "type": "module"}
+    packages_total: 1343
+    platform_packages_installed: ["@deepseek-ai/libreoffice-kit-win32-x64@0.2.3 os=['win32'] cpu=['x64']", "@img/sharp-win32-x64@0.35.5 os=['win32'] cpu=['x64']", "@koromix/koffi-win32-x64@3.1.1 os=['win32'] cpu=['x64']", "@nx/nx-win32-x64-msvc@23.3.2 os=['win32'] cpu=['x64']", "@vscode/ripgrep-win32-x64@1.18.0 os=['win32'] cpu=['x64']", "node-addon-require-builtin-win32-x64-msvc@0.1.10 os=['win32'] cpu=['x64']", "sherpa-onnx-win-x64@1.13.8 os=['win32'] cpu=['x64']"]
+    optional_sets_without_win32: ["@deepseek-ai/dsh-cua-bundle: ['@deepseek-ai/dsh-experimental-cua-macos']", "@deepseek-ai/node-addon-system: ['@deepseek-ai/node-addon-system-darwin-arm64', '@deepseek-ai/node-addon-system-darwin-x64', '@deepseek-ai/node-addon-system-linux-arm64', '@deepseek-ai/node-addon-system-linux-x64']", "cli-table3: ['@colors/colors']", "handlebars: ['uglify-js']", "handlebars: ['uglify-js']", "jsonfile: ['graceful-fs']", "minipass-fetch: ['iconv-lite']", "sver: ['semver']"]
+    install_scripts: ["@deepseek-ai/dsh-subprocess-local@0.2.2-rc.5: {'postinstall': 'node scripts/ensure-spawn-helper.mjs'}", "koffi@3.1.1: {'install': 'node ./cnoke.cjs -P . -D src/koffi --prebuild --release'}", "node-pty@1.2.0-beta.15: {'install': 'node scripts/prebuild.js || node-gyp rebuild', 'postinstall': 'node scripts/post-install.js'}", "nx@23.3.2: {'postinstall': 'node -e \"try{require(\\'./dist/bin/post-install\\')}catch(e){}\"'}", "protobufjs@7.6.6: {'postinstall': 'node scripts/postinstall'}", "yarn@1.22.22: {'preinstall': ':; (node ./preinstall.js > /dev/null 2>&1 || true)'}"]
+    native_node_files: ["@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/darwin-arm64/frame-forwarding.node", "@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/darwin-x64/frame-forwarding.node", "@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/win32-arm64/frame-forwarding.node", "@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/win32-x64/frame-forwarding.node", "@deepseek-ai/dsh/node_modules/@img/sharp-win32-x64/lib/sharp-win32-x64-0.35.5.node", "@deepseek-ai/dsh/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node", "@deepseek-ai/dsh/node_modules/node-addon-require-builtin-win32-x64-msvc/prebuilt/win32-x64-msvc-napi-v9.node", "@deepseek-ai/dsh/node_modules/n
+    which_dsh: "C:\\npm\\prefix\\dsh.CMD"
+    where_dsh: ["C:\\npm\\prefix\\dsh", "C:\\npm\\prefix\\dsh.cmd"]
+    |   "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/win32-arm64/conpty_console_list.node",
+    |   "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/win32-x64/conpty.node",
+    |   "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node",
+    |   "@deepseek-ai/dsh/node_modules/sherpa-onnx-win-x64/sherpa-onnx.node",
+    |   "lerna/node_modules/@nx/nx-win32-x64-msvc/nx.win32-x64-msvc.node"
+    |  ],
+    |  "which_dsh": "C:\\npm\\prefix\\dsh.CMD",
+    |  "where_dsh": [
+    |   "C:\\npm\\prefix\\dsh",
+    |   "C:\\npm\\prefix\\dsh.cmd"
+    |  ]
+    | }
+cli-version	exit 0	0.1 s	dsh --version (npm shim)
+    | 0.2.2-rc.5
+cli-node	exit 0	0.1 s	node <bin.js> --version (no shim)
+    | 0.2.2-rc.5
+cli-help	exit 0	0.1 s	dsh --help
+    |                                  patches without mounting
+    |   --dump-default-config          print the profile tree without its user layer
+    |                                  or --patch overlays and exit
+    | Examples:
+    |   dsh web                                   boot the web profile (same as: dsh --profile web)
+    |   dsh rescue --from-default-profile web
+    |                                             recreate rescue from the shipped web template, then boot it
+    |   dsh headless "run the tests"              answer one task, print the result, and exit
+    |   dsh tui --patch ./extra.yml               boot a custom profile with one extra overlay
+    |   dsh tui --resume <session>                arguments after the launcher flags reach the app
+    |   dsh web --help                            the web app's own flags and help
+    |   dsh plugin --profile tui add <package>    install a plugin into the tui profile
+cli-web-help	exit 0	3.2 s	dsh web --help
+    |   --tls-key <file>               unencrypted PEM private key; requires
+    |                                  --tls-cert
+    |   -h, --help                     show this help
+    | Examples:
+    |   dsh --profile web                          serve on the composed host and port
+    |   dsh --profile web --no-open                serve without opening a browser
+    |   dsh --profile web --port 8080              serve on another port
+    |   dsh --profile web --host 10.0.0.7          bind one local interface address
+    |   dsh --profile web --public-url https://app.example/ui/ --trusted-host app.example
+    |                                              advertise a prefix-stripping HTTPS proxy entry and admit its authority
+    |   dsh --profile web --tls-cert ./server-chain.pem --tls-key ./server-key.pem
+    |                                              serve HTTPS with an existing certificate and key
+preflight	exit 0	5.2 s	graftling's DSH preflight on the installed DSH
+    derived_package_json: "C:\\npm\\package.json"
+    derived_exists: false
+    refusal_at_derived: "DSH 0.2.0-rc.2 or later is required (installed unknown)."
+    refusal_at_package: null
+    conftest_unsupported_dsh: "DSH 0.2.0-rc.2 or later is required (installed unknown)."
+    prepare_which: "DshError RUNTIME_UNSUPPORTED: DSH 0.2.0-rc.2 or later is required (installed unknown)."
+    prepare_executable: "DshError RUNTIME_UNSUPPORTED: DSH 0.2.0-rc.2 or later is required (installed unknown)."
+    catalog_providers: 42
+    | {
+    |  "derived_package_json": "C:\\npm\\package.json",
+    |  "derived_exists": false,
+    |  "refusal_at_derived": "DSH 0.2.0-rc.2 or later is required (installed unknown).",
+    |  "refusal_at_package": null,
+    |  "conftest_unsupported_dsh": "DSH 0.2.0-rc.2 or later is required (installed unknown).",
+    |  "prepare_which": "DshError RUNTIME_UNSUPPORTED: DSH 0.2.0-rc.2 or later is required (installed unknown).",
+    |  "prepare_executable": "DshError RUNTIME_UNSUPPORTED: DSH 0.2.0-rc.2 or later is required (installed unknown).",
+    |  "catalog_providers": 42
+    | }
+web-raw	exit 0	3.9 s	dsh web in a kill-on-close job, then the job handle closed
+    launch_url_seen: true
+    port: "57987"
+    seconds_to_url: 3.4
+    exit_before_url: null
+    job_processes: [{"pid": 6216, "image": "C:\\Windows\\System32\\cmd.exe"}, {"pid": 8512, "image": "C:\\Windows\\System32\\conhost.exe"}, {"pid": 9308, "image": "C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.exe"}]
+    alive_15s_after_job_handle_closed: []
+    dsh_exit_code: 0
+    | dsh web: http://127.0.0.1:57987/?token=<redacted>
+service	exit 0	4.3 s	graftling's DshService: start, session/list, close
+    start: "ok in 3.7 s"
+    port: "57994"
+    cookie_received: true
+    job_processes: [{"pid": 2360, "image": "C:\\Windows\\System32\\cmd.exe"}, {"pid": 5892, "image": "C:\\Windows\\System32\\conhost.exe"}, {"pid": 5592, "image": "C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.exe"}]
+    session_list: "ok: 0 sessions"
+    close: "ok in 0.0 s"
+    dsh_exit_code: 1
+    alive_15s_after_close: []
+    |    "image": "C:\\Windows\\System32\\conhost.exe"
+    |   },
+    |   {
+    |    "pid": 5592,
+    |    "image": "C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.exe"
+    |   }
+    |  ],
+    |  "session_list": "ok: 0 sessions",
+    |  "close": "ok in 0.0 s",
+    |  "dsh_exit_code": 1,
+    |  "alive_15s_after_close": []
+    | }
+owner-death	exit 0	4.3 s	DshService owner killed without close: does the DSH job end with it?
+    owner_report: {"owner": 2112, "dsh": 1648, "pids": [1648, 3188, 7296], "port": "58000"}
+    alive_before_kill: [1648, 3188, 7296]
+    owner_exit_code: 1
+    alive_15s_after_owner_killed: []
+    | {"owner": 2112, "dsh": 1648, "pids": [1648, 3188, 7296], "port": "58000"}

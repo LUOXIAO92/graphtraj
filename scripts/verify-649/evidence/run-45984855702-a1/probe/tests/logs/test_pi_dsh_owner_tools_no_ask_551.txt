@@ -1,0 +1,46 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 11 items
+
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[True-asked0] PASSED [  9%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[False-asked1] PASSED [ 18%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config0-asked0] PASSED [ 27%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config1-asked1] PASSED [ 36%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_names_the_owner_tools_only_when_declared PASSED [ 45%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_disallowed_owner_tool_is_not_offered PASSED [ 54%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding FAILED [ 63%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_disallowed_owner_tool_is_excluded_natively PASSED [ 72%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_available_set_keeps_the_owners_entries PASSED [ 81%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_launch_names_the_owner_entries_in_its_argv PASSED [ 90%]
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row FAILED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=8c17fdb1aa0b4d9daedac87a30ca5a96: found=0 stopped=0 remaining=0 error=No job graftling-8c17fdb1aa0b4d9daedac87a30ca5a96 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+================================== FAILURES ===================================
+___________ test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding ____________
+tests\test_pi_dsh_owner_tools_no_ask_551.py:111: in test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding
+    execution.apply_tools(request, {'tools': None, 'disallowed_tools': ['mcp__graphtraj__tasks']})
+src\graftling\dsh\execution.py:201: in apply_tools
+    raise AgentsError('unavailable', "The installed DSH agent preset cannot be read, so a child's tools "
+E   graftling.tool.AgentsError: The installed DSH agent preset cannot be read, so a child's tools cannot be chosen.
+______________ test_dsh_tool_rows_never_touch_the_owner_mcp_row _______________
+tests\test_pi_dsh_owner_tools_no_ask_551.py:157: in test_dsh_tool_rows_never_touch_the_owner_mcp_row
+    settings = prepare({**dsh, 'executable': installed}, tmp_path)
+src\graftling\dsh\settings.py:196: in prepare
+    raise DshError('RUNTIME_UNSUPPORTED', refusal)
+E   graftling.dsh.errors.DshError: DSH 0.2.0-rc.2 or later is required (installed unknown).
+- generated xml file: D:\a\graftling\graftling\test-results\dsh-probe\tests\junit\test_pi_dsh_owner_tools_no_ask_551.xml -
+============================ slowest 10 durations =============================
+0.05s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[False-asked1]
+0.05s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config1-asked1]
+0.05s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config0-asked0]
+0.04s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_pi_review_lets_the_owners_declared_tools_through[True-asked0]
+0.02s setup    tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_lets_the_owners_declared_tools_through[config0-asked0]
+0.01s call     tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_review_row_names_the_owner_tools_only_when_declared
+
+(4 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding - graftling.tool.AgentsError: The installed DSH agent preset cannot be read, so a child's tools cannot be chosen.
+FAILED tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row - graftling.dsh.errors.DshError: DSH 0.2.0-rc.2 or later is required (installed unknown).
+========================= 2 failed, 9 passed in 0.39s =========================

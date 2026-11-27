@@ -1,0 +1,15 @@
+{
+  "version": "0.2.2-rc.5",
+  "dist-tags": {
+    "next": "0.2.2-rc.5",
+    "latest": "0.2.2-rc.5",
+    "alpha": "0.2.3-alpha.2"
+  },
+  "engines": {
+    "node": ">=24.9.0"
+  },
+  "scripts": {},
+  "bin": {
+    "dsh": "lib/bin.js"
+  }
+}

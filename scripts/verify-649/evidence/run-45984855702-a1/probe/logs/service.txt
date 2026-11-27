@@ -1,0 +1,23 @@
+{
+ "start": "ok in 3.7 s",
+ "port": "57994",
+ "cookie_received": true,
+ "job_processes": [
+  {
+   "pid": 2360,
+   "image": "C:\\Windows\\System32\\cmd.exe"
+  },
+  {
+   "pid": 5892,
+   "image": "C:\\Windows\\System32\\conhost.exe"
+  },
+  {
+   "pid": 5592,
+   "image": "C:\\hostedtoolcache\\windows\\node\\24.22.3\\x64\\node.exe"
+  }
+ ],
+ "session_list": "ok: 0 sessions",
+ "close": "ok in 0.0 s",
+ "dsh_exit_code": 1,
+ "alive_15s_after_close": []
+}

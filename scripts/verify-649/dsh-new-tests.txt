@@ -1,0 +1,52 @@
+# Task 649 (W11): tests that must PASS in the dsh-windows-tests job (DSH 0.2.2-rc.5 installed with npm on a GitHub-hosted
+# Windows x64 runner); not failed, skipped or absent. Read by steps.zsh through wincheck649.py newtests.
+# - tests/test_dsh_windows_649.py: npm shim resolution; the real DSH service through the shim (start, session/list,
+#   close leaves nothing; owner killed without close: the DSH job ends, decision 3).
+# - DSH plugin on Windows: directPython starts a venv's base interpreter with __PYVENV_LAUNCHER__, so the host and
+#   the MCP server are direct children of DSH's node (test_a_venv_python_the_dsh_plugin_starts_is_a_direct_child...).
+# - The installed-DSH tests that failed or skipped in run 45984855702 only because graftling read the package
+#   from the shim's directory (test_dsh_live, test_dsh_mcp, test_dsh_providers_608, test_dsh_standalone_child,
+#   test_pi_dsh_child_tools_551, test_pi_dsh_owner_tools_no_ask_551).
+# - DSH host: test_dsh_mcp::test_delivered_plugin_native_scopes (plugin.mjs in the installed DSH's packages, its MCP
+#   client over stdio) and the in-process host tests of test_dsh_standalone_host.
+# - DSH child: create, turn, resume and end with the stand-in service (test_dsh_standalone_child; a model turn needs a
+#   key: Task 650), its launch preparation against the installed DSH (search and endpoint rows).
+# Node ids as xunit1 JUnit gives them, rebuilt from the final candidate 5b7bd91d's macOS run
+# (evidence/macos/suite-cand-5b7bd91d.txt): 37, the 35 of the superseded runs plus the two directPython tests.
+tests/test_dsh_live.py::test_installed_native_relay_without_duplicate_model_content
+tests/test_dsh_live.py::test_standalone_driver_with_only_independent_package
+tests/test_dsh_mcp.py::test_installed_dsh_official_mcp_client
+tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes
+tests/test_dsh_providers_608.py::test_the_installed_dsh_serves_the_documented_providers
+tests/test_dsh_providers_608.py::test_the_installed_dsh_composes_the_provider_route
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.0-rc.2]
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.1-alpha.5]
+tests/test_dsh_standalone_child.py::test_send_and_resume_continue_the_same_dsh_session[0.2.2-alpha.2]
+tests/test_dsh_standalone_child.py::test_claude_host_routes_a_dsh_child_with_its_own_choices
+tests/test_dsh_standalone_child.py::test_a_dsh_childs_end_reaches_the_claude_main_once
+tests/test_dsh_standalone_child.py::test_dsh_child_launch_needs_no_graphtraj_setting
+tests/test_dsh_standalone_child.py::test_delivered_plugin_loads_from_dsh_agent_package_alone
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DEEPSEEK_API_KEY-https://declared.invalid/anthropic/v1/messages]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/v1-DEEPSEEK_API_KEY-https://declared.invalid/v1/messages]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[http://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-http://api.deepseek.com/anthropic/v1/messages]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com:8443/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com:8443/anthropic/v1/messages]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://api.deepseek.com/anthropic-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[https://declared.invalid/anthropic-DSH_383_KEY-https://api.deepseek.com/anthropic/v1/messages]
+tests/test_dsh_standalone_child.py::test_installed_search_sends_the_key_where_the_row_says[None-DEEPSEEK_API_KEY-https://api.deepseek.com/anthropic/v1/messages]
+tests/test_dsh_standalone_child.py::test_installed_dsh_resolves_only_the_connection_endpoint[None-https://api.deepseek.com/anthropic]
+tests/test_dsh_standalone_child.py::test_installed_dsh_resolves_only_the_connection_endpoint[https://declared.invalid/anthropic-https://declared.invalid/anthropic]
+tests/test_dsh_standalone_host.py::test_dsh_host_routes_creates_to_every_runtime_with_per_child_models
+tests/test_dsh_standalone_host.py::test_host_refuses_a_parent_that_is_not_the_native_dsh
+tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh.cmd]
+tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh.CMD]
+tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh]
+tests/test_dsh_windows_649.py::test_a_windows_executable_that_is_no_npm_shim_is_resolved_as_before
+tests/test_dsh_windows_649.py::test_posix_ignores_the_npm_shim
+tests/test_dsh_windows_649.py::test_dsh_plugin_runs_a_windows_venv_python_as_its_base_interpreter
+tests/test_dsh_windows_649.py::test_a_venv_python_the_dsh_plugin_starts_is_a_direct_child_running_as_the_venv
+tests/test_dsh_windows_649.py::test_installed_dsh_is_found_through_its_npm_shim
+tests/test_dsh_windows_649.py::test_installed_dsh_service_starts_lists_and_leaves_nothing_after_close
+tests/test_dsh_windows_649.py::test_installed_dsh_service_ends_when_its_owner_dies_without_close
+tests/test_pi_dsh_child_tools_551.py::test_dsh_installed_preset_rows_are_selectable
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_apply_tools_keeps_an_mcp_deny_for_the_binding
+tests/test_pi_dsh_owner_tools_no_ask_551.py::test_dsh_tool_rows_never_touch_the_owner_mcp_row

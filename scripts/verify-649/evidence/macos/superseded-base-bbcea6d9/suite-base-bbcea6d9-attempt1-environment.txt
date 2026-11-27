@@ -1,0 +1,4 @@
+# The first base attempt: 4 setup errors because this session's venv exposed websockets without its dist-info (an environment fault, fixed by exposing websockets-16.1.1.dist-info); not graftling's
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+990 passed, 45 skipped, 4 errors in 265.39s (0:04:25)
+exit 1

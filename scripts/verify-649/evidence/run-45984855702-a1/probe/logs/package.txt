@@ -1,0 +1,70 @@
+{
+ "package_dir": "C:\\npm\\prefix\\node_modules\\@deepseek-ai\\dsh",
+ "package_json": {
+  "name": "@deepseek-ai/dsh",
+  "version": "0.2.2-rc.5",
+  "os": null,
+  "cpu": null,
+  "engines": {
+   "node": ">=24.9.0"
+  },
+  "bin": {
+   "dsh": "lib/bin.js"
+  },
+  "scripts": {},
+  "optionalDependencies": null,
+  "type": "module"
+ },
+ "packages_total": 1343,
+ "platform_packages_installed": [
+  "@deepseek-ai/libreoffice-kit-win32-x64@0.2.3 os=['win32'] cpu=['x64']",
+  "@img/sharp-win32-x64@0.35.5 os=['win32'] cpu=['x64']",
+  "@koromix/koffi-win32-x64@3.1.1 os=['win32'] cpu=['x64']",
+  "@nx/nx-win32-x64-msvc@23.3.2 os=['win32'] cpu=['x64']",
+  "@vscode/ripgrep-win32-x64@1.18.0 os=['win32'] cpu=['x64']",
+  "node-addon-require-builtin-win32-x64-msvc@0.1.10 os=['win32'] cpu=['x64']",
+  "sherpa-onnx-win-x64@1.13.8 os=['win32'] cpu=['x64']"
+ ],
+ "optional_sets_without_win32": [
+  "@deepseek-ai/dsh-cua-bundle: ['@deepseek-ai/dsh-experimental-cua-macos']",
+  "@deepseek-ai/node-addon-system: ['@deepseek-ai/node-addon-system-darwin-arm64', '@deepseek-ai/node-addon-system-darwin-x64', '@deepseek-ai/node-addon-system-linux-arm64', '@deepseek-ai/node-addon-system-linux-x64']",
+  "cli-table3: ['@colors/colors']",
+  "handlebars: ['uglify-js']",
+  "handlebars: ['uglify-js']",
+  "jsonfile: ['graceful-fs']",
+  "minipass-fetch: ['iconv-lite']",
+  "sver: ['semver']"
+ ],
+ "install_scripts": [
+  "@deepseek-ai/dsh-subprocess-local@0.2.2-rc.5: {'postinstall': 'node scripts/ensure-spawn-helper.mjs'}",
+  "koffi@3.1.1: {'install': 'node ./cnoke.cjs -P . -D src/koffi --prebuild --release'}",
+  "node-pty@1.2.0-beta.15: {'install': 'node scripts/prebuild.js || node-gyp rebuild', 'postinstall': 'node scripts/post-install.js'}",
+  "nx@23.3.2: {'postinstall': 'node -e \"try{require(\\'./dist/bin/post-install\\')}catch(e){}\"'}",
+  "protobufjs@7.6.6: {'postinstall': 'node scripts/postinstall'}",
+  "yarn@1.22.22: {'preinstall': ':; (node ./preinstall.js > /dev/null 2>&1 || true)'}"
+ ],
+ "native_node_files": [
+  "@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/darwin-arm64/frame-forwarding.node",
+  "@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/darwin-x64/frame-forwarding.node",
+  "@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/win32-arm64/frame-forwarding.node",
+  "@deepseek-ai/dsh/node_modules/@deepseek-ai/libreoffice-kit/frame-forwarding/prebuilds/win32-x64/frame-forwarding.node",
+  "@deepseek-ai/dsh/node_modules/@img/sharp-win32-x64/lib/sharp-win32-x64-0.35.5.node",
+  "@deepseek-ai/dsh/node_modules/@koromix/koffi-win32-x64/win32_x64/koffi.node",
+  "@deepseek-ai/dsh/node_modules/node-addon-require-builtin-win32-x64-msvc/prebuilt/win32-x64-msvc-napi-v9.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/darwin-arm64/pty.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/darwin-x64/pty.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/linux-arm64/pty.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/linux-x64/pty.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/win32-arm64/conpty.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/win32-arm64/conpty_console_list.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/win32-x64/conpty.node",
+  "@deepseek-ai/dsh/node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node",
+  "@deepseek-ai/dsh/node_modules/sherpa-onnx-win-x64/sherpa-onnx.node",
+  "lerna/node_modules/@nx/nx-win32-x64-msvc/nx.win32-x64-msvc.node"
+ ],
+ "which_dsh": "C:\\npm\\prefix\\dsh.CMD",
+ "where_dsh": [
+  "C:\\npm\\prefix\\dsh",
+  "C:\\npm\\prefix\\dsh.cmd"
+ ]
+}

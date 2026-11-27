@@ -1,58 +1,57 @@
-"""Task 649 (W11, phase A) step helper, beside verify-632/wincheck.py (which steps.zsh also runs, by reference).
+"""Task 649 (W11, phase B) step helper, beside verify-632/wincheck.py (which steps.zsh also runs, by reference).
 
 Run as: python -I wincheck649.py <command> <args...>. Standard library only except `wfdiff`, which needs PyYAML.
-  wfdiff BASE_WF HEAD_WF        the workflow at the bundle head is the one at BASE (graftling dev eb5ad8e) with its
+  wfdiff BASE_WF HEAD_WF        the workflow at the bundle head is the one at BASE (graftling dev 5715323) with its
                                 push branches line gaining exactly agent/649-graftling-windows-dsh and one job,
-                                dsh-windows-probe, appended at the end; the windows-tests job is unchanged; the new
-                                job's runner, pins, credentials, Node, step names, probe command and upload are checked
+                                dsh-windows-tests, appended at the end; the windows-tests job is unchanged; the new
+                                job's runner, pins, credentials, Node, step names, gating install, gating DSH test
+                                files and upload are checked
   as632 WF OUT                  write to OUT the workflow with its push branches line (the base's or the head's) set
                                 back to 632's, so 632's wfcheck judges the windows-tests job and the whole file's
                                 secret and token rules unchanged; fails unless exactly one such line is there
   dshlines OLD NEW              the DSH-related lines (those naming DSH) of the expected list NEW are OLD's (GraphTraj
-                                afaf516d's): phase A changes none. Other lines belong to other Tasks (647, 648 edit the
-                                same file in parallel); their differences are printed as NOTE and do not fail
-  probejob JOBS                 the dsh-windows-probe job of a saved jobs response: every step with its conclusion;
-                                last line PROBEJOB PASS|FAIL (each named step must have succeeded)
-  findings DIR                  the downloaded probe artifact: every probe with its exit code and a short excerpt,
-                                then the DSH test files' records; last line FINDINGS PASS|FAIL (PASS: the artifact is
-                                complete, whatever DSH did; the findings are evidence, not a pass condition)
+                                b5653bac's): this Task changes none (the windows-tests job still has no DSH). Other
+                                lines belong to other Tasks; their differences are printed as NOTE and do not fail
+  dshjob JOBS                   the dsh-windows-tests job of a saved jobs response: every step with its conclusion;
+                                last line DSHJOB PASS|FAIL (each named step must have succeeded: the install and the
+                                DSH test files gate)
+  install DIR                   the DSH job's install facts (DIR/environment.json, the tail of npm-install.txt);
+                                information, no verdict
+  newtests DIR LIST             every node id in LIST passed in the merged per-file JUnit files of the artifact
+                                DIR (not failed, errored, skipped or absent); last line NEWTESTS PASS|FAIL
 Writes nothing, except as632's OUT.
 """
 import json
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
-# graftling dev eb5ad8e's push branches, in the workflow's order; the candidate appends only its own branch.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "verify-632"))
+from wincheck import load, nodeid  # noqa: E402
+
+# graftling dev 5715323's push branches, in the workflow's order; the candidate appends only its own branch.
 BASE_BRANCHES = ["agent/632-graftling-windows-ci", "agent/633-graftling-windows-process",
                  "agent/634-graftling-windows-durable-writes", "agent/635-graftling-windows-process-tree",
                  "agent/638-graftling-windows-paths-encoding", "dev", "agent/636-graftling-windows-named-pipe",
-                 "agent/637-graftling-windows-process-listing", "agent/639-graftling-windows-codex"]
+                 "agent/637-graftling-windows-process-listing", "agent/639-graftling-windows-codex",
+                 "agent/647-graftling-windows-claude", "agent/648-graftling-windows-pi"]
 BRANCHES = BASE_BRANCHES + ["agent/649-graftling-windows-dsh"]
 BASE_LINE = "    branches: [" + ", ".join(BASE_BRANCHES) + "]"
 HEAD_LINE = "    branches: [" + ", ".join(BRANCHES) + "]"
 LINE_632 = "    branches: [agent/632-graftling-windows-ci, dev]"
-JOB = "dsh-windows-probe"
+JOB = "dsh-windows-tests"
 SETUP = ["Keep symbolic links on this runner", "Check out the commit under test", "Set up Node 24.22.3 x64",
-         "Set up Python 3.13.7 x64", "Install graftling and pinned test tools"]
-PROBE = "Probe DSH on this runner"
+         "Set up Python 3.13.7 x64", "Install graftling and pinned test tools", "Restore the npm download cache"]
+INSTALL = "Install DSH with npm"
 TESTS = "Run graftling's DSH test files against the installed DSH"
-UPLOAD = "Retain the DSH probe results"
-STEPS = SETUP + [PROBE, TESTS, UPLOAD]
-PROBES = ["runner", "registry", "install", "package", "cli-version", "cli-node", "cli-help", "cli-web-help",
-          "preflight", "web-raw", "service", "owner-death"]
-DSH_TEST_FILES = ["tests/test_dsh_live.py", "tests/test_dsh_mcp.py", "tests/test_dsh_standalone_child.py",
-                  "tests/test_dsh_providers_608.py", "tests/test_pi_dsh_child_tools_551.py",
-                  "tests/test_pi_dsh_owner_tools_no_ask_551.py"]
+UPLOAD = "Retain the DSH test results"
+STEPS = SETUP + [INSTALL, TESTS, UPLOAD]
+ARTIFACT = "graftling-dsh-windows-${{ github.sha }}-${{ github.run_attempt }}"
 SHA_PIN = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@[0-9a-f]{40}$")
 CRED_PART = re.compile(r"(KEY|TOKEN|SECRET|SECRETS|PASSWORD|CREDENTIAL|CREDENTIALS)$")
 PROVIDER = re.compile(r"^(ANTHROPIC_|OPENAI_|DEEPSEEK_|CODEX_|CLAUDE_CODE_USE_|GRAFTLING_CONNECTION)|_BASE_URL$")
-
-
-def load(file):
-    with open(file, encoding="utf-8") as handle:
-        return json.load(handle)
 
 
 def wfdiff(base_file, head_file):
@@ -70,7 +69,7 @@ def wfdiff(base_file, head_file):
     doc = yaml.safe_load(head)
     on = doc.get("on", doc.get(True)) or {}
     branches = ((on.get("push") or {}).get("branches") or []) if isinstance(on, dict) else []
-    check(branches == BRANCHES, f"push branches are exactly dev's plus agent/649-graftling-windows-dsh",
+    check(branches == BRANCHES, "push branches are exactly dev's plus agent/649-graftling-windows-dsh",
           f"push branches are {branches}, not {BRANCHES}")
     prefix = base.replace(BASE_LINE + "\n", HEAD_LINE + "\n")
     appended = head[len(prefix):] if head.startswith(prefix) else None
@@ -78,7 +77,7 @@ def wfdiff(base_file, head_file):
           "the base workflow is unchanged up to its end apart from the push branches line",
           "the workflow differs from the base before its end, beyond the push branches line")
     jobs = doc.get("jobs") or {}
-    base_jobs = (yaml.safe_load(base).get("jobs") or {})
+    base_jobs = yaml.safe_load(base).get("jobs") or {}
     check(list(jobs) == ["windows-tests", JOB], f"jobs are windows-tests and {JOB}", f"jobs are {list(jobs)}")
     check(jobs.get("windows-tests") == base_jobs.get("windows-tests"), "the windows-tests job is the base one",
           "the windows-tests job changed")
@@ -114,23 +113,30 @@ def wfdiff(base_file, head_file):
     run_text = "\n".join(str(s.get("run", "")) for s in items)
     check(re.search(r"\benv\b\s*(\||$)|Get-ChildItem\s+env:|\bprintenv\b|\bset\s*$", run_text, re.M) is None,
           "no step prints the whole environment", "a step prints the environment")
-    probe = str(next((s.get("run", "") for s in items if s.get("name") == PROBE), ""))
-    check(re.search(r"^\s*python \.github/dsh_windows_probe\.py --out test-results/dsh-probe --dsh-version \$env:DSH_VERSION\s*$",
-                    probe, re.M) is not None, "the probe step runs .github/dsh_windows_probe.py into test-results/dsh-probe",
-          "the probe step does not run .github/dsh_windows_probe.py --out test-results/dsh-probe")
+    cache = next((s for s in items if s.get("name") == SETUP[-1]), {})
+    check(str(cache.get("uses", "")).startswith("actions/cache@") and "npm-cache" in str((cache.get("with") or {}).get("path")),
+          "the npm download cache is actions/cache over npm's cache directory only",
+          "the cache step is not actions/cache over npm's cache directory")
+    install = str(next((s.get("run", "") for s in items if s.get("name") == INSTALL), ""))
+    check('npm install -g' in install and '"@deepseek-ai/dsh@$env:DSH_VERSION"' in install
+          and re.search(r"^\s*exit \$code\s*$", install, re.M) is not None and "exit 0" not in install,
+          "the install step runs npm install -g @deepseek-ai/dsh@$DSH_VERSION and exits with npm's code (gating)",
+          "the install step does not gate on npm install -g @deepseek-ai/dsh@$DSH_VERSION")
     tests = next((s for s in items if s.get("name") == TESTS), {})
-    check(str(tests.get("if", "")).startswith("always()") and "run-exit-code.txt" in str(tests.get("run", ""))
-          and all(f in str(tests.get("run", "")) for f in DSH_TEST_FILES)
-          and re.search(r"^\s*exit 0\s*$", str(tests.get("run", "")), re.M) is not None,
-          "the DSH test files run always(), their exit code is recorded and does not gate",
-          "the DSH test files step is not always(), unrecorded or gating")
+    command = str(tests.get("run", ""))
+    check("test_*dsh*.py" in command
+          and re.search(r"^\s*python \.github/run_test_files\.py --out test-results/dsh --file-limit \d+ --total-limit \d+ @files\s*$",
+                        command, re.M) is not None
+          and "run-exit-code.txt" in command and re.search(r"^\s*exit \$code\s*$", command, re.M) is not None
+          and "exit 0" not in command and "always()" not in str(tests.get("if", "")),
+          "every tests/test_*dsh*.py runs through .github/run_test_files.py, gating, after a successful install",
+          "the DSH test step does not run every test_*dsh*.py through run_test_files.py, gating")
     upload = next((s for s in items if s.get("name") == UPLOAD), {})
     w = upload.get("with") or {}
-    check(str(upload.get("if", "")).startswith("always()") and "retention-days" in w
-          and w.get("name") == "graftling-dsh-probe-${{ github.sha }}-${{ github.run_attempt }}"
-          and w.get("path") == "test-results/dsh-probe/" and w.get("if-no-files-found") == "error",
+    check(str(upload.get("if", "")).startswith("always()") and "retention-days" in w and w.get("name") == ARTIFACT
+          and w.get("path") == "test-results/dsh/" and w.get("if-no-files-found") == "error",
           f"upload always() as {w.get('name')} with retention {w.get('retention-days')} days",
-          "the upload is not always(), not named graftling-dsh-probe-<sha>-<attempt> or without retention")
+          "the upload is not always(), not named graftling-dsh-windows-<sha>-<attempt> or without retention")
     sys.exit(1 if bad else 0)
 
 
@@ -158,7 +164,7 @@ def dshlines(old_file, new_file):
     for line in others:
         print(f"NOTE: a non-DSH line differs from the base (another Task's): {line[:160]!r}")
     if old_dsh == new_dsh:
-        print(f"PASS: the {len(new_dsh)} DSH-related lines of the expected list are unchanged (phase A changes none)")
+        print(f"PASS: the {len(new_dsh)} DSH-related lines of the expected list are unchanged (windows-tests has no DSH)")
         sys.exit(0)
     for line in sorted(set(old_dsh) ^ set(new_dsh)):
         print(f"FAIL: DSH-related line {'added' if line in new_dsh else 'removed'}: {line[:160]!r}")
@@ -167,14 +173,14 @@ def dshlines(old_file, new_file):
     sys.exit(1)
 
 
-def probejob(jobs_file):
+def dshjob(jobs_file):
     found = load(jobs_file).get("jobs", [])
     job = next((j for j in found if j.get("name") == JOB), None)
     problems = []
     if job is None:
         problems.append(f"no {JOB} job")
     else:
-        print("PROBE JOB", job.get("name"), "|", job.get("status"), "|", job.get("conclusion"), "|", job.get("html_url"))
+        print("DSH JOB", job.get("name"), "|", job.get("status"), "|", job.get("conclusion"), "|", job.get("html_url"))
         seen = {}
         for s in job.get("steps", []):
             seen[s.get("name")] = s.get("conclusion")
@@ -187,70 +193,60 @@ def probejob(jobs_file):
                 problems.append(f"step {name!r} is missing")
             elif seen[name] != "success":
                 problems.append(f"step {name!r} is {seen[name]}")
-    print("PROBEJOB", "FAIL" if problems else "PASS",
-          "; ".join(problems) or f"{len(STEPS)} steps succeeded (the probe recorded every probe; the DSH test files ran)")
+    print("DSHJOB", "FAIL" if problems else "PASS",
+          "; ".join(problems) or f"{len(STEPS)} steps succeeded (DSH installed; every DSH test file passed or skipped)")
 
 
-def findings(directory):
-    problems = []
-    path = os.path.join(directory, "findings.json")
-    data = load(path) if os.path.exists(path) else None
-    if data is None:
-        problems.append("no findings.json")
+def install(directory):
+    path = os.path.join(directory, "environment.json")
+    try:
+        facts = load(path) if os.path.exists(path) else None
+    except ValueError:
+        facts = None
+    if facts is None:
+        try:  # PowerShell's Set-Content -Encoding utf8 may write a byte order mark
+            facts = json.loads(open(path, encoding="utf-8-sig").read())
+        except (OSError, ValueError):
+            facts = None
+    print("--- DSH install on the runner (information)")
+    if facts is None:
+        print("  environment.json missing or unreadable")
     else:
-        records = {r.get("probe"): r for r in data.get("probes", [])}
-        print(f"--- DSH probe findings (DSH {data.get('dsh_version')}; evidence, not a pass condition); "
-              f"variables removed by name: {data.get('removed_variable_names')}")
-        for probe in PROBES:
-            r = records.get(probe)
-            if r is None:
-                print(f"  {probe:<12} ABSENT")
-                problems.append(f"probe {probe} not recorded")
-                continue
-            if "exit" not in r or not os.path.exists(os.path.join(directory, str(r.get("log", "")).replace("\\", "/"))):
-                problems.append(f"probe {probe} has no exit code or log")
-            print(f"  {probe:<12} exit {r.get('exit')!s:<6}{' (timed out)' if r.get('timed_out') else ''} "
-                  f"{r.get('seconds')} s | {r.get('title')}")
-            for key, value in (r.get("facts") or {}).items():
-                text = json.dumps(value, default=str)
-                print(f"      {key}: {text[:300]}{' ...' if len(text) > 300 else ''}")
-            for line in (r.get("excerpt") or [])[-3:]:
-                print(f"      | {line[:200]}")
-        if not data.get("complete"):
-            problems.append("findings.json says complete: false")
-    tests = os.path.join(directory, "tests")
-    files = os.path.join(tests, "files.json")
-    print("--- graftling's DSH test files against the installed DSH (recorded, not gating)")
-    if not os.path.exists(files):
-        problems.append("no tests/files.json")
-    else:
-        records = {r.get("file"): r for r in load(files).get("files", [])}
-        for name in DSH_TEST_FILES:
-            r = records.get(name)
-            if r is None:
-                problems.append(f"no record for {name}")
-                print(f"  {name}: ABSENT")
-                continue
-            summary, skips = "", {}
-            log = os.path.join(tests, str(r.get("log", "")).replace("\\", "/"))
-            if r.get("log") and os.path.exists(log):
-                text = open(log, encoding="utf-8", errors="replace").read()
-                found = re.findall(r"=+ (.*(?:passed|failed|error|skipped|no tests ran).*) in [0-9.]+s", text)
-                summary = found[-1] if found else ""
-                for count, reason in re.findall(r"^SKIPPED \[(\d+)\] [^:]+:\d+: (.*)$", text, re.M):
-                    skips[reason] = skips.get(reason, 0) + int(count)
-            print(f"  {name}: {r.get('outcome')} exit {r.get('exit_code')} | {summary}")
-            for reason, count in skips.items():
-                print(f"      skipped {count}: {reason[:160]}")
-        code = os.path.join(tests, "run-exit-code.txt")
-        print(f"  run_test_files exit code: {open(code).read().strip() if os.path.exists(code) else 'absent'}")
-        if not os.path.exists(code):
-            problems.append("no tests/run-exit-code.txt")
-    print("FINDINGS", "FAIL" if problems else "PASS",
-          "; ".join(problems) or f"the probe artifact is complete: {len(PROBES)} probes and {len(DSH_TEST_FILES)} "
-                                  "DSH test file records, each with its exit code")
+        for key in ("dsh_requested", "npm_exit", "install_seconds", "npm_cache_hit", "node", "npm", "dsh_version",
+                    "dsh", "npm_prefix", "npm_cache", "codepage", "image", "image_version", "arch"):
+            print(f"  {key}: {facts.get(key)}")
+    log = os.path.join(directory, "npm-install.txt")
+    if os.path.exists(log):
+        tail = [line for line in open(log, encoding="utf-8", errors="replace").read().splitlines() if line.strip()][-3:]
+        for line in tail:
+            print(f"  npm | {line[:200]}")
+
+
+def newtests(directory, list_file):
+    wanted = [line.strip() for line in open(list_file, encoding="utf-8") if line.strip() and not line.startswith("#")]
+    outcome = {}
+    files = os.path.join(directory, "files.json")
+    for record in (load(files).get("files", []) if os.path.exists(files) else []):
+        if not record.get("junit"):
+            continue
+        path = os.path.join(directory, record["junit"].replace("\\", "/"))
+        if not os.path.exists(path):
+            continue
+        for case in ET.parse(path).getroot().iter("testcase"):
+            tags = {child.tag for child in case}
+            outcome[nodeid(case)] = ("failed" if tags & {"failure", "error"} else
+                                     "skipped" if "skipped" in tags else "passed")
+    passed = 0
+    print(f"--- the DSH tests that must pass on Windows (649): {len(wanted)}")
+    for node in wanted:
+        state = outcome.get(node, "absent")
+        passed += state == "passed"
+        print(f"  {state.upper()} {node}")
+    verdict = "PASS" if passed == len(wanted) else "FAIL"
+    print(f"NEWTESTS {verdict} {passed} of {len(wanted)} DSH tests passed")
 
 
 if __name__ == "__main__":
     command, *rest = sys.argv[1:]
-    {"wfdiff": wfdiff, "as632": as632, "dshlines": dshlines, "probejob": probejob, "findings": findings}[command](*rest)
+    {"wfdiff": wfdiff, "as632": as632, "dshlines": dshlines, "dshjob": dshjob, "install": install,
+     "newtests": newtests}[command](*rest)

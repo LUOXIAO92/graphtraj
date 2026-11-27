@@ -45,6 +45,5 @@ skip-allowed	This DSH has no readable web-app preset.	test_pi_dsh_child_tools_55
 skip-allowed	Node and an installed Pi are required	test_pi_notice_display_536.py: no Pi on the runner
 
 # --- Expected Windows failures (run 45608819873, rules R1-R13; 192 entries).
-fail	tests/test_unified_data_root_577.py::test_claude_launcher_logs_into_the_variable	tests/test_unified_data_root_577.py:382	W8 (not registered; outside this round)	R12: Claude plugin launcher; no mark | observed: FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\pytest-of-runnera (origin from test assertion, no graftling frame)
 
 # --- Fit no rule in round 2B; placed by the Leader (Main delegated these), by inference from sibling failures.

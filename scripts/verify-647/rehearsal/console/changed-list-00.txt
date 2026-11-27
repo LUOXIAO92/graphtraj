@@ -1,0 +1,69 @@
+$ VERIFY647_GRAFTLING=/tmp/claude-501/rh647/changed-list/graftling VERIFY647_GREMOTE=/tmp/claude-501/rh647/changed-list/gremote.git VERIFY647_GH=/tmp/claude-501/rh647/changed-list/gh/gh VERIFY647_EVIDENCE=/tmp/claude-501/rh647/changed-list/evidence VERIFY647_POLL_S=1 VERIFY647_APPEAR_S=10 VERIFY647_DONE_S=30 VERIFY647_EXPECTED=/tmp/claude-501/rh647/changed-list.txt zsh steps.zsh 00
+scrubbed at start: 5 variable(s) (names not shown)
+== [00] Preflight, read only. Login: gh login (account shown, no token), git credential helper (ls-remote). Dialog: none. Network: GitHub.
+PASS: run by zsh 5.9
+git: git version 2.50.1 (Apple Git-155) | gh: gh version 0.0.0-verify632-stand-in | gh path: /tmp/claude-501/rh647/changed-list/gh/gh | TMPDIR for started processes: /tmp/claude-501
+$ gh auth status --hostname github.com   (token lines removed)
+  github.com
+    ✓ Logged in to github.com account stand-in-user (verify-632 fake)
+    - Active account: true
+PASS: /tmp/claude-501/rh647/changed-list/graftling origin is https://github.com/LUOXIAO92/graftling.git
+NOTE: rehearsal remote /tmp/claude-501/rh647/changed-list/gremote.git is used instead of graftling origin
+PASS: bundle verifies against /tmp/claude-501/rh647/changed-list/graftling; head bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b contains graftling dev eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866 (prerequisites: eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866; any other than the base an ancestor of it)
+--- bundle commits on eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+  bbcea6d LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | Claude on Windows: the generated plugin hosts without a venv launcher; no Claude child (647)
+PASS: author and committer are the noreply identity
+--- files changed since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866:
+   .github/workflows/windows.yml                      |   2 +-
+   PUBLIC_API.md                                      |  14 +
+   src/graftling/claude-plugin/bin/graftling-host     |  39 ++-
+   src/graftling/claude-plugin/hooks/host_context.mjs |  29 +-
+   src/graftling/claude/driver.py                     |  25 +-
+   src/graftling/claude/host.py                       |  52 +++-
+   src/graftling/claude/host_context.mjs              |  29 +-
+   tests/test_approval_layers.py                      |   3 +
+   tests/test_claude_gateway_login_613.py             |   1 +
+   tests/test_claude_windows_647.py                   | 336 +++++++++++++++++++++
+   10 files changed, 508 insertions(+), 22 deletions(-)
+PASS: changed paths are within the allowed set: .github/workflows/windows.yml, PUBLIC_API.md, src/graftling/claude-plugin/bin/graftling-host, src/graftling/claude-plugin/hooks/host_context.mjs, src/graftling/claude/driver.py, src/graftling/claude/host.py, src/graftling/claude/host_context.mjs, tests/test_approval_layers.py, tests/test_claude_gateway_login_613.py, tests/test_claude_windows_647.py
+--- .github/workflows/windows.yml at bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b against eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: push branches are exactly ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing', 'agent/639-graftling-windows-codex', 'agent/647-graftling-windows-claude']
+PASS: the workflow is the base one with only its push branches line changed
+--- .github/workflows/windows.yml at eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866 (632's accepted workflow with 633's to 639's branches; every other property by 632's wfcheck)
+PASS: the base workflow's push branches line is ['agent/632-graftling-windows-ci', 'agent/633-graftling-windows-process', 'agent/634-graftling-windows-durable-writes', 'agent/635-graftling-windows-process-tree', 'agent/638-graftling-windows-paths-encoding', 'dev', 'agent/636-graftling-windows-named-pipe', 'agent/637-graftling-windows-process-listing', 'agent/639-graftling-windows-codex']; judged below with it set back to 632's
+PASS: push branches are exactly agent/632-graftling-windows-ci and dev
+PASS: triggers: push and workflow_dispatch only
+PASS: permissions: contents: read
+PASS: no secrets reference
+PASS: no token reference
+PASS: job runs on windows-latest
+PASS: job timeout-minutes 90
+PASS: PYTHONUTF8=1
+PASS: every action pinned to a 40-hex SHA: actions/checkout@11d5960a326750d5838078e36cf38b85af677262, actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020, actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1, actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+PASS: core.symlinks true is set before the checkout
+PASS: checkout has persist-credentials: false
+PASS: a step fails unless the linked documents are symbolic links
+PASS: no step prints the whole environment
+PASS: step named: Keep symbolic links on this runner
+PASS: step named: Check out the commit under test
+PASS: step named: Fail unless the linked package documents are symbolic links
+PASS: step named: Set up Node 22.18.0 x64
+PASS: step named: Set up Python 3.13.7 x64
+PASS: step named: Install graftling and pinned test tools
+PASS: step named: Show runner, Python and pytest versions
+PASS: step named: Run the graftling test suite
+PASS: step named: Retain JUnit results
+PASS: the suite step runs every test file through .github/run_test_files.py with file and total limits
+PASS: total limit 4200 s is inside the step's 75 minutes
+PASS: suite step timeout-minutes 75
+PASS: upload runs always() with retention 7 days
+PASS: .github/run_test_files.py and tests/posix_only.py unchanged since eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+PASS: the 7 647 tests of new-tests.txt are defined at bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b (tests/test_claude_windows_647.py, tests/test_unified_data_root_577.py)
+PASS: /tmp/claude-501/rh647/changed-list.txt parses: 1 expected Windows failures and 0 expected hangs (W8 (647) 1), 19 allowed environment skips
+FAIL: the expected list adds or changes a line: 'fail\ttests/test_claude_windows_647.py::test_mod_starts_a_windows_venvs_base_interpreter\tx:1\tW8 (647)\trehearsal: an added line'
+NOTE: judged against /tmp/claude-501/rh647/changed-list.txt (rehearsal)
+PASS: /tmp/claude-501/rh647/changed-list/graftling has no local agent/647-graftling-windows-claude (P creates it from the bundle)
+PASS: agent/647-graftling-windows-claude is absent on graftling /tmp/claude-501/rh647/changed-list/gremote.git
+next: fix the FAIL lines above (new bundle or list from the Engineer), then zsh /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/647-graftling-windows-claude/scripts/verify-647/steps.zsh 00
+VERDICT 647 00: PASS (P ready: no; remote branch absent; candidate graftling bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b)
+[exit 0]

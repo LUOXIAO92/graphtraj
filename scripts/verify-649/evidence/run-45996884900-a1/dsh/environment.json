@@ -1,0 +1,22 @@
+{
+  "commit": "5b7bd91d6ed5d23b541ac89fb5f0066d2057567a",
+  "run": "45996884900",
+  "attempt": "1",
+  "os": "Microsoft Windows NT 10.0.26100.0",
+  "image": "win25-vs2026",
+  "image_version": "20261123.321.1",
+  "arch": "AMD64",
+  "python": "Python 3.13.7",
+  "pytest": "pytest 8.3.5",
+  "node": "v24.22.3",
+  "npm": "11.19.1",
+  "codepage": 1252,
+  "dsh_requested": "0.2.2-rc.5",
+  "npm_exit": 0,
+  "install_seconds": 857,
+  "npm_cache_hit": "",
+  "npm_cache": "C:\\npm\\cache",
+  "npm_prefix": "C:\\npm\\prefix",
+  "dsh": "C:\\npm\\prefix\\dsh.ps1",
+  "dsh_version": "0.2.2-rc.5"
+}

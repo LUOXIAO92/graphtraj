@@ -1,0 +1,34 @@
+JOB dsh-windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/45996884900/job/140498398317
+JOB windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/45996884900/job/140498398690
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | setup: must succeed
+  step  3 | success   | Check out the commit under test | setup: must succeed
+  step  4 | success   | Fail unless the linked package documents are symbolic links | setup: must succeed
+  step  5 | success   | Set up Node 22.18.0 x64 | setup: must succeed
+  step  6 | success   | Set up Python 3.13.7 x64 | setup: must succeed
+  step  7 | success   | Install graftling and pinned test tools | setup: must succeed
+  step  8 | success   | Show runner, Python and pytest versions | setup: must succeed
+  step  9 | failure   | Run the graftling test suite | suite: success or failure (results judged from JUnit)
+  step 10 | success   | Retain JUnit results | upload: must succeed
+  step 18 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 19 | skipped   | Post Set up Node 22.18.0 x64 | other: success or skipped
+  step 20 | success   | Post Check out the commit under test | other: success or skipped
+  step 21 | success   | Complete job | other: success or skipped
+JUDGE PASS 7 setup steps and the upload succeeded; the suite step ran
+DSH JOB dsh-windows-tests | completed | failure | https://github.com/LUOXIAO92/graftling/actions/runs/45996884900/job/140498398317
+  step  1 | success   | Set up job | other: success or skipped
+  step  2 | success   | Keep symbolic links on this runner | must succeed
+  step  3 | success   | Check out the commit under test | must succeed
+  step  4 | success   | Set up Node 24.22.3 x64 | must succeed
+  step  5 | success   | Set up Python 3.13.7 x64 | must succeed
+  step  6 | success   | Install graftling and pinned test tools | must succeed
+  step  7 | success   | Restore the npm download cache | must succeed
+  step  8 | success   | Install DSH with npm | must succeed
+  step  9 | failure   | Run graftling's DSH test files against the installed DSH | must succeed
+  step 10 | success   | Retain the DSH test results | must succeed
+  step 17 | skipped   | Post Restore the npm download cache | other: success or skipped
+  step 18 | skipped   | Post Set up Python 3.13.7 x64 | other: success or skipped
+  step 19 | skipped   | Post Set up Node 24.22.3 x64 | other: success or skipped
+  step 20 | success   | Post Check out the commit under test | other: success or skipped
+  step 21 | success   | Complete job | other: success or skipped
+DSHJOB FAIL step "Run graftling's DSH test files against the installed DSH" is failure

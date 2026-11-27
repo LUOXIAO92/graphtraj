@@ -1,0 +1,123 @@
+{
+ "file_limit_s": 300.0,
+ "total_limit_s": 1200.0,
+ "files": [
+  {
+   "file": "tests/test_dsh_live.py",
+   "log": "logs\\test_dsh_live.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.4,
+   "junit": "junit\\test_dsh_live.xml"
+  },
+  {
+   "file": "tests/test_dsh_mcp.py",
+   "log": "logs\\test_dsh_mcp.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 1.6,
+   "junit": "junit\\test_dsh_mcp.xml"
+  },
+  {
+   "file": "tests/test_dsh_official.py",
+   "log": "logs\\test_dsh_official.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_official.xml"
+  },
+  {
+   "file": "tests/test_dsh_plugin_install_python.py",
+   "log": "logs\\test_dsh_plugin_install_python.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 2.3,
+   "junit": "junit\\test_dsh_plugin_install_python.xml"
+  },
+  {
+   "file": "tests/test_dsh_providers_608.py",
+   "log": "logs\\test_dsh_providers_608.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 1.7,
+   "junit": "junit\\test_dsh_providers_608.xml"
+  },
+  {
+   "file": "tests/test_dsh_standalone_child.py",
+   "log": "logs\\test_dsh_standalone_child.txt",
+   "outcome": "ended",
+   "exit_code": 1,
+   "pipe_closed": true,
+   "elapsed_s": 7.9,
+   "junit": "junit\\test_dsh_standalone_child.xml"
+  },
+  {
+   "file": "tests/test_dsh_standalone_host.py",
+   "log": "logs\\test_dsh_standalone_host.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 4.6,
+   "junit": "junit\\test_dsh_standalone_host.xml"
+  },
+  {
+   "file": "tests/test_dsh_startup.py",
+   "log": "logs\\test_dsh_startup.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.5,
+   "junit": "junit\\test_dsh_startup.xml"
+  },
+  {
+   "file": "tests/test_dsh_windows_649.py",
+   "log": "logs\\test_dsh_windows_649.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 14.0,
+   "junit": "junit\\test_dsh_windows_649.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_child_tools_551.py",
+   "log": "logs\\test_pi_dsh_child_tools_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.8,
+   "junit": "junit\\test_pi_dsh_child_tools_551.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_extra_tools_551.py",
+   "log": "logs\\test_pi_dsh_extra_tools_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.7,
+   "junit": "junit\\test_pi_dsh_extra_tools_551.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_notice_holding.py",
+   "log": "logs\\test_pi_dsh_notice_holding.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 25.5,
+   "junit": "junit\\test_pi_dsh_notice_holding.xml"
+  },
+  {
+   "file": "tests/test_pi_dsh_owner_tools_no_ask_551.py",
+   "log": "logs\\test_pi_dsh_owner_tools_no_ask_551.txt",
+   "outcome": "ended",
+   "exit_code": 0,
+   "pipe_closed": true,
+   "elapsed_s": 0.9,
+   "junit": "junit\\test_pi_dsh_owner_tools_no_ask_551.xml"
+  }
+ ]
+}

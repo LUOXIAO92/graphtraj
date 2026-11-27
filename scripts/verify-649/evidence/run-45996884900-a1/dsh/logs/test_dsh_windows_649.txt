@@ -1,0 +1,28 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 10 items
+
+tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh.cmd] PASSED [ 10%]
+tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh.CMD] PASSED [ 20%]
+tests/test_dsh_windows_649.py::test_npm_shim_names_the_installed_package_on_windows[dsh] PASSED [ 30%]
+tests/test_dsh_windows_649.py::test_a_windows_executable_that_is_no_npm_shim_is_resolved_as_before PASSED [ 40%]
+tests/test_dsh_windows_649.py::test_posix_ignores_the_npm_shim PASSED    [ 50%]
+tests/test_dsh_windows_649.py::test_dsh_plugin_runs_a_windows_venv_python_as_its_base_interpreter PASSED [ 60%]
+tests/test_dsh_windows_649.py::test_a_venv_python_the_dsh_plugin_starts_is_a_direct_child_running_as_the_venv PASSED [ 70%]
+tests/test_dsh_windows_649.py::test_installed_dsh_is_found_through_its_npm_shim PASSED [ 80%]
+tests/test_dsh_windows_649.py::test_installed_dsh_service_starts_lists_and_leaves_nothing_after_close PASSED [ 90%]
+tests/test_dsh_windows_649.py::test_installed_dsh_service_ends_when_its_owner_dies_without_close PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=59a37b371fd34e08ba077ba5527b84a2: found=0 stopped=0 remaining=0 error=No job graftling-59a37b371fd34e08ba077ba5527b84a2 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\dsh\junit\test_dsh_windows_649.xml -
+============================ slowest 10 durations =============================
+6.59s call     tests/test_dsh_windows_649.py::test_installed_dsh_service_starts_lists_and_leaves_nothing_after_close
+6.44s call     tests/test_dsh_windows_649.py::test_installed_dsh_service_ends_when_its_owner_dies_without_close
+0.21s call     tests/test_dsh_windows_649.py::test_a_venv_python_the_dsh_plugin_starts_is_a_direct_child_running_as_the_venv
+0.10s call     tests/test_dsh_windows_649.py::test_dsh_plugin_runs_a_windows_venv_python_as_its_base_interpreter
+0.01s call     tests/test_dsh_windows_649.py::test_installed_dsh_is_found_through_its_npm_shim
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================= 10 passed in 13.50s =============================

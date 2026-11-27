@@ -1,0 +1,39 @@
+runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25-vs2026 | image_version=20261123.321.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v24.22.3 | codepage=1252
+run_test_files exit code: 1
+--- test files: 13 recorded | ended 13 | hung 0 | not run 0 | in the commit: 13
+  slowest ended files: tests/test_pi_dsh_notice_holding.py 25.5 s, tests/test_dsh_windows_649.py 14.0 s, tests/test_dsh_standalone_child.py 7.9 s, tests/test_dsh_standalone_host.py 4.6 s, tests/test_dsh_plugin_install_python.py 2.3 s
+FILES PASS every test file ended or was stopped and recorded as hung
+merged JUnit files: 13
+collected in JUnit: 234 | passed 200 | failed 3 | errors 0 | skipped 31
+--- POSIX-only skips: 22 in 5 modules
+     2  tests/test_dsh_plugin_install_python.py
+     1  tests/test_dsh_standalone_child.py
+     9  tests/test_dsh_standalone_host.py
+     1  tests/test_dsh_startup.py
+     9  tests/test_pi_dsh_notice_holding.py
+  reason x19: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+  reason x2: the stand-in executable is a '#!/bin/sh' script
+  reason x1: a read-only directory made with chmod 0o555 and checked with os.geteuid
+--- allowed environment skips (not Windows-specific): 9
+  x2: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+  x2: Requires one explicitly retained native trace.
+  x1: Requires assigned official host slot.
+  x1: Requires final assigned host slot.
+  x1: Requires retained interrupted official Session.
+  x1: Requires fixed Pi combination and final host slot.
+  x1: Requires assigned native startup diagnosis.
+--- skips without the 'POSIX-only: ' prefix and not allowed: 0, by reason:
+  by test:
+--- expected hangs: 0; observed hangs: 0 (0 as expected)
+--- unexpected hangs: 0
+--- listed hangs that did not hang: 0
+--- expected Windows failures: 0; observed failures and errors: 3 (0 as expected)
+--- unexpected failures: 3
+  FAIL tests/test_dsh_mcp.py::test_delivered_plugin_native_scopes | origin tests/test_dsh_mcp.py:44 (?; from test assertion, no graftling frame) | AssertionError: node:internal/modules/run_main:107
+  FAIL tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation | origin tests/test_dsh_plugin_install_python.py:142 (?; from test assertion, no graftling frame) | AssertionError: assert (['C:\\hostedt...\\python.exe'] == ['D:\\a\\_tem...\\python.exe']
+  FAIL tests/test_dsh_standalone_child.py::test_delivered_plugin_loads_from_dsh_agent_package_alone | origin tests/test_dsh_standalone_child.py:545 (?; from test assertion, no graftling frame) | AssertionError: node:internal/modules/run_main:107
+    origins of the unexpected failures: test assertion, no graftling frame 3
+--- unexpected passes (listed as failing, passed): 0
+--- listed failures that were skipped or not collected: 0
+observed list written: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/649-graftling-windows-dsh/scripts/verify-649/evidence/live/run-45996884900-a1/dsh-observed-expected.txt
+JUDGE FAIL 3 unexpected failures

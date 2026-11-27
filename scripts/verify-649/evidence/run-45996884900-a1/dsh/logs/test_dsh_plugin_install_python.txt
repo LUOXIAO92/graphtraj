@@ -1,0 +1,49 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 4 items
+
+tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation FAILED [ 25%]
+tests/test_dsh_plugin_install_python.py::test_the_pi_extension_finds_the_python_of_its_installation PASSED [ 50%]
+tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command SKIPPED [ 75%]
+tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=479a4d86d0014f7396bf3812d9071231: found=0 stopped=0 remaining=0 error=No job graftling-479a4d86d0014f7396bf3812d9071231 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+================================== FAILURES ===================================
+_________ test_the_linked_plugin_runs_the_python_of_its_installation __________
+tests\test_dsh_plugin_install_python.py:142: in test_the_linked_plugin_runs_the_python_of_its_installation
+    assert shown['attached'] == shown['host'] and used.parent == installation / ('Scripts' if os.name == 'nt' else 'bin')
+E   AssertionError: assert (['C:\\hostedt...\\python.exe'] == ['D:\\a\\_tem...\\python.exe']
+E     
+E     At index 0 diff: 'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe' != 'D:\\a\\_temp\\graftling-测试-ü\\pytest-of-runneradmin\\pytest-2\\test_the_linked_plugin_runs_th0\\tools-测试-ü\\graftling\\Scripts\\python.exe'
+E     
+E     Full diff:
+E       [
+E     -     'D:\\a\\_temp\\graftling-测试-ü\\pytest-of-runneradmin\\pytest-2\\test_the_linked_plugin_runs_th0\\tools-测试-ü\\graftling\\Scripts\\python.exe',
+E     +     'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe',
+E       ])
+- generated xml file: D:\a\graftling\graftling\test-results\dsh\junit\test_dsh_plugin_install_python.xml -
+============================ slowest 10 durations =============================
+0.68s call     tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
+0.34s call     tests/test_dsh_plugin_install_python.py::test_the_pi_extension_finds_the_python_of_its_installation
+0.19s setup    tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
+0.18s setup    tests/test_dsh_plugin_install_python.py::test_the_pi_extension_finds_the_python_of_its_installation
+0.17s setup    tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged
+0.17s setup    tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command
+0.01s call     tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command
+
+(3 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+FAILED tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation - AssertionError: assert (['C:\\hostedt...\\python.exe'] == ['D:\\a\\_tem...\\python.exe']
+  
+  At index 0 diff: 'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe' != 'D:\\a\\_temp\\graftling-测试-ü\\pytest-of-runneradmin\\pytest-2\\test_the_linked_plugin_runs_th0\\tools-测试-ü\\graftling\\Scripts\\python.exe'
+  
+  Full diff:
+    [
+  -     'D:\\a\\_temp\\graftling-测试-ü\\pytest-of-runneradmin\\pytest-2\\test_the_linked_plugin_runs_th0\\tools-测试-ü\\graftling\\Scripts\\python.exe',
+  +     'C:\\hostedtoolcache\\windows\\Python\\3.13.7\\x64\\python.exe',
+    ])
+SKIPPED [1] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!/bin/sh' script
+SKIPPED [1] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+=================== 1 failed, 1 passed, 2 skipped in 1.96s ====================

@@ -3,8 +3,13 @@
 Task 648 made the Pi host work on Windows and refuses a Pi child there. Its evidence is a stand-in Pi on the
 GitHub-hosted Windows runner (`steps.zsh P`). This file lists what only a real Pi on a real Windows machine can show:
 what to observe, the observable that proves each item, the settings Pi needs for its model, and the assumptions that
-are still inferences. graftling candidate: `f759fd6c` on `agent/648-graftling-windows-pi` (bundle
+are still inferences. graftling candidate: `57153234` on `agent/648-graftling-windows-pi` (correction 1: round 1's
+`f759fd6c`, the venv test fix `a955b4e5`, and graftling dev `bbcea6d9` with 647 merged in; bundle
 `graftling-648.bundle`), or dev once Main has merged it.
+
+The runner's venv test (H4's record line) found that CPython 3.13's `site.py` runs a venv's `.pth` `import` lines
+twice in one process (`site.venv`, then `site.main`'s `addsitepackages`). So H4 and H5 count records per `pid`,
+not lines.
 
 User environment details are not written here: the machine, account, cloud project, addresses, provider choice,
 model and endpoint values. Main passes them through its local, uncommitted settings.

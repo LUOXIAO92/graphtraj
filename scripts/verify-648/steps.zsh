@@ -24,7 +24,7 @@
 # Run one step at a time, in this order:  zsh <this file> <STEP>
 #   00  Preflight, read only. zsh; git and gh versions; gh auth status (account only); <Harness>/graftling origin is
 #       https://github.com/LUOXIAO92/graftling.git; the bundle verifies against <Harness>/graftling, its prerequisites
-#       are graftling dev eb5ad8e5 (W0-W7, 645) or ancestors of it, and the head contains eb5ad8e5 and is shown; read
+#       are graftling dev bbcea6d9 (W0-W9, 645) or ancestors of it, and the head contains bbcea6d9 and is shown; read
 #       through a temporary repository that borrows <Harness>/graftling's objects (nothing is written there):
 #       noreply identity; the paths changed since the base are within ALLOWED (below); the workflow is the base one
 #       with only its push branches line changed, to exactly dev's set plus agent/648-graftling-windows-pi, and the
@@ -76,8 +76,10 @@ THIS=${0:A}
 HERE=${0:A:h}
 STEP=${1:-}
 BRANCH=agent/648-graftling-windows-pi
-# graftling dev eb5ad8e5: W0 (632) to W7 (639) and 645 integrated.
-BASE=eb5ad8e5b080f2cc0c826f8d0fe7c54882d96866
+# graftling dev bbcea6d9: W0 (632) to W7 (639), 645 and W8+W9 (647) integrated (648 correction 1 merged it).
+# The candidate also descends from f759fd6c, round 1's head, already on the remote, so P pushes fast-forward; the
+# bundle then also lists eb5ad8e5 (f759fd6c's parent) as a prerequisite, an ancestor of BASE, which check_bundle accepts.
+BASE=bbcea6d9d12b2ddf4d6e8259ccc75ee96d47269b
 REPO=LUOXIAO92/graftling
 GURL=https://github.com/LUOXIAO92/graftling.git
 HARNESS=/Users/luoxiao/workspace/you-are-a-product-architect-delivery

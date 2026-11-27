@@ -1,7 +1,7 @@
 """Task 648 (W10) step helper, beside verify-632/wincheck.py (which steps.zsh also runs, by reference).
 
 Run as: python -I wincheck648.py <command> <args...>. Standard library only except `wfdiff`, which needs PyYAML.
-  wfdiff BASE_WF HEAD_WF               the workflow at the bundle head is the one at BASE (graftling dev eb5ad8e) with
+  wfdiff BASE_WF HEAD_WF               the workflow at the bundle head is the one at BASE (graftling dev bbcea6d) with
                                        only its push branches line changed, and its push branches are exactly BRANCHES
   as632 BASE_WF OUT                    write to OUT the base workflow with its push branches line set back to 632's,
                                        so 632's wfcheck judges every other property of it unchanged; fails unless
@@ -22,11 +22,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "verify-632"))
 from wincheck import load, nodeid, read_expected  # noqa: E402
 
-# graftling dev eb5ad8e's push branches, in the workflow's order; the candidate appends only its own branch.
+# graftling dev bbcea6d's push branches, in the workflow's order; the candidate appends only its own branch.
 BASE_BRANCHES = ["agent/632-graftling-windows-ci", "agent/633-graftling-windows-process",
                  "agent/634-graftling-windows-durable-writes", "agent/635-graftling-windows-process-tree",
                  "agent/638-graftling-windows-paths-encoding", "dev", "agent/636-graftling-windows-named-pipe",
-                 "agent/637-graftling-windows-process-listing", "agent/639-graftling-windows-codex"]
+                 "agent/637-graftling-windows-process-listing", "agent/639-graftling-windows-codex",
+                 "agent/647-graftling-windows-claude"]
 BRANCHES = BASE_BRANCHES + ["agent/648-graftling-windows-pi"]
 BASE_LINE = "    branches: [" + ", ".join(BASE_BRANCHES) + "]"
 HEAD_LINE = "    branches: [" + ", ".join(BRANCHES) + "]"

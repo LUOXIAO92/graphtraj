@@ -1,0 +1,8 @@
+$ env <python> vm/drive650.py case claude-refuse
+[claude-refuse] in this session
+CASE claude-refuse launcher: OBSERVED pid 83352; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+CASE claude-refuse CLAUDE_HOST_LOAD plugin-dir: OBSERVED --plugin-dir <tmp>/home/work/claude-refuse/.claude/skills/agents-claude-host: NOT graftling's documented route (that is the project plugin loaded by Claude Code itself)
+[claude] $ python <prompt> claude -p <prompt> --output-format stream-json --verbose --max-turns 15 --allowedTools mcp__graftling__subagents --plugin-dir <prompt>   (cwd <tmp>/home/work/claude-refuse; bound 420 s)
+[claude] exit 1 after 0.1 s; 1 process(es) seen; trace events 0
+RESULT claude-refuse STOP driver error: RuntimeError: claude exited 1 without the call (the model made no subagents create call (tool uses: [])); stderr tail '<harness>/.graphtraj/core/worktrees/650-graftling-windows-runtimes-real/scripts/verify-650/rehearsal/standin_runtime.py", line 96, in claude server = manifest[\'mcpServers\'][\'probe650\'] ~~~~~~~~^^^^^^^^^^^^^^ KeyError: \'mcpServers\''; stdout tail ''
+(exit 2)

@@ -169,7 +169,7 @@ def pi(args: list[str]) -> int:
             emit({'type': 'tool_execution_start', 'toolName': 'mcp__graftling__subagents'})
             emit({'type': 'tool_execution_end', 'result': json.dumps({'result': {'agents': []}})})
         if 'bash ' in prompt:
-            emit({'type': 'tool_execution_start', 'toolName': 'bash', 'args': 'h7.sh'})
+            emit({'type': 'tool_execution_start', 'toolName': 'bash', 'args': {'command': 'bash h7.sh'}})
             run_script(prompt)
         found = re.search(r'sleep (\d+)', prompt)
         if found:

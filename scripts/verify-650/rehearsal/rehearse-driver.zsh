@@ -93,7 +93,17 @@ run r0 "RESULT r0 PASS" $BASE $SA $PY $DRV case r0
 run claude "RESULT claude PASS" $BASE $SA $PY $DRV case claude
 run claude-no-tool-call "RESULT claude NO-TOOL-CALL" $BASE $SA V650_STANDIN_MODE=no-tool $PY $DRV case claude
 run claude-refuse "RESULT claude-refuse PASS" $BASE $SA $PY $DRV case claude-refuse
-run claude-caller-real-graftling-refusals "RESULT claude-caller FAIL (O4 context from a Bash-tool caller)" $BASE $SA $PY $DRV case claude-caller
+# Correction 3: CLAUDE_HOST_LOAD trust / plugin-dir in a Claude host case (the stand-in ignores both; the item lines
+# and the trust entry written into the (temporary) user's ~/.claude.json are what is checked).
+hl() { $PY -I -c 'import json, sys; p = sys.argv[1]; d = json.load(open(p)); d["claude"]["host_load"] = sys.argv[2]; json.dump(d, open(p, "w"))' $H/home/settings.json $1; }
+hl trust
+run claude-refuse-host-load-trust "CASE claude-refuse CLAUDE_HOST_LOAD trust: OBSERVED wrote projects[<project>].hasTrustDialogAccepted = true" $BASE $SA $PY $DRV case claude-refuse
+run trust-entry-written "trusted projects: 1, hasTrustDialogAccepted True" $PY -I -c 'import json, sys; d = json.load(open(sys.argv[1])); v = list(d["projects"].values()); print("trusted projects: %d, hasTrustDialogAccepted %s" % (len(v), all(x.get("hasTrustDialogAccepted") for x in v)))' $H/userhome/.claude.json
+hl plugin-dir
+run claude-refuse-host-load-plugin-dir "CASE claude-refuse CLAUDE_HOST_LOAD plugin-dir: OBSERVED --plugin-dir" $BASE $SA $PY $DRV case claude-refuse
+hl none
+run claude-refuse-host-load-none "CASE claude-refuse CLAUDE_HOST_LOAD none: OBSERVED" $BASE $SA $PY $DRV case claude-refuse
+run claude-caller-real-graftling-refusals "CASE claude-caller O4 context from a Bash-tool caller: PASS exit 1" $BASE $SA $PY $DRV case claude-caller
 run claude-probe "expanded with the variable" $BASE $SA $PY $DRV case claude-probe
 run claude-market "RESULT claude-market PASS" $BASE $SA $PY $DRV case claude-market
 run pi "RESULT pi PASS" $BASE $SA $PY $DRV case pi

@@ -1,0 +1,11 @@
+$ zsh scripts/verify-650/steps.zsh D
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [D] Delete this Task's resources (VM with all disks, both Task firewall rules). Login: gcloud. Dialog: none.
+no Task VM exists
+no Task firewall rule <VM_NAME>-ssh exists
+no Task firewall rule <VM_NAME>-deny exists
+== verification: nothing of this Task remains
+reminder: the user now revokes the temporary key at its provider
+note: gcloud keeps the VM's host key in ~/.ssh/google_compute_known_hosts (alias compute.<instance id>); harmless after deletion
+VERDICT 650 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)
+(exit 0)

@@ -1,0 +1,4 @@
+$ env <python> -I -c vm/drive650.py
+parsers: init ['graftling=connected'], uses 2, results 1, models ['m1'], subagent calls 2, models_in ['pm', 'pm2'], records 1
+child_answer: {'agent': 'a.json', 'runtime': 'dsh', 'outcomes': ['completed']}
+(exit 0)

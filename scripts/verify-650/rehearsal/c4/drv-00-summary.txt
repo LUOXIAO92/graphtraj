@@ -1,0 +1,38 @@
+Task 650 driver rehearsal (macOS, stand-in Runtimes; random dummy settings, key and password; consoles drv-01-35 in c4/)
+drv-01 npm-summary-real-649: expects 'added 670 packages in 14m' -> yes
+drv-02 parsers-stand-in-data: expects 'parsers: init ['graftling=connected'], uses 2, results 1, models ['m1'], subagent calls 2, models_in ['pm', 'pm2'], records 1' -> yes
+drv-03 venv: expects 'RESULT venv PASS' -> yes
+drv-04 r0: expects 'RESULT r0 PASS' -> yes
+drv-05 claude: expects 'RESULT claude PASS' -> yes
+drv-06 claude-no-tool-call: expects 'RESULT claude NO-TOOL-CALL' -> yes
+drv-07 claude-refuse: expects 'RESULT claude-refuse PASS' -> yes
+drv-08 claude-refuse-host-load-trust: expects 'CASE claude-refuse CLAUDE_HOST_LOAD trust: OBSERVED wrote projects[<project>].hasTrustDialogAccepted = true' -> yes
+drv-09 trust-entry-written: expects 'trusted projects: 1, hasTrustDialogAccepted True' -> yes
+drv-10 claude-refuse-host-load-plugin-dir: expects 'CASE claude-refuse CLAUDE_HOST_LOAD plugin-dir: OBSERVED --plugin-dir' -> yes
+drv-11 claude-refuse-host-load-none: expects 'CASE claude-refuse CLAUDE_HOST_LOAD none: OBSERVED' -> yes
+drv-12 claude-caller-real-graftling-refusals: expects 'CASE claude-caller O4 context from a Bash-tool caller: PASS exit 1' -> yes
+drv-13 claude-probe: expects 'expanded with the variable' -> yes
+drv-14 claude-market: expects 'RESULT claude-market PASS' -> yes
+drv-15 pi: expects 'RESULT pi PASS' -> yes
+drv-16 pi-refuse: expects 'RESULT pi-refuse PASS' -> yes
+drv-17 pi-refuse-no-tool-call: expects 'RESULT pi-refuse NO-TOOL-CALL' -> yes
+drv-18 pi-caller-real-graftling-cli: expects 'RESULT pi-caller FAIL (H7 caller under Pi's bash tool refused)' -> yes
+drv-19 pi-nonascii: expects 'RESULT pi-nonascii PASS' -> yes
+drv-20 pi-kill: expects 'RESULT pi-kill PASS' -> yes
+drv-21 dsh: expects 'RESULT dsh PASS' -> yes
+drv-22 dsh-nonascii: expects 'RESULT dsh-nonascii PASS' -> yes
+drv-23 dsh-stop: expects 'RESULT dsh-stop PASS' -> yes
+drv-24 dsh-kill: expects 'RESULT dsh-kill PASS' -> yes
+drv-25 schedule-claude-refuse: expects 'RESULT claude-refuse PASS' -> yes
+drv-26 schedule-no-session: expects 'RESULT claude STOP the VM user has no Active console session' -> yes
+drv-27 no-key: expects 'RESULT pi STOP the key variable is not set' -> yes
+drv-28 driver-error: expects 'RESULT dsh STOP driver error' -> yes
+drv-29 cleanup-planted-leftover: expects 'CLEANUP dsh-kill: 1 leftover' -> yes
+drv-30 scan-clean-vm-user-replaced: expects 'SCAN PASS' -> yes
+drv-31 scan-no-vm-user-left: expects 'count 0' -> yes
+drv-32 scan-keeps-dsh-package-paths: expects 'SCAN PASS' -> yes
+drv-33 package-paths-intact-dummy-gone: expects 'paths intact True True; dummy left outside protected names 0 0; placeholders 4 4' -> yes
+drv-34 scan-finds-planted-key: expects 'SCAN FAIL the key or the autologon password is in 1 file(s)' -> yes
+drv-35 scan-finds-planted-password: expects 'SCAN FAIL the key or the autologon password is in 1 file(s)' -> yes
+record .pth files left in the venv's site directory after all cases: 0
+consoles holding the dummy key, password, VM user or settings tag: 0; consoles holding a /Users/ path: 0

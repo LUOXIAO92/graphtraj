@@ -135,6 +135,20 @@ step V-resume-on-existing-VM PASS V
 CHECK+="V on the existing VM: instances create calls $(( $(grep -c 'compute instances create' $S/argv.log) - c0 )); re-uploads by tar $(( $(grep -c 'tar -xf - -C C:/' $S/argv.log) - u0 )); provisioning re-run $(( $(grep -c 'provision.ps1' $S/argv.log) - p0 )); autologon.ps1 or reboot run during V: $(( $(grep -c -e 'autologon.ps1' -e 'shutdown /r' $S/argv.log) - a0 ))"
 step P PASS P
 step S PASS S
+# Correction 3: CLAUDE_HOST_LOAD empty (the runs above), trust and plugin-dir reach settings.json and C; a bad value STOPs.
+CHECK+="CLAUDE_HOST_LOAD empty -> settings.json claude.host_load: $(/usr/bin/python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["claude"]["host_load"])' $S/uploaded-settings.json)"
+write_settings CLAUDE_HOST_LOAD=sometimes; step 00-host-load-bad STOP 00
+CHECK+="a bad CLAUDE_HOST_LOAD is named: $(has 'settings variable CLAUDE_HOST_LOAD is not empty, none, trust or plugin-dir')"
+for hl in trust plugin-dir; do
+  write_settings CLAUDE_HOST_LOAD=$hl; step 00-host-load-$hl PASS 00
+  CHECK+="00 with CLAUDE_HOST_LOAD=$hl prints it: $(has "PASS: CLAUDE_HOST_LOAD $hl")"
+  step V-host-load-$hl PASS V
+  CHECK+="V with CLAUDE_HOST_LOAD=$hl -> settings.json claude.host_load: $(/usr/bin/python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["claude"]["host_load"])' $S/uploaded-settings.json)"
+  step C-host-load-$hl PASS C
+done
+write_settings -CLAUDE_HOST_LOAD; step 00-host-load-absent PASS 00
+CHECK+="00 with CLAUDE_HOST_LOAD absent from the file (an older settings file): $(has 'PASS: CLAUDE_HOST_LOAD none')"
+write_settings
 CHECK+="S: item lines per case $(for c in dsh dsh-nonascii dsh-stop dsh-kill; do print -n "$c $(grep -c "^  CASE $c " $LAST) "; done)"
 print -r -- 'FAIL (D6 the DSH service ends with its owner)' > $S/want-dsh-kill
 step S-kill-fails FAIL S; rm -f $S/want-dsh-kill

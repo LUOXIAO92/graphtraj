@@ -1,0 +1,11 @@
+$ env <python> vm/drive650.py case dsh-stop
+[dsh-stop] in this session
+CASE dsh-stop launcher: OBSERVED pid 83514; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+owner pid 83517; work dir <tmp>/home/work/dsh-stop
+CASE dsh-stop turn 1 completes: PASS outcome completed; last message 'TURN1-650-OK'
+CASE dsh-stop D8 process shape of the child's tool: PASS Start-Sleep 6501 pid(s) [83519], ancestry {83519: [(83519, 'python3.13'), (83518, 'node'), (83517, 'python'), (83514, 'python'), (83223, 'zsh'), (83221, 'zsh')]}; in graftling's job None: [None]
+CASE dsh-stop D5 stop during the second turn: PASS outcome interrupted; state standby; tool alive 30 s after the stop []
+CASE dsh-stop D5 no node.exe of the child's DSH service left: PASS service processes under the owner [(83519, 'python3.13'), (83518, 'node')]; node(s) [83518] alive 30 s after retire []
+wall time 8.4 s
+RESULT dsh-stop PASS
+(exit 0)

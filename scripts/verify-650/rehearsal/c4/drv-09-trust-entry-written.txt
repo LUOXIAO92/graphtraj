@@ -1,0 +1,3 @@
+$ <python> -I -c <tmp>/userhome/.claude.json
+trusted projects: 1, hasTrustDialogAccepted True
+(exit 0)

@@ -1,0 +1,4 @@
+$ env <python> -I -c vm/drive650.py scripts/verify-650/../verify-649/evidence/run-45996884900-a1/dsh/npm-install.txt
+npm_added (real 649 runner log): added 670 packages in 14m
+npm_added (none): no npm summary line
+(exit 0)

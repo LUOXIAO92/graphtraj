@@ -53,6 +53,9 @@
 #   D1 (install time) is measured by V's provisioning (evidence V: d1.json, npm-dsh.txt).
 # Run one step at a time, in this order:  zsh scripts/verify-650/steps.zsh <STEP>
 #   00, V, K, I, R0, C, P, S, D       (case <name> reruns one case; E <name> refetches evidence any time)
+#   M   (correction 3) On the Mac, no VM, no settings: does Claude Code's print mode load the generated plugin? Fetches
+#       Claude Code's release binary (SHA-256 checked) and installs graftling with uv, all in a temporary directory with
+#       its own HOME and CLAUDE_CONFIG_DIR, deleted at the end; prints the recommended CLAUDE_HOST_LOAD. ~5-10 min.
 #   00  Preflight, read only: settings, gcloud account, project, scrub values distinctive, image family, no Task VM
 #       yet, project rules opening 22/3389 (STOP at priority <= 1000), graftling dev contains the candidate, the Claude
 #       Code pin, cost per hour (console only). ~20 s.
@@ -178,6 +181,7 @@ load_settings() {
   local name
   for name in $REQUIRED; do typeset -g $name=; done
   for name in $OPTIONAL; do unset $name; done
+  typeset -g CLAUDE_HOST_LOAD=   # correction 3: may be absent from an older settings file (then: none)
   source $SETTINGS || stop "the settings file did not load"
   for name in $REQUIRED; do [[ -n ${(P)name} ]] || stop "settings variable $name is missing or empty"; done
   for name in $OPTIONAL; do (( ${+parameters[$name]} )) || stop "settings variable $name is missing (it may be empty: $name=)"; done
@@ -185,6 +189,7 @@ load_settings() {
   (( ${#VM_USER} <= 20 )) || stop "settings variable VM_USER is longer than 20 characters"
   [[ $CLAUDE_BASE_URL == https://* ]] && is_url "$CLAUDE_BASE_URL" || stop "settings variable CLAUDE_BASE_URL is not an https URL"
   [[ $CLAUDE_AUTH_VAR == (ANTHROPIC_AUTH_TOKEN|ANTHROPIC_API_KEY) ]] || stop "settings variable CLAUDE_AUTH_VAR is neither ANTHROPIC_AUTH_TOKEN nor ANTHROPIC_API_KEY"
+  [[ $CLAUDE_HOST_LOAD == (|none|trust|plugin-dir) ]] || stop "settings variable CLAUDE_HOST_LOAD is not empty, none, trust or plugin-dir"
   [[ -z $CLAUDE_API_TIMEOUT_MS || $CLAUDE_API_TIMEOUT_MS == <-> ]] || stop "settings variable CLAUDE_API_TIMEOUT_MS is not a number of milliseconds"
   for name in KEY_ENV DSH_MAIN_KEY_VAR; do is_env_name "${(P)name}" || stop "settings variable $name is not an environment variable name"; done
   case $PI_ROUTE in
@@ -261,7 +266,8 @@ print(json.dumps({
     "pins": {"claude": v["CLAUDE_VERSION"], "pi": v["PI_VERSION"], "dsh": v["DSH_VERSION"], "pnpm": v["PNPM_VERSION"]},
     "claude": {"base_url": v["CLAUDE_BASE_URL"], "auth_var": v["CLAUDE_AUTH_VAR"], "model": v["CLAUDE_MODEL"],
                "haiku": v["CLAUDE_HAIKU_MODEL"], "sonnet": v["CLAUDE_SONNET_MODEL"], "opus": v["CLAUDE_OPUS_MODEL"],
-               "subagent": v["CLAUDE_SUBAGENT_MODEL"], "api_timeout_ms": v["CLAUDE_API_TIMEOUT_MS"]},
+               "subagent": v["CLAUDE_SUBAGENT_MODEL"], "api_timeout_ms": v["CLAUDE_API_TIMEOUT_MS"],
+               "host_load": v["CLAUDE_HOST_LOAD"] or "none"},
     "pi": {"route": v["PI_ROUTE"], "provider": v["PI_PROVIDER"], "model": v["PI_MODEL"], "key_var": v["PI_KEY_VAR"],
            "base_url": v["PI_BASE_URL"], "api": v["PI_API"]},
     "dsh_child": {"model": v["DSH_CHILD_MODEL"], "provider": v["DSH_CHILD_PROVIDER"], "base_url": v["DSH_CHILD_BASE_URL"]},
@@ -271,6 +277,7 @@ print(json.dumps({
     PNPM_VERSION=$PNPM_VERSION CLAUDE_BASE_URL=$CLAUDE_BASE_URL CLAUDE_AUTH_VAR=$CLAUDE_AUTH_VAR CLAUDE_MODEL=$CLAUDE_MODEL \
     CLAUDE_HAIKU_MODEL=$CLAUDE_HAIKU_MODEL CLAUDE_SONNET_MODEL=$CLAUDE_SONNET_MODEL CLAUDE_OPUS_MODEL=$CLAUDE_OPUS_MODEL \
     CLAUDE_SUBAGENT_MODEL=$CLAUDE_SUBAGENT_MODEL CLAUDE_API_TIMEOUT_MS=$CLAUDE_API_TIMEOUT_MS PI_ROUTE=$PI_ROUTE \
+    CLAUDE_HOST_LOAD=$CLAUDE_HOST_LOAD \
     PI_PROVIDER=$PI_PROVIDER PI_MODEL=$PI_MODEL PI_KEY_VAR=$PI_KEY_VAR PI_BASE_URL=$PI_BASE_URL PI_API=$PI_API \
     DSH_CHILD_MODEL=$DSH_CHILD_MODEL DSH_CHILD_PROVIDER=$DSH_CHILD_PROVIDER DSH_CHILD_BASE_URL=$DSH_CHILD_BASE_URL \
     DSH_MAIN_KEY_VAR=$DSH_MAIN_KEY_VAR DSH_MAIN_BASE_URL=$DSH_MAIN_BASE_URL DSH_MAIN_APP_ARGS=$DSH_MAIN_APP_ARGS
@@ -562,6 +569,72 @@ run_cases() {
 }
 
 case $STEP in
+M)
+  # Correction 3: on the Mac, whether Claude Code 2.1.314 in print mode loads the plugin configuration --write generates.
+  # Isolation: HOME, CLAUDE_CONFIG_DIR, TMPDIR, uv's tool, bin, Python and cache dirs all inside one temporary directory
+  # under ${TMPDIR:-/tmp} (outside the Harness), deleted at the end; the user's Claude installation, ~/.claude,
+  # ~/.claude.json, settings and login are neither read nor changed; no settings file is read. Claude Code's binary comes
+  # from the release source and manifest its native installer uses, SHA-256 checked; the installer is not run. Its
+  # model endpoint is an unreachable local address with a dummy token; nonessential traffic and auto-update are off.
+  say "[M] Mac check: does Claude Code $CLAUDE_VERSION print mode load the generated plugin? Login: none. Dialog: at most one macOS Keychain prompt for a 'Claude Code-credentials' item (expected none: the temporary config has no such item and a token is set); if it appears, choose Deny."
+  local T=$WORK/m MOUT=${VERIFY650_M_EVIDENCE:-$HERE/evidence/M} plat claude venvpy
+  mkdir -p $T/home $T/config $T/tmp $T/uv/tools $T/uv/bin $T/uv/python $T/uv/cache $T/work
+  [[ -e $MOUT ]] && { mv $MOUT $MOUT-prev-$(date +%Y%m%d%H%M%S); print -r -- "an earlier M evidence directory kept beside it"; }
+  mkdir -p $MOUT
+  case $(uname -m) in arm64) plat=darwin-arm64 ;; x86_64) plat=darwin-x64 ;; *) stop "unknown Mac architecture $(uname -m)" ;; esac
+  if [[ -n ${VERIFY650_M_CLAUDE:-} ]]; then
+    claude=$VERIFY650_M_CLAUDE; print -r -- "rehearsal: a stand-in claude, not the release binary"
+  else
+    local base=https://downloads.claude.ai/claude-code-releases/$CLAUDE_VERSION
+    print -r -- "\$ curl $base/manifest.json; curl $base/$plat/claude   (into the temporary directory; bound 10 min)"
+    bounded 120 allow curl -fsSL -o $T/manifest.json $base/manifest.json || stop "the Claude Code $CLAUDE_VERSION manifest could not be fetched"
+    local want=$(allow $PY -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["platforms"][sys.argv[2]]["checksum"])' $T/manifest.json $plat 2> /dev/null)
+    [[ $want == [0-9a-f](#c64) ]] || stop "the manifest names no SHA-256 for $plat"
+    bounded 600 allow curl -fsSL -o $T/claude $base/$plat/claude || stop "the Claude Code $CLAUDE_VERSION $plat binary could not be fetched"
+    [[ $(shasum -a 256 $T/claude | cut -d' ' -f1) == $want ]] || stop "the binary's SHA-256 differs from the manifest's"
+    chmod +x $T/claude; claude=$T/claude
+    print -r -- "PASS: Claude Code $CLAUDE_VERSION $plat fetched; SHA-256 equals the manifest's"
+  fi
+  allow $GIT -C $GRAFT bundle create -q $T/graftling.bundle refs/heads/$GBRANCH && allow $GIT clone -q --no-checkout $T/graftling.bundle $T/graftling \
+    && allow $GIT -C $T/graftling checkout -q --detach $CANDIDATE || stop "graftling ${CANDIDATE[1,12]} could not be checked out from a bundle of $GBRANCH"
+  # The isolated environment of every process M starts from here (no credential variable; HOME etc. in the temp dir).
+  local -a menv=(/usr/bin/env -i HOME=$T/home USER=${USER:-} LOGNAME=${LOGNAME:-${USER:-}} PATH=/usr/bin:/bin:/usr/sbin:/sbin
+                 TMPDIR=$T/tmp LANG=en_US.UTF-8 TERM=${TERM:-dumb} CLAUDE_CONFIG_DIR=$T/config
+                 UV_TOOL_DIR=$T/uv/tools UV_TOOL_BIN_DIR=$T/uv/bin UV_PYTHON_INSTALL_DIR=$T/uv/python UV_CACHE_DIR=$T/uv/cache
+                 ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=dummy-not-a-key-650
+                 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_AUTOUPDATER=1)
+  if [[ -n ${VERIFY650_M_PYTHON:-} ]]; then
+    venvpy=$VERIFY650_M_PYTHON; menv+=(PYTHONPATH=$T/graftling/src); print -r -- "rehearsal: graftling from the checkout on PYTHONPATH, not uv"
+  else
+    local uvb=$(whence -p uv)
+    [[ -n $uvb ]] || stop "uv is not on PATH (graftling's README installs with uv)"
+    print -r -- "\$ uv tool install --managed-python <bundle checkout of ${CANDIDATE[1,12]}>   (tool, bin, Python and cache dirs in the temporary directory; bound 10 min)"
+    bounded 600 $menv $uvb tool install --managed-python $T/graftling > $MOUT/uv-tool-install.txt 2>&1 || { tail -5 $MOUT/uv-tool-install.txt; stop "uv tool install failed"; }
+    venvpy=$T/uv/tools/graftling/bin/python
+  fi
+  print -r -- "\$ python mac/mcheck.py   (variants untrusted, trusted, plugin-dir, and interactive only if the first two miss; each bounded 90 s)"
+  bounded 900 $menv $PY -I $HERE/mac/mcheck.py $claude $venvpy $T/work $MOUT 2>&1 | tee $WORK/m-console.txt
+  # Nothing of M may outlive it: every process naming the temporary directory is ended and counted.
+  local -a left=(${(f)"$(ps -axo pid=,command= | grep -F -- $T | grep -v grep | awk '{print $1}')"})
+  (( ${#left} )) && kill -9 $left 2> /dev/null
+  print -r -- "processes naming the temporary directory left after M: ${#left} (ended)"
+  # Evidence: the temporary and home paths replaced (the user name is part of the home path).
+  allow $PY -I -c 'import pathlib, sys
+pairs = [(sys.argv[2], "<tmp>"), (sys.argv[3], "<tmp>"), (sys.argv[4], "<home>")]
+for path in pathlib.Path(sys.argv[1]).rglob("*"):
+    if path.is_file():
+        data = path.read_bytes()
+        for value, holder in pairs:
+            data = data.replace(value.encode(), holder.encode())
+        path.write_bytes(data)' $MOUT ${T:A} $T $HOME
+  local rec=$(grep -E '^RECOMMEND CLAUDE_HOST_LOAD=' $WORK/m-console.txt | tail -1)
+  rm -rf $T
+  print -r -- "temporary directory deleted: $([[ -e $T ]] && print no || print yes); evidence: scripts/verify-650/evidence/M/"
+  [[ -n $rec ]] || stop "the check did not finish (no recommendation; see the lines above)"
+  print -r -- "next: set CLAUDE_HOST_LOAD=${${rec#RECOMMEND CLAUDE_HOST_LOAD=}%%:*} in local/settings.zsh, then on a VM: zsh $REL 00 (and on to V, K, I, R0, C)"
+  print -r -- "$rec"
+  print -r -- "VERDICT 650 M: PASS (the check ran; findings are OBSERVED: ${rec%%:*})"
+  ;;
 00)
   say "[00] Preflight, read only. Login: gcloud (account not shown). Dialog: none."
   print -r -- "PASS: run by zsh $ZSH_VERSION"
@@ -600,6 +673,7 @@ case $STEP in
   allow $PY -I -c 'import sys; t = lambda v: tuple(map(int, v.split("."))); sys.exit(0 if t(sys.argv[1]) >= t(sys.argv[2]) else 1)' $CLAUDE_VERSION $CLAUDE_MIN \
     && print -r -- "PASS: Claude Code pin $CLAUDE_VERSION >= $CLAUDE_MIN (the Windows stdio stop); Pi $PI_VERSION, DSH $DSH_VERSION, pnpm $PNPM_VERSION" \
     || stop "Claude Code pin $CLAUDE_VERSION is below $CLAUDE_MIN"
+  print -r -- "PASS: CLAUDE_HOST_LOAD ${CLAUDE_HOST_LOAD:-none} (none: as the first sitting; trust: folder trust in the VM user's Claude config; plugin-dir: --plugin-dir, not the documented route)"
   print -r -- "PASS: Pi route $PI_ROUTE; the DSH child's provider $([[ -n $DSH_CHILD_PROVIDER ]] && print set || print 'DSH built-in'), base_url $([[ -n $DSH_CHILD_BASE_URL ]] && print set || print 'the route'"'"'s own'); every host's child is a DSH child (api_key_env = KEY_ENV)"
   [[ -f $KEY ]] && print -r -- "NOTE: the Task SSH key already exists (V reuses it)" || print -r -- "PASS: no Task SSH key yet (V creates one under local/ssh)"
   allow $PY -I -c 'import sys
@@ -806,5 +880,5 @@ D)
   print -r -- "VERDICT 650 D: PASS (nothing of this Task remains: 0 instances, 0 disks, 0 firewall rules by name, tag and labels)"
   ;;
 *)
-  print -r -- "usage: zsh $REL 00|V|K|I|R0|C|P|S|case <name>|E <name>|D"; exit 2 ;;
+  print -r -- "usage: zsh $REL M|00|V|K|I|R0|C|P|S|case <name>|E <name>|D"; exit 2 ;;
 esac

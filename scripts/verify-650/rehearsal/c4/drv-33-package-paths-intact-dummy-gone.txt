@@ -1,0 +1,4 @@
+$ /usr/bin/python3 -I -c <tmp>/home/out/claude/agents-control
+paths intact True True; dummy left outside protected names 0 0; placeholders 4 4
+provider <PI_PROVIDER> <PI_PROVIDER>_API_KEY <PI_PROVIDER>-official <PI_PROVIDER>
+(exit 0)

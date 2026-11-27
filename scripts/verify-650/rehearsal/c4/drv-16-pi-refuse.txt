@@ -1,0 +1,10 @@
+$ env <python> vm/drive650.py case pi-refuse
+[pi-refuse] in this session
+CASE pi-refuse launcher: OBSERVED pid 83427; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[pi] $ python <prompt> pi --provider <PI_PROVIDER> --model <PI_MODEL> -p --mode json <prompt>   (cwd <tmp>/home/work/pi-refuse; bound 420 s)
+[pi] exit 0 after 1.8 s; 3 process(es) seen; trace events 0
+CASE pi-refuse H8 Pi child refused: PASS unsupported-runtime in Pi's events True; message True; agent records []
+CASE pi-refuse H9 session end (no child): PASS host/MCP processes alive 10 s after Pi ended: []; "Independent Pi host failed" in Pi's output False; trace: host 83431 stop None exit None; mcp 83432 stop None exit None; node 83430 stop None; print mode (-p): a host stop before node's means session_shutdown closed its stdin, after it means stdin EOF at node's exit (I5/I6 reading)
+wall time 2.0 s
+RESULT pi-refuse PASS
+(exit 0)

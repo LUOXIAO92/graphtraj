@@ -1,0 +1,12 @@
+$ zsh scripts/verify-650/steps.zsh E dsh-stop
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [E] Scan, fetch and scrub the evidence of dsh-stop. Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== evidence of dsh-stop: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of dsh-stop kept as dsh-stop-prev-20261128004025
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out dsh-stop" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 3, "<CLAUDE_BASE_URL>": 6, "<CLAUDE_BASE_URL_HOST>": 3, "<CLAUDE_HAIKU_MODEL>": 3, "<CLAUDE_MODEL>": 3, "<DSH_CHILD_BASE_URL>": 6, "<DSH_CHILD_BASE_URL_HOST>": 3, "<DSH_CHILD_MODEL>": 3, "<DSH_MAIN_ARG>": 3, "<DSH_MAIN_KEY_VAR>": 3, "<IP>": 2, "<KEY_ENV>": 3, "<MACHINE_TYPE>": 3, "<PI_KEY_VAR>": 3, "<PI_MODEL>": 3, "<PI_PROVIDER>": 3, "<PROJECT>": 3, "<REGION>": 3, "<VM_LABEL>": 3, "<VM_NAME>": 6, "<VM_USER>": 3, "<ZONE>": 3}
+next: zsh scripts/verify-650/steps.zsh D
+VERDICT 650 E dsh-stop: FAIL (FAIL (the VM counted 3 evidence files, 2 arrived))
+(exit 1)

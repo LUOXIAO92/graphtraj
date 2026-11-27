@@ -1,0 +1,22 @@
+$ zsh scripts/verify-650/steps.zsh M   (stand-in claude, mode never)
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [M] Mac check: does Claude Code 2.1.314 print mode load the generated plugin? Login: none. Dialog: at most one macOS Keychain prompt for a 'Claude Code-credentials' item (expected none: the temporary config has no such item and a token is set); if it appears, choose Deny.
+rehearsal: a stand-in claude, not the release binary
+rehearsal: graftling from the checkout on PYTHONPATH, not uv
+$ python mac/mcheck.py   (variants untrusted, trusted, plugin-dir, and interactive only if the first two miss; each bounded 90 s)
+M Claude Code 2.1.314 (Claude Code) (stand-in; hasTrustDialogAccepted); the binary names hasTrustDialogAccepted 2 time(s) and find-generic-password 0 time(s) (source of the trust key; Keychain use)
+M trusted: wrote projects[<project>].hasTrustDialogAccepted = true for 2 key(s) (the path and its real path) into <CLAUDE_CONFIG_DIR>/.claude.json
+M untrusted: plugins listed ['cc-plugin-agents-md']; agents-claude-host loaded False; mcp_servers ['graftling=connected']; exit killed after init; debug lines naming plugins/agents-claude-host: 1
+  | [DEBUG] plugin agents-claude-host: not loaded
+M trusted: plugins listed ['cc-plugin-agents-md']; agents-claude-host loaded False; mcp_servers ['graftling=connected']; exit killed after init; debug lines naming plugins/agents-claude-host: 1
+  | [DEBUG] plugin agents-claude-host: not loaded
+M plugin-dir: plugins listed ['cc-plugin-agents-md', 'agents-claude-host']; agents-claude-host loaded True; mcp_servers ['graftling=connected']; exit killed after init; debug lines naming plugins/agents-claude-host: 1
+  | [DEBUG] plugin agents-claude-host: loaded
+M interactive: plugins listed none; agents-claude-host loaded False; mcp_servers none; exit not run: out of pty devices; debug lines naming plugins/agents-claude-host: 0
+RECOMMEND CLAUDE_HOST_LOAD=plugin-dir: print mode does not load the project plugin even trusted; only --plugin-dir loads it (interactive: False). Not the documented route: a graftling documentation finding
+scripts/verify-650/steps.zsh:618: operation not permitted: ps
+processes naming the temporary directory left after M: 0 (ended)
+temporary directory deleted: yes; evidence: scripts/verify-650/evidence/M/
+next: set CLAUDE_HOST_LOAD=plugin-dir in local/settings.zsh, then on a VM: zsh scripts/verify-650/steps.zsh 00 (and on to V, K, I, R0, C)
+RECOMMEND CLAUDE_HOST_LOAD=plugin-dir: print mode does not load the project plugin even trusted; only --plugin-dir loads it (interactive: False). Not the documented route: a graftling documentation finding
+VERDICT 650 M: PASS (the check ran; findings are OBSERVED: RECOMMEND CLAUDE_HOST_LOAD=plugin-dir)

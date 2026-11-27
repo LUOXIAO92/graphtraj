@@ -39,6 +39,10 @@ CLAUDE_SONNET_MODEL=                 # OPTIONAL -> ANTHROPIC_DEFAULT_SONNET_MODE
 CLAUDE_OPUS_MODEL=                   # OPTIONAL -> ANTHROPIC_DEFAULT_OPUS_MODEL; empty: not set
 CLAUDE_SUBAGENT_MODEL=               # OPTIONAL -> CLAUDE_CODE_SUBAGENT_MODEL; empty: not set
 CLAUDE_API_TIMEOUT_MS=               # OPTIONAL -> API_TIMEOUT_MS (digits) for a slow endpoint; empty: not set
+CLAUDE_HOST_LOAD=                    # OPTIONAL (may also be absent): how the Claude host cases get the generated plugin
+                                     # loaded: empty/none = left to Claude Code (first sitting); trust = folder trust written
+                                     # into the VM user's Claude config; plugin-dir = --plugin-dir (NOT the documented
+                                     # route). Step M on the Mac recommends the value.
 
 # --- Pi (the Pi host) --------------------------------------------------------------------------------------------
 PI_ROUTE=builtin                     # REQUIRED: builtin (a provider Pi ships) or custom (a models.json provider)

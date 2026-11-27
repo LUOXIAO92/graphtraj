@@ -661,6 +661,80 @@ class Recording:
         return list(found.values())
 
 
+# --- criteria as pure functions (correction 3; also used offline by rehearsal/rejudge.py on retained evidence) ----
+
+def own_records(records: list[dict], parent_pid: object, venv: object = None) -> tuple[bool, str, str]:
+    """H5/D4: only records whose parent is the host's own node count; the others (e.g. a DSH child's graftling.mcp
+    started through Scripts\\python.exe under the child service's node) are listed separately."""
+    venv = venv or VENV
+    mine = [r for r in records if r.get('ppid') == parent_pid]
+    others = [r for r in records if r.get('ppid') != parent_pid]
+    ok = bool(mine) and all(same_path(r.get('prefix'), venv) for r in mine)
+    text = (f'{len(mine)} record(s) with parent {parent_pid}: ' + '; '.join(
+        f'pid {r.get("pid")} prefix is the venv {same_path(r.get("prefix"), venv)} executable {r.get("executable")}'
+        for r in mine[:3])) if mine else f'no record with parent {parent_pid}'
+    other = ('; '.join(f'pid {r.get("pid")} ppid {r.get("ppid")} executable {r.get("executable")}' for r in others[:4])
+             or 'none')
+    return ok, text, other
+
+
+def o3_judgement(stream: dict) -> tuple[str, str]:
+    """O3 from Claude's own tool results: FAIL if any subagents result is authority-denied or names the native call
+    association; PASS needs at least one subagents call answered without an error."""
+    uses = [use for use in stream['uses'] if 'subagents' in str(use.get('name'))]
+    results = [stream['results'].get(use.get('id')) or {} for use in uses]
+    refused = [r.get('text', '') for r in results if 'authority-denied' in r.get('text', '')
+               or 'native call association' in r.get('text', '')]
+    answered = [r for r in results if r and not r.get('is_error') and '"error"' not in r.get('text', '')]
+    verdict = 'FAIL' if refused or not answered else 'PASS'
+    return verdict, (f'{len(uses)} subagents call(s) in stream-json: {len(answered)} answered without an error, '
+                     f'{len(refused)} refused (authority-denied / native call association)'
+                     + (f'; first refusal {short(refused[0], 200)!r}' if refused else ''))
+
+
+def deep_json(value: object):
+    """Every value inside ``value``, decoding JSON found in strings however deeply it is escaped."""
+    yield value
+    if isinstance(value, str):
+        text = value.strip()
+        if text[:1] in ('{', '['):
+            try:
+                inner = json.loads(text)
+            except ValueError:
+                return
+            yield from deep_json(inner)
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from deep_json(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from deep_json(item)
+
+
+def status_answered(events: list[dict]) -> bool:
+    """H6: a subagents status result {"result": {"agents": [...]}} among ``events``, at any escaping depth."""
+    return any(isinstance(v, dict) and isinstance(v.get('result'), dict) and isinstance(v['result'].get('agents'), list)
+               for event in events for v in deep_json(event))
+
+
+def first_bash(events: list[dict]) -> int:
+    """Index of Pi's first bash tool execution (the prompt's own text also names the script, so it does not count)."""
+    return next((index for index, event in enumerate(events) if event.get('type') == 'tool_execution_start'
+                 and str(event.get('toolName', '')).lower() == 'bash'), len(events))
+
+
+HANDOFF_O4 = 'launched directly by the selected Claude CLI'
+
+
+def o4_judgement(text: str, code: int | None) -> tuple[str, str]:
+    """O4: PASS on a refusal (non-zero exit, no {"prepared": true}); the refusal text verbatim."""
+    prepared = re.search(r'"prepared"\s*:\s*true', text) is not None
+    verdict = 'PASS' if code not in (0, None) and not prepared else 'FAIL'
+    body = ' '.join(line for line in text.splitlines() if not line.startswith('exit=')).strip()
+    note = '' if HANDOFF_O4 in text else f' (not the handoff\'s "{HANDOFF_O4}" text)'
+    return verdict, (f'exit {code}; prepared {prepared}; refusal text verbatim: {body[:400]!r}{note}')
+
+
 def record_text(records: list[dict], parent_pid: object) -> tuple[bool, str]:
     ok = bool(records) and all(same_path(r.get('prefix'), VENV) and r.get('ppid') == parent_pid for r in records)
     return ok, (f'{len(records)} record(s) (one per pid): ' + '; '.join(
@@ -933,6 +1007,36 @@ def claude_project(log: Log, directory: Path, runtimes: dict | None = None) -> t
     return config, directory / '.agents-control'
 
 
+# CLAUDE_HOST_LOAD (correction 3): how the Claude host cases make Claude Code load the generated plugin
+# .claude/skills/agents-claude-host. none (empty): as the first sitting (left to Claude Code). trust: the folder trust
+# the interactive dialog records, projects[<abs path>].hasTrustDialogAccepted = true in Claude Code's global config
+# (<CLAUDE_CONFIG_DIR or home>/.claude.json; step M checks the key in the 2.1.314 binary). plugin-dir: --plugin-dir
+# <that directory>, which is NOT graftling's documented route.
+CLAUDE_TRUST_KEY = 'hasTrustDialogAccepted'
+
+
+def claude_load(log: Log, directory: Path) -> list[str]:
+    mode = settings()['claude'].get('host_load') or 'none'
+    plugin = directory / '.claude' / 'skills' / 'agents-claude-host'
+    if mode == 'trust':
+        config = Path(os.environ.get('CLAUDE_CONFIG_DIR') or USERHOME) / '.claude.json'
+        document = json.loads(file_text(config) or '{}')
+        keys = list(dict.fromkeys([str(directory), directory.as_posix()]))
+        for key in keys:
+            document.setdefault('projects', {}).setdefault(key, {})[CLAUDE_TRUST_KEY] = True
+        config.write_text(json.dumps(document, indent=2) + '\n', encoding='utf-8')
+        log.item('CLAUDE_HOST_LOAD trust', 'OBSERVED',
+                 f'wrote projects[<project>].{CLAUDE_TRUST_KEY} = true for {keys} into {config} before the run')
+        return []
+    if mode == 'plugin-dir':
+        log.item('CLAUDE_HOST_LOAD plugin-dir', 'OBSERVED',
+                 f'--plugin-dir {plugin}: NOT graftling\'s documented route (that is the project plugin loaded by '
+                 'Claude Code itself)')
+        return ['--plugin-dir', str(plugin)]
+    log.item('CLAUDE_HOST_LOAD none', 'OBSERVED', 'no load aid: the generated plugin is left to Claude Code (documented route)')
+    return []
+
+
 def mcp_json_item(log: Log, directory: Path) -> None:
     server = (json.loads(file_text(directory / '.mcp.json') or '{}').get('mcpServers') or {}).get('graftling') or {}
     env = server.get('env') or {}
@@ -992,6 +1096,7 @@ def case_claude(log: Log) -> None:
     """O1, O2, O3, O5 and required result 1: Claude Code creates a DSH child through graftling's MCP tool."""
     directory = HOME / 'work' / 'claude-host'
     config, root = claude_project(log, directory, {'dsh': dsh_child()})
+    load = claude_load(log, directory)
     mcp_json_item(log, directory)
     prompt = (f'Use the subagents tool (mcp__graftling__subagents), not your own Task subagents. First call it with '
               f'action execute, feature create and arguments runtime dsh, model {settings()["dsh_child"]["model"]}, '
@@ -1000,7 +1105,7 @@ def case_claude(log: Log) -> None:
               f'execute, feature retire and that agent. Finally reply with the child\'s answer.')
     with Recording(log) as recording:
         done = host_run(log, 'claude', runtime_argv('claude', claude_args(
-            prompt, '--allowedTools', 'mcp__graftling__subagents')), directory, claude_env(), 600,
+            prompt, '--allowedTools', 'mcp__graftling__subagents', *load)), directory, claude_env(), 600,
             markers=('graftling.claude.host',), channel=root / 'live' / 'channel.json')
     collect(root, log.dir / 'agents-control')
     stream = claude_stream(done['stdout'])
@@ -1030,12 +1135,11 @@ def case_claude(log: Log) -> None:
     log.item('O2 .mcp.json env reaches the server', 'PASS' if o1 and ok else 'FAIL',
              f'{text}; the base interpreter imports graftling only through __PYVENV_LAUNCHER__')
     require_tool_call(done, stream, hostlog, 'subagents')
-    calls = [line for line in hostlog.splitlines() if 'subagents-call' in line]
-    denied = [line for line in hostlog.splitlines() if 'authority-denied' in line or 'association failed' in line]
+    verdict, observable = o3_judgement(stream)
+    log.item('O3 mod context call (direct child)', verdict, observable)
     contexts = [row for row in rows_with(done, ' -I -c ') if 'context' in row['cmd']]
-    log.item('O3 mod context call (direct child)', 'PASS' if calls and not denied else 'FAIL',
-             f'{len(calls)} subagents-call line(s) in host.log; denial lines {[short(l, 120) for l in denied[:2]]}; '
-             f'context process(es) traced: {"; ".join(shape_text(row) for row in contexts[:2]) or "none traced"}')
+    log.item('O3 traced context process(es)', 'OBSERVED',
+             f'{"; ".join(shape_text(row) for row in contexts[:2]) or "none traced"}')
     answer = child_answer(agent_records(root), CHILD_TOKEN)
     final = str(stream['result'].get('result') or '')
     log.item('child created through MCP and answered (required result 1)',
@@ -1053,11 +1157,12 @@ def case_claude_refuse(log: Log) -> None:
     """O6 (and O7 noted): a Claude child is refused on the Windows host."""
     directory = HOME / 'work' / 'claude-refuse'
     _, root = claude_project(log, directory)
+    load = claude_load(log, directory)
     prompt = ('Use the subagents tool (mcp__graftling__subagents), not your own Task subagents: call it once with '
               'action execute, feature create and arguments runtime claude, instruction "Reply with OK." Then reply '
               'with the error code and the first sentence of the error message it returned. Do not retry.')
     done = host_run(log, 'claude', runtime_argv('claude', claude_args(
-        prompt, '--allowedTools', 'mcp__graftling__subagents')), directory, claude_env(), 420,
+        prompt, '--allowedTools', 'mcp__graftling__subagents', *load)), directory, claude_env(), 420,
         markers=('graftling.claude.host',), channel=root / 'live' / 'channel.json')
     collect(root, log.dir / 'agents-control')
     stream = claude_stream(done['stdout'])
@@ -1096,6 +1201,7 @@ def case_claude_caller(log: Log) -> None:
     """O4: a Bash-tool caller is not Claude Code's direct child: context and the subagents CLI are refused."""
     directory = HOME / 'work' / 'claude-caller'
     config, root = claude_project(log, directory)
+    load = claude_load(log, directory)
     (directory / 'prepare.json').write_text('{}\n', encoding='utf-8')
     out1, out2 = directory / 'o4-context.txt', directory / 'o4-cli.txt'
     script = bash_script(directory / 'o4.sh', [
@@ -1106,7 +1212,7 @@ def case_claude_caller(log: Log) -> None:
         f'echo "exit=$?" >> "{out2.as_posix()}"', 'echo O4-DONE'])
     prompt = (f'Use your Bash tool to run exactly this command and wait for it: bash {script}   Run nothing else. '
               'Then reply with exactly O4-DONE.')
-    done = host_run(log, 'claude', runtime_argv('claude', claude_args(prompt, '--allowedTools', 'Bash')),
+    done = host_run(log, 'claude', runtime_argv('claude', claude_args(prompt, '--allowedTools', 'Bash', *load)),
                     directory, claude_env(), 420, markers=('graftling.claude.host', 'o4.sh'),
                     channel=root / 'live' / 'channel.json')
     collect(root, log.dir / 'agents-control')
@@ -1118,12 +1224,8 @@ def case_claude_caller(log: Log) -> None:
     if not out1.exists() and not [u for u in stream['uses'] if u.get('name') in ('Bash', 'PowerShell')]:
         no_tool(done, f'the model made no Bash call (tool uses: {[u.get("name") for u in stream["uses"]]})')
     text1, code1 = outcome_file(out1)
-    observed = re.findall(r'"observed_executable":\s*"([^"]*)"', text1)
-    refused = code1 == 1 and 'launched directly by the selected Claude CLI' in text1
-    prepared_text = "PREPARED: a tool command passed as Claude Code's direct child"
-    log.item('O4 context from a Bash-tool caller', 'PASS' if refused else 'FAIL',
-             f'exit {code1}; refused as not the direct child {refused}; observed_executable {observed or "not named"}; '
-             + (prepared_text if '"prepared"' in text1 else repr(short(text1, 160))))
+    verdict, observable = o4_judgement(text1, code1)
+    log.item('O4 context from a Bash-tool caller', verdict, observable)
     text2, code2 = outcome_file(out2)
     codes = re.findall(r'"code":\s*"([^"]+)"', text2)
     log.item('O4 subagents CLI from a Bash-tool caller', 'PASS' if code2 not in (0, None) and codes else 'FAIL',
@@ -1292,9 +1394,13 @@ def case_pi(log: Log) -> None:
              f'{entry_ok}; node\'s parent {cmd_parent.get("name")} {short(cmd_parent.get("cmd"), 80)!r}')
     ok, text = record_text(recording.records('graftling.pi.host'), node)
     log.item('H4 the host runs as the tool venv', 'PASS' if ok else 'FAIL', text)
-    ok5, text5 = record_text(recording.records('graftling.mcp'), node)
+    ok5, text5, other5 = own_records(recording.records('graftling.mcp'), node)
+    own_servers = [row for row in servers if row.get('ppid') == node]
     log.item('H5 Pi passes the registered env to the MCP server', 'PASS' if ok5 else 'FAIL',
-             f'{text5}; MCP server process(es) {"; ".join(shape_text(row) for row in servers[:1]) or "not seen"}')
+             f'{text5}; MCP server process(es) of node {"; ".join(shape_text(row) for row in own_servers[:1]) or "not seen"}')
+    log.item('H5 other graftling.mcp processes', 'OBSERVED',
+             f'records not under Pi\'s node: {other5}; processes: '
+             f'{"; ".join(shape_text(row) for row in servers if row.get("ppid") != node)[:400] or "none"}')
     require_pi_call(done, events, root, 'subagents')
     answer = child_answer(agent_records(root), CHILD_TOKEN)
     denied = 'authority-denied' in done['stdout']
@@ -1358,8 +1464,8 @@ def case_pi_caller(log: Log) -> None:
     if not out.exists() and not subagent_calls(events):
         no_tool(done, f'the model made neither call ({len(events)} JSON event(s))')
     text = done['stdout']
-    before = text.split('h7.sh')[0]  # a tool result may be JSON inside a JSON string (escaped quotes)
-    status_ok = re.search(r'\\*"agents\\*"', before) is not None and 'authority-denied' not in before
+    before = events[:first_bash(events)]  # the status result, however deeply its JSON is escaped, before the bash call
+    status_ok = status_answered(before) and 'authority-denied' not in json.dumps(before)
     log.item('H6 status through MCP', 'PASS' if subagent_calls(events) and status_ok else 'FAIL',
              f'subagents calls {subagent_calls(events)}; an agents list before the bash call {status_ok}')
     text7, code = outcome_file(out)
@@ -1476,13 +1582,17 @@ def dsh_host_case(log: Log, directory: Path, token: str, extra: str = '') -> Non
              f'agent records {len(records)}; live/dsh-host existed {live.exists() or bool(hosts)}; refusals '
              f'{[short(r, 120) for r in refused[:2]]}; authority-denied in its output {"authority-denied" in done["stdout"]}')
     entry = 'dsh' in node_row.get('cmd', '') and 'bin.js' in node_row.get('cmd', '') or bool(STANDIN and hosts)
-    base = all(same_path(row.get('exe'), BASEPY) for row in hosts + servers)
-    ok_h, text_h = record_text(recording.records('graftling.dsh.host'), node)
-    ok_m, text_m = record_text(recording.records('graftling.mcp'), node)
+    own_servers = [row for row in servers if row.get('ppid') == node]
+    base = all(same_path(row.get('exe'), BASEPY) for row in hosts + own_servers)
+    ok_h, text_h, _ = own_records(recording.records('graftling.dsh.host'), node)
+    ok_m, text_m, other_m = own_records(recording.records('graftling.mcp'), node)
+    log.item('D4 other graftling.mcp processes', 'OBSERVED',
+             f'records not under the DSH host\'s node (e.g. a child\'s tool server): {other_m}; processes: '
+             f'{"; ".join(shape_text(row) for row in servers if row.get("ppid") != node)[:400] or "none"}')
     venv_named = all(same_path(r.get('executable'), VENVPY) for r in recording.records('graftling.dsh.host'))
-    log.item('D4 process shape of the host', 'PASS' if hosts and servers and entry and base and ok_h and ok_m else 'FAIL',
+    log.item('D4 process shape of the host', 'PASS' if hosts and own_servers and entry and base and ok_h and ok_m else 'FAIL',
              f'host {"; ".join(shape_text(row) for row in hosts[:1]) or "not seen"}; MCP '
-             f'{"; ".join(shape_text(row) for row in servers[:1]) or "not seen"}; node runs DSH\'s bin.js {entry}; base '
+             f'{"; ".join(shape_text(row) for row in own_servers[:1]) or "not seen"}; node runs DSH\'s bin.js {entry}; base '
              f'interpreter {base}; host record {text_h}; MCP record {text_m}; __PYVENV_LAUNCHER__ named the venv python '
              f'(record executable) {venv_named}')
     log.item('D5 DSH child: create and a real turn (required result 3)',

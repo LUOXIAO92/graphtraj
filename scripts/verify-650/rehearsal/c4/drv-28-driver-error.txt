@@ -1,0 +1,7 @@
+$ env <python> vm/drive650.py case dsh
+[dsh] in this session
+CASE dsh launcher: OBSERVED pid 83569; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[dsh] $ python <tmp>/no-such-standin.py dsh --profile headless <prompt>   (cwd <tmp>/home/work/dsh-host; bound 720 s)
+[dsh] exit 2 after 0.1 s; 1 process(es) seen; trace events 0
+RESULT dsh STOP driver error: RuntimeError: dsh exited 2 without the call (the model made no subagents call (no agent record, no mention in its output)); stderr tail "<python>: can't open file '<tmp>/no-such-standin.py': [Errno 2] No such file or directory"; stdout tail ''
+(exit 2)

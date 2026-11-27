@@ -1,0 +1,17 @@
+$ env <python> vm/drive650.py case pi
+[pi] in this session
+CASE pi launcher: OBSERVED pid 55904; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+pi route: built-in provider (no models.json written)
+[pi] $ python <prompt> pi --provider <PI_PROVIDER> --model <PI_MODEL> -p --mode json <prompt>   (cwd <tmp>/home/work/pi-host; bound 600 s)
+[pi] exit 0 after 1.8 s; 3 process(es) seen; trace events 0
+CASE pi H1 extension loads, host starts: PASS host process(es) 1; extension errors []; live/pi-host exists True (entries ['control-standin'])
+CASE pi H3 process shape pi.cmd -> cmd.exe -> node.exe -> host: PASS host pid 55908 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55907 <python> cmd '<python> <mac-path>'; node cmd names Pi's entry False; node's parent None 'None'
+CASE pi H4 the host runs as the tool venv: PASS 1 record(s) (one per pid): pid 55908 ppid 55907 prefix is the venv True executable <tmp>/venv/bin/python
+CASE pi H5 Pi passes the registered env to the MCP server: PASS 1 record(s) (one per pid): pid 55909 ppid 55907 prefix is the venv True executable <tmp>/venv/bin/python; MCP server process(es) pid 55909 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55907 <python> cmd '<python> <mac-path>'
+CASE pi H6 MCP calls pass the direct-child check: PASS subagents tool calls in Pi's events 1; authority-denied in Pi's output False
+CASE pi child created through MCP and answered (required result 2): PASS child record a1.json runtime dsh outcomes ['completed']; Pi's output holds the token True
+CASE pi H9 session end: PASS host/MCP processes alive 10 s after Pi ended: []; "Independent Pi host failed" in Pi's output False; trace: host 55908 stop None exit None; mcp 55909 stop None exit None; node 55907 stop None; print mode (-p): a host stop before node's means session_shutdown closed its stdin, after it means stdin EOF at node's exit (I5/I6 reading)
+CASE pi 629 s6.4/s6.5 process shape and end (Pi host): OBSERVED node 55907 cmd '<python> <mac-path>'; servers pid 55909 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55907 <python> cmd '<python> <mac-path>'
+wall time 2.0 s
+RESULT pi PASS
+(exit 0)

@@ -1,0 +1,5 @@
+$ zsh scripts/verify-650/steps.zsh case foo
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+usage: zsh scripts/verify-650/steps.zsh case r0|venv|claude|claude-refuse|claude-caller|claude-probe|claude-market|pi|pi-refuse|pi-caller|pi-nonascii|pi-kill|dsh|dsh-nonascii|dsh-stop|dsh-kill
+VERDICT 650 case foo: STOP
+(exit 2)

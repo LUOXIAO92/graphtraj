@@ -1,0 +1,11 @@
+$ env <python> vm/drive650.py case pi-caller
+[pi-caller] in this session
+CASE pi-caller launcher: OBSERVED pid 55938; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[pi] $ python <prompt> pi --provider <PI_PROVIDER> --model <PI_MODEL> -p --mode json <prompt>   (cwd <tmp>/home/work/pi-caller; bound 420 s)
+[pi] exit 0 after 11.8 s; 5 process(es) seen; trace events 0
+CASE pi-caller H6 status through MCP: PASS subagents calls 1; an agents list before the bash call True
+CASE pi-caller H7 caller under Pi's bash tool refused: FAIL exit 1; 'connection=<tmp>/home/work/pi-caller/.agents-control/live/pi-host/control-standin {"error": {"code": "request-not-accepted", "message": "The Session host did not accept the request."}} ex...' (expected "The client is not owned by this native Pi host.")
+CASE pi-caller 629 s6.1 pipe identity (Pi, tool caller): OBSERVED pid 55942 exe <python> cmd '<python> <mac-path>' <- parent pid 55938 not seen cmd 'None'; pid 55944 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55942 <python> cmd '<python> <mac-path>'
+wall time 11.9 s
+RESULT pi-caller FAIL (H7 caller under Pi's bash tool refused)
+(exit 0)

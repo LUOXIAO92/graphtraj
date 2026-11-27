@@ -225,17 +225,25 @@ scrub_list() {
 # (any case) in the committed drive650.py or steps.zsh: such a value is ordinary text and would garble the evidence.
 check_scrub_values() {
   local -a checks=("${(@f)$(scrub_list)}")
-  local bad=$(allow $PY -I -c 'import sys
-text = (open(sys.argv[1], encoding="utf-8").read() + open(sys.argv[2], encoding="utf-8").read()).lower()
+  # The PROTECTED product strings come from drive650.py (one list); occurrences inside them do not count, because the
+  # scrub masks them (correction 1). A value that contains one could not be scrubbed there: refused.
+  local bad=$(allow $PY -I -c 'import ast, re, sys
+source = open(sys.argv[1], encoding="utf-8").read()
+protected = next(ast.literal_eval(node.value) for node in ast.parse(source).body if isinstance(node, ast.Assign)
+                 and [getattr(t, "id", None) for t in node.targets] == ["PROTECTED"])
+text = (source + open(sys.argv[2], encoding="utf-8").read()).lower()
+for name in protected:
+    text = re.sub(re.escape(name.lower()), "\x00", text)
 a = sys.argv[3:]
 bad = []
 for name, value in zip(a[::2], a[1::2]):
     name = name[:-5] if name.endswith("_HOST") else name
-    if (len(value) < 4 or value.lower() in text) and name not in bad:
+    inside = any(p.lower() in value.lower() for p in protected)
+    if (len(value) < 4 or value.lower() in text or inside) and name not in bad:
         bad.append(name)
 print(" ".join(bad))' $HERE/vm/drive650.py $THIS $checks)
-  [[ -z $bad ]] || stop "settings variable(s) ${bad} hold ordinary text (shorter than 4 characters, or found in drive650.py or steps.zsh); the evidence scrub would garble the evidence. Choose a more distinctive value"
-  print -r -- "PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive650.py and steps.zsh)"
+  [[ -z $bad ]] || stop "settings variable(s) ${bad} hold ordinary text (shorter than 4 characters, found in drive650.py or steps.zsh outside the protected DSH package names, or containing a protected name); the evidence scrub would garble the evidence. Choose a more distinctive value"
+  print -r -- "PASS: every value the evidence scrub replaces is distinctive (4+ characters, absent from drive650.py and steps.zsh outside the protected DSH package names)"
 }
 # A JSON list of [placeholder, value] pairs: every scrubbed settings value and derived form, plus the active account.
 scrub_values() {

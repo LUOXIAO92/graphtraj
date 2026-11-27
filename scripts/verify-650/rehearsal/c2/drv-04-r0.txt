@@ -1,0 +1,32 @@
+$ env <python> vm/drive650.py case r0
+[r0] in this session
+CASE r0 launcher: OBSERVED pid 55809; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+versions first, then one line per Runtime (no tool, no graftling call)
+  platform: darwin
+  python: 3.13.11 | packaged by Anaconda, Inc. | (main, Dec 10 2025, 21:21:08) [Clang 20.1.8 ]
+  executable: <python>
+  base_executable: <mac-path>
+  venv: <tmp>/venv
+  filesystem_encoding: utf-8
+  claude: not Windows
+  git: git version 2.50.1 (Apple Git-155)
+  graftling_head: 0e5c92a602005ba0c0e53b887ff612dfd28180fd
+  graftling_installed: 0.10.2 <tmp>/home/graftling/src/graftling/__init__.py
+CASE r0 graftling candidate: PASS graftling installed from the bundle checkout at 0e5c92a602005ba0c0e53b887ff612dfd28180fd; candidate 0e5c92a602005ba0c0e53b887ff612dfd28180fd
+[claude] $ python <prompt> claude -p <prompt> --output-format stream-json --verbose --max-turns 15   (cwd <tmp>/home/work/r0-claude; bound 300 s)
+[claude] exit 0 after 0.1 s; 1 process(es) seen; trace events 0
+CASE r0 claude answer: PASS exit 0; result 'PONG650'; is_error False; claude_code_version 2.1.314; stderr tail ''
+CASE r0 claude model: PASS model(s) reported ['<CLAUDE_MODEL>']; configured <CLAUDE_MODEL>
+claude login: ANTHROPIC_AUTH_TOKEN from the shared key, ANTHROPIC_BASE_URL set (value not shown)
+pi route: built-in provider (no models.json written)
+[pi] $ python <prompt> pi --provider <PI_PROVIDER> --model <PI_MODEL> -p --mode json <prompt>   (cwd <tmp>/home/work/r0-pi; bound 300 s)
+[pi] exit 0 after 1.8 s; 3 process(es) seen; trace events 0
+CASE r0 pi answer: PASS exit 0; 2 JSON event(s); answer token present True; stderr tail ''
+CASE r0 pi model: PASS model(s) reported ['<PI_MODEL>']; configured <PI_MODEL>
+[dsh] $ python <prompt> dsh --profile headless <prompt>   (cwd <tmp>/home/work/r0-dsh; bound 420 s)
+[dsh] exit 0 after 1.8 s; 3 process(es) seen; trace events 0
+CASE r0 dsh answer: PASS exit 0; stdout 'PONG650'; stderr tail ''; its headless app flags: out/r0/dsh-headless-help.txt
+CASE r0 dsh model: OBSERVED model(s) in its new session log(s) none found (0 log(s)); the main Session runs on its profile and DSH_MAIN_* settings
+wall time 4.0 s
+RESULT r0 PASS
+(exit 0)

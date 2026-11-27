@@ -1,0 +1,15 @@
+$ env <python> vm/drive650.py case claude
+[claude] in this session
+CASE claude launcher: OBSERVED pid 55828; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+CASE claude .mcp.json from the uv venv: PASS command <tmp>/venv/bin/python (base interpreter <mac-path>); env {}; args ['-m', 'graftling.claude.host', 'serve', '--config', '<tmp>/home/work/claude-host/.agents-control/claude-host.json']
+[claude] $ python <prompt> claude -p <prompt> --output-format stream-json --verbose --max-turns 15 --allowedTools mcp__graftling__subagents   (cwd <tmp>/home/work/claude-host; bound 600 s)
+[claude] exit 0 after 1.8 s; 2 process(es) seen; trace events 0
+CASE claude O1 MCP server is claude.exe's direct child: PASS init mcp_servers ['graftling=connected']; channel.json parent 55832; host's parent 55832 is the configured claude.exe True (the started claude.exe pid 55832); host pid 55833 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55832 <python> cmd '<python> <mac-path>'; host.log no did-not-start line
+CASE claude O2 .mcp.json env reaches the server: PASS 1 record(s) (one per pid): pid 55833 ppid 55832 prefix is the venv True executable <tmp>/venv/bin/python; the base interpreter imports graftling only through __PYVENV_LAUNCHER__
+CASE claude O3 mod context call (direct child): PASS 1 subagents-call line(s) in host.log; denial lines []; context process(es) traced: none traced
+CASE claude child created through MCP and answered (required result 1): PASS child record a1.json runtime dsh outcomes ['completed']; Claude's final reply holds the token True; subagents tool uses 1
+CASE claude O5 session end: PASS host.log last line '2026-11-27T00:00:00 subagents host recorded its children stopped.'; channel.json gone; host python alive 10 s after Claude Code exited: []; gone after (s) {55833: 0.0}; trace: no host stop event; claude.exe stopped None; Claude Code 2.1.314 (Claude Code) (stand-in) in print mode (-p): the session ends at the end of the turn, not at /exit
+CASE claude 629 s6.4 process shape (Claude host): OBSERVED claude.exe pid 55832; hosts: pid 55833 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55832 <python> cmd '<python> <mac-path>'; DSH child service: not seen
+wall time 2.1 s
+RESULT claude PASS
+(exit 0)

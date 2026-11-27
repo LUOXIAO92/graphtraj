@@ -1,0 +1,11 @@
+$ zsh scripts/verify-650/steps.zsh 00
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [00] Preflight, read only. Login: gcloud (account not shown). Dialog: none.
+PASS: run by zsh 5.9
+PASS: settings file is git-ignored and untracked; variables read (names only): PROJECT, ZONE, MACHINE_TYPE, VCPUS, VM_NAME, VM_LABELS, VM_USER, NETWORK, IMAGE_FAMILY, IMAGE_PROJECT, DISK_GB, KEY_ENV, CLAUDE_BASE_URL, CLAUDE_AUTH_VAR, CLAUDE_MODEL, PI_ROUTE, PI_PROVIDER, PI_MODEL, DSH_CHILD_MODEL, DSH_MAIN_KEY_VAR, PRICE_VM_USD_H, PRICE_WINLIC_USD_VCPU_H, PRICE_DISK_USD_GB_MONTH, PRICE_IP_USD_H, EST_CURRENCY, EST_RATE, BUDGET; optional (assigned, may be empty): CLAUDE_HAIKU_MODEL, CLAUDE_SONNET_MODEL, CLAUDE_OPUS_MODEL, CLAUDE_SUBAGENT_MODEL, CLAUDE_API_TIMEOUT_MS, PI_KEY_VAR, PI_BASE_URL, PI_API, DSH_CHILD_PROVIDER, DSH_CHILD_BASE_URL, DSH_MAIN_BASE_URL, DSH_MAIN_APP_ARGS
+gcloud: Google Cloud SDK 999.0.0 (stand-in) | path: /Users/luoxiao/workspace/you-are-a-product-architect-delivery/.graphtraj/core/worktrees/650-graftling-windows-runtimes-real/scripts/verify-650/rehearsal/fake-gcloud.zsh | TMPDIR for started processes: /tmp/claude-501
+PASS: gcloud has an active account (not shown)
+PASS: the project is reachable and ACTIVE
+STOP: settings variable(s) DSH_CHILD_MODEL hold ordinary text (shorter than 4 characters, found in drive650.py or steps.zsh outside the protected DSH package names, or containing a protected name); the evidence scrub would garble the evidence. Choose a more distinctive value
+VERDICT 650 00: STOP
+(exit 1)

@@ -1,0 +1,9 @@
+$ env <python> vm/drive650.py case claude-probe
+[claude-probe] in this session
+CASE claude-probe launcher: OBSERVED pid 55879; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[claude] $ python <prompt> claude -p Reply with exactly PROBE-650-OK. --output-format stream-json --verbose --max-turns 15 --plugin-dir <prompt> --debug   (cwd <tmp>/home/work/claude-probe/project; bound 300 s)
+[claude] exit 0 after 0.1 s; 1 process(es) seen; trace events 0
+CASE claude-probe O8 ${VAR:-default} in a plugin mcpServers command: OBSERVED init mcp_servers ['plugin:probe650:probe650=connected']; probe records 1 ['<tmp>/venv/bin/python']; reading: expanded with the variable (the venv python ran); debug lines naming probe650: 1 (first '[DEBUG] MCP server "plugin:probe650:probe650": connected (stand-in)')
+wall time 0.2 s
+RESULT claude-probe PASS
+(exit 0)

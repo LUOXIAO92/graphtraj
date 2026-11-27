@@ -139,8 +139,48 @@ def _ip(match: re.Match) -> bytes | None:
     return b'<IP>'
 
 
+# PROTECTED public product strings (correction 1): DSH's npm scope token. Every form in which DSH's package occurs in
+# paths, command lines, npm logs and URLs contains it: '@<scope>/dsh', '@<scope>\dsh', '@<scope>\\dsh' (JSON),
+# '%40<scope>%2fdsh', any case. It names the product, not the user's provider choice, and is already in committed
+# files. The scrub masks it before replacing settings values and restores it afterwards; the 00/V guard (steps.zsh,
+# which reads this list) ignores occurrences of a value that lie only inside it, and refuses a value containing it.
+PROTECTED = ('deepseek-ai',)
+_SENTINELS = (re.compile(rb'\x01\x00V\x006\x005\x000\x00P\x00((?:\d\x00)+)\x02\x00'),  # UTF-16-LE
+              re.compile(rb'\x01V650P(\d+)\x02'))  # UTF-8
+
+
+def protect(data: bytes) -> tuple[bytes, list[bytes]]:
+    """Each PROTECTED occurrence (any case, UTF-8 and UTF-16-LE) -> a numbered sentinel; the originals in order."""
+    kept: list[bytes] = []
+    for name in PROTECTED:
+        for encoding in ('utf-8', 'utf-16-le'):
+            def hide(match: re.Match, encoding: str = encoding) -> bytes:
+                kept.append(match.group(0))
+                return f'\x01V650P{len(kept) - 1}\x02'.encode(encoding)
+            data = re.sub(re.escape(name.encode(encoding)), hide, data, flags=re.IGNORECASE)
+    return data, kept
+
+
+def unprotect(data: bytes, kept: list[bytes]) -> bytes:
+    if not kept:
+        return data
+    for sentinel in _SENTINELS:
+        def back(match: re.Match) -> bytes:
+            index = int(match.group(1).replace(b'\x00', b''))
+            return kept[index] if index < len(kept) else match.group(0)
+        data = sentinel.sub(back, data)
+    return data
+
+
 def scrub_bytes(data: bytes, pairs: list[list[str]], counts: dict) -> bytes:
-    """Replace each value (case-insensitive, UTF-8 and UTF-16-LE) and each IP address by its placeholder."""
+    """Replace each value (case-insensitive, UTF-8 and UTF-16-LE) and each IP address by its placeholder; the
+    PROTECTED product strings are masked meanwhile and come back unchanged."""
+    data, kept = protect(data)
+    data = _replace(data, pairs, counts)
+    return unprotect(data, kept)
+
+
+def _replace(data: bytes, pairs: list[list[str]], counts: dict) -> bytes:
     for placeholder, value in sorted(pairs, key=lambda pair: -len(pair[1])):
         if not value:
             continue

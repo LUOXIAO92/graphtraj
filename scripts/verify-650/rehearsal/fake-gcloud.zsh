@@ -135,13 +135,17 @@ path.write_text(json.dumps(r))' $S/rule-$4.json $3 "$@" ;;
     /usr/bin/python3 -I -c 'import json, sys
 pairs = json.load(open(sys.argv[1]))["scrub"]
 print(" | ".join(v for _, v in pairs) + " | " + " | ".join(v.upper() for _, v in pairs))
-print("ip 203.0.113.7 ipv6 2001:db8::7 loopback 127.0.0.1 build 10.0.20348.2700")' $S/uploaded-settings.json > $d/$step/console.txt
+print("ip 203.0.113.7 ipv6 2001:db8::7 loopback 127.0.0.1 build 10.0.20348.2700")
+# Correction 1: DSH package paths in the forms the evidence holds (path, any case, npm spec, URL); they must survive.
+for one in (r"C:\npm\node_modules\@deepseek-ai\dsh\lib\bin.js", "@DeepSeek-AI/dsh@0.2.2-rc.5",
+            "https://registry.npmjs.org/@deepseek-ai%2fdsh", r"C:\npm\node_modules\@DEEPSEEK-AI\dsh\package.json"):
+    print("pkg", one)' $S/uploaded-settings.json > $d/$step/console.txt
     /usr/bin/python3 -I -c 'import json, sys
 pairs = json.load(open(sys.argv[1]))["scrub"]
-print(json.dumps({"values": [v for _, v in pairs]}))' $S/uploaded-settings.json > $d/$step/agents/record.json
+print(json.dumps({"values": [v for _, v in pairs], "dsh_package": "C:\\npm\\node_modules\\@deepseek-ai\\dsh\\package.json"}))' $S/uploaded-settings.json > $d/$step/agents/record.json
     /usr/bin/python3 -I -c 'import json, sys
 pairs = json.load(open(sys.argv[1]))["scrub"]
-open(sys.argv[2], "wb").write(" ".join(v for _, v in pairs).encode("utf-16-le"))' $S/uploaded-settings.json $d/$step/utf16.txt
+open(sys.argv[2], "wb").write((" ".join(v for _, v in pairs) + " pkg C:\\npm\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js").encode("utf-16-le"))' $S/uploaded-settings.json $d/$step/utf16.txt
     [[ -f $S/tar-short ]] && rm -f $d/$step/utf16.txt
     tar -cf - -C $d $step ;;
   *) print -r -- "stand-in: unknown remote command" >&2; exit 2 ;;

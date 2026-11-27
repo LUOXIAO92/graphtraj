@@ -1,0 +1,11 @@
+$ env <python> vm/drive650.py case claude-caller
+[claude-caller] in this session
+CASE claude-caller launcher: OBSERVED pid 55865; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[claude] $ python <prompt> claude -p <prompt> --output-format stream-json --verbose --max-turns 15 --allowedTools Bash   (cwd <tmp>/home/work/claude-caller; bound 420 s)
+[claude] exit 0 after 2.4 s; 4 process(es) seen; trace events 0
+CASE claude-caller O4 context from a Bash-tool caller: FAIL exit 1; refused as not the direct child False; observed_executable not named; 'The subagents host for this project is not running; see <tmp>/home/work/claude-caller/.agents-control/host.log. exit=1'
+CASE claude-caller O4 subagents CLI from a Bash-tool caller: PASS exit 1; refused with ['invalid-config'] (the handoff expects authority-denied; without GRAFTLING_CONNECTION graftling may refuse earlier); '{"error": {"code": "invalid-config", "message": "Agent Runner must be invoked from the Harness Project Root or this Session\'s Worktree."}} exit=1'
+CASE claude-caller 629 s6.1 pipe identity (Claude, tool caller): OBSERVED shells and launchers between claude.exe and the caller: not sampled (short-lived)
+wall time 2.7 s
+RESULT claude-caller FAIL (O4 context from a Bash-tool caller)
+(exit 0)

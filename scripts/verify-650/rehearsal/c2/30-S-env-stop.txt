@@ -1,0 +1,25 @@
+$ zsh scripts/verify-650/steps.zsh S
+scrubbed at start: 16 credential-class or provider variable(s) removed (names not shown)
+== [S] DSH: cases dsh, dsh-nonascii, dsh-stop, dsh-kill in VM_USER's console session (a scheduled task each; bound 1 min each, 4 min at most). Login: gcloud. Dialog: none.
+PASS: Task firewall rules in place and enabled: <VM_NAME>-deny (DENY all, 1000) and <VM_NAME>-ssh (tcp:22 from the current public IPv4 only, 900), both only for this VM's tag
+== case dsh: a scheduled task in VM_USER's console session (bound 60s on the VM)
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd schedule dsh 60"   (bound 360s)
+session of the VM user: NONE; query user: No User exists for *
+RESULT dsh STOP the VM user has no Active console session (run step I first)
+$ gcloud compute ssh ... --command="C:\v650\driver.cmd cleanup dsh"   (bound 180s)
+  CLEANUP dsh: 0 leftover process(es) ended
+== evidence of dsh: scan on the VM, fetch, scrub on the Mac
+  SCAN PASS key checked, autologon password checked; replacements: {"<MODEL>": 2, "<VM_USER>": 3}; files 3
+  an earlier fetch of dsh kept as dsh-prev-20261127232243
+  $ gcloud compute ssh ... --command="tar -cf - -C C:/v650/out dsh" | tar -xf - -C evidence/live   (Windows' own tar.exe)
+  Mac pass: SCRUB replacements: {"<ACCOUNT>": 4, "<CLAUDE_BASE_URL>": 8, "<CLAUDE_BASE_URL_HOST>": 4, "<CLAUDE_HAIKU_MODEL>": 4, "<CLAUDE_MODEL>": 4, "<DSH_CHILD_BASE_URL>": 8, "<DSH_CHILD_BASE_URL_HOST>": 4, "<DSH_CHILD_MODEL>": 4, "<DSH_MAIN_ARG>": 4, "<DSH_MAIN_KEY_VAR>": 4, "<IP>": 2, "<KEY_ENV>": 4, "<MACHINE_TYPE>": 4, "<PI_KEY_VAR>": 4, "<PI_MODEL>": 4, "<PI_PROVIDER>": 4, "<PROJECT>": 4, "<REGION>": 4, "<VM_LABEL>": 4, "<VM_NAME>": 8, "<VM_USER>": 4, "<ZONE>": 4}
+  PASS: 3 of 3 evidence files arrived
+--- case dsh: one line per item (0):
+  
+--- RESULT dsh STOP the VM user has no Active console session (run step I first)
+=== step S: dsh STOP (evidence: dsh PASS)
+next: zsh scripts/verify-650/steps.zsh I
+next: zsh scripts/verify-650/steps.zsh S
+next: zsh scripts/verify-650/steps.zsh D
+VERDICT 650 S: STOP (STOP the VM user has no Active console session (run step I first); dsh STOP)
+(exit 1)

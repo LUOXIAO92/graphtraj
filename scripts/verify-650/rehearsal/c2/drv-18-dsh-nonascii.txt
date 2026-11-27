@@ -1,0 +1,14 @@
+$ env <python> vm/drive650.py case dsh-nonascii
+[dsh-nonascii] in this session
+CASE dsh-nonascii launcher: OBSERVED pid 55991; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+CASE dsh-nonascii D9 code page: OBSERVED ANSI code page None; chcp None
+[dsh] $ python <prompt> dsh --profile headless <prompt>   (cwd <tmp>/home/work/项目-ü-650/dsh; bound 720 s)
+[dsh] exit 0 after 1.8 s; 3 process(es) seen; trace events 0
+CASE dsh-nonascii D3 DSH host with a real MCP call: PASS agent records 1; live/dsh-host existed True; refusals []; authority-denied in its output False
+CASE dsh-nonascii D4 process shape of the host: PASS host pid 55995 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55994 <python> cmd '<python> <mac-path>'; MCP pid 55996 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55994 <python> cmd '<python> <mac-path>'; node runs DSH's bin.js True; base interpreter True; host record 1 record(s) (one per pid): pid 55995 ppid 55994 prefix is the venv True executable <tmp>/venv/bin/python; MCP record 1 record(s) (one per pid): pid 55996 ppid 55994 prefix is the venv True executable <tmp>/venv/bin/python; __PYVENV_LAUNCHER__ named the venv python (record executable) True
+CASE dsh-nonascii D5 DSH child: create and a real turn (required result 3): PASS child record a1.json outcomes ['completed']; token in DSH's reply True; agents-mcp patch rows ['- id: agents-mcp', 'name: file:///C:/stand-in/graftling/dsh/plugin.mjs']
+CASE dsh-nonascii D3 session end: host and child services gone: PASS host/MCP alive 10 s after DSH exited []; child DSH service node(s) seen [], alive after []
+CASE dsh-nonascii D9 non-ASCII prompt and answer intact: PASS project <tmp>/home/work/项目-ü-650/dsh; the token 完成-ü-650 in graftling's records True
+wall time 2.0 s
+RESULT dsh-nonascii PASS
+(exit 0)

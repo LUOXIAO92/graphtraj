@@ -38,12 +38,12 @@ cp $HERE/vm/mcp_probe.py $H/home/
 $PY -I -c 'import json, sys
 t, keyenv, user, cand = sys.argv[2:6]
 pairs = [["<CLAUDE_MODEL>", f"cm-{t}-pro"], ["<PI_MODEL>", f"pm-{t}-chat"], ["<DSH_CHILD_MODEL>", f"dm-{t}-flash"],
-         ["<KEY_ENV>", keyenv], ["<VM_USER>", user], ["<PI_KEY_VAR>", f"PK{t.upper()}_KEY"], ["<PI_PROVIDER>", f"pp{t}"],
+         ["<KEY_ENV>", keyenv], ["<VM_USER>", user], ["<PI_KEY_VAR>", f"PK{t.upper()}_KEY"], ["<PI_PROVIDER>", "eepsee"],
          ["<DSH_MAIN_KEY_VAR>", f"DK{t.upper()}_KEY"], ["<CLAUDE_BASE_URL>", f"https://cl.h{t}.invalid/anth"]]
 json.dump({"key_env": keyenv, "candidate": cand, "pins": {"claude": "2.1.314", "pi": "1.4.0", "dsh": "0.2.2-rc.5", "pnpm": "12.21.0"},
            "claude": {"base_url": f"https://cl.h{t}.invalid/anth", "auth_var": "ANTHROPIC_AUTH_TOKEN", "model": f"cm-{t}-pro",
                       "haiku": "", "sonnet": "", "opus": "", "subagent": "", "api_timeout_ms": ""},
-           "pi": {"route": "builtin", "provider": f"pp{t}", "model": f"pm-{t}-chat", "key_var": f"PK{t.upper()}_KEY", "base_url": "", "api": ""},
+           "pi": {"route": "builtin", "provider": "eepsee", "model": f"pm-{t}-chat", "key_var": f"PK{t.upper()}_KEY", "base_url": "", "api": ""},
            "dsh_child": {"model": f"dm-{t}-flash", "provider": "", "base_url": ""},
            "dsh_main": {"key_var": f"DK{t.upper()}_KEY", "base_url": "", "app_args": []}, "scrub": pairs},
           open(sys.argv[1], "w"))' $H/home/settings.json $TAG $KEYENV $VMUSER $CANDIDATE
@@ -118,6 +118,24 @@ mkdir -p $H/home/out/claude/agents-control
 print -r -- "work dir C:\\Users\\$VMUSER\\AppData\\Roaming\\uv\\tools\\graftling" > $H/home/out/claude/agents-control/path.txt
 run scan-clean-vm-user-replaced "SCAN PASS" $BASE $PY $DRV scan claude
 run scan-no-vm-user-left "count 0" $BASE /usr/bin/python3 -I -c 'import sys, pathlib; print("count", sum(sys.argv[2].lower() in p.read_text(errors="replace").lower() for p in pathlib.Path(sys.argv[1]).rglob("*") if p.is_file()))' $H/home/out/claude $VMUSER
+# Correction 1: the dummy PI_PROVIDER (a substring of the protected DSH scope token) beside DSH package paths, in UTF-8
+# and UTF-16-LE: the scan keeps every package path byte for byte and replaces every other occurrence of the dummy.
+/usr/bin/python3 -I -c 'import sys, pathlib
+lines = [r"node C:\npm\node_modules\@deepseek-ai\dsh\lib\bin.js", "@DeepSeek-AI/dsh@0.2.2-rc.5",
+         "https://registry.npmjs.org/@deepseek-ai%2fdsh", r"C:\npm\node_modules\@DEEPSEEK-AI\dsh\package.json",
+         "provider eepsee EEPSEE_API_KEY eepsee-official Eepsee"]
+d = pathlib.Path(sys.argv[1]); (d / "pkg.txt").write_text("\n".join(lines) + "\n"); (d / "pkg16.txt").write_bytes("\n".join(lines).encode("utf-16-le"))
+(d / "pkg.orig").write_text("\n".join(lines[:4]) + "\n")' $H/home/out/claude/agents-control
+run scan-keeps-dsh-package-paths "SCAN PASS" $BASE $PY $DRV scan claude
+run package-paths-intact-dummy-gone "paths intact True True; dummy left outside protected names 0 0; placeholders 4 4" /usr/bin/python3 -I -c 'import pathlib, re, sys
+d = pathlib.Path(sys.argv[1]); orig = (d / "pkg.orig").read_text().splitlines()
+one = (d / "pkg.txt").read_text(); two = (d / "pkg16.txt").read_bytes().decode("utf-16-le")
+left = [len(re.findall("eepsee", re.sub("(?i)deepseek-ai", "", t), re.I)) for t in (one, two)]
+print("paths intact", all(o in one for o in orig), all(o in two for o in orig), end="; ")
+print("dummy left outside protected names", *left, end="; ")
+print("placeholders", one.count("<PI_PROVIDER>"), two.count("<PI_PROVIDER>"))
+print(one.splitlines()[-1])' $H/home/out/claude/agents-control
+rm -f $H/home/out/claude/agents-control/pkg*
 print -r -- "leaked $KEYVAL" > $H/home/out/claude/agents-control/leak.txt
 run scan-finds-planted-key "SCAN FAIL the key or the autologon password is in 1 file(s)" $BASE $PY $DRV scan claude
 rm -f $H/home/out/claude/agents-control/leak.txt

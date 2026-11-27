@@ -1,0 +1,8 @@
+$ env <python> vm/drive650.py case dsh-kill
+[dsh-kill] in this session
+CASE dsh-kill launcher: OBSERVED pid 56015; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+CASE dsh-kill D6 the DSH service ends with its owner: PASS owner 56018 killed hard; its 2 service process(es) [(56020, 'python3.13'), (56019, 'node')]; alive 0.5 s later []; gone within 15 s True
+CASE dsh-kill D7 session data after a hard kill: OBSERVED 1 v4.jsonl log(s): 1 line(s) parse, 0 do not; the completed turn 1 is in it True; session.lock left none; a later send: outcome completed, session s1
+wall time 4.0 s
+RESULT dsh-kill PASS
+(exit 0)

@@ -1,0 +1,10 @@
+$ env <python> vm/drive650.py case claude
+[claude] in this session
+CASE claude launcher: OBSERVED pid 55841; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+CASE claude .mcp.json from the uv venv: PASS command <tmp>/venv/bin/python (base interpreter <mac-path>); env {}; args ['-m', 'graftling.claude.host', 'serve', '--config', '<tmp>/home/work/claude-host/.agents-control/claude-host.json']
+[claude] $ python <prompt> claude -p <prompt> --output-format stream-json --verbose --max-turns 15 --allowedTools mcp__graftling__subagents   (cwd <tmp>/home/work/claude-host; bound 600 s)
+[claude] exit 0 after 1.8 s; 2 process(es) seen; trace events 0
+CASE claude O1 MCP server is claude.exe's direct child: PASS init mcp_servers ['graftling=connected']; channel.json parent 55845; host's parent 55845 is the configured claude.exe True (the started claude.exe pid 55845); host pid 55846 exe <mac-path> cmd '<mac-path> -c import json, os, sys, time from pathlib import Path spec = json.loads(sys.ar...' <- parent pid 55845 <python> cmd '<python> <mac-path>'; host.log no did-not-start line
+CASE claude O2 .mcp.json env reaches the server: PASS 1 record(s) (one per pid): pid 55846 ppid 55845 prefix is the venv True executable <tmp>/venv/bin/python; the base interpreter imports graftling only through __PYVENV_LAUNCHER__
+RESULT claude NO-TOOL-CALL (the model made no subagents call (tool uses: []))
+(exit 0)

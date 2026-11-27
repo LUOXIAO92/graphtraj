@@ -24,7 +24,7 @@ V=(PROJECT p-$TAG-proj ZONE z$TAG-east9-q MACHINE_TYPE mt-$TAG-std2 VCPUS 2 VM_N
    VM_USER u$TAG NETWORK stand-in-net IMAGE_FAMILY fake-family IMAGE_PROJECT stand-in-images DISK_GB 64
    KEY_ENV K${(U)TAG}_SHARED CLAUDE_BASE_URL https://cl.h$TAG.invalid/anth/ CLAUDE_AUTH_VAR ANTHROPIC_AUTH_TOKEN
    CLAUDE_MODEL cm-$TAG-pro CLAUDE_HAIKU_MODEL cm-$TAG-mini CLAUDE_SONNET_MODEL '' CLAUDE_OPUS_MODEL '' CLAUDE_SUBAGENT_MODEL ''
-   CLAUDE_API_TIMEOUT_MS 600000 PI_ROUTE builtin PI_PROVIDER pp$TAG PI_MODEL pm-$TAG-chat PI_KEY_VAR PK${(U)TAG}_KEY
+   CLAUDE_API_TIMEOUT_MS 600000 PI_ROUTE builtin PI_PROVIDER eepsee PI_MODEL pm-$TAG-chat PI_KEY_VAR PK${(U)TAG}_KEY
    PI_BASE_URL '' PI_API '' DSH_CHILD_MODEL dm-$TAG-flash DSH_CHILD_PROVIDER '' DSH_CHILD_BASE_URL https://ds.h$TAG.invalid
    DSH_MAIN_KEY_VAR DK${(U)TAG}_KEY DSH_MAIN_BASE_URL '' DSH_MAIN_APP_ARGS "--flag dmm-$TAG-arg"
    PRICE_VM_USD_H 0.1 PRICE_WINLIC_USD_VCPU_H 0.05 PRICE_DISK_USD_GB_MONTH 0.1 PRICE_IP_USD_H 0.005 EST_CURRENCY XXX
@@ -87,8 +87,11 @@ write_settings VM_USER=work; step 00-vm-user-ordinary-word STOP 00
 CHECK+="an ordinary VM_USER (a word in drive650.py) is refused naming VM_USER: $(has 'settings variable(s) VM_USER hold ordinary text')"
 write_settings DSH_CHILD_MODEL=claude; step 00-model-ordinary-word STOP 00
 CHECK+="a model value found in the committed files is refused naming it: $(has 'settings variable(s) DSH_CHILD_MODEL hold ordinary text')"
+write_settings PI_PROVIDER=x-deepseek-ai-$TAG; step 00-value-holding-protected-name STOP 00
+CHECK+="a value containing a protected DSH name is refused naming it: $(has 'settings variable(s) PI_PROVIDER hold ordinary text')"
 write_settings
 project_rules 65534; step 00-preflight PASS 00
+CHECK+="00 PASS with the dummy PI_PROVIDER (a substring of the protected DSH scope token, found nowhere else in drive650.py or steps.zsh): $(has 'PASS: every value the evidence scrub replaces is distinctive')"
 step C-vm-absent STOP C
 CHECK+="C with no VM (and no Task rules) names V: $(yn grep -q -E 'run( V first)?: zsh scripts/verify-650/steps.zsh V' $LAST)"
 step D-vm-absent PASS D
@@ -163,18 +166,37 @@ want="length=${#DUMMYKEY} sha256=$(print -rn -- $DUMMYKEY | shasum -a 256 | cut 
 k_stdin=$(grep -c -F -- "$want" $S/stdin.log)
 CHECK+="dummy key: in gcloud argv $k_argv, in gcloud environments $k_env, in files (verify-650 tree incl. local/ and rehearsal, stand-in state, evidence) $k_files; arrived on gcloud's stdin (length+SHA-256 match) $k_stdin time(s)"
 ev_files=$(find $EVID -type f | wc -l | tr -d ' ')
-leak=0
+# Leaks: each scrubbed value (any case; UTF-8 and UTF-16-LE) in a fetched file, after removing the PROTECTED product
+# strings (drive650.py's list), inside which the scrub leaves the dummy PI_PROVIDER on purpose (correction 1).
 typeset -a scrubbed=(PROJECT ZONE MACHINE_TYPE VM_NAME VM_USER KEY_ENV CLAUDE_MODEL CLAUDE_HAIKU_MODEL PI_PROVIDER PI_MODEL
                      PI_KEY_VAR DSH_CHILD_MODEL DSH_MAIN_KEY_VAR)
-for k in $scrubbed; do
-  n=$(grep -r -i -l -F -- ${V[$k]} $EVID 2> /dev/null | wc -l | tr -d ' '); (( leak += n ))
-done
-for k in cl.h$TAG.invalid ds.h$TAG.invalid dmm-$TAG-arg val$TAG; do
-  n=$(grep -r -i -l -F -- $k $EVID 2> /dev/null | wc -l | tr -d ' '); (( leak += n ))
-done
+typeset -a values=()
+for k in $scrubbed; do values+=${V[$k]}; done
+values+=(cl.h$TAG.invalid ds.h$TAG.invalid dmm-$TAG-arg val$TAG)
+leak=$(/usr/bin/python3 -I -c 'import ast, pathlib, re, sys
+src = open(sys.argv[1], encoding="utf-8").read()
+protected = next(ast.literal_eval(n.value) for n in ast.parse(src).body if isinstance(n, ast.Assign) and [getattr(t, "id", None) for t in n.targets] == ["PROTECTED"])
+files = 0
+for path in pathlib.Path(sys.argv[2]).rglob("*"):
+    if not path.is_file():
+        continue
+    data = path.read_bytes()
+    texts = [data.decode("utf-8", "ignore").lower(), data.decode("utf-16-le", "ignore").lower()]
+    for name in protected:
+        texts = [re.sub(re.escape(name.lower()), "\x00", t) for t in texts]
+    files += any(v.lower() in t for v in sys.argv[3:] for t in texts)
+print(files)' $HERE/vm/drive650.py $EVID $values)
+kept=$(/usr/bin/python3 -I -c 'import pathlib, sys
+forms = [r"node_modules\@deepseek-ai\dsh\lib\bin.js", "@DeepSeek-AI/dsh@0.2.2-rc.5", "@deepseek-ai%2fdsh", r"@DEEPSEEK-AI\dsh\package.json",
+         r"node_modules\\@deepseek-ai\\dsh\\package.json"]
+root = pathlib.Path(sys.argv[1]); dirs = [d for d in root.iterdir() if d.is_dir()]
+counts = [sum(p.read_bytes().decode("utf-8", "ignore").count(f) for p in root.rglob("*") if p.is_file()) for f in forms]
+utf16 = sum(p.read_bytes().count(r"node_modules\@deepseek-ai\dsh\lib\bin.js".encode("utf-16-le")) for p in root.rglob("*") if p.is_file())
+print(f"{len(dirs)} fetched step dirs; DSH package forms kept (path, npm spec in its own case, URL, upper-case path, JSON-escaped path): {counts}; UTF-16 path kept: {utf16}")' $EVID)
+CHECK+="correction 1: the dummy PI_PROVIDER is a substring of the protected DSH scope token; scrubbed evidence: $kept"
 ips=$(grep -r -l -E '203\.0\.113\.7|2001:db8::7' $EVID | wc -l | tr -d ' ')
 holders=$(grep -r -h -o -E '<[A-Z_]+>' $EVID | sort | uniq -c | awk '{printf "%s %s, ", $2, $1}')
-CHECK+="fetched evidence: $ev_files files; files still holding a scrubbed settings value incl. VM_USER, URL hosts, label value, app-arg word (any case, UTF-8): $leak; files holding the sample IPv4/IPv6: $ips; placeholders now present: ${holders%, }"
+CHECK+="fetched evidence: $ev_files files; files still holding a scrubbed settings value incl. VM_USER, URL hosts, label value, app-arg word (any case, UTF-8 or UTF-16-LE, outside the protected DSH names): $leak; files holding the sample IPv4/IPv6: $ips; placeholders now present: ${holders%, }"
 committed=$(cd $WT && git grep --untracked --exclude-standard -i -l -F -e $TAG -e $DUMMYKEY -- . | wc -l | tr -d ' ')
 CHECK+="committed-or-committable files (tracked + untracked not ignored) holding the dummy settings tag or the dummy key: $committed"
 {

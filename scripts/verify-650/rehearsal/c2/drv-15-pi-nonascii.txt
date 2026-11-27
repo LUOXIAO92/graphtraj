@@ -1,0 +1,11 @@
+$ env <python> vm/drive650.py case pi-nonascii
+[pi-nonascii] in this session
+CASE pi-nonascii launcher: OBSERVED pid 55957; session None (console session None); elevated None; INTERACTIVE SID None; in a job None; NOT-WINDOWS (rehearsal)
+[pi] $ python <prompt> pi --provider <PI_PROVIDER> --model <PI_MODEL> -p --mode json <prompt>   (cwd <tmp>/home/work/项目-ü-650/pi; bound 420 s)
+[pi] exit 0 after 1.8 s; 3 process(es) seen; trace events 0
+CASE pi-nonascii H11 H1 under a non-ASCII project: PASS project <tmp>/home/work/项目-ü-650/pi; host process(es) 1; live/pi-host exists True
+CASE pi-nonascii H11 H6 status: PASS subagents calls 1; authority-denied False
+CASE pi-nonascii H11 H9 session end: PASS host/MCP processes alive 10 s after Pi ended: []; "Independent Pi host failed" in Pi's output False; trace: host 55961 stop None exit None; mcp 55962 stop None exit None; node 55960 stop None; print mode (-p): a host stop before node's means session_shutdown closed its stdin, after it means stdin EOF at node's exit (I5/I6 reading)
+wall time 2.0 s
+RESULT pi-nonascii PASS
+(exit 0)

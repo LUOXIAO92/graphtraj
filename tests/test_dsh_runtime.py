@@ -44,6 +44,8 @@ class NativePeer:
     """Controlled native service, including cancel ACK before actual quiescence."""
 
     instances = []
+    # graftling 0.11.0's binding passes service.tree to authenticate_process (POSIX ignores it).
+    tree = None
 
     def __init__(self, executable: str, cwd: Path, environment: dict) -> None:
         """Start with independent per-service state and a raw native record."""

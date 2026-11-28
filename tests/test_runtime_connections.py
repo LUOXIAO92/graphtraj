@@ -943,7 +943,12 @@ def test_host_operation_os_error_keeps_reply_and_logs_traceback(tmp_path, capsys
     import json
     import os
 
-    from graftling import connection  # e1e3e3a moved the request answerer here
+    import importlib.util
+
+    # e1e3e3a moved the request answerer to graftling.connection; graftling 0.11.0 (636)
+    # moved it to graftling._channel_posix with the same signature. The range includes both.
+    name = 'graftling._channel_posix' if importlib.util.find_spec('graftling._channel_posix') else 'graftling.connection'
+    connection = importlib.import_module(name)
 
     (tmp_path / 'request.json').write_text(json.dumps({'operation': 'recover'}))
 

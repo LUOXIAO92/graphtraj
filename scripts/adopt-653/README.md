@@ -4,6 +4,20 @@ User decisions (Worldline):
 - `20261128T030617.779906+0900`, "发版并采用到生产". It covers the release (graftling dev, main, the tag and their push) and the production adoption. There is no PyPI or npm release.
 - `20261127T190418.319112+0900`, the long-term authority to push agent branches and run the Windows workflow. P, W and X rely on it.
 
+## Correction 1 (Main's G/GR: 3 NEW ids, which suite-base classed as candidate-only)
+
+**Cause.** Two GraphTraj **tests** read graftling internals that 0.11.0 moved. Neither is a product incompatibility:
+- `tests/test_runtime_connections.py::test_host_operation_os_error_keeps_reply_and_logs_traceback` calls the private `_answer_request`. 636 moved it from `graftling.connection` to `graftling._channel_posix`, with the same signature.
+- `tests/test_dsh_runtime.py::test_agents_control_dsh_without_task_or_archive[False/True]` replaces `DshService` with the stand-in `NativePeer`. 0.11.0's `dsh/binding.py` passes `service.tree` to `authenticate_process`; POSIX ignores it. GraphTraj's real `DshService` subclasses graftling's, which sets `tree`, so production is unaffected.
+
+**Fix.** One commit changes only those two test files:
+- the first test takes `_answer_request` from `graftling._channel_posix` when that module exists, else from `graftling.connection`, so it works with 0.10.x and 0.11.0;
+- `NativePeer` gets `tree = None`.
+
+TARGET stays `afaaca41`: the product and the graphtraj wheel are unchanged. steps.zsh's product guard (00, B, G, V, I) and GR's candidate check now allow HEAD to differ from TARGET under `scripts/adopt-653/` **plus exactly** `tests/test_dsh_runtime.py` and `tests/test_runtime_connections.py` (`TESTFIX`). Any other changed file STOPs; this is rehearsed.
+
+**What Main reruns:** 00, then G in the background (it ends with GR), then the rest of the order from rp on. B and V keep their records: the wheels and the product are unchanged, and the old G record stays as it is (GR judges the newest).
+
 ## What 0.11.0 is
 
 0.11.0 is graftling dev `9650361e` (Tasks 632-652, native Windows support) plus one release commit.

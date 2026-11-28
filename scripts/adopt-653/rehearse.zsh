@@ -136,7 +136,7 @@ EOF
   print "zsh -n steps.zsh: $(zsh -n $S 2>&1 || true)(empty = OK) | zsh -n rehearse.zsh: $(zsh -n $0 2>&1 || true)(empty = OK)"
   print "user environment details in scripts/adopt-653 (home, user name): $(grep -rlE "$HOME|${USER:-nouser}" $SD --include='*.zsh' --include='*.py' --include='*.md' 2>/dev/null | tr '\n' ' ')(empty = none)"
   print "git diff 5a17543e afaaca41 --name-only: $(git -C $WT diff --name-only 5a17543e afaaca41 | tr '\n' ' ')(= pyproject.toml only)"
-  print "git diff afaaca41 HEAD --name-only outside scripts/adopt-653/: $(git -C $WT diff --name-only afaaca41 HEAD | grep -v '^scripts/adopt-653/' | tr '\n' ' ')(empty = only this Task's scripts)"
+  print "git diff afaaca41 HEAD --name-only outside scripts/adopt-653/: $(git -C $WT diff --name-only afaaca41 HEAD | grep -v '^scripts/adopt-653/' | tr '\n' ' ')(= exactly correction 1's tests/test_dsh_runtime.py tests/test_runtime_connections.py)"
   run $RAW 00 zsh $S 00
   print "\n## STOP: rel with dev moved (then dev is reset to $GBASE)"
   echo moved > $SB/gdev/moved.txt && git -C $SB/gdev add moved.txt && git -C $SB/gdev -c user.name=x -c user.email=x@invalid commit -q -m 'dev moved (rehearsal)'
@@ -156,7 +156,7 @@ EOF
   print -r -- "\n## G: the step's own process starts at $(date +%T); it must exit only after its shards end, with the verdict as its last output"
   print -r -- "## G queue: a ps FIXTURE line shows another suite ('-m pytest') for ~5 s; G must wait for it in its own process"
   print -r -- "88 python -m pytest -q (ps FIXTURE: another suite)" > $SB/ps.txt; ( sleep 5; print -r -- $PSIDLE > $SB/ps.txt ) &
-  run $RAW "G (-k: REAL tests incl. a repository fixture, 641's github_backup tests, the intent and MCP/discovery tests)" env ADOPT653_PYTEST_ARGS="-k 'test_wheels_have_separate_owners or test_intent_queries_find_create or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_github_backup'" zsh $S G
+  run $RAW "G (-k: REAL tests incl. a repository fixture, correction 1's 3 ids, 641's github_backup tests, the intent and MCP/discovery tests)" env ADOPT653_PYTEST_ARGS="-k 'test_wheels_have_separate_owners or test_host_operation_os_error_keeps_reply_and_logs_traceback or test_agents_control_dsh_without_task_or_archive or test_intent_queries_find_create or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_github_backup'" zsh $S G
   GREC=$(print -l $FST/$T653/adoption/G-*(N/om[1]))
   print -r -- "## G: the step's process exited at $(date +%T) | wait.txt: $(tr '\n' ';' < $GREC/wait.txt) | suite.txt last line: $(tail -1 $GREC/suite.txt)"
   print "## G record's PASSED lines (-rA, the per-test outcomes):"; grep -hoE '^PASSED tests/.*' $GREC/shards/*.log(N) | sort -u
@@ -167,6 +167,11 @@ EOF
   run $STOPS "STOP: GR with a NEW failure (fixture record)" zsh $S GR
   mv $FX $SB/G-fixture-set-aside
   run $RAW "GR alone (re-judging the real rehearsal record; G already ran it at its end)" zsh $S GR
+  print "\n## STOP (correction 1): the product guard with one EXTRA changed file beyond scripts/adopt-653/ and the two allowed tests (a scratch clone of this Worktree's HEAD plus one commit to tests/test_tool_name_592.py)"
+  git clone -q $WT $SB/wt-extra && print "# extra change (rehearsal)" >> $SB/wt-extra/tests/test_tool_name_592.py \
+    && git -C $SB/wt-extra -c user.name=x -c user.email=x@invalid commit -qam 'extra change (rehearsal)' || exit 1
+  run $STOPS "STOP: B with an extra changed file (guard; nothing built)" env ADOPT653_WT=$SB/wt-extra zsh $SB/wt-extra/scripts/adopt-653/steps.zsh B
+  print -r -- "wheels after the STOP (unchanged since B): $(ls $FST/$T653/adoption/wheels-0.11.0 $FST/$T653/adoption/wheels-afaaca41 | tr '\n' ' ')"
   run $RAW "STOP: rp unconfirmed (after Windows and GR passed; rp.txt is rewritten by the confirmed rp below)" zsh $S rp; cp -p $RAW/rp.txt $STOPS/rp-unconfirmed.txt
   run $RAW "rp confirmed" env ADOPT653_PUSH_CONFIRMED=yes zsh $S rp
   run $RAW gh zsh $S gh

@@ -100,6 +100,9 @@ NEWTESTS=$S652/new-tests.txt
 TARGET=afaaca41e5c148048e0ce8bb0d1d7c352505a9f3     # GraphTraj adoption commit: DEV0 + the widened range; production after I
 DEV0=5a17543e9cdaa927b136a2c14e6b8b82320a873e       # GraphTraj dev at dispatch, TARGET's parent
 RANGE='"graftling>=0.10.0,<0.12",'                   # pyproject's dependency line at TARGET
+# Correction 1: the only files besides scripts/adopt-653/ in which HEAD may differ from TARGET (two GraphTraj tests
+# that read graftling internals 0.11.0 moved; TARGET's product and wheel are unchanged).
+TESTFIX=(tests/test_dsh_runtime.py tests/test_runtime_connections.py)
 OLDT=4ef36426ab6fa5a4769a23557aecf2aa2e2b3759       # production graphtraj now (616's wheel)
 TOLDSHA=ac805ac9b3fb88f328a932a52ecd807a369ff25500f15d67d94489a1508bf473  # 616's graphtraj wheel (R's graphtraj)
 GOLDSHA=300559ab2221d4d257ceeac10678e2a1de8abc40e0ce495abeb9acf072b9f1ee  # 625's graftling 0.10.2 wheel (R's graftling)
@@ -178,13 +181,14 @@ direct_urls() {  # $1 = graftling version whose dist-info is read; sets DGT and 
   local sp=$(site); DGT=$(cat $sp/graphtraj-$GTVERSION.dist-info/direct_url.json 2>/dev/null); DGL=$(cat $sp/graftling-$1.dist-info/direct_url.json 2>/dev/null)
   print -r -- "graphtraj direct_url: ${DGT:-none}"; print -r -- "graftling $1 direct_url: ${DGL:-none}"
 }
-product_guard() {  # TARGET = DEV0 + pyproject.toml (range <0.12); HEAD differs from TARGET only under scripts/adopt-653/; clean
+outside_allowed() { grep -v '^scripts/adopt-653/' | grep -vxF -e $TESTFIX[1] -e $TESTFIX[2]; }   # stdin: paths; prints the others
+product_guard() {  # TARGET = DEV0 + pyproject.toml (range <0.12); HEAD differs from TARGET only under scripts/adopt-653/ and TESTFIX; clean
   local head tdiff other dirty range parent
   head=$(gg -C $WT rev-parse HEAD) parent=$(gg -C $WT rev-parse -q --verify "$TARGET^" 2>/dev/null)
-  tdiff=$(gg -C $WT diff --name-only $DEV0 $TARGET 2>&1); other=$(gg -C $WT diff --name-only $TARGET HEAD 2>&1 | grep -v '^scripts/adopt-653/')
+  tdiff=$(gg -C $WT diff --name-only $DEV0 $TARGET 2>&1); other=$(gg -C $WT diff --name-only $TARGET HEAD 2>&1 | outside_allowed)
   dirty=$(gg -C $WT status --porcelain -- . ':!scripts/adopt-653/rehearsal' 2>&1)
   range=$(gg -C $WT show ${TARGET}:pyproject.toml 2>/dev/null | grep -m1 '"graftling')
-  print -r -- "product guard: HEAD $head | TARGET ${TARGET[1,8]}'s parent ${parent[1,8]:-none} (DEV0 ${DEV0[1,8]}) | git diff ${DEV0[1,8]} ${TARGET[1,8]}: ${${tdiff//$'\n'/ }:-empty} | changes since ${TARGET[1,8]} outside scripts/adopt-653/: ${${other//$'\n'/ }:-none} | uncommitted (rehearsal outputs excepted): ${${dirty//$'\n'/ }:-none} | graftling range at ${TARGET[1,8]}: ${range//[[:space:]]/}"
+  print -r -- "product guard: HEAD $head | TARGET ${TARGET[1,8]}'s parent ${parent[1,8]:-none} (DEV0 ${DEV0[1,8]}) | git diff ${DEV0[1,8]} ${TARGET[1,8]}: ${${tdiff//$'\n'/ }:-empty} | changes since ${TARGET[1,8]} outside scripts/adopt-653/ and ${TESTFIX[*]}:${${other//$'\n'/ }:-none} | uncommitted (rehearsal outputs excepted): ${${dirty//$'\n'/ }:-none} | graftling range at ${TARGET[1,8]}: ${range//[[:space:]]/}"
   [[ $parent == $DEV0 ]] && gg -C $WT merge-base --is-ancestor $TARGET HEAD \
     && [[ $tdiff == pyproject.toml && -z $other && -z $dirty && ${range//[[:space:]]/} == $RANGE ]]
 }
@@ -517,7 +521,7 @@ case $STEP in
     oldbk_report 00 | tee $SCR/oldbk-00.txt
     [[ ! -e $BK ]]; ck $? "00 backup $BK absent"
     say "this Worktree $WT (GraphTraj adoption commit ${TARGET[1,8]} + scripts/adopt-653/)"
-    product_guard; ck $? "00 TARGET ${TARGET[1,8]} = GraphTraj dev ${DEV0[1,8]} + pyproject.toml (range $RANGE); HEAD differs from TARGET only under scripts/adopt-653/; clean"
+    product_guard; ck $? "00 TARGET ${TARGET[1,8]} = GraphTraj dev ${DEV0[1,8]} + pyproject.toml (range $RANGE); HEAD differs from TARGET only under scripts/adopt-653/ and the correction-1 tests ${TESTFIX[*]}; clean"
     print -r -- "graphtraj product changes ${OLDT[1,8]} (production) .. ${TARGET[1,8]} (information): $(gg -C $WT diff --name-only $OLDT $TARGET -- src manuals pyproject.toml plugins skills | tr '\n' ' ')| desktop/src files changed: $(gg -C $WT diff --name-only $OLDT $TARGET -- desktop/src | grep -c .) (not in the graphtraj wheel; B checks)"
     cdef=$(cdef_of $STATE/tasks/$TASKDIR); [[ -n $cdef && -f $cdef ]]; ck $? "00 Task $TASK_ID ready (current_definition ${cdef:t} exists)"
     print -r -- "hook copy and entry files (hashes; V and I compare against them):"; shasum -a 256 $PDIR/hooks/host_context.mjs $PDIR/hooks/hooks.json $PDIR/.claude-plugin/plugin.json $ENTRIES 2>&1 | sed 's/^/  /'
@@ -788,8 +792,8 @@ GR) print "[GR] G runs this at its end; Main may rerun it alone to re-judge an e
     grep -q '^exit=' $rec/suite.txt || { print -r -- "G has not finished ($rec/suite.txt has no exit= line; queue: $(tail -1 $rec/wait.txt 2>/dev/null)). Rerun GR later."; exit 1; }
     sed 's/^/  run.txt: /' $rec/run.txt
     cand=$(sed -n 's/^candidate: \([0-9a-f]\{40\}\).*/\1/p' $rec/run.txt | head -1) gl=$(grep -oE 'git archive [0-9a-f]{40}' $rec/run.txt | head -1 | awk '{print $3}')
-    cdiff=$(gg -C $WT diff --name-only ${cand:-missing} $TARGET 2>&1 | grep -v '^scripts/adopt-653/')
-    [[ -n $cand && -z $cdiff ]] && gg -C $WT merge-base --is-ancestor $TARGET $cand; ck $? "GR the record's candidate ${cand[1,8]} is the adoption commit ${TARGET[1,8]} (only scripts/adopt-653/ differs)" "${cdiff//$'\n'/ }"
+    cdiff=$(gg -C $WT diff --name-only ${cand:-missing} $TARGET 2>&1 | outside_allowed)
+    [[ -n $cand && -z $cdiff ]] && gg -C $WT merge-base --is-ancestor $TARGET $cand; ck $? "GR the record's candidate ${cand[1,8]} is the adoption commit ${TARGET[1,8]} (only scripts/adopt-653/ and the correction-1 tests ${TESTFIX[*]} differ)" "${cdiff//$'\n'/ }"
     [[ $gl == $GCOMMIT ]] && grep -q "($GTAG, graftling-$GVERSION-" $rec/run.txt; ck $? "GR the record's graftling wheel is $GTAG ($GCOMMIT)" "${gl:-none}"
     tig=$(tig_of $rec) tigdir=$(sed -n 's/^test interpreter graftling: [^ ]* //p' $rec/run.txt | head -1)
     print -r -- "test interpreter graftling: ${tig:-NOT RECORDED} | dependencies line: $(grep -oE '\| graftling [^ ]+ \|' $rec/run.txt | head -1)"

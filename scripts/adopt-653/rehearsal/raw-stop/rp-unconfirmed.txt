@@ -2,5 +2,5 @@ Windows: CHECK 653 win Windows workflow on the release commit 67b0fe9aacc868c9c6
 G/GR: RESULT 653 G/GR: PASS | 34 passed, 3747 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 0 | ABNORMAL shards: 0 | test interpreter graftling: 0.11.0
 origin: <SCRATCH>/origin.git
 remote before: 57bca73657d3135a4504904fcc3f1898c2419766	refs/heads/dev | 57bca73657d3135a4504904fcc3f1898c2419766	refs/heads/main
-will push: dev 67b0fe9aacc868c9c6b5a2818adc8449514221c4, main 67b0fe9aacc868c9c6b5a2818adc8449514221c4, refs/tags/v0.11.0 (c464b633a8d62a6e20a91327db3c889bb01d39be) (fast-forward only, --atomic, no force)
+will push: dev 67b0fe9aacc868c9c6b5a2818adc8449514221c4, main 67b0fe9aacc868c9c6b5a2818adc8449514221c4, refs/tags/v0.11.0 (a0988e0e162141c267a8692077251a449430216d) (fast-forward only, --atomic, no force)
 STOP: the push is outward-facing. It is the user's decision 20261128T030617.779906+0900; run: ADOPT653_PUSH_CONFIRMED=yes zsh <TMPDIR>/c2/wt/scripts/adopt-653/steps.zsh rp

@@ -9,7 +9,7 @@ CHECK 653 00 gh auth status rc 0 (gh's stored login; P, W, X read and dispatch t
 
 ### graftling repository <SCRATCH>/g (read only)
 dev: 67b0fe9aacc868c9c6b5a2818adc8449514221c4 in <SCRATCH>/gdev | main: 57bca73657d3135a4504904fcc3f1898c2419766 in <SCRATCH>/g | origin: <SCRATCH>/origin.git
-graftling release state: mixed (dev 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | main 57bca73657d3135a4504904fcc3f1898c2419766 | v0.11.0 c464b633a8d62a6e20a91327db3c889bb01d39be -> 67b0fe9aacc868c9c6b5a2818adc8449514221c4, type tag, tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>)
+graftling release state: mixed (dev 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | main 57bca73657d3135a4504904fcc3f1898c2419766 | v0.11.0 a0988e0e162141c267a8692077251a449430216d -> 67b0fe9aacc868c9c6b5a2818adc8449514221c4, type tag, tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>)
 CHECK 653 00 graftling is pre-rel (dev = 9650361e, main = 57bca736 = v0.10.2, v0.11.0 absent) or exactly post-rel (dev = main = 67b0fe9a, v0.11.0 annotated, noreply tagger, peels to 67b0fe9a, rel's message and version): FAIL (mixed)
 CHECK 653 00 origin of <SCRATCH>/g is <SCRATCH>/origin.git: PASS
 CHECK 653 00 dev is checked out in <SCRATCH>/gdev and main in <SCRATCH>/g: PASS
@@ -60,11 +60,11 @@ production bin: subagents subagents-mcp graphtraj-mcp agent-runner
 CHECK 653 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
 
 ### backups under <SCRATCH>/project/tmp (information; none is required; never written)
-  00 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847759 | entries 3
+  00 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847895 | entries 3
 CHECK 653 00 backup <SCRATCH>/scr/backup absent: PASS
 
 ### this Worktree <TMPDIR>/c2/wt (GraphTraj adoption commit afaaca41 + scripts/adopt-653/)
-product guard: HEAD 5d8948912dab2d96b24d3178ea2596c2f07f827e | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+product guard: HEAD 0168f4f582b202482a2a1af639ec75e72870758e | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
 CHECK 653 00 TARGET afaaca41 = GraphTraj dev 5a17543e + pyproject.toml (range "graftling>=0.10.0,<0.12",); HEAD differs from TARGET only under scripts/adopt-653/ and the correction-1 tests tests/test_dsh_runtime.py tests/test_runtime_connections.py; clean: PASS
 graphtraj product changes 4ef36426 (production) .. afaaca41 (information): manuals/task-delivery/references/command-inputs.md pyproject.toml src/graphtraj/graph/github_backup.py src/graphtraj/interfaces/tools.py | desktop/src files changed: 21 (not in the graphtraj wheel; B checks)
 CHECK 653 00 Task 653 ready (current_definition 20261128T030645.311984+0900.md exists): PASS

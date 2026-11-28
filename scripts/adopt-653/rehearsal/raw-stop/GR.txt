@@ -1,25 +1,25 @@
 G record: <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/G-99999999T999999-fixture
-product guard: HEAD 5d8948912dab2d96b24d3178ea2596c2f07f827e | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
-  run.txt: pytest temp root: <TMPDIR>/adopt-653-G-20261128T153621 (TMPDIR=/tmp/claude-501, outside the Harness)
+product guard: HEAD 0168f4f582b202482a2a1af639ec75e72870758e | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+  run.txt: pytest temp root: <TMPDIR>/adopt-653-G-20261128T153835 (TMPDIR=/tmp/claude-501, outside the Harness)
   run.txt: launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
-  run.txt: candidate: 5d8948912dab2d96b24d3178ea2596c2f07f827e | graftling wheel from git archive 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (v0.11.0, graftling-0.11.0-py3-none-any.whl)
+  run.txt: candidate: 0168f4f582b202482a2a1af639ec75e72870758e | graftling wheel from git archive 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (v0.11.0, graftling-0.11.0-py3-none-any.whl)
   run.txt: python: <SCRATCH>/scr/gvenv-653/bin/python
   run.txt: test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.11.0 | graphtraj 0.1.0
   run.txt: test interpreter graftling: 0.11.0 <SCRATCH>/scr/gvenv-653/lib/python3.13/site-packages/graftling
   run.txt: REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_host_operation_os_error_keeps_reply_and_logs_traceback or test_agents_control_dsh_without_task_or_archive or test_intent_queries_find_create or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_github_backup
-CHECK 653 GR the record's candidate 5d894891 is the adoption commit afaaca41 (only scripts/adopt-653/ and the correction-1 tests tests/test_dsh_runtime.py tests/test_runtime_connections.py differ): PASS
+CHECK 653 GR the record's candidate 0168f4f5 is the adoption commit afaaca41 (only scripts/adopt-653/ and the correction-1 tests tests/test_dsh_runtime.py tests/test_runtime_connections.py differ): PASS
 CHECK 653 GR the record's graftling wheel is v0.11.0 (67b0fe9aacc868c9c6b5a2818adc8449514221c4): PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
 test interpreter graftling: 0.11.0 | dependencies line: | graftling 0.11.0 |
 CHECK 653 GR test interpreter imports graftling 0.11.0 (graftling.__version__ and metadata): PASS (0.11.0)
   0.11.0 marker in <SCRATCH>/scr/gvenv-653/lib/python3.13/site-packages/graftling: __init__.py version 0.11.0 x1 | claude/host_context.mjs WINDOWS_UNSUPPORTED x1, BOOT x1 | claude/settings.py native_claude x1 | claude/native_host.py 'so Claude Code has not loaded it' x1
 CHECK 653 GR test interpreter's graftling 0.11.0's code is in <SCRATCH>/scr/gvenv-653/lib/python3.13/site-packages/graftling (version; 647's BOOT and 652's WINDOWS_UNSUPPORTED in host_context.mjs; native_claude; 652's unloaded-plugin message): PASS
-CHECK 653 GR pytest temp root is outside the Harness: PASS (<TMPDIR>/adopt-653-G-20261128T153621)
+CHECK 653 GR pytest temp root is outside the Harness: PASS (<TMPDIR>/adopt-653-G-20261128T153835)
 CHECK 653 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
 totals: 34 passed, 3747 deselected | exit: 1
 516 current definition (task.yml current_definition): <SCRATCH>/project/.graphtraj/core/state/tasks/516-low-priority-flaky-tests/definitions/20261125T162952.084209+0900.md
 known non-blocking ids: ONLY those in 516's current definition
   NEW: tests/test_runtime_distribution.py::test_wheels_have_separate_owners
-  rehearsal filter, nothing collected: ABNORMAL <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/G-20261128T153621/shards/shard-0.log: exit 5
+  rehearsal filter, nothing collected: ABNORMAL <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/G-20261128T153835/shards/shard-0.log: exit 5
   shard timeouts ('timed out after' lines): 0
 CHECK 653 GR G record (v0.11.0 wheel) has no new failure and no ABNORMAL shard: FAIL (1 NEW ids: run SR)
 RESULT 653 G/GR: FAIL | 34 passed, 3747 deselected | exit: 1 | known non-blocking ids: 0 | NEW ids: 1 | ABNORMAL shards: 0 | test interpreter graftling: 0.11.0

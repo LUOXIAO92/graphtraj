@@ -1,5 +1,5 @@
 waiting in this process for run 46041409568 (completion bound 30s, poll 1s)
-  [15:36:17] run 46041409568: completed success
+  [15:38:31] run 46041409568: completed success
 --- run 46041409568 | attempt 1 | workflow_dispatch | conclusion success (information only) | head 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)
 artifacts of run 46041409568: graftling-claude-real-entry-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1 graftling-windows-junit-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1
 EVIDENCE windows-tests: ATTEMPT 1 graftling-windows-junit-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1 | ran in attempt 1 (started_at 2026-11-27T17:23:12Z >= run_started_at 2026-11-27T17:23:05Z)

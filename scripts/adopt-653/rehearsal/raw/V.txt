@@ -1,6 +1,6 @@
 graftling-0.11.0-py3-none-any.whl: OK
 graphtraj-0.1.0-py3-none-any.whl: OK
-product guard: HEAD 4dcb359e042a8a38588a5c048f75a7db52ce70b5 | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+product guard: HEAD 269de715011e0f396ec972684e2820d696ddf57c | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
 CHECK 653 V product guard: PASS
 graftling v0.10.2..v0.11.0 in the files the hook copy is written from (information; expected: host_context.mjs only): src/graftling/claude/host_context.mjs 
 graphtraj 4ef36426..afaaca41 under src/graphtraj/runtimes/claude and plugins (information; expected none): 

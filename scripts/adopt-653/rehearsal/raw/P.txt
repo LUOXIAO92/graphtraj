@@ -1,13 +1,11 @@
 CHECK 653 P local agent/653-graftling-0.11.0 = 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
-remote agent/653-graftling-0.11.0: absent; pushing (fast-forward only, no force)
-To <SCRATCH>/origin.git
- * [new branch]      agent/653-graftling-0.11.0 -> agent/653-graftling-0.11.0
+remote agent/653-graftling-0.11.0: already 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (not pushed again)
 CHECK 653 P remote agent/653-graftling-0.11.0 = 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
 dispatch: $ gh workflow run windows.yml --repo LUOXIAO92/graftling --ref agent/653-graftling-0.11.0
   Created workflow_dispatch event for windows.yml (stand-in)
 run 46041409568: workflow_dispatch | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)
 waiting in this process for run 46041409568 (completion bound 30s, poll 1s)
-  [03:31:13] run 46041409568: completed success
+  [15:26:58] run 46041409568: completed success
 --- run 46041409568 | attempt 1 | workflow_dispatch | conclusion success (information only) | head 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed

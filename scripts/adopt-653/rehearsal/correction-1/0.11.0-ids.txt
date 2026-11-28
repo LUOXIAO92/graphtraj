@@ -1,0 +1,6 @@
+graftling 0.11.0 /tmp/claude-501/w653/c1-0.11.0/lib/python3.13/site-packages/graftling/__init__.py | candidate c531cb6e239f9de14ebe8af0550d5aed22c82d09 + uncommitted test fix | TMPDIR=/tmp/claude-501/w653/c1tmp-0.11.0 | env -i HOME USER PATH TERM TMPDIR LANG
+PASSED tests/test_runtime_connections.py::test_host_operation_os_error_keeps_reply_and_logs_traceback
+PASSED tests/test_dsh_runtime.py::test_agents_control_dsh_without_task_or_archive[False]
+PASSED tests/test_dsh_runtime.py::test_agents_control_dsh_without_task_or_archive[True]
+3 passed in 1.19s
+exit=0

@@ -1,0 +1,2 @@
+product guard: HEAD 31a771ef4640fff134851ae83e23e885e069c619 | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: tests/test_tool_name_592.py | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+STOP: product guard (above)

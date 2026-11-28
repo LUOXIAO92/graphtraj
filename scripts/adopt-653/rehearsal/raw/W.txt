@@ -1,5 +1,5 @@
 waiting in this process for run 46041409568 (completion bound 30s, poll 1s)
-  [03:31:14] run 46041409568: completed success
+  [15:26:58] run 46041409568: completed success
 --- run 46041409568 | attempt 1 | workflow_dispatch | conclusion success (information only) | head 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed

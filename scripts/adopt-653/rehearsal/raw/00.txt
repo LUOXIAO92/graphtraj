@@ -18,11 +18,11 @@ CHECK 653 00 v0.11.0 absent locally: PASS
 CHECK 653 00 local agent/653-graftling-0.11.0 absent or the release commit: PASS (absent)
 
 ### GitHub <SCRATCH>/origin.git (git ls-remote, read only)
-GitHub main: 57bca73657d3135a4504904fcc3f1898c2419766 | dev: 57bca73657d3135a4504904fcc3f1898c2419766 | v0.11.0: absent | agent/653-graftling-0.11.0: absent
+GitHub main: 57bca73657d3135a4504904fcc3f1898c2419766 | dev: 57bca73657d3135a4504904fcc3f1898c2419766 | v0.11.0: absent | agent/653-graftling-0.11.0: 67b0fe9aacc868c9c6b5a2818adc8449514221c4
 CHECK 653 00 GitHub main = 57bca73657d3135a4504904fcc3f1898c2419766: PASS
 CHECK 653 00 GitHub v0.11.0 absent: PASS
 CHECK 653 00 GitHub dev (57bca73657d3135a4504904fcc3f1898c2419766) is 9650361e13d6ef9981c753038469ff3b9e44cfa6 or its ancestor, so rp fast-forwards it: PASS
-CHECK 653 00 GitHub agent/653-graftling-0.11.0 absent or the release commit (P pushes it, fast-forward only): PASS (absent)
+CHECK 653 00 GitHub agent/653-graftling-0.11.0 absent or the release commit (P pushes it, fast-forward only): PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
 
 ### bundle <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/adopt-653/graftling-0.11.0.bundle
 sha256: 660b394a384a1e645805bf4bc62f6411abcb46a0eb8ec59049e81ba51bcfb30e
@@ -61,12 +61,12 @@ production bin: subagents subagents-mcp graphtraj-mcp agent-runner
 CHECK 653 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
 
 ### backups under <SCRATCH>/project/tmp (information; none is required; never written)
-  00 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795804265 | entries 3
+  00 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847210 | entries 3
 CHECK 653 00 backup <SCRATCH>/scr/backup absent: PASS
 
 ### this Worktree <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption (GraphTraj adoption commit afaaca41 + scripts/adopt-653/)
-product guard: HEAD 4dcb359e042a8a38588a5c048f75a7db52ce70b5 | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
-CHECK 653 00 TARGET afaaca41 = GraphTraj dev 5a17543e + pyproject.toml (range "graftling>=0.10.0,<0.12",); HEAD differs from TARGET only under scripts/adopt-653/; clean: PASS
+product guard: HEAD 269de715011e0f396ec972684e2820d696ddf57c | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+CHECK 653 00 TARGET afaaca41 = GraphTraj dev 5a17543e + pyproject.toml (range "graftling>=0.10.0,<0.12",); HEAD differs from TARGET only under scripts/adopt-653/ and the correction-1 tests tests/test_dsh_runtime.py tests/test_runtime_connections.py; clean: PASS
 graphtraj product changes 4ef36426 (production) .. afaaca41 (information): manuals/task-delivery/references/command-inputs.md pyproject.toml src/graphtraj/graph/github_backup.py src/graphtraj/interfaces/tools.py | desktop/src files changed: 21 (not in the graphtraj wheel; B checks)
 CHECK 653 00 Task 653 ready (current_definition 20261128T030645.311984+0900.md exists): PASS
 hook copy and entry files (hashes; V and I compare against them):

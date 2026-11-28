@@ -1,4 +1,4 @@
-product guard: HEAD 4dcb359e042a8a38588a5c048f75a7db52ce70b5 | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+product guard: HEAD 269de715011e0f396ec972684e2820d696ddf57c | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
 CHECK 653 B setuptools importable offline in <HOME>/miniconda3/bin/python3.13: PASS (setuptools 80.9.0 | pip 25.3)
 
 ### graftling: git archive v0.11.0 (67b0fe9aacc868c9c6b5a2818adc8449514221c4) -> <SCRATCH>/scr/gsrc
@@ -48,4 +48,4 @@ CHECK 653 B no build/ or __pycache__ in the graphtraj wheel: PASS
 graftling-0.11.0-py3-none-any.whl: OK
 graphtraj-0.1.0-py3-none-any.whl: OK
 CHECK 653 B <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0 and <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41 hold the wheels with SHA256SUMS and COMMIT: PASS
-wheel sha256: graftling 8374a9061e369daa36b2ede1d2710b6c59c035f6827aa6105e276ce47e3c36d8  graftling-0.11.0-py3-none-any.whl | graphtraj 9bc3bd4ef606de9d5be856e281f8f0ed28803fcf16be3d276d2793250594d998  graphtraj-0.1.0-py3-none-any.whl
+wheel sha256: graftling 2edc661cd11b9155fff15ec8086fbd2354d1361c70b01d7e4c91324109aa3047  graftling-0.11.0-py3-none-any.whl | graphtraj eb8b378423b7da04c3f97ef440903ba12b2cc4a22e609911d115d71160882646  graphtraj-0.1.0-py3-none-any.whl

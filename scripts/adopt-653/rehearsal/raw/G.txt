@@ -1,13 +1,13 @@
 TMPDIR=/tmp/claude-501 (outside the Harness)
-product guard: HEAD 4dcb359e042a8a38588a5c048f75a7db52ce70b5 | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
-pytest temp root: <TMPDIR>/adopt-653-G-20261128T033115 (TMPDIR=/tmp/claude-501, outside the Harness)
+product guard: HEAD 269de715011e0f396ec972684e2820d696ddf57c | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+pytest temp root: <TMPDIR>/adopt-653-G-20261128T152659 (TMPDIR=/tmp/claude-501, outside the Harness)
 launch environment: HOME USER PATH TERM TMPDIR LANG only (clean(); no provider credential variable reaches the suite)
-candidate: 4dcb359e042a8a38588a5c048f75a7db52ce70b5 | graftling wheel from git archive 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (v0.11.0, graftling-0.11.0-py3-none-any.whl)
+candidate: 269de715011e0f396ec972684e2820d696ddf57c | graftling wheel from git archive 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (v0.11.0, graftling-0.11.0-py3-none-any.whl)
 python: <SCRATCH>/scr/gvenv-653/bin/python
 test interpreter dependencies: click 8.5.0 | PyYAML 6.0.3 | websockets 16.1.1 | pytest 9.1.1 | graftling 0.11.0 | graphtraj 0.1.0
 test interpreter graftling: 0.11.0 <SCRATCH>/scr/gvenv-653/lib/python3.13/site-packages/graftling
-REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_intent_queries_find_create or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_github_backup
-record: <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/G-20261128T033115
-03:31:18 waiting for another suite: 88 
-03:31:20 started (6 shards; this step waits for them)
-03:31:34 ended (all shards ended: exit=1)
+REHEARSAL: extra pytest args after -- -rA: -k test_wheels_have_separate_owners or test_host_operation_os_error_keeps_reply_and_logs_traceback or test_agents_control_dsh_without_task_or_archive or test_intent_queries_find_create or test_the_mcp_server_lists_subagents_and_tasks_only or test_graphtraj_discovery_keeps_its_document or test_github_backup
+record: <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/G-20261128T152659
+15:27:02 waiting for another suite: 88 
+15:27:04 started (6 shards; this step waits for them)
+15:27:18 ended (all shards ended: exit=1)

@@ -3,13 +3,11 @@ CHECK 653 00 this uv's 'uv tool install --help' lists --managed-python: PASS
 CHECK 653 00 TMPDIR outside the Harness: PASS
 CHECK 653 00 <SCRATCH>/uvtool-653 absent: PASS
 CHECK 653 00 gh auth status rc 0 (gh's stored login; P, W, X read and dispatch the Actions run with it): PASS
-CHECK 653 00 graftling dev = 9650361e13d6ef9981c753038469ff3b9e44cfa6: PASS
-CHECK 653 00 graftling main = 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2): PASS
+CHECK 653 00 graftling is pre-rel (dev = 9650361e, main = 57bca736 = v0.10.2, v0.11.0 absent) or exactly post-rel (dev = main = 67b0fe9a, v0.11.0 annotated, noreply tagger, peels to 67b0fe9a, rel's message and version): PASS (post-rel)
 CHECK 653 00 origin of <SCRATCH>/g is <SCRATCH>/origin.git: PASS
 CHECK 653 00 dev is checked out in <SCRATCH>/gdev and main in <SCRATCH>/g: PASS
 CHECK 653 00 both worktrees clean (git status --porcelain empty): PASS
-CHECK 653 00 v0.11.0 absent locally: PASS
-CHECK 653 00 local agent/653-graftling-0.11.0 absent or the release commit: PASS (absent)
+CHECK 653 00 local agent/653-graftling-0.11.0 absent or the release commit: PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
 CHECK 653 00 GitHub main = 57bca73657d3135a4504904fcc3f1898c2419766: PASS
 CHECK 653 00 GitHub v0.11.0 absent: PASS
 CHECK 653 00 GitHub dev (57bca73657d3135a4504904fcc3f1898c2419766) is 9650361e13d6ef9981c753038469ff3b9e44cfa6 or its ancestor, so rp fast-forwards it: PASS
@@ -22,7 +20,7 @@ CHECK 653 00 release commit author and committer are 89069722+LUOXIAO92@users.no
 CHECK 653 00 the release commit changes exactly the 4 version files, CHANGELOG.md and PUBLIC_API.md (so windows.yml and the tests are 652's): PASS
 CHECK 653 00 CHANGELOG at 67b0fe9aacc868c9c6b5a2818adc8449514221c4 starts '## 0.11.0 (compatible; minor release by the user's decision of 2026-11-28)' and has no '## Unreleased': PASS
 CHECK 653 00 README's first install line at 67b0fe9aacc868c9c6b5a2818adc8449514221c4 is C5's tagless command: PASS
-CHECK 653 00 windows-expected.txt parses (<Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/verify-632/windows-expected.txt): PASS
+CHECK 653 00 windows-expected.txt parses (<TMPDIR>/c2/wt/scripts/verify-632/windows-expected.txt): PASS
 CHECK 653 00 652's new-tests.txt is readable (5 node ids; each must PASS on Windows): PASS
 CHECK 653 00 production is graphtraj 0.1.0 (616's wheels-4ef36426) + graftling 0.10.2 (625's wheels-0.10.2): PASS
 CHECK 653 00 616's wheels-4ef36426 (R's graphtraj) verifies, sha256 ac805ac9b3fb88f3...: PASS
@@ -34,7 +32,7 @@ CHECK 653 00 TARGET afaaca41 = GraphTraj dev 5a17543e + pyproject.toml (range "g
 CHECK 653 00 Task 653 ready (current_definition 20261128T030645.311984+0900.md exists): PASS
 CHECK 653 00 claude -p answers READY-653 on claude-opus-5-5 through the Claude login (apiKeySource none: no API key): PASS
 CHECK 653 00 Main's Session id found: PASS
-CHECK 653 win Windows workflow on the release commit 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (W): PASS ((run 46041409568 attempt 1 on 67b0fe9aacc868c9c6b5a2818adc8449514221c4; windows-tests: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1061 tests: 793 passed, 0 failed as listed, 0 hangs as listed, 224 POSIX-only skips, 44 environment skips; 652 tests: 5 of 5 652 tests passed; dsh-windows-tests: every step succeeded; claude-real-entry: every step succeeded; real Claude Code: 5 items passed with real Claude Code 2.1.314 (Claude Code); https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)))
+CHECK 653 win Windows workflow on the release commit 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (W): PASS ((run 46041409568 attempt 1 on 67b0fe9aacc868c9c6b5a2818adc8449514221c4; windows-tests: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1061 tests: 793 passed, 0 failed as listed, 0 hangs as listed, 224 POSIX-only skips, 44 environment skips; 652 tests: 5 of 5 652 tests passed; dsh-windows-tests: every step succeeded; claude-real-entry: every step succeeded; real Claude Code: 5 items passed with real Claude Code 2.1.314 (Claude Code); evidence: windows-tests attempt 1,claude-real-entry attempt 1,dsh-windows-tests attempt 1; https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)))
 CHECK 653 rel v0.11.0 peels to 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
 CHECK 653 rel graftling main == dev == v0.11.0^{} == 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
 CHECK 653 rel v0.11.0 is an annotated tag with the noreply tagger: PASS
@@ -59,11 +57,11 @@ CHECK 653 B graphtraj Requires-Dist other than graftling identical to 616s wheel
 CHECK 653 B graphtraj requires graftling graftling<0.12,>=0.10.0: includes 0.11.0 and 0.10.2, excludes 0.12.0: PASS
 CHECK 653 B no build/ or __pycache__ in the graphtraj wheel: PASS
 CHECK 653 B <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0 and <SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41 hold the wheels with SHA256SUMS and COMMIT: PASS
-CHECK 653 GR the record's candidate 269de715 is the adoption commit afaaca41 (only scripts/adopt-653/ and the correction-1 tests tests/test_dsh_runtime.py tests/test_runtime_connections.py differ): PASS
+CHECK 653 GR the record's candidate 5d894891 is the adoption commit afaaca41 (only scripts/adopt-653/ and the correction-1 tests tests/test_dsh_runtime.py tests/test_runtime_connections.py differ): PASS
 CHECK 653 GR the record's graftling wheel is v0.11.0 (67b0fe9aacc868c9c6b5a2818adc8449514221c4): PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
 CHECK 653 GR test interpreter imports graftling 0.11.0 (graftling.__version__ and metadata): PASS (0.11.0)
 CHECK 653 GR test interpreter's graftling 0.11.0's code is in <SCRATCH>/scr/gvenv-653/lib/python3.13/site-packages/graftling (version; 647's BOOT and 652's WINDOWS_UNSUPPORTED in host_context.mjs; native_claude; 652's unloaded-plugin message): PASS
-CHECK 653 GR pytest temp root is outside the Harness: PASS (<TMPDIR>/adopt-653-G-20261128T152659)
+CHECK 653 GR pytest temp root is outside the Harness: PASS (<TMPDIR>/adopt-653-G-20261128T153621)
 CHECK 653 GR clean launch environment recorded (HOME USER PATH TERM TMPDIR LANG only): PASS
 CHECK 653 GR G record (v0.11.0 wheel) has no new failure and no ABNORMAL shard: PASS
 CHECK 653 rp remote main == v0.11.0^{} == 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
@@ -71,7 +69,7 @@ CHECK 653 rp remote dev == local dev (67b0fe9aacc868c9c6b5a2818adc8449514221c4):
 CHECK 653 gh GitHub main = 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
 CHECK 653 gh GitHub dev = 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
 CHECK 653 gh GitHub v0.11.0^{} = 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
-CHECK 653 gh GitHub v0.11.0 is the local annotated tag object: PASS (remote c809175da7774e27b415ea0e254d69eda5e1e103, local c809175da7774e27b415ea0e254d69eda5e1e103)
+CHECK 653 gh GitHub v0.11.0 is the local annotated tag object: PASS (remote c464b633a8d62a6e20a91327db3c889bb01d39be, local c464b633a8d62a6e20a91327db3c889bb01d39be)
 CHECK 653 C5 uv tool install rc 0: PASS
 CHECK 653 C5 uv tool dir is <SCRATCH>/uvtool-653/tools: PASS
 CHECK 653 C5 graftling.__version__ and importlib.metadata version are 0.11.0: PASS
@@ -176,8 +174,8 @@ RESULT 653 G/GR: PASS | 34 passed, 3747 deselected | exit: 1 | known non-blockin
 
 ### production now
 graphtraj graftling: 0.1.0 0.11.0
-graphtraj direct_url: {"archive_info": {"hash": "sha256=eb8b378423b7da04c3f97ef440903ba12b2cc4a22e609911d115d71160882646", "hashes": {"sha256": "eb8b378423b7da04c3f97ef440903ba12b2cc4a22e609911d115d71160882646"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41/graphtraj-0.1.0-py3-none-any.whl"}
-graftling 0.11.0 direct_url: {"archive_info": {"hash": "sha256=2edc661cd11b9155fff15ec8086fbd2354d1361c70b01d7e4c91324109aa3047", "hashes": {"sha256": "2edc661cd11b9155fff15ec8086fbd2354d1361c70b01d7e4c91324109aa3047"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0/graftling-0.11.0-py3-none-any.whl"}
+graphtraj direct_url: {"archive_info": {"hash": "sha256=2bb02d8bfedeb4940182907dd4d98b923a6c8ff151e87edfff6f399f078e5f43", "hashes": {"sha256": "2bb02d8bfedeb4940182907dd4d98b923a6c8ff151e87edfff6f399f078e5f43"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.11.0 direct_url: {"archive_info": {"hash": "sha256=848174e787862515df65918fcdc6d7c09f49b8d12825476d21783310998e8734", "hashes": {"sha256": "848174e787862515df65918fcdc6d7c09f49b8d12825476d21783310998e8734"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0/graftling-0.11.0-py3-none-any.whl"}
 CHECK 653 done production graphtraj from wheels-afaaca41, graftling 0.11.0 from wheels-0.11.0: PASS
-steps without a raw file: none | CHECK PASS 173 | CHECK not passed 0
+steps without a raw file: none | CHECK PASS 171 | CHECK not passed 0
 CHECK 653 done every step ran and every CHECK passed: PASS

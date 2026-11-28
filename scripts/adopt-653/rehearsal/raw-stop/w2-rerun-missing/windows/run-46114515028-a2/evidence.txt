@@ -1,0 +1,3 @@
+EVIDENCE windows-tests: ATTEMPT 2 graftling-windows-junit-67b0fe9aacc868c9c6b5a2818adc8449514221c4-2 | ran in attempt 2 (started_at 2026-11-28T06:22:03Z >= run_started_at 2026-11-28T06:21:58Z)
+EVIDENCE claude-real-entry: NONE | ran in attempt 2, but its own artifact graftling-claude-real-entry-67b0fe9aacc868c9c6b5a2818adc8449514221c4-2 is missing (an earlier attempt never stands in for a re-run job)
+EVIDENCE dsh-windows-tests: ATTEMPT 1 | did not run in attempt 2 (started_at 2026-11-28T05:59:17Z < run_started_at 2026-11-28T06:21:58Z); carried over with conclusion success; judged from the jobs API

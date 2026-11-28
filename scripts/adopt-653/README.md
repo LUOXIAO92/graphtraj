@@ -18,6 +18,40 @@ TARGET stays `afaaca41`: the product and the graphtraj wheel are unchanged. step
 
 **What Main reruns:** 00, then G in the background (it ends with GR), then the rest of the order from rp on. B and V keep their records: the wheels and the product are unchanged, and the old G record stays as it is (GR judges the newest).
 
+## Correction 2 (Main's real 00 after rel, and the Windows judge after X)
+
+**(1) 00 assumed the pre-rel state.**
+- After Main's real `rel`, a rerun of 00 failed exactly 3 checks: dev = 9650361e, main = 57bca736, and v0.11.0 absent.
+- 00 now accepts EITHER the **pre-rel** state (dev = GBASE, main = GMAIN0 = v0.10.2, tag absent) OR exactly the **post-rel** state that `rel_verify` establishes: dev = main = GCOMMIT, and v0.11.0 is an annotated tag with the noreply tagger that peels to GCOMMIT and carries rel's message and version (`rel_tag_ok`).
+- It prints `graftling release state: pre-rel|post-rel|mixed`. Anything mixed or different FAILs.
+- The GitHub-side checks are unchanged, because rp has not run.
+
+**(2) After X, the judge picked the wrong artifact for carried-over jobs.**
+- `gh run rerun --failed` re-ran only windows-tests. The attempt-2 jobs API labels all three jobs `run_attempt 2`, but claude-real-entry and dsh-windows-tests keep the `started_at` of attempt 1. So the judge asked for `graftling-claude-real-entry-<sha>-2`, which does not exist.
+- The shared judge (P, W, X) now lists the run's artifacts (`actions/runs/<id>/artifacts`), and `evidence653.py` picks each job's evidence:
+  - a job that started at or after the attempt's `run_started_at` ran in this attempt and needs **its own** artifact `<prefix><attempt>`;
+  - a job that started before it was carried over, and only with conclusion success, takes the artifact of the highest earlier attempt that exists. An earlier result never stands in for a re-run job.
+- The same rule covers the windows-tests JUnit artifact. dsh-windows-tests has no artifact and is judged from the jobs API.
+- The judge prints `EVIDENCE <job>: ATTEMPT <n> <artifact> | <reason>` per job, and the VERDICT ends `evidence: windows-tests attempt N, claude-real-entry attempt N, dsh-windows-tests attempt N`.
+- Downloads go to `junit-a<n>/` and `real-entry-a<n>/` under the run's evidence directory.
+
+Only `scripts/adopt-653/` changes. TARGET, TESTFIX, both wheels, the release commit and the bundle stay.
+
+**What Main reruns:**
+1. `zsh <Worktree>/scripts/adopt-653/steps.zsh 00` (once, read only; expected `graftling release state: post-rel` and every CHECK PASS).
+2. `zsh <Worktree>/scripts/adopt-653/steps.zsh W 46114515028` (observe and judge attempt 2; no re-run, no push). It writes WIN.ok; the expected verdict names attempt 2 for windows-tests and attempt 1 for claude-real-entry and dsh-windows-tests.
+3. After the running G ends with GR PASS: `ADOPT653_PUSH_CONFIRMED=yes zsh … rp`, then gh, C5, Mpre, and so on.
+
+B, V and rel are not rerun.
+
+**Rehearsed** (through `zsh steps.zsh <step>`, from a scratch clone of the Worktree):
+- 00 pre-rel PASS (`raw/00-pre-rel.txt`);
+- 00 post-rel PASS (`raw/00.txt`);
+- 00 mixed (dev = GCOMMIT, main = v0.10.2) FAIL (`raw-stop/00-mixed.txt`);
+- W on Main's REAL retained run-46114515028 records, offline: `VERDICT 653 W: PASS`, windows-tests from attempt 2, claude-real-entry and dsh-windows-tests from attempt 1 (`raw-w2/W.txt`). The run object's `run_started_at` (06:21:58Z, just before the a2 jobs' created_at) is a fixture;
+- the STOP where claude-real-entry re-ran but its own -2 artifact is missing: FAIL, with no attempt-1 stand-in (`raw-stop/w2-rerun-missing/W.txt`);
+- `done` reran.
+
 ## What 0.11.0 is
 
 0.11.0 is graftling dev `9650361e` (Tasks 632-652, native Windows support) plus one release commit.

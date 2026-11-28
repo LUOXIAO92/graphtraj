@@ -428,9 +428,9 @@ judge() {  # $1 = completed run's json, $2 = label: jobs, logs, artifacts, judge
   grep -v '^REALENTRY ' $dir/real-entry-judgement.txt
   real=$(grep '^REALENTRY ' $dir/real-entry-judgement.txt | tail -1); [[ -n $real ]] || real="REALENTRY FAIL judgement failed: $(tail -2 $dir/real-entry-judgement.txt)"
   print -r -- "evidence: $dir"
-  print -r -- "evidence judged per job: $(sed -E 's/^EVIDENCE ([^:]+): (ATTEMPT ([0-9]+)|NONE).*/\1 attempt \3/' $dir/evidence.txt | tr '\n' ';')"
+  print -r -- "evidence judged per job: $(sed -E 's/^EVIDENCE ([^:]+): ATTEMPT ([0-9]+).*/\1 attempt \2/; s/^EVIDENCE ([^:]+): NONE.*/\1 none/' $dir/evidence.txt | tr '\n' ';')"
   print -r -- "RUNID $rid"
-  local evsum="evidence: $(sed -E 's/^EVIDENCE ([^:]+): (ATTEMPT ([0-9]+)|NONE).*/\1 attempt \3/' $dir/evidence.txt | tr '\n' ',' | sed 's/,$//')"
+  local evsum="evidence: $(sed -E 's/^EVIDENCE ([^:]+): ATTEMPT ([0-9]+).*/\1 attempt \2/; s/^EVIDENCE ([^:]+): NONE.*/\1 none/' $dir/evidence.txt | tr '\n' ',' | sed 's/,$//')"
   if [[ $sha == $GCOMMIT && $mech == "JUDGE PASS"* && $res == "JUDGE PASS"* && $newt == "NEWTESTS PASS"* && $djob == "JOBSTATE PASS"* \
         && $rjob == "JOBSTATE PASS"* && $real == "REALENTRY PASS"* ]]; then
     print -r -- "VERDICT 653 $label: PASS (run $rid attempt $attempt on $sha; windows-tests: ${mech#JUDGE PASS }; results: ${res#JUDGE PASS }; 652 tests: ${newt#NEWTESTS PASS }; ${djob#JOBSTATE PASS }; ${rjob#JOBSTATE PASS }; real Claude Code: ${real#REALENTRY PASS }; $evsum; $url)"

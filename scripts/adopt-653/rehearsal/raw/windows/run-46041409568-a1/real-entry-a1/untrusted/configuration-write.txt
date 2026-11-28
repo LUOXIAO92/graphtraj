@@ -1,0 +1,8 @@
+[
+  "D:\\a\\_temp\\real-entry\\untrusted\\project\\.agents-control\\claude-host.json",
+  "D:\\a\\_temp\\real-entry\\untrusted\\project\\.claude\\settings.local.json",
+  "D:\\a\\_temp\\real-entry\\untrusted\\project\\.claude\\skills\\agents-claude-host\\.claude-plugin\\plugin.json",
+  "D:\\a\\_temp\\real-entry\\untrusted\\project\\.claude\\skills\\agents-claude-host\\hooks\\hooks.json",
+  "D:\\a\\_temp\\real-entry\\untrusted\\project\\.claude\\skills\\agents-claude-host\\hooks\\host_context.mjs",
+  "D:\\a\\_temp\\real-entry\\untrusted\\project\\.mcp.json"
+]

@@ -1,6 +1,10 @@
 waiting in this process for run 46041409568 (completion bound 30s, poll 1s)
-  [15:26:58] run 46041409568: completed success
+  [15:36:17] run 46041409568: completed success
 --- run 46041409568 | attempt 1 | workflow_dispatch | conclusion success (information only) | head 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)
+artifacts of run 46041409568: graftling-claude-real-entry-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1 graftling-windows-junit-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1
+EVIDENCE windows-tests: ATTEMPT 1 graftling-windows-junit-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1 | ran in attempt 1 (started_at 2026-11-27T17:23:12Z >= run_started_at 2026-11-27T17:23:05Z)
+EVIDENCE claude-real-entry: ATTEMPT 1 graftling-claude-real-entry-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1 | ran in attempt 1 (started_at 2026-11-27T17:23:13Z >= run_started_at 2026-11-27T17:23:05Z)
+EVIDENCE dsh-windows-tests: ATTEMPT 1 | ran in attempt 1 (started_at 2026-11-27T17:23:12Z >= run_started_at 2026-11-27T17:23:05Z); judged from the jobs API
   step  1 | success   | Set up job | other: success or skipped
   step  2 | success   | Keep symbolic links on this runner | setup: must succeed
   step  3 | success   | Check out the commit under test | setup: must succeed
@@ -34,9 +38,9 @@ JOB claude-real-entry | completed | success | https://github.com/LUOXIAO92/graft
 --- job log saved: <SCRATCH>/out/raw/windows/run-46041409568-a1/claude-real-entry.log
   2026-11-27T17:24:15.8815587Z [36;1m"run_test_files exit code: $code"[0m
   2026-11-27T17:29:58.1106378Z run_test_files exit code: 0
-already present, not downloaded again: <SCRATCH>/out/raw/windows/run-46041409568-a1/junit
+already present, not downloaded again: <SCRATCH>/out/raw/windows/run-46041409568-a1/junit-a1
 test files in 67b0fe9aacc868c9c6b5a2818adc8449514221c4: 70
---- per-file records and results against <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/verify-632/windows-expected.txt
+--- per-file records and results against <TMPDIR>/c2/wt/scripts/verify-632/windows-expected.txt (evidence: graftling-windows-junit-67b0fe9aacc868c9c6b5a2818adc8449514221c4-1)
 runner: os=Microsoft Windows NT 10.0.26100.0 | image=win25-vs2026 | image_version=20261123.321.1 | arch=AMD64 | python=Python 3.13.7 | pytest=pytest 8.3.5 | node=v22.18.0 | codepage=1252
 run_test_files exit code: 0
 --- test files: 70 recorded | ended 70 | hung 0 | not run 0 | in the commit: 70
@@ -115,7 +119,7 @@ observed list written: <SCRATCH>/out/raw/windows/run-46041409568-a1/observed-exp
   PASSED tests/test_claude_host_messages_652.py::test_marketplace_module_on_native_windows_names_configuration_write[data-root]
   PASSED tests/test_claude_windows_647.py::test_mod_starts_a_windows_venvs_base_interpreter
   PASSED tests/test_claude_windows_647.py::test_marketplace_launcher_refuses_under_a_windows_sh
-already present, not downloaded again: <SCRATCH>/out/raw/windows/run-46041409568-a1/real-entry
+already present, not downloaded again: <SCRATCH>/out/raw/windows/run-46041409568-a1/real-entry-a1
 --- real Claude Code on the runner: claude 2.1.314 (Claude Code); graftling 0.10.2 D:\a\graftling\graftling\src\graftling\__init__.py; platform win32
   PASS market | plugin installed | marketplace add exit 0; plugin install exit 0
   PASS market | R2 native Windows: unsupported, configuration --write named | exit 0; init plugins ['graftling@0.10.2', 'cc-plugin-agents-md@None', 'cc-plugin-plugin-authoring@None']; mcp_servers {'plugin:graftling:subagents': 'failed'}; graftling ui_log ["graftling plugin: the subagents host did not start: the graftling marketplace plugin is not supported on native Windows. Disable it and generate this project's plugin files with configuration --write instead (graftling's install/claude-code.md, Generate the plugin files); then restart Claude Code."]; host.log "2026-11-27T17:24:36.084Z graftling plugin: the subagents host did not start: the graftling marketplace plugin is not supported on native Windows. Disable it and generate this project's plugin files with configuration --write instead (graftling's install/claude-code.md, Generate the plugin files); th..."; sh on PATH C:\Program Files\Git\bin\sh.EXE; debug lines naming the server 0: []
@@ -123,5 +127,6 @@ already present, not downloaded again: <SCRATCH>/out/raw/windows/run-46041409568
   PASS caller | R3 Bash-tool context step: refused as the same session | exit 0; trusted keys 2; init plugins ['agents-claude-host', 'cc-plugin-agents-md', 'cc-plugin-plugin-authoring']; Bash result "This context step was not started by Claude Code itself: its parent is pid 1144 (C:\\Program Files\\Git\\usr\\bin\\bash.exe), a process under the Claude Code session (Claude Code pid 4716) whose subagents host owns this project. The host accepts only the context step that Claude Code starts directly for graftling's plugin; a command run from a shell or a tool, such as Claude Code's Bash tool, is refused. Call the subagents tool instead. exit=1"; stub requests [{'tools': 24, 'offered': ['Bash', 'mcp__graftling__subagents'], 'tool_uses_before': 0, 'reply': ['Bash']}, {'tools': 24, 'offered': ['Bash', 'mcp__graftling__subagents'], 'tool_uses_before': 1, 'reply': ['mcp__graftling__subagents']}, {'tools': 24, 'offered': ['Bash', 'mcp__graftling__subagents'], 'tool_uses_before': 2, 'reply': ['text']}]
   PASS caller | trusted folder: the plugin loaded and subagents answered | subagents result '{"features":[{"feature":"create","description":"Create a child Agent on a Runtime; returns before its work finishes."},{"feature":"models","description":"List a Runtime\'s configured connections with their providers and models, grouped by provider; read only."},{"feature":"send","description":"Send a...' (error False)
 evidence: <SCRATCH>/out/raw/windows/run-46041409568-a1
+evidence judged per job: windows-tests attempt 1;claude-real-entry attempt 1;dsh-windows-tests attempt 1;
 RUNID 46041409568
-VERDICT 653 W: PASS (run 46041409568 attempt 1 on 67b0fe9aacc868c9c6b5a2818adc8449514221c4; windows-tests: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1061 tests: 793 passed, 0 failed as listed, 0 hangs as listed, 224 POSIX-only skips, 44 environment skips; 652 tests: 5 of 5 652 tests passed; dsh-windows-tests: every step succeeded; claude-real-entry: every step succeeded; real Claude Code: 5 items passed with real Claude Code 2.1.314 (Claude Code); https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record))
+VERDICT 653 W: PASS (run 46041409568 attempt 1 on 67b0fe9aacc868c9c6b5a2818adc8449514221c4; windows-tests: 7 setup steps and the upload succeeded; the suite step ran; every test file ended or was stopped and recorded as hung; results: 1061 tests: 793 passed, 0 failed as listed, 0 hangs as listed, 224 POSIX-only skips, 44 environment skips; 652 tests: 5 of 5 652 tests passed; dsh-windows-tests: every step succeeded; claude-real-entry: every step succeeded; real Claude Code: 5 items passed with real Claude Code 2.1.314 (Claude Code); evidence: windows-tests attempt 1,claude-real-entry attempt 1,dsh-windows-tests attempt 1; https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record))

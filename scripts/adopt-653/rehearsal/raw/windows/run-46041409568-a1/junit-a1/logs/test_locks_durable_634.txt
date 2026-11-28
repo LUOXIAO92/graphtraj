@@ -1,0 +1,28 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 10 items
+
+tests/test_locks_durable_634.py::test_try_exclusive_takes_only_a_free_lock PASSED [ 10%]
+tests/test_locks_durable_634.py::test_try_exclusive_sees_another_process_and_its_death PASSED [ 20%]
+tests/test_locks_durable_634.py::test_replace_durably_publishes_whole_content_without_leftovers PASSED [ 30%]
+tests/test_locks_durable_634.py::test_reader_and_writer_of_one_record_overlap_without_errors PASSED [ 40%]
+tests/test_locks_durable_634.py::test_session_archive_written_by_two_stores_of_one_file PASSED [ 50%]
+tests/test_locks_durable_634.py::test_exclusive_waits_past_ten_seconds_and_takes_a_dead_holders_lock PASSED [ 60%]
+tests/test_locks_durable_634.py::test_replace_durably_retries_while_a_reader_holds_the_destination PASSED [ 70%]
+tests/test_locks_durable_634.py::test_replace_durably_gives_up_after_its_retry_time PASSED [ 80%]
+tests/test_locks_durable_634.py::test_session_archive_refuses_a_volume_without_change_detection[volume0] PASSED [ 90%]
+tests/test_locks_durable_634.py::test_session_archive_refuses_a_volume_without_change_detection[volume1] PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=3a4a207b0304464fadd7501cde204972: found=0 stopped=0 remaining=0 error=No job graftling-3a4a207b0304464fadd7501cde204972 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_locks_durable_634.xml -
+============================ slowest 10 durations =============================
+11.11s call     tests/test_locks_durable_634.py::test_exclusive_waits_past_ten_seconds_and_takes_a_dead_holders_lock
+2.07s call     tests/test_locks_durable_634.py::test_replace_durably_gives_up_after_its_retry_time
+0.36s call     tests/test_locks_durable_634.py::test_replace_durably_retries_while_a_reader_holds_the_destination
+0.13s call     tests/test_locks_durable_634.py::test_reader_and_writer_of_one_record_overlap_without_errors
+0.10s call     tests/test_locks_durable_634.py::test_try_exclusive_sees_another_process_and_its_death
+
+(5 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================= 10 passed in 13.86s =============================

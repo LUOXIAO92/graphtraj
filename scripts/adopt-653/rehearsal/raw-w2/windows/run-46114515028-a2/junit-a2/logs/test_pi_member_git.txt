@@ -1,0 +1,29 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 8 items
+
+tests/test_pi_member_git.py::test_write_member_reads_and_writes_the_git_data_a_commit_needs PASSED [ 12%]
+tests/test_pi_member_git.py::test_write_member_cannot_reach_other_working_files PASSED [ 25%]
+tests/test_pi_member_git.py::test_write_member_commits_with_the_host_identity PASSED [ 37%]
+tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-None-expected0] PASSED [ 50%]
+tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[Host Person-None-expected1] PASSED [ 62%]
+tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-host@example.test-expected2] PASSED [ 75%]
+tests/test_pi_member_git.py::test_write_member_launches_when_host_git_is_missing PASSED [ 87%]
+tests/test_pi_member_git.py::test_read_member_gets_no_git_access_or_variables PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=c3b2f7962eda425cab73e9c36389c0a9: found=0 stopped=0 remaining=0 error=No job graftling-c3b2f7962eda425cab73e9c36389c0a9 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_member_git.xml -
+============================ slowest 10 durations =============================
+0.46s setup    tests/test_pi_member_git.py::test_write_member_reads_and_writes_the_git_data_a_commit_needs
+0.41s setup    tests/test_pi_member_git.py::test_write_member_launches_when_host_git_is_missing
+0.39s setup    tests/test_pi_member_git.py::test_read_member_gets_no_git_access_or_variables
+0.39s setup    tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-host@example.test-expected2]
+0.39s setup    tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[Host Person-None-expected1]
+0.39s setup    tests/test_pi_member_git.py::test_write_member_cannot_reach_other_working_files
+0.39s setup    tests/test_pi_member_git.py::test_write_member_gets_only_the_identity_that_is_set[None-None-expected0]
+0.39s setup    tests/test_pi_member_git.py::test_write_member_commits_with_the_host_identity
+0.37s call     tests/test_pi_member_git.py::test_write_member_commits_with_the_host_identity
+0.15s call     tests/test_pi_member_git.py::test_write_member_reads_and_writes_the_git_data_a_commit_needs
+============================== 8 passed in 4.28s ==============================

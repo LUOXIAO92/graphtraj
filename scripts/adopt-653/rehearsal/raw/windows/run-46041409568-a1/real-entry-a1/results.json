@@ -1,0 +1,38 @@
+{
+  "claude": "2.1.314 (Claude Code)",
+  "graftling": "0.10.2 D:\\a\\graftling\\graftling\\src\\graftling\\__init__.py",
+  "platform": "win32",
+  "verdict": "PASS",
+  "items": [
+    {
+      "case": "market",
+      "item": "plugin installed",
+      "verdict": "PASS",
+      "observable": "marketplace add exit 0; plugin install exit 0"
+    },
+    {
+      "case": "market",
+      "item": "R2 native Windows: unsupported, configuration --write named",
+      "verdict": "PASS",
+      "observable": "exit 0; init plugins ['graftling@0.10.2', 'cc-plugin-agents-md@None', 'cc-plugin-plugin-authoring@None']; mcp_servers {'plugin:graftling:subagents': 'failed'}; graftling ui_log [\"graftling plugin: the subagents host did not start: the graftling marketplace plugin is not supported on native Windows. Disable it and generate this project's plugin files with configuration --write instead (graftling's install/claude-code.md, Generate the plugin files); then restart Claude Code.\"]; host.log \"2026-11-27T17:24:36.084Z graftling plugin: the subagents host did not start: the graftling marketplace plugin is not supported on native Windows. Disable it and generate this project's plugin files with configuration --write instead (graftling's install/claude-code.md, Generate the plugin files); th...\"; sh on PATH C:\\Program Files\\Git\\bin\\sh.EXE; debug lines naming the server 0: []"
+    },
+    {
+      "case": "untrusted",
+      "item": "R1 refusal names the plugin and folder trust",
+      "verdict": "PASS",
+      "observable": "exit 0; init plugins ['cc-plugin-agents-md', 'cc-plugin-plugin-authoring']; mcp_servers {'graftling': 'connected'}; subagents results 1; first result '{\"error\": {\"code\": \"authority-denied\", \"message\": \"No matching current native call association: graftling\\'s Claude Code plugin has not reached this host in this session, so Claude Code has not loaded it (the plugin configuration --write generates, .claude/skills/agents-claude-host, or the graftling marketplace plugin). Claude Code loads a project\\'s plugin only in a folder whose trust was accepted, in print mode (claude -p) too: start claude in D:\\\\\\\\a\\\\\\\\_temp\\\\\\\\real-entry\\\\\\\\untrusted\\\\\\\\project, accept the folder trust, then start Claude Code again. The call is not executed.\"}}'; host.log refusal lines 1; stub requests [{'tools': 24, 'offered': ['mcp__graftling__subagents'], 'tool_uses_before': 0, 'reply': ['mcp__graftling__subagents']}, {'tools': 24, 'offered': ['mcp__graftling__subagents'], 'tool_uses_before': 1, 'reply': ['text']}]"
+    },
+    {
+      "case": "caller",
+      "item": "R3 Bash-tool context step: refused as the same session",
+      "verdict": "PASS",
+      "observable": "exit 0; trusted keys 2; init plugins ['agents-claude-host', 'cc-plugin-agents-md', 'cc-plugin-plugin-authoring']; Bash result \"This context step was not started by Claude Code itself: its parent is pid 1144 (C:\\\\Program Files\\\\Git\\\\usr\\\\bin\\\\bash.exe), a process under the Claude Code session (Claude Code pid 4716) whose subagents host owns this project. The host accepts only the context step that Claude Code starts directly for graftling's plugin; a command run from a shell or a tool, such as Claude Code's Bash tool, is refused. Call the subagents tool instead. exit=1\"; stub requests [{'tools': 24, 'offered': ['Bash', 'mcp__graftling__subagents'], 'tool_uses_before': 0, 'reply': ['Bash']}, {'tools': 24, 'offered': ['Bash', 'mcp__graftling__subagents'], 'tool_uses_before': 1, 'reply': ['mcp__graftling__subagents']}, {'tools': 24, 'offered': ['Bash', 'mcp__graftling__subagents'], 'tool_uses_before': 2, 'reply': ['text']}]"
+    },
+    {
+      "case": "caller",
+      "item": "trusted folder: the plugin loaded and subagents answered",
+      "verdict": "PASS",
+      "observable": "subagents result '{\"features\":[{\"feature\":\"create\",\"description\":\"Create a child Agent on a Runtime; returns before its work finishes.\"},{\"feature\":\"models\",\"description\":\"List a Runtime\\'s configured connections with their providers and models, grouped by provider; read only.\"},{\"feature\":\"send\",\"description\":\"Send a...' (error False)"
+    }
+  ]
+}

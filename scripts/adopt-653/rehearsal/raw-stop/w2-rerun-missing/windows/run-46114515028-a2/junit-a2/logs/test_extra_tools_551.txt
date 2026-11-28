@@ -1,0 +1,29 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 13 items
+
+tests/test_extra_tools_551.py::test_table_refuses_agents_and_repeats PASSED [  7%]
+tests/test_extra_tools_551.py::test_call_reports_refusals_as_failed_results PASSED [ 15%]
+tests/test_extra_tools_551.py::test_agents_envelopes_never_look_like_tool_requests PASSED [ 23%]
+tests/test_extra_tools_551.py::test_environment_descriptors_ignore_malformed PASSED [ 30%]
+tests/test_extra_tools_551.py::test_codex_child_lists_and_calls_host_tools PASSED [ 38%]
+tests/test_extra_tools_551.py::test_codex_child_without_host_tools_keeps_agents_only PASSED [ 46%]
+tests/test_extra_tools_551.py::test_claude_child_lists_and_calls_host_tools PASSED [ 53%]
+tests/test_extra_tools_551.py::test_claude_child_without_host_tools_lists_agents_only PASSED [ 61%]
+tests/test_extra_tools_551.py::test_claude_host_tools_are_allowed_without_a_parent_request PASSED [ 69%]
+tests/test_extra_tools_551.py::test_claude_disallowed_host_tool_is_not_offered[tasks] PASSED [ 76%]
+tests/test_extra_tools_551.py::test_claude_disallowed_host_tool_is_not_offered[mcp__host_name__tasks] PASSED [ 84%]
+tests/test_extra_tools_551.py::test_claude_tool_choice_keeps_agents_and_host_tools[chosen0] PASSED [ 92%]
+tests/test_extra_tools_551.py::test_claude_tool_choice_keeps_agents_and_host_tools[chosen1] PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=45e67c14b5f74ff9b65fbd79d22b2762: found=0 stopped=0 remaining=0 error=No job graftling-45e67c14b5f74ff9b65fbd79d22b2762 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_extra_tools_551.xml -
+============================ slowest 10 durations =============================
+1.01s call     tests/test_extra_tools_551.py::test_claude_host_tools_are_allowed_without_a_parent_request
+0.42s call     tests/test_extra_tools_551.py::test_codex_child_lists_and_calls_host_tools
+0.36s call     tests/test_extra_tools_551.py::test_codex_child_without_host_tools_keeps_agents_only
+
+(7 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================= 13 passed in 1.99s ==============================

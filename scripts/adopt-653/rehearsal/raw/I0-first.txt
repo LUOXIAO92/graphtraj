@@ -1,4 +1,4 @@
-the failed run being set aside: run1 | backup <SCRATCH>/scr/backup (I start 2026-11-28 15:27:35)
+the failed run being set aside: run1 | backup <SCRATCH>/scr/backup (I start 2026-11-28 15:37:15)
 CHECK 653 I0 <SCRATCH>/scr/backup has COMPLETE and INSTALL-STARTED (an I whose install began): PASS
 CHECK 653 I0 R's record <SCRATCH>/out/raw/R.txt exists and every CHECK in it passed: PASS (6 CHECK lines, 0 FAIL)
 
@@ -12,7 +12,7 @@ graphtraj direct_url: {"archive_info": {"hash": "sha256=ac805ac9b3fb88f328a932a5
 graftling 0.10.2 direct_url: {"archive_info": {"hash": "sha256=300559ab2221d4d257ceeac10678e2a1de8abc40e0ce495abeb9acf072b9f1ee", "hashes": {"sha256": "300559ab2221d4d257ceeac10678e2a1de8abc40e0ce495abeb9acf072b9f1ee"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/625-graftling-0-10-2-release-and-production-adoption/adoption/wheels-0.10.2/graftling-0.10.2-py3-none-any.whl"}
 CHECK 653 I0 graphtraj from 616's wheels-4ef36426 and graftling 0.10.2 from 625's wheel: PASS
 CHECK 653 I0 production pip check: PASS (WARNING: The directory '<HOME>/Library/Caches/pip' or its parent directory is not owned or is not writable by th)
-MOVED <SCRATCH>/scr/backup -> <SCRATCH>/scr/backup-run1-20261128T152741 (after-install snapshots inside: after-install-20261128T152740 )
+MOVED <SCRATCH>/scr/backup -> <SCRATCH>/scr/backup-run1-20261128T153723 (after-install snapshots inside: after-install-20261128T153721 )
 MOVED to <SCRATCH>/out/raw/run1/: I.txt I.ok I-configuration.txt I-install-end.epoch I-install-start.epoch I-plugin-vs-V.diff R.txt
 CHECK 653 I0 backup and run1 records set aside; <SCRATCH>/scr/backup and the current I/R records are absent: PASS
-  I0 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847210 | entries 3
+  I0 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847759 | entries 3

@@ -1,0 +1,17 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 1 item
+
+tests/test_pi_notice_display_536.py::test_notice_is_drawn_as_who_and_markdown_with_the_model_input_unchanged SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=47d109b9f3ec44b0a9b97926949a3bc1: found=0 stopped=0 remaining=0 error=No job graftling-47d109b9f3ec44b0a9b97926949a3bc1 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_pi_notice_display_536.xml -
+============================ slowest 10 durations =============================
+0.01s call     tests/test_pi_notice_display_536.py::test_notice_is_drawn_as_who_and_markdown_with_the_model_input_unchanged
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_pi_notice_display_536.py:37: Node and an installed Pi are required
+============================= 1 skipped in 0.08s ==============================

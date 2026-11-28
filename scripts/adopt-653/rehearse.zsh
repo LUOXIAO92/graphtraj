@@ -61,7 +61,7 @@ scrub() {  # $1 = file or directory under $SB/out -> the same under $OUTD, with 
   local src=$1 dst=$OUTD/${1#$SB/out/} f
   # The run's artifacts and job logs are copies of Task 652's retained record: not copied again (the judgements are).
   [[ -d $src ]] && { mkdir -p $dst; for f in $src/**/*(N.); do
-      [[ $f == */windows/run-*/(junit|real-entry)/* || $f == */windows/run-*/*.log || $f == */windows/run-*/jobs.json ]] && continue
+      [[ $f == */windows/run-*/(junit|real-entry)(|-a<->)/* || $f == */windows/run-*/*.log || $f == */windows/run-*/jobs.json ]] && continue
       mkdir -p ${$(print -r -- $OUTD/${f#$SB/out/}):h}; scrub $f; done; return; }
   mkdir -p ${dst:h}
   LC_ALL=C sed -e "s|$SB|<SCRATCH>|g" -e "s|${TMPDIR:A}|<TMPDIR>|g" -e "s|$REALH|<Harness>|g" -e "s|$HOME|<HOME>|g" -e "s|${USER:-nouser}|<USER>|g" $src > $dst

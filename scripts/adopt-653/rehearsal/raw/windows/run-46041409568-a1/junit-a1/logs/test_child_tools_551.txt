@@ -1,0 +1,23 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 10 items
+
+tests/test_child_tools_551.py::test_selection_keeps_the_host_when_nothing_is_chosen PASSED [ 10%]
+tests/test_child_tools_551.py::test_selection_create_tools_replace_and_denies_add PASSED [ 20%]
+tests/test_child_tools_551.py::test_claude_inherits_host_tools_without_a_choice PASSED [ 30%]
+tests/test_child_tools_551.py::test_codex_narrows_what_it_can_express PASSED [ 40%]
+tests/test_child_tools_551.py::test_codex_refuses_tools_of_a_server_it_does_not_define PASSED [ 50%]
+tests/test_child_tools_551.py::test_codex_refuses_what_it_cannot_express_or_authorize PASSED [ 60%]
+tests/test_child_tools_551.py::test_presets_declare_tools PASSED         [ 70%]
+tests/test_child_tools_551.py::test_create_passes_tools_or_refuses_a_driver_without_them PASSED [ 80%]
+tests/test_child_tools_551.py::test_claude_reports_tool_entries_it_did_not_apply PASSED [ 90%]
+tests/test_child_tools_551.py::test_tool_check_reaches_the_parent_status PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=322ff5d08eb84529bf59f318c34bb6bc: found=0 stopped=0 remaining=0 error=No job graftling-322ff5d08eb84529bf59f318c34bb6bc is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_child_tools_551.xml -
+============================ slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================= 10 passed in 0.10s ==============================

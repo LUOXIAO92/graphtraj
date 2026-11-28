@@ -1,0 +1,27 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 8 items
+
+tests/test_child_server_name_551.py::test_default_server_name_is_unchanged PASSED [ 12%]
+tests/test_child_server_name_551.py::test_pi_names_its_server_only_when_the_owner_chose_one PASSED [ 25%]
+tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server PASSED [ 37%]
+tests/test_child_server_name_551.py::test_codex_child_server_replaces_a_captured_entry_of_that_name PASSED [ 50%]
+tests/test_child_server_name_551.py::test_codex_child_host_tools_need_no_approval PASSED [ 62%]
+tests/test_child_server_name_551.py::test_codex_disallowed_owner_tool_is_dropped_not_refused PASSED [ 75%]
+tests/test_child_server_name_551.py::test_codex_tool_choice_keeps_the_owner_server PASSED [ 87%]
+tests/test_child_server_name_551.py::test_codex_unknown_server_is_still_refused PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=898e137242994ea893cbbd9df34c60eb: found=0 stopped=0 remaining=0 error=No job graftling-898e137242994ea893cbbd9df34c60eb is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_child_server_name_551.xml -
+============================ slowest 10 durations =============================
+0.27s call     tests/test_child_server_name_551.py::test_codex_disallowed_owner_tool_is_dropped_not_refused
+0.27s call     tests/test_child_server_name_551.py::test_codex_child_host_tools_need_no_approval
+0.23s call     tests/test_child_server_name_551.py::test_codex_tool_choice_keeps_the_owner_server
+0.22s call     tests/test_child_server_name_551.py::test_codex_child_server_replaces_a_captured_entry_of_that_name
+0.06s call     tests/test_child_server_name_551.py::test_pi_extension_reads_the_chosen_server
+0.01s setup    tests/test_child_server_name_551.py::test_codex_child_server_replaces_a_captured_entry_of_that_name
+
+(4 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 8 passed in 1.23s ==============================

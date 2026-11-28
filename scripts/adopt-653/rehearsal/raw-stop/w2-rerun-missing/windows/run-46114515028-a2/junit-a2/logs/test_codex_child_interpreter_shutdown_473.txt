@@ -1,0 +1,16 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 1 item
+
+tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns PASSED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=0b0a79d7a1f04735ab35e0cc65747910: found=0 stopped=0 remaining=0 error=No job graftling-0b0a79d7a1f04735ab35e0cc65747910 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_codex_child_interpreter_shutdown_473.xml -
+============================ slowest 10 durations =============================
+8.52s call     tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns
+0.01s setup    tests/test_codex_child_interpreter_shutdown_473.py::test_child_ends_completed_after_the_owner_main_thread_returns
+
+(1 durations < 0.005s hidden.  Use -vv to show these durations.)
+============================== 1 passed in 8.69s ==============================

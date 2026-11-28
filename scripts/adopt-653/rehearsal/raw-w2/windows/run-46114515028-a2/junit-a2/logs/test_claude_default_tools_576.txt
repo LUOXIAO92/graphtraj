@@ -1,0 +1,27 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 12 items
+
+tests/test_claude_default_tools_576.py::test_omitted_tools_name_the_probed_set PASSED [  8%]
+tests/test_claude_default_tools_576.py::test_probe_runs_unrestricted_without_settings_credentials_or_mcp PASSED [ 16%]
+tests/test_claude_default_tools_576.py::test_probe_reads_built_in_names_and_caches_them_in_graftling_state SKIPPED [ 25%]
+tests/test_claude_default_tools_576.py::test_cache_key_follows_executable_version_model_and_claude_settings SKIPPED [ 33%]
+tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print("not json"); sys.exit(3)-no system/init (exit 3] SKIPPED [ 41%]
+tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print(json.dumps({"type": "system", "subtype": "init", "tools": []}), flush=True)-the default set is empty] SKIPPED [ 50%]
+tests/test_claude_default_tools_576.py::test_a_failed_probe_fails_the_child_and_names_the_way_out[print(json.dumps({"type": "system", "subtype": "init", "tools": ["mcp__a__b"]}), flush=True)-the default set is empty] SKIPPED [ 58%]
+tests/test_claude_default_tools_576.py::test_probe_timeout_and_missing_executable SKIPPED [ 66%]
+tests/test_claude_default_tools_576.py::test_prepare_keeps_restricted_and_passes_the_probed_set SKIPPED [ 75%]
+tests/test_claude_default_tools_576.py::test_tool_check_reports_probed_tools_the_child_lacks PASSED [ 83%]
+tests/test_claude_default_tools_576.py::test_a_subclass_with_fixed_member_tools_never_probes SKIPPED [ 91%]
+tests/test_claude_default_tools_576.py::test_a_subclass_independent_child_gets_the_probed_set_or_its_choice SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=e3228a793b92436e8cfba698d0d74c33: found=0 stopped=0 remaining=0 error=No job graftling-e3228a793b92436e8cfba698d0d74c33 is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_claude_default_tools_576.xml -
+============================ slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [9] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+======================== 3 passed, 9 skipped in 0.17s =========================

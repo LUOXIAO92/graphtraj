@@ -1,0 +1,42 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0 -- C:\hostedtoolcache\windows\Python\3.13.7\x64\python.exe
+rootdir: D:\a\graftling\graftling
+configfile: pytest.ini
+collecting ... collected 18 items
+
+tests/test_provider_listing_609.py::test_pi_catalog_is_grouped_by_provider_and_keeps_the_flat_list SKIPPED [  5%]
+tests/test_provider_listing_609.py::test_a_pi_connection_is_listed_with_its_provider_and_named_key SKIPPED [ 11%]
+tests/test_provider_listing_609.py::test_claude_lists_with_the_connection_endpoint_key_and_provider SKIPPED [ 16%]
+tests/test_provider_listing_609.py::test_a_claude_query_gets_only_the_credentials_its_child_would[connection0-expected0] SKIPPED [ 22%]
+tests/test_provider_listing_609.py::test_a_claude_query_gets_only_the_credentials_its_child_would[connection1-expected1] SKIPPED [ 27%]
+tests/test_provider_listing_609.py::test_a_claude_endpoint_without_its_key_is_not_queried SKIPPED [ 33%]
+tests/test_provider_listing_609.py::test_codex_names_its_models_by_the_connection_provider SKIPPED [ 38%]
+tests/test_provider_listing_609.py::test_dsh_catalog_groups_follow_its_provider_groups SKIPPED [ 44%]
+tests/test_provider_listing_609.py::test_declared_models_are_grouped_by_their_providers PASSED [ 50%]
+tests/test_provider_listing_609.py::test_models_lists_each_connection_by_provider_read_only_and_key_free SKIPPED [ 55%]
+tests/test_provider_listing_609.py::test_models_narrows_to_a_declared_provider_and_refuses_another SKIPPED [ 61%]
+tests/test_provider_listing_609.py::test_models_without_a_connection_lists_the_native_login SKIPPED [ 66%]
+tests/test_provider_listing_609.py::test_models_and_create_refuse_a_dsh_provider_discovery_cannot_route_alike SKIPPED [ 72%]
+tests/test_provider_listing_609.py::test_models_is_a_discoverable_feature_taking_runtime_and_provider PASSED [ 77%]
+tests/test_provider_listing_609.py::test_provider_selects_its_connection_and_tells_a_shared_model_apart SKIPPED [ 83%]
+tests/test_provider_listing_609.py::test_without_provider_several_connections_stay_ambiguous SKIPPED [ 88%]
+tests/test_provider_listing_609.py::test_a_provider_no_connection_declares_is_refused_before_anything_starts SKIPPED [ 94%]
+tests/test_provider_listing_609.py::test_provider_with_a_preset_must_be_the_preset_connection_provider SKIPPED [100%]
+leftover test processes of PYTEST_GRAFTLING_RUN=e2151a86aa1d4874b9ca7ce74be9cdca: found=0 stopped=0 remaining=0 error=No job graftling-e2151a86aa1d4874b9ca7ce74be9cdca is open, so its processes cannot be listed on Windows: its tree was not started through graftling's OwnedTree, or every handle to the job has closed (FileNotFoundError: [WinError 2] The system cannot find the file specified.).
+
+- generated xml file: D:\a\graftling\graftling\test-results\windows\junit\test_provider_listing_609.xml -
+============================ slowest 10 durations =============================
+
+(10 durations < 0.005s hidden.  Use -vv to show these durations.)
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_provider_listing_609.py:137: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:145: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [7] tests\posix_only.py:37: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:286: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:302: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:311: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:354: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:366: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:376: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+SKIPPED [1] tests\test_provider_listing_609.py:391: POSIX-only: the stand-in executable is a '#!' script run directly; Windows needs a .exe or .cmd stand-in
+======================== 2 passed, 16 skipped in 0.20s ========================

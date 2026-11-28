@@ -8,14 +8,13 @@ gh: <SCRATCH>/stub/gh | gh version 0.0.0 (stand-in) | auth status:   Logged in t
 CHECK 653 00 gh auth status rc 0 (gh's stored login; P, W, X read and dispatch the Actions run with it): PASS
 
 ### graftling repository <SCRATCH>/g (read only)
-dev: 9650361e13d6ef9981c753038469ff3b9e44cfa6 in <SCRATCH>/gdev | main: 57bca73657d3135a4504904fcc3f1898c2419766 in <SCRATCH>/g | origin: <SCRATCH>/origin.git
-CHECK 653 00 graftling dev = 9650361e13d6ef9981c753038469ff3b9e44cfa6: PASS
-CHECK 653 00 graftling main = 57bca73657d3135a4504904fcc3f1898c2419766 (v0.10.2): PASS
+dev: 67b0fe9aacc868c9c6b5a2818adc8449514221c4 in <SCRATCH>/gdev | main: 67b0fe9aacc868c9c6b5a2818adc8449514221c4 in <SCRATCH>/g | origin: <SCRATCH>/origin.git
+graftling release state: post-rel (dev 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | main 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | v0.11.0 c464b633a8d62a6e20a91327db3c889bb01d39be -> 67b0fe9aacc868c9c6b5a2818adc8449514221c4, type tag, tagger LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>)
+CHECK 653 00 graftling is pre-rel (dev = 9650361e, main = 57bca736 = v0.10.2, v0.11.0 absent) or exactly post-rel (dev = main = 67b0fe9a, v0.11.0 annotated, noreply tagger, peels to 67b0fe9a, rel's message and version): PASS (post-rel)
 CHECK 653 00 origin of <SCRATCH>/g is <SCRATCH>/origin.git: PASS
 CHECK 653 00 dev is checked out in <SCRATCH>/gdev and main in <SCRATCH>/g: PASS
 CHECK 653 00 both worktrees clean (git status --porcelain empty): PASS
-CHECK 653 00 v0.11.0 absent locally: PASS
-CHECK 653 00 local agent/653-graftling-0.11.0 absent or the release commit: PASS (absent)
+CHECK 653 00 local agent/653-graftling-0.11.0 absent or the release commit: PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
 
 ### GitHub <SCRATCH>/origin.git (git ls-remote, read only)
 GitHub main: 57bca73657d3135a4504904fcc3f1898c2419766 | dev: 57bca73657d3135a4504904fcc3f1898c2419766 | v0.11.0: absent | agent/653-graftling-0.11.0: 67b0fe9aacc868c9c6b5a2818adc8449514221c4
@@ -24,7 +23,7 @@ CHECK 653 00 GitHub v0.11.0 absent: PASS
 CHECK 653 00 GitHub dev (57bca73657d3135a4504904fcc3f1898c2419766) is 9650361e13d6ef9981c753038469ff3b9e44cfa6 or its ancestor, so rp fast-forwards it: PASS
 CHECK 653 00 GitHub agent/653-graftling-0.11.0 absent or the release commit (P pushes it, fast-forward only): PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
 
-### bundle <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/adopt-653/graftling-0.11.0.bundle
+### bundle <TMPDIR>/c2/wt/scripts/adopt-653/graftling-0.11.0.bundle
 sha256: 660b394a384a1e645805bf4bc62f6411abcb46a0eb8ec59049e81ba51bcfb30e
 CHECK 653 00 bundle sha256 = 660b394a384a1e645805bf4bc62f6411abcb46a0eb8ec59049e81ba51bcfb30e: PASS
 CHECK 653 00 bundle verifies against <SCRATCH>/g (its prerequisite 9650361e13d6ef9981c753038469ff3b9e44cfa6 is there): PASS
@@ -45,8 +44,8 @@ C5 runs:             uv tool install --managed-python "git+https://github.com/LU
 CHECK 653 00 README's first install line at 67b0fe9aacc868c9c6b5a2818adc8449514221c4 is C5's tagless command: PASS
 
 ### the Windows judgement's inputs (read only)
-PASS: <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/verify-632/windows-expected.txt parses: 0 expected Windows failures and 0 expected hangs (none), 19 allowed environment skips
-CHECK 653 00 windows-expected.txt parses (<Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption/scripts/verify-632/windows-expected.txt): PASS
+PASS: <TMPDIR>/c2/wt/scripts/verify-632/windows-expected.txt parses: 0 expected Windows failures and 0 expected hangs (none), 19 allowed environment skips
+CHECK 653 00 windows-expected.txt parses (<TMPDIR>/c2/wt/scripts/verify-632/windows-expected.txt): PASS
 CHECK 653 00 652's new-tests.txt is readable (5 node ids; each must PASS on Windows): PASS
 
 ### production <SCRATCH>/project/.venv-runtime (read only)
@@ -61,11 +60,11 @@ production bin: subagents subagents-mcp graphtraj-mcp agent-runner
 CHECK 653 00 production bin has subagents, subagents-mcp, graphtraj-mcp (and no agents): PASS
 
 ### backups under <SCRATCH>/project/tmp (information; none is required; never written)
-  00 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847210 | entries 3
+  00 kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847759 | entries 3
 CHECK 653 00 backup <SCRATCH>/scr/backup absent: PASS
 
-### this Worktree <Harness>/.graphtraj/core/worktrees/653-graftling-0-11-0-release-and-production-adoption (GraphTraj adoption commit afaaca41 + scripts/adopt-653/)
-product guard: HEAD 269de715011e0f396ec972684e2820d696ddf57c | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
+### this Worktree <TMPDIR>/c2/wt (GraphTraj adoption commit afaaca41 + scripts/adopt-653/)
+product guard: HEAD 5d8948912dab2d96b24d3178ea2596c2f07f827e | TARGET afaaca41's parent 5a17543e (DEV0 5a17543e) | git diff 5a17543e afaaca41: pyproject.toml | changes since afaaca41 outside scripts/adopt-653/ and tests/test_dsh_runtime.py tests/test_runtime_connections.py: none | uncommitted (rehearsal outputs excepted): none | graftling range at afaaca41: "graftling>=0.10.0,<0.12",
 CHECK 653 00 TARGET afaaca41 = GraphTraj dev 5a17543e + pyproject.toml (range "graftling>=0.10.0,<0.12",); HEAD differs from TARGET only under scripts/adopt-653/ and the correction-1 tests tests/test_dsh_runtime.py tests/test_runtime_connections.py; clean: PASS
 graphtraj product changes 4ef36426 (production) .. afaaca41 (information): manuals/task-delivery/references/command-inputs.md pyproject.toml src/graphtraj/graph/github_backup.py src/graphtraj/interfaces/tools.py | desktop/src files changed: 21 (not in the graphtraj wheel; B checks)
 CHECK 653 00 Task 653 ready (current_definition 20261128T030645.311984+0900.md exists): PASS

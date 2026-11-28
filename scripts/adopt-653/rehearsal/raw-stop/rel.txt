@@ -1,2 +1,2 @@
-before: dev 6be1ba23bd9a6811514eb68952a8a086ab6204e3 (in <SCRATCH>/gdev) | main 57bca73657d3135a4504904fcc3f1898c2419766 (in <SCRATCH>/g) | v0.11.0 absent
-STOP: graftling dev is 6be1ba23bd9a6811514eb68952a8a086ab6204e3, no longer 9650361e13d6ef9981c753038469ff3b9e44cfa6 (moved since dispatch: 6be1ba2 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.
+before: dev 4deb1a1c91cafbe594737260fc09db167b23155c (in <SCRATCH>/gdev) | main 57bca73657d3135a4504904fcc3f1898c2419766 (in <SCRATCH>/g) | v0.11.0 absent
+STOP: graftling dev is 4deb1a1c91cafbe594737260fc09db167b23155c, no longer 9650361e13d6ef9981c753038469ff3b9e44cfa6 (moved since dispatch: 4deb1a1 dev moved (rehearsal);). Requirement 2 needs dev AND main at the release commit, so rel does not merge. Nothing changed. Main tells the Leader.

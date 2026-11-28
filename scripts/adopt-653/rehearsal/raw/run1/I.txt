@@ -3,9 +3,9 @@ guard: budget_idle_timer processes (NON-BLOCKING, never signalled): 0
 guard: zombies (information): 0
 guard: BLOCKING 0 (no process uses <SCRATCH>/project/.venv-runtime)
 members_idle [I]: no member execution is active: PASS
-I start 2026-11-28 15:27:35
+I start 2026-11-28 15:37:15
 other backups before the install (never written):
-  I kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847210 | entries 3
+  I kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847759 | entries 3
 
 ### backup: venv (manifest + cp -Rp), hook copy, entry files (mode 600), the tools R needs; COMPLETE marker
 manifest <SCRATCH>/scr/backup/venv.manifest: 1002 entries
@@ -37,8 +37,8 @@ Installing collected packages: graphtraj, graftling
 
 Successfully installed graftling-0.11.0 graphtraj-0.1.0
 CHECK 653 I one pip install of both wheels (graphtraj afaaca41, graftling v0.11.0): PASS
-graphtraj direct_url: {"archive_info": {"hash": "sha256=eb8b378423b7da04c3f97ef440903ba12b2cc4a22e609911d115d71160882646", "hashes": {"sha256": "eb8b378423b7da04c3f97ef440903ba12b2cc4a22e609911d115d71160882646"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41/graphtraj-0.1.0-py3-none-any.whl"}
-graftling 0.11.0 direct_url: {"archive_info": {"hash": "sha256=2edc661cd11b9155fff15ec8086fbd2354d1361c70b01d7e4c91324109aa3047", "hashes": {"sha256": "2edc661cd11b9155fff15ec8086fbd2354d1361c70b01d7e4c91324109aa3047"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0/graftling-0.11.0-py3-none-any.whl"}
+graphtraj direct_url: {"archive_info": {"hash": "sha256=2bb02d8bfedeb4940182907dd4d98b923a6c8ff151e87edfff6f399f078e5f43", "hashes": {"sha256": "2bb02d8bfedeb4940182907dd4d98b923a6c8ff151e87edfff6f399f078e5f43"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-afaaca41/graphtraj-0.1.0-py3-none-any.whl"}
+graftling 0.11.0 direct_url: {"archive_info": {"hash": "sha256=848174e787862515df65918fcdc6d7c09f49b8d12825476d21783310998e8734", "hashes": {"sha256": "848174e787862515df65918fcdc6d7c09f49b8d12825476d21783310998e8734"}}, "url": "file://<SCRATCH>/project/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/adoption/wheels-0.11.0/graftling-0.11.0-py3-none-any.whl"}
 CHECK 653 I graphtraj direct_url is wheels-afaaca41: PASS
 CHECK 653 I graftling direct_url is wheels-0.11.0: PASS
 CHECK 653 I graftling 0.10.2 dist-info gone: PASS
@@ -94,5 +94,5 @@ CHECK 653 Codex hooks entry of <SCRATCH>/project/.venv-runtime names its python 
 CHECK 653 Codex hooks entry of <SCRATCH>/project/.venv-runtime runs (neutral event answers {}): PASS ({})
 CHECK 653 I no process started on <SCRATCH>/project/.venv-runtime during the install: PASS
 other backups after the install:
-  I kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847210 | entries 3
+  I kept backup <SCRATCH>/project/tmp/625/backup: COMPLETE | top-level mtime 1795847759 | entries 3
 CHECK 653 I other backups under <SCRATCH>/project/tmp untouched: same presence, COMPLETE, mtime and entry count before and after: PASS

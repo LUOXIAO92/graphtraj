@@ -332,6 +332,14 @@ main_transcripts() {  # $1 = epoch file: Main's transcript plus any transcript w
   local -a found=($PROJECTS/$MAIN.jsonl(N) ${(f)"$(find $PROJECTS -maxdepth 1 -name '*.jsonl' -newer $1 2>/dev/null)"})
   print -l -- ${(u)found:#}
 }
+rel_tag_ok() {  # the tag is what rel_verify establishes: annotated, noreply tagger, peels to GCOMMIT, rel's message and version
+  local tm
+  tm=$(gg -C $G cat-file tag refs/tags/$GTAG 2>/dev/null | sed '1,/^$/d')
+  [[ $(gg -C $G rev-parse -q --verify "refs/tags/$GTAG^{commit}") == $GCOMMIT && $(gg -C $G cat-file -t refs/tags/$GTAG 2>/dev/null) == tag \
+    && $(gg -C $G for-each-ref --format='%(taggername) %(taggeremail)' refs/tags/$GTAG) == "$RELNAME <$RELMAIL>" \
+    && $tm == *Windows* && $tm == *compatible* && $tm == *2026-11-28* \
+    && $(gg -C $G show ${GTAG}:src/graftling/__init__.py 2>/dev/null | grep -E '^__version__') == "__version__ = \"$GVERSION\"" ]]
+}
 gr_passed() { [[ -e $R/GR.ok ]] && grep -q "^RESULT 653 G/GR: PASS" $R/GR.txt 2>/dev/null; }
 win_passed() { [[ -e $R/WIN.ok ]] && grep -q "^CHECK 653 win .*: PASS" $R/WIN.txt 2>/dev/null; }
 passed() { [[ -s $R/$1.txt ]] && grep -q "^CHECK 653 $1 " $R/$1.txt && ! grep -q "^CHECK 653 $1 .*: FAIL" $R/$1.txt; }
@@ -344,7 +352,7 @@ api() {  # $1 = output file, $2 = endpoint: save a gh api response; on failure p
   print -r -- "  gh api $2 failed: $(<$WORK/api-err)"; return 1
 }
 judge() {  # $1 = completed run's json, $2 = label: jobs, logs, artifacts, judgement; ends with the VERDICT line
-  local runfile=$1 label=$2 rid sha attempt concl url event jid dir mech res files newt djob rjob real jname tlist=
+  local runfile=$1 label=$2 rid sha attempt concl url event jid dir mech res files newt djob rjob real jname tlist= evj evr evd jdir rdir name rname w
   rid=$(wc_ get $runfile id); sha=$(wc_ get $runfile head_sha); attempt=$(wc_ get $runfile run_attempt)
   concl=$(wc_ get $runfile conclusion); url=$(wc_ get $runfile html_url); event=$(wc_ get $runfile event)
   dir=$WEV/run-$rid-a${attempt:-1}; mkdir -p $dir
@@ -363,6 +371,17 @@ judge() {  # $1 = completed run's json, $2 = label: jobs, logs, artifacts, judge
     print -r -- "JOBSTATE FAIL jobs of run $rid unreadable" > $WORK/realjob.txt
   fi
   cat $WORK/jobs.txt $WORK/dshjob.txt $WORK/realjob.txt > $dir/jobs.txt
+  # Correction 2: each job's evidence comes from the attempt that actually ran it (evidence653.py). After
+  # `gh run rerun --failed` the jobs API labels every job with the new attempt, but a carried-over job keeps its earlier
+  # started_at and its earlier artifact; a re-run job must use its own attempt's artifact.
+  [[ -f $WORK/jobs.json ]] || print -r -- '{}' > $WORK/jobs.json
+  api $WORK/arts.json "repos/$REPO/actions/runs/$rid/artifacts?per_page=100" && cp $WORK/arts.json $dir/artifacts.json || print -r -- '{"artifacts": []}' > $WORK/arts.json
+  print -r -- "artifacts of run $rid: $(clean $CONDA -I -c 'import json, sys; print(" ".join(sorted(a["name"] for a in json.load(open(sys.argv[1])).get("artifacts", []) if not a.get("expired"))) or "none")' $WORK/arts.json 2>&1)"
+  evj=$(clean $CONDA -I $SD/evidence653.py $runfile $WORK/jobs.json $WORK/arts.json $JOB graftling-windows-junit-$sha- 2>&1)
+  evr=$(clean $CONDA -I $SD/evidence653.py $runfile $WORK/jobs.json $WORK/arts.json $REALJOB graftling-claude-real-entry-$sha- 2>&1)
+  evd=$(clean $CONDA -I $SD/evidence653.py $runfile $WORK/jobs.json $WORK/arts.json $DSHJOB - 2>&1)
+  for w in "$JOB|$evj" "$REALJOB|$evr" "$DSHJOB|$evd"; do print -r -- "EVIDENCE ${w%%|*}: ${${w#*|}/ - |/ |}"; done | tee $dir/evidence.txt
+  [[ $evd == ATTEMPT* ]] || djob="JOBSTATE FAIL $DSHJOB: ${evd#*| }"
   grep -v '^JUDGE \|^JOB ' $WORK/jobs.txt
   mech=$(grep '^JUDGE ' $WORK/jobs.txt | tail -1); [[ -n $mech ]] || mech="JUDGE FAIL step judgement failed: $(tail -2 $WORK/jobs.txt)"
   grep -v '^JOBSTATE ' $WORK/dshjob.txt | head -3
@@ -375,21 +394,23 @@ judge() {  # $1 = completed run's json, $2 = label: jobs, logs, artifacts, judge
     else print -r -- "$jname job log unavailable: $(<$WORK/err 2> /dev/null)"; fi
   done
   [[ -f $dir/$JOB.log ]] && grep -E '(### HUNG|run_test_files exit code:|INTERNALERROR|has timed out)' $dir/$JOB.log | tail -n 12 | cut -c1-240 | sed 's/^/  /'
-  local name=graftling-windows-junit-$sha-${attempt:-1} rname=graftling-claude-real-entry-$sha-${attempt:-1}
-  if [[ -f $dir/junit/environment.json ]]; then print -r -- "already present, not downloaded again: $dir/junit"
-  else print -r -- "\$ gh run download $rid --repo $REPO -n $name -D $dir/junit"; ghc run download $rid --repo $REPO -n $name -D $dir/junit 2>&1 | sed 's/^/  /'; fi
+  if [[ $evj == ATTEMPT* ]]; then
+    w=(${=evj}); name=$w[3] jdir=$dir/junit-a$w[2]
+    if [[ -f $jdir/environment.json ]]; then print -r -- "already present, not downloaded again: $jdir"
+    else print -r -- "\$ gh run download $rid --repo $REPO -n $name -D $jdir"; ghc run download $rid --repo $REPO -n $name -D $jdir 2>&1 | sed 's/^/  /'; fi
+  else name="none (${evj#*| })" jdir=$dir/junit-none; fi
   # The commit's test files (the bundle's commit is in $G after P).
   if gg -C $G cat-file -e "$sha^{commit}" 2> /dev/null; then
     gg -C $G ls-tree --name-only $sha tests/ | grep -E '^tests/test_[^/]*\.py$' > $WORK/testfiles.txt; tlist=$WORK/testfiles.txt
     print -r -- "test files in $sha: $(grep -c . $tlist)"
   else print -r -- "NOTE: $sha is not in $G; per-file records are not compared with its test files"; fi
-  if [[ -f $dir/junit/environment.json ]]; then
-    print -r -- "--- per-file records and results against $EXPECTED"
-    wc_ junit $dir/junit $EXPECTED $dir/observed-expected.txt $tlist > $dir/judgement.txt 2>&1
+  if [[ -f $jdir/environment.json ]]; then
+    print -r -- "--- per-file records and results against $EXPECTED (evidence: $name)"
+    wc_ junit $jdir $EXPECTED $dir/observed-expected.txt $tlist > $dir/judgement.txt 2>&1
     grep -v '^JUDGE \|^FILES ' $dir/judgement.txt
     files=$(grep '^FILES ' $dir/judgement.txt | tail -1); [[ -n $files ]] || files="FILES FAIL per-file judgement failed: $(tail -2 $dir/judgement.txt)"
     res=$(grep '^JUDGE ' $dir/judgement.txt | tail -1); [[ -n $res ]] || res="JUDGE FAIL JUnit judgement failed: $(tail -2 $dir/judgement.txt)"
-    w652_ newtests $dir/junit $NEWTESTS > $dir/652-tests.txt 2>&1
+    w652_ newtests $jdir $NEWTESTS > $dir/652-tests.txt 2>&1
     newt=$(grep '^NEWTESTS ' $dir/652-tests.txt | tail -1); [[ -n $newt ]] || newt="NEWTESTS FAIL check failed: $(tail -2 $dir/652-tests.txt)"
   else
     files="FILES FAIL no artifact downloaded ($name)"; res="JUDGE FAIL no JUnit files"; newt="NEWTESTS FAIL no JUnit files"
@@ -398,19 +419,24 @@ judge() {  # $1 = completed run's json, $2 = label: jobs, logs, artifacts, judge
   if [[ $files == "FILES FAIL"* ]]; then [[ $mech == "JUDGE PASS"* ]] && mech="JUDGE FAIL ${files#FILES FAIL }" || mech="$mech; ${files#FILES FAIL }"
   else mech="$mech; ${files#FILES PASS }"; fi
   grep -v '^NEWTESTS ' $dir/652-tests.txt
-  if [[ -f $dir/real-entry/results.json ]]; then print -r -- "already present, not downloaded again: $dir/real-entry"
-  else print -r -- "\$ gh run download $rid --repo $REPO -n $rname -D $dir/real-entry"; ghc run download $rid --repo $REPO -n $rname -D $dir/real-entry 2>&1 | sed 's/^/  /'; fi
-  w652_ realentry $dir/real-entry > $dir/real-entry-judgement.txt 2>&1
+  if [[ $evr == ATTEMPT* ]]; then
+    w=(${=evr}); rname=$w[3] rdir=$dir/real-entry-a$w[2]
+    if [[ -f $rdir/results.json ]]; then print -r -- "already present, not downloaded again: $rdir"
+    else print -r -- "\$ gh run download $rid --repo $REPO -n $rname -D $rdir"; ghc run download $rid --repo $REPO -n $rname -D $rdir 2>&1 | sed 's/^/  /'; fi
+    w652_ realentry $rdir > $dir/real-entry-judgement.txt 2>&1
+  else print -r -- "REALENTRY FAIL $REALJOB: ${evr#*| }" > $dir/real-entry-judgement.txt; fi
   grep -v '^REALENTRY ' $dir/real-entry-judgement.txt
   real=$(grep '^REALENTRY ' $dir/real-entry-judgement.txt | tail -1); [[ -n $real ]] || real="REALENTRY FAIL judgement failed: $(tail -2 $dir/real-entry-judgement.txt)"
   print -r -- "evidence: $dir"
+  print -r -- "evidence judged per job: $(sed -E 's/^EVIDENCE ([^:]+): (ATTEMPT ([0-9]+)|NONE).*/\1 attempt \3/' $dir/evidence.txt | tr '\n' ';')"
   print -r -- "RUNID $rid"
+  local evsum="evidence: $(sed -E 's/^EVIDENCE ([^:]+): (ATTEMPT ([0-9]+)|NONE).*/\1 attempt \3/' $dir/evidence.txt | tr '\n' ',' | sed 's/,$//')"
   if [[ $sha == $GCOMMIT && $mech == "JUDGE PASS"* && $res == "JUDGE PASS"* && $newt == "NEWTESTS PASS"* && $djob == "JOBSTATE PASS"* \
         && $rjob == "JOBSTATE PASS"* && $real == "REALENTRY PASS"* ]]; then
-    print -r -- "VERDICT 653 $label: PASS (run $rid attempt $attempt on $sha; windows-tests: ${mech#JUDGE PASS }; results: ${res#JUDGE PASS }; 652 tests: ${newt#NEWTESTS PASS }; ${djob#JOBSTATE PASS }; ${rjob#JOBSTATE PASS }; real Claude Code: ${real#REALENTRY PASS }; $url)"
+    print -r -- "VERDICT 653 $label: PASS (run $rid attempt $attempt on $sha; windows-tests: ${mech#JUDGE PASS }; results: ${res#JUDGE PASS }; 652 tests: ${newt#NEWTESTS PASS }; ${djob#JOBSTATE PASS }; ${rjob#JOBSTATE PASS }; real Claude Code: ${real#REALENTRY PASS }; $evsum; $url)"
     return 0
   fi
-  print -r -- "VERDICT 653 $label: FAIL (run $rid attempt $attempt on $sha; windows-tests: ${mech#JUDGE }; results: ${res#JUDGE }; 652 tests: ${newt#NEWTESTS }; ${djob#JOBSTATE }; ${rjob#JOBSTATE }; real Claude Code: ${real#REALENTRY }; $url)"
+  print -r -- "VERDICT 653 $label: FAIL (run $rid attempt $attempt on $sha; windows-tests: ${mech#JUDGE }; results: ${res#JUDGE }; 652 tests: ${newt#NEWTESTS }; ${djob#JOBSTATE }; ${rjob#JOBSTATE }; real Claude Code: ${real#REALENTRY }; $evsum; $url)"
   return 1
 }
 wait_run() {  # $1 = run id, $2 = label: wait for completion (bounded), then judge
@@ -464,13 +490,17 @@ case $STEP in
     gd=$(gg -C $G rev-parse -q --verify refs/heads/dev) gm=$(gg -C $G rev-parse -q --verify refs/heads/main)
     dw=$(rel_wt dev) mw=$(rel_wt main)
     print -r -- "dev: ${gd:-NOT FOUND} in ${dw:-no worktree} | main: ${gm:-NOT FOUND} in ${mw:-no worktree} | origin: $(gg -C $G remote get-url origin 2>&1)"
-    [[ $gd == $GBASE ]]; ck $? "00 graftling dev = $GBASE"
-    [[ $gm == $GMAIN0 ]]; ck $? "00 graftling main = $GMAIN0 ($GOLDTAG)"
+    # Correction 2: 00 may run before or after rel. It accepts exactly one of the two states and names it.
+    lt=$(gg -C $G rev-parse -q --verify refs/tags/$GTAG)
+    if [[ $gd == $GBASE && $gm == $GMAIN0 && -z $lt ]]; then relstate=pre-rel
+    elif [[ $gd == $GCOMMIT && $gm == $GCOMMIT && -n $lt ]] && rel_tag_ok; then relstate=post-rel
+    else relstate=mixed; fi
+    print -r -- "graftling release state: $relstate (dev ${gd:-none} | main ${gm:-none} | $GTAG ${lt:-absent}$([[ -n $lt ]] && print -r -- " -> $(gg -C $G rev-parse -q --verify "refs/tags/$GTAG^{commit}"), type $(gg -C $G cat-file -t $lt), tagger $(gg -C $G for-each-ref --format='%(taggername) %(taggeremail)' refs/tags/$GTAG)"))"
+    [[ $relstate != mixed ]]; ck $? "00 graftling is pre-rel (dev = ${GBASE[1,8]}, main = ${GMAIN0[1,8]} = $GOLDTAG, $GTAG absent) or exactly post-rel (dev = main = ${GCOMMIT[1,8]}, $GTAG annotated, noreply tagger, peels to ${GCOMMIT[1,8]}, rel's message and version)" "$relstate"
     [[ $(gg -C $G remote get-url origin 2>&1) == $GURL ]]; ck $? "00 origin of $G is $GURL"
     [[ -n $dw && ${dw:A} == ${GDEV:A} && -n $mw && ${mw:A} == ${G:A} ]]; ck $? "00 dev is checked out in $GDEV and main in $G"
     dirty=""; for w in $dw $mw; do [[ -z $(gg -C $w status --porcelain 2>&1) ]] || dirty="$dirty $w"; done
     [[ -z $dirty ]]; ck $? "00 both worktrees clean (git status --porcelain empty)" "${dirty# }"
-    lt=$(gg -C $G rev-parse -q --verify refs/tags/$GTAG); [[ -z $lt ]]; ck $? "00 $GTAG absent locally" "$lt"
     lb=$(gg -C $G rev-parse -q --verify refs/heads/$GBRANCH); [[ -z $lb || $lb == $GCOMMIT ]]; ck $? "00 local $GBRANCH absent or the release commit" "${lb:-absent}"
     say "GitHub $GURL (git ls-remote, read only)"
     if rem=$(gg ls-remote $GURL refs/heads/main refs/heads/dev refs/tags/$GTAG refs/heads/$GBRANCH 2>&1); then

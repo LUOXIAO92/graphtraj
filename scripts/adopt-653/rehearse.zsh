@@ -25,7 +25,8 @@ setopt pipe_fail no_unset no_bg_nice
 STAGE=${1:-}
 SD=${0:A:h}
 WT=$(git -C $SD rev-parse --show-toplevel)
-REALH=${WT:h:h:h:h}
+REALH=${REHEARSE653_REALH:-${WT:h:h:h:h}}           # correction 2: set when rehearsing from a scratch clone of the Worktree
+RUN653=$REALH/.graphtraj/core/state/tasks/653-graftling-0-11-0-release-and-production-adoption/realhost/main-raw/windows   # Main's real X records
 REALS=$REALH/.venv-runtime/lib/python3.13/site-packages
 REALSTATE=$REALH/.graphtraj/core/state
 CONDA=$HOME/miniconda3/bin/python3.13
@@ -85,7 +86,7 @@ rm -rf $SB $OUTD/raw $OUTD/raw-stop; mkdir -p $SB/stub $SB/gh $SB/projects/-fake
     '  *) print "stub claude: $*" ;;' 'esac' > $SB/stub/claude
   print -l '#!/bin/zsh' "# STUB ps (fixture): the sandbox refuses /bin/ps; prints the fixture listing $SB/ps.txt" "cat $SB/ps.txt 2>/dev/null; exit 0" > $SB/stub/ps
   print -r -- $PSIDLE > $SB/ps.txt
-  RUNJSON='{"id": 46041409568, "name": "Windows tests", "path": ".github/workflows/windows.yml", "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_sha": "'$GCOMMIT'", "run_attempt": 1, "html_url": "https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)"}'
+  RUNJSON='{"id": 46041409568, "name": "Windows tests", "path": ".github/workflows/windows.yml", "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_sha": "'$GCOMMIT'", "run_attempt": 1, "run_started_at": "2026-11-27T17:23:05Z", "html_url": "https://github.com/LUOXIAO92/graftling/actions/runs/46041409568 (FIXTURE: 652 run record)"}'
   print -r -- $RUNJSON > $SB/gh/run.json
   cat > $SB/stub/gh <<EOF
 #!/bin/zsh
@@ -104,6 +105,7 @@ case "\$1 \$2" in
       */attempts/*/jobs*) cat $RUN652/jobs.json ;;
       */jobs/140649778126/logs) cat $RUN652/windows-tests.log ;;
       */jobs/140649778142/logs) cat $RUN652/claude-real-entry.log ;;
+      */actions/runs/46041409568/artifacts*) print -r -- '{"artifacts": [{"name": "graftling-windows-junit-'$GCOMMIT'-1", "expired": false}, {"name": "graftling-claude-real-entry-'$GCOMMIT'-1", "expired": false}]}' ;;
       */actions/runs/46041409568) cat $SB/gh/run.json ;;
       *) print -u2 "stand-in: unknown endpoint \$ep"; exit 1 ;;
     esac ;;
@@ -138,7 +140,7 @@ EOF
   print "user environment details in scripts/adopt-653 (home, user name): $(grep -rlE "$HOME|${USER:-nouser}" $SD --include='*.zsh' --include='*.py' --include='*.md' 2>/dev/null | tr '\n' ' ')(empty = none)"
   print "git diff 5a17543e afaaca41 --name-only: $(git -C $WT diff --name-only 5a17543e afaaca41 | tr '\n' ' ')(= pyproject.toml only)"
   print "git diff afaaca41 HEAD --name-only outside scripts/adopt-653/: $(git -C $WT diff --name-only afaaca41 HEAD | grep -v '^scripts/adopt-653/' | tr '\n' ' ')(= exactly correction 1's tests/test_dsh_runtime.py tests/test_runtime_connections.py)"
-  run $RAW 00 zsh $S 00
+  run $RAW "00 pre-rel" zsh $S 00; cp -p $RAW/00.txt $RAW/00-pre-rel.txt
   print "\n## STOP: rel with dev moved (then dev is reset to $GBASE)"
   echo moved > $SB/gdev/moved.txt && git -C $SB/gdev add moved.txt && git -C $SB/gdev -c user.name=x -c user.email=x@invalid commit -q -m 'dev moved (rehearsal)'
   run $STOPS "STOP: rel with dev moved" zsh $S rel
@@ -146,6 +148,13 @@ EOF
   git -C $SB/gdev reset -q --hard $GBASE
   run $RAW rel zsh $S rel
   run $RAW "rel again (already released)" zsh $S rel
+  print "\n## correction 2: 00 after rel (post-rel state: dev = main = release commit, annotated v0.11.0); raw/00.txt is this run"
+  run $RAW "00 post-rel" zsh $S 00
+  print "\n## STOP (correction 2): 00 in a MIXED state (dev = the release commit, main reset to v0.10.2, the tag present); then main is restored"
+  git -C $SB/g reset -q --hard $GMAIN0
+  run $STOPS "STOP: 00 mixed (dev = 67b0fe9a, main = 57bca736, v0.11.0 present)" zsh $S 00; mv $STOPS/00.txt $STOPS/00-mixed.txt
+  git -C $SB/g reset -q --hard $GCOMMIT
+  print -r -- "after the STOP: dev $(git -C $SB/g rev-parse dev) main $(git -C $SB/g rev-parse main) tag $(git -C $SB/g rev-parse -q --verify 'refs/tags/v0.11.0^{commit}')"
   run $RAW B zsh $S B
   run $RAW "STOP: I before V/GR/Windows (nothing changed; no I.txt is written)" zsh -fc "print | zsh $S I"; print -r -- "I.txt in raw/ after the STOP: $([[ -e $RAW/I.txt ]] && print PRESENT || print absent)"
   run $RAW "STOP: rp (confirmed) before the Windows workflow and G/GR passed" env ADOPT653_PUSH_CONFIRMED=yes zsh $S rp; cp -p $RAW/rp.txt $STOPS/rp-before-windows.txt
@@ -153,6 +162,43 @@ EOF
   run $RAW "P (push the branch to the scratch origin; dispatch and judge through the gh stand-in on 652's retained run record)" zsh $S P
   print -r -- "after P: origin agent/653-graftling-0.11.0 $(git -C $SB/origin.git rev-parse -q --verify refs/heads/agent/653-graftling-0.11.0 || print absent) | origin main $(git -C $SB/origin.git rev-parse main) | gh stand-in calls: $(grep -c . $SB/gh/calls.txt)"
   run $RAW "W (observe the dispatch run again; no push, no dispatch)" zsh $S W
+  print "\n## correction 2: W on Main's REAL retained run 46114515028 records (attempt 2 after gh run rerun --failed re-ran only windows-tests), offline through a second gh stand-in"
+  print -r -- "## stand-in serves: a2's jobs.json (all jobs labelled run_attempt 2; claude-real-entry and dsh-windows-tests keep started_at 05:59 of attempt 1), the a2 junit artifact, the a1 claude-real-entry artifact under its real name; artifacts list junit-1, junit-2, claude-real-entry-1 (no claude-real-entry-2, as X saw); run_started_at 06:21:58Z (FIXTURE, just before a2's jobs' created_at 06:22:00)"
+  mkdir -p $SB/gh2
+  print -r -- '{"id": 46114515028, "name": "Windows tests", "path": ".github/workflows/windows.yml", "event": "workflow_dispatch", "status": "completed", "conclusion": "success", "head_sha": "'$GCOMMIT'", "run_attempt": 2, "run_started_at": "2026-11-28T06:21:58Z", "html_url": "https://github.com/LUOXIAO92/graftling/actions/runs/46114515028 (FIXTURE run object; jobs and artifacts are the retained records of Main)"}' > $SB/gh2/run.json
+  cat > $SB/stub/gh2 <<EOF2
+#!/bin/zsh
+# gh STAND-IN 2 (rehearsal fixture): Main's retained records of run 46114515028, attempts 1 and 2.
+print -r -- "gh \$*" >> $SB/gh2/calls.txt
+A1=$RUN653/run-46114515028-a1 A2=$RUN653/run-46114515028-a2
+case "\$1 \$2" in
+  "run download") n=\${@[(i)-n]}; d=\${@[(i)-D]}; name=\${@[\$((n + 1))]}; dir=\${@[\$((d + 1))]}; mkdir -p \$dir
+    case \$name in
+      graftling-windows-junit-$GCOMMIT-2) cp -Rp \$A2/junit/. \$dir/ ;;
+      graftling-windows-junit-$GCOMMIT-1) cp -Rp \$A1/junit/. \$dir/ ;;
+      graftling-claude-real-entry-$GCOMMIT-1) cp -Rp \$A1/real-entry/. \$dir/ ;;
+      *) print -u2 "no artifact matches any of the names or patterns provided"; exit 1 ;;
+    esac ;;
+  api*) ep=\${@[-1]}
+    case \$ep in
+      */attempts/2/jobs*) if [[ -e $SB/gh2/rerun-missing ]]; then $CONDA -I -c 'import json, sys; d = json.load(open(sys.argv[1])); [j.update(started_at="2026-11-28T06:22:05Z") for j in d["jobs"] if j["name"] == "claude-real-entry"]; print(json.dumps(d))' \$A2/jobs.json; else cat \$A2/jobs.json; fi ;;
+      */jobs/140890686467/logs) cat \$A2/windows-tests.log ;;
+      */jobs/140890687998/logs) cat \$A2/claude-real-entry.log ;;
+      */actions/runs/46114515028/artifacts*) print -r -- '{"artifacts": [{"name": "graftling-windows-junit-$GCOMMIT-1", "expired": false}, {"name": "graftling-windows-junit-$GCOMMIT-2", "expired": false}, {"name": "graftling-claude-real-entry-$GCOMMIT-1", "expired": false}]}' ;;
+      */actions/runs/46114515028) cat $SB/gh2/run.json ;;
+      *) print -u2 "stand-in 2: unknown endpoint \$ep"; exit 1 ;;
+    esac ;;
+  *) print -u2 "stand-in 2: unknown gh \$*"; exit 1 ;;
+esac
+EOF2
+  chmod +x $SB/stub/gh2
+  run $SB/out/raw-w2 "W 46114515028 (Main's real records; expected PASS, windows-tests from attempt 2, claude-real-entry and dsh-windows-tests from attempt 1)" env ADOPT653_GH=$SB/stub/gh2 zsh $S W 46114515028
+  grep -h '^EVIDENCE \|^VERDICT ' $SB/out/raw-w2/W.txt
+  print "\n## STOP (correction 2): the same run, but claude-real-entry RE-RAN in attempt 2 (its started_at moved after run_started_at, FIXTURE) and its own artifact -2 is missing: the attempt-1 artifact must NOT stand in"
+  touch $SB/gh2/rerun-missing
+  run $STOPS/w2-rerun-missing "STOP: W with a re-run job whose own artifact is missing (expected FAIL)" env ADOPT653_GH=$SB/stub/gh2 zsh $S W 46114515028
+  grep -h '^EVIDENCE \|^VERDICT ' $STOPS/w2-rerun-missing/W.txt
+  rm -f $SB/gh2/rerun-missing
   run $RAW "STOP: rp (confirmed) before G/GR passed (Windows passed)" env ADOPT653_PUSH_CONFIRMED=yes zsh $S rp; cp -p $RAW/rp.txt $STOPS/rp-before-GR.txt
   print -r -- "\n## G: the step's own process starts at $(date +%T); it must exit only after its shards end, with the verdict as its last output"
   print -r -- "## G queue: a ps FIXTURE line shows another suite ('-m pytest') for ~5 s; G must wait for it in its own process"
@@ -178,7 +224,7 @@ EOF
   run $RAW gh zsh $S gh
   run $RAW "C5 (FOREGROUND; source git+file:// scratch origin, no tag)" env ADOPT653_SOURCE="git+file://$SB/origin.git" zsh $S C5
 } > $SB/out/console-release.txt 2>&1
-scrub $SB/out/console-release.txt; scrub $RAW; scrub $STOPS; tail -3 $OUTD/console-release.txt ;;
+scrub $SB/out/console-release.txt; scrub $RAW; scrub $STOPS; scrub $SB/out/raw-w2; tail -3 $OUTD/console-release.txt ;;
 
 adopt)
 [[ -d $FH && -e $RAW/GR.ok ]] || { print "run the release stage first"; exit 1; }

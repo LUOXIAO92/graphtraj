@@ -75,6 +75,7 @@ rm -rf $SB $OUTD/raw $OUTD/raw-stop; mkdir -p $SB/stub $SB/gh $SB/projects/-fake
   git -C $SB/origin.git tag -d v0.11.0 > /dev/null 2>&1
   git clone -q --no-hardlinks $REALH/graftling $SB/g && git -C $SB/g checkout -q main && git -C $SB/g reset -q --hard $GMAIN0 \
     && git -C $SB/g branch -q -f dev $GBASE && git -C $SB/g worktree add -q $SB/gdev dev || exit 1
+  git -C $SB/g tag -d v0.11.0 > /dev/null 2>&1   # the real repository has it once Main's rel ran; the scratch starts before rel
   git -C $SB/g remote set-url origin $SB/origin.git
   print -r -- "scratch graftling: main $(git -C $SB/g rev-parse main) | dev $(git -C $SB/g rev-parse dev) | origin main $(git -C $SB/origin.git rev-parse main) dev $(git -C $SB/origin.git rev-parse dev) HEAD -> $(git -C $SB/origin.git symbolic-ref HEAD)"
   print "## setup: STUB claude and ps; gh STAND-IN serving Task 652's retained run record (fixtures)"

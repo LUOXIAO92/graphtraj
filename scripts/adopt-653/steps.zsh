@@ -188,7 +188,7 @@ product_guard() {  # TARGET = DEV0 + pyproject.toml (range <0.12); HEAD differs 
   tdiff=$(gg -C $WT diff --name-only $DEV0 $TARGET 2>&1); other=$(gg -C $WT diff --name-only $TARGET HEAD 2>&1 | outside_allowed)
   dirty=$(gg -C $WT status --porcelain -- . ':!scripts/adopt-653/rehearsal' 2>&1)
   range=$(gg -C $WT show ${TARGET}:pyproject.toml 2>/dev/null | grep -m1 '"graftling')
-  print -r -- "product guard: HEAD $head | TARGET ${TARGET[1,8]}'s parent ${parent[1,8]:-none} (DEV0 ${DEV0[1,8]}) | git diff ${DEV0[1,8]} ${TARGET[1,8]}: ${${tdiff//$'\n'/ }:-empty} | changes since ${TARGET[1,8]} outside scripts/adopt-653/ and ${TESTFIX[*]}:${${other//$'\n'/ }:-none} | uncommitted (rehearsal outputs excepted): ${${dirty//$'\n'/ }:-none} | graftling range at ${TARGET[1,8]}: ${range//[[:space:]]/}"
+  print -r -- "product guard: HEAD $head | TARGET ${TARGET[1,8]}'s parent ${parent[1,8]:-none} (DEV0 ${DEV0[1,8]}) | git diff ${DEV0[1,8]} ${TARGET[1,8]}: ${${tdiff//$'\n'/ }:-empty} | changes since ${TARGET[1,8]} outside scripts/adopt-653/ and ${TESTFIX[*]}: ${${other//$'\n'/ }:-none} | uncommitted (rehearsal outputs excepted): ${${dirty//$'\n'/ }:-none} | graftling range at ${TARGET[1,8]}: ${range//[[:space:]]/}"
   [[ $parent == $DEV0 ]] && gg -C $WT merge-base --is-ancestor $TARGET HEAD \
     && [[ $tdiff == pyproject.toml && -z $other && -z $dirty && ${range//[[:space:]]/} == $RANGE ]]
 }

@@ -1,0 +1,33 @@
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_claude_windows_647.py: Windows only: the native refusal
+SKIPPED [1] tests/test_dsh_official.py: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_official.py: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_startup.py: Requires assigned native startup diagnosis.
+SKIPPED [1] tests/test_locks_durable_634.py: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_pi_windows_648.py: Windows only: a venv launcher and a .cmd shim
+SKIPPED [1] tests/test_process_tree_635.py: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py: Windows only: Job Objects
+SKIPPED [1] tests/test_process_windows_633.py: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py: Windows only: calls Win32 directly
+SKIPPED [12] tests/test_claude_jsonl.py: Explicit pinned official SDK comparison
+SKIPPED [2] tests/test_dsh_mcp.py: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [2] tests/test_locks_durable_634.py: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_process_tree_635.py: Windows only: Job Objects
+SKIPPED [3] tests/test_dsh_windows_649.py: Windows only: the npm .cmd shim and the DSH service's Job Object (649)

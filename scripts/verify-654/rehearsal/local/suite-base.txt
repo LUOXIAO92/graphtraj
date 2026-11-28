@@ -1,0 +1,99 @@
+suite base: 0dad0db948f5a7ec5f069b4910a8d19282634a1e (cand) / tree <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base; python <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/venv-base/bin/python
+........................................................................ [  6%]
+.................................................................sssssss [ 13%]
+ssss.................................................................... [ 20%]
+....................................................................ssss [ 27%]
+ssssssss................................................................ [ 33%]
+.......................................s................................ [ 40%]
+........................ssssssss........................................ [ 47%]
+........................................................................ [ 54%]
+......s........sss...................................................... [ 61%]
+..............................................................sssss..... [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 81%]
+.........................................s...............sssss.......... [ 88%]
+...ss................................................................... [ 95%]
+.....................................................                    [100%]
+=============================== warnings summary ===============================
+tests/test_channel_windows_emulated_636.py::test_a_request_during_close_is_refused_and_a_running_one_finishes
+  <HOME>/miniconda3/lib/python3.13/site-packages/_pytest/threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-59 (run)
+  
+  Traceback (most recent call last):
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_channel_windows.py", line 128, in answer
+      _answer_request(handle, connected, refuse_closed if closing.is_set() else operate, authenticate, stop)
+      ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_channel_windows.py", line 253, in _answer_request
+      _win32.write_message(handle, reply.encode('utf-8'), _bound(), stop.is_set)
+      ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_win32.py", line 914, in write_message
+      count, _ = _transfer(_api()[0].WriteFile, handle, ctypes.create_string_buffer(data, len(data)), len(data),
+                           ~~~~^^
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_win32.py", line 227, in _api
+      kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+                 ^^^^^^^^^^^^^
+  AttributeError: module 'ctypes' has no attribute 'WinDLL'
+  
+  During handling of the above exception, another exception occurred:
+  
+  Traceback (most recent call last):
+    File "<HOME>/miniconda3/lib/python3.13/threading.py", line 1044, in _bootstrap_inner
+      self.run()
+      ~~~~~~~~^^
+    File "<HOME>/miniconda3/lib/python3.13/threading.py", line 995, in run
+      self._target(*self._args, **self._kwargs)
+      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_channel_windows.py", line 130, in answer
+      _win32.close(handle)
+      ~~~~~~~~~~~~^^^^^^^^
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_win32.py", line 674, in close
+      _close(handle)
+      ~~~~~~^^^^^^^^
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_win32.py", line 313, in _close
+      _api()[0].CloseHandle(handle)
+      ~~~~^^
+    File "<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/src/graftling/_win32.py", line 227, in _api
+      kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+                 ^^^^^^^^^^^^^
+  AttributeError: module 'ctypes' has no attribute 'WinDLL'
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_channel_windows_636.py:181: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:291: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:303: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:344: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:425: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:469: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:495: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:519: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:530: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:547: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:560: Windows-only: the named-pipe owner connection (636)
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [1] tests/test_claude_windows_647.py:59: Windows only: the native refusal
+SKIPPED [2] tests/test_dsh_mcp.py:60: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:15: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:60: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:81: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:162: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:195: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:211: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [3] tests/test_dsh_windows_649.py:206: Windows only: the npm .cmd shim and the DSH service's Job Object (649)
+SKIPPED [1] tests/test_locks_durable_634.py:162: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:190: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:216: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:233: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_pi_windows_648.py:289: Windows only: a venv launcher and a .cmd shim
+SKIPPED [2] tests/test_process_tree_635.py:364: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:380: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:400: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:415: Windows only: Job Objects
+SKIPPED [1] tests/test_process_windows_633.py:141: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+1012 passed, 49 skipped, 1 warning in 272.50s (0:04:32)
+EXIT 0

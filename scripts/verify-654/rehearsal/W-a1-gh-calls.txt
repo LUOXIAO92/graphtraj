@@ -1,0 +1,7 @@
+gh api repos/LUOXIAO92/graftling/actions/runs/46114515028
+gh api repos/LUOXIAO92/graftling/actions/runs/46114515028/attempts/1/jobs?per_page=100
+gh api repos/LUOXIAO92/graftling/actions/runs/46114515028/artifacts?per_page=100
+gh api --allow-escape-sequences repos/LUOXIAO92/graftling/actions/jobs/140885224763/logs
+gh api --allow-escape-sequences repos/LUOXIAO92/graftling/actions/jobs/140885224951/logs
+gh run download 46114515028 --repo LUOXIAO92/graftling -n graftling-windows-junit-0dad0db948f5a7ec5f069b4910a8d19282634a1e-1 -D <TMPDIR>/r654/ev-a1/live/windows/run-46114515028-a1/junit-a1
+gh run download 46114515028 --repo LUOXIAO92/graftling -n graftling-claude-real-entry-0dad0db948f5a7ec5f069b4910a8d19282634a1e-1 -D <TMPDIR>/r654/ev-a1/live/windows/run-46114515028-a1/real-entry-a1

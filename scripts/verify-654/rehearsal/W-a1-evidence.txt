@@ -1,0 +1,3 @@
+EVIDENCE windows-tests: ATTEMPT 1 graftling-windows-junit-0dad0db948f5a7ec5f069b4910a8d19282634a1e-1 | ran in attempt 1 (started_at 2026-11-28T05:59:17Z >= run_started_at 2026-11-28T05:59:00Z)
+EVIDENCE claude-real-entry: ATTEMPT 1 graftling-claude-real-entry-0dad0db948f5a7ec5f069b4910a8d19282634a1e-1 | ran in attempt 1 (started_at 2026-11-28T05:59:17Z >= run_started_at 2026-11-28T05:59:00Z)
+EVIDENCE dsh-windows-tests: ATTEMPT 1 | ran in attempt 1 (started_at 2026-11-28T05:59:17Z >= run_started_at 2026-11-28T05:59:00Z); judged from the jobs API

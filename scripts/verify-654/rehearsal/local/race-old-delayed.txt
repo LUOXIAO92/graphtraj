@@ -1,0 +1,36 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________ test_a_request_notice_returns_promptly_while_pi_holds_it ___________
+
+pi_host_process = <function pi_host_process.<locals>.build at 0x1052aeac0>
+
+    def test_a_request_notice_returns_promptly_while_pi_holds_it(pi_host_process: Callable) -> None:
+        """The driver path and ask_parent must not wait for a turn; shown later settles the request."""
+        driver = Driver()
+        driver.finish = None
+        process = pi_host_process(shown='queued', driver=driver)
+        agent = process.create()
+        run = wait_until(lambda: driver.runs.get(agent))
+        began = time.monotonic()
+        run.events.request({'request_token': 'token-1', 'request_id': 7, 'method': 'claude/can_use_tool',
+                            'params': {'tool_name': 'Bash'}})
+        assert time.monotonic() - began < 1.5
+        child = bind(process.control, Caller('runtime-mcp', agent))
+        began = time.monotonic()
+        child({'action': 'ask_parent', 'kind': 'decision', 'question': 'Which?', 'timeout_seconds': 0.05})
+        assert time.monotonic() - began < 1.5
+        assert len(process.pipe.lines) == 2 and len(process.notices.awaiting) == 2
+        assert len(process.flush()) == 2  # still awaiting: not pushed again
+        process.notices.acknowledge(process.pipe.lines[0]['id'], True)
+>       assert [notice['request'] for notice in process.control.held_notices(process.caller)] == [
+            process.pipe.lines[1]['id'].rsplit(':', 1)[1]]
+E       AssertionError: assert ['token-1', '...826acd478e87'] == ['cc40376e938...826acd478e87']
+E         
+E         At index 0 diff: 'token-1' != 'cc40376e9384489dbe8c826acd478e87'
+E         Left contains one more item: 'cc40376e9384489dbe8c826acd478e87'
+E         Use -v to get more diff
+
+<Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base/tests/test_pi_dsh_notice_holding.py:603: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it
+1 failed in 1.04s

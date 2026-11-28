@@ -1,0 +1,46 @@
+[00] Main. Read only (a scratch bare clone under TMPDIR, deleted at the end). Login: gh's stored login (auth status, account only), git credential helper (ls-remote). Network: GitHub. Dialog: none.
+CHECK 654 00 runs under zsh: PASS (zsh 5.9)
+CHECK 654 00 TMPDIR outside the Harness: PASS
+gh: warning: failed to load config: open <HOME>/.config/gh/config.yml: operation not permitted | 
+CHECK 654 00 gh auth status rc 0 (gh's stored login; P, W, X use it): FAIL
+
+### graftling repository <Harness>/graftling (read only)
+dev: 67b0fe9aacc868c9c6b5a2818adc8449514221c4 | origin: https://github.com/LUOXIAO92/graftling.git
+CHECK 654 00 origin of <Harness>/graftling is https://github.com/LUOXIAO92/graftling.git: PASS
+CHECK 654 00 graftling dev = 67b0fe9aacc868c9c6b5a2818adc8449514221c4 (v0.11.0): PASS (67b0fe9aacc868c9c6b5a2818adc8449514221c4)
+
+### bundle <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/scripts/verify-654/graftling-654.bundle
+sha256: e9ec81fda434cd4bcaa505c8e2b1c4d68449e265e13298c28ec778ed173fc2aa
+CHECK 654 00 bundle sha256 = e9ec81fda434cd4bcaa505c8e2b1c4d68449e265e13298c28ec778ed173fc2aa: PASS
+CHECK 654 00 bundle verifies against <Harness>/graftling (prerequisite 67b0fe9aacc868c9c6b5a2818adc8449514221c4): PASS
+list-heads: 0dad0db948f5a7ec5f069b4910a8d19282634a1e refs/heads/agent/654-graftling-pi-notice-test-race
+CHECK 654 00 bundle head = 0dad0db948f5a7ec5f069b4910a8d19282634a1e (agent/654-graftling-pi-notice-test-race): PASS
+
+### the commit, read from a scratch bare clone under TMPDIR (objects borrowed from <Harness>/graftling, which is not written)
+0dad0db948f5a7ec5f069b4910a8d19282634a1e: test: wait for the Pi host's settle thread before reading held notices (654) | author LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | committer LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com> | parent 67b0fe9aacc868c9c6b5a2818adc8449514221c4
+CHECK 654 00 0dad0db948f5a7ec5f069b4910a8d19282634a1e is one commit on 67b0fe9aacc868c9c6b5a2818adc8449514221c4: PASS
+CHECK 654 00 author and committer are 89069722+LUOXIAO92@users.noreply.github.com: PASS
+changed files: tests/test_pi_dsh_notice_holding.py 
+CHECK 654 00 the commit changes exactly tests/test_pi_dsh_notice_holding.py (no product code; windows.yml is v0.11.0's): PASS
+CHECK 654 00 tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it is defined at 0dad0db948f5a7ec5f069b4910a8d19282634a1e: PASS
+CHECK 654 00 local agent/654-graftling-pi-notice-test-race absent, 0dad0db948f5a7ec5f069b4910a8d19282634a1e or its ancestor: PASS (absent)
+
+### GitHub https://github.com/LUOXIAO92/graftling.git (git ls-remote, read only)
+CHECK 654 00 git ls-remote https://github.com/LUOXIAO92/graftling.git: FAIL (fatal: unable to access 'https://github.com/LUOXIAO92/graftling.git/': Could not resolve host: github.com)
+
+### the Windows judgement's inputs (read only)
+CHECK 654 00 <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/scripts/verify-632/windows-expected.txt present: PASS
+PASS: <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/scripts/verify-632/windows-expected.txt parses: 0 expected Windows failures and 0 expected hangs (none), 19 allowed environment skips
+CHECK 654 00 windows-expected.txt parses: PASS
+windows-expected.txt: this Worktree 1aae1d10eefa2cc681ed9633b42d39b307fc23c7 | GraphTraj dev 1aae1d10eefa2cc681ed9633b42d39b307fc23c7
+CHECK 654 00 windows-expected.txt identical to GraphTraj dev's (this Task owns no line in it): PASS
+CHECK 654 00 the judge's helpers present (wincheck.py, wincheck652.py, evidence653.py, wincheck654.py): PASS
+
+----- summary for Main (00) -----
+evidence: <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/scripts/verify-654/evidence/live/00.txt
+CHECK 654 00 gh auth status rc 0 (gh's stored login; P, W, X use it): FAIL
+CHECK 654 00 git ls-remote https://github.com/LUOXIAO92/graftling.git: FAIL (fatal: unable to access 'https://github.com/LUOXIAO92/graftling.git/': Could not resolve host: github.com)
+VERDICT 654 00: FAIL (2 of 18 checks failed)
+
+==> next (paste as is): nothing: report <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/scripts/verify-654/evidence/live/00.txt to Task 654's Leader (do not run P)
+EXIT 1

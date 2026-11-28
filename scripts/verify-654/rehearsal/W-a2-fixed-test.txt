@@ -1,0 +1,2 @@
+  PASSED tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it
+FIXED PASS tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it passed in windows-tests' JUnit

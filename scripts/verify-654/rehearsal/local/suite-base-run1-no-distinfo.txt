@@ -1,0 +1,353 @@
+suite base: 0dad0db948f5a7ec5f069b4910a8d19282634a1e (cand) / tree <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/base; python <Harness>/.graphtraj/core/worktrees/654-graftling-pi-notice-test-race/.scratch/654/venv-base/bin/python
+........................................................................ [  6%]
+.................................................................sssssss [ 13%]
+ssss.................................................................... [ 20%]
+....................................................................ssss [ 27%]
+ssssssss................................................................ [ 33%]
+.......................................s................................ [ 40%]
+........................ssssssssEEEE.................................... [ 47%]
+........................................................................ [ 54%]
+......s........sss...................................................... [ 61%]
+..............................................................sssss..... [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 81%]
+.........................................s...............sssss.......... [ 88%]
+...ss................................................................... [ 95%]
+.....................................................                    [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_the_linked_plugin_runs_the_python_of_its_installation _
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+>           return next(iter(cls.discover(name=name)))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           StopIteration
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:407: StopIteration
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('<TMPDIR>/pytest-of-<USER>/pytest-760/test_the_linked_plugin_runs_th0')
+
+    @pytest.fixture
+    def installation(tmp_path: Path) -> Path:
+        """A venv with graftling in its site-packages, as ``uv tool install`` leaves one; returns its prefix.
+    
+        Beside it: ``stub/`` (DSH's packages) and ``bin/`` (the plugin's PATH, empty). The venv lies
+        under a non-ASCII directory name, as an installation in a user's profile can (638).
+        """
+        if not shutil.which('node'):
+            pytest.skip('Node is required')
+        prefix = tmp_path / 'tools-\u6d4b\u8bd5-\u00fc' / 'graftling'
+        subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(prefix)], check=True)
+        package = site_packages(prefix) / 'graftling'
+        shutil.copytree(SOURCE, package, ignore=shutil.ignore_patterns('__pycache__'))
+        for name in ('PyYAML', 'websockets'):    # graftling's dependencies, offline
+>           distribution = importlib.metadata.distribution(name)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_dsh_plugin_install_python.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:960: in distribution
+    return Distribution.from_name(distribution_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+            return next(iter(cls.discover(name=name)))
+        except StopIteration:
+>           raise PackageNotFoundError(name)
+E           importlib.metadata.PackageNotFoundError: No package metadata was found for websockets
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:409: PackageNotFoundError
+_ ERROR at setup of test_the_pi_extension_finds_the_python_of_its_installation _
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+>           return next(iter(cls.discover(name=name)))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           StopIteration
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:407: StopIteration
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('<TMPDIR>/pytest-of-<USER>/pytest-760/test_the_pi_extension_finds_th0')
+
+    @pytest.fixture
+    def installation(tmp_path: Path) -> Path:
+        """A venv with graftling in its site-packages, as ``uv tool install`` leaves one; returns its prefix.
+    
+        Beside it: ``stub/`` (DSH's packages) and ``bin/`` (the plugin's PATH, empty). The venv lies
+        under a non-ASCII directory name, as an installation in a user's profile can (638).
+        """
+        if not shutil.which('node'):
+            pytest.skip('Node is required')
+        prefix = tmp_path / 'tools-\u6d4b\u8bd5-\u00fc' / 'graftling'
+        subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(prefix)], check=True)
+        package = site_packages(prefix) / 'graftling'
+        shutil.copytree(SOURCE, package, ignore=shutil.ignore_patterns('__pycache__'))
+        for name in ('PyYAML', 'websockets'):    # graftling's dependencies, offline
+>           distribution = importlib.metadata.distribution(name)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_dsh_plugin_install_python.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:960: in distribution
+    return Distribution.from_name(distribution_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+            return next(iter(cls.discover(name=name)))
+        except StopIteration:
+>           raise PackageNotFoundError(name)
+E           importlib.metadata.PackageNotFoundError: No package metadata was found for websockets
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:409: PackageNotFoundError
+_ ERROR at setup of test_a_python_of_another_graftling_is_refused_with_the_uv_command _
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+>           return next(iter(cls.discover(name=name)))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           StopIteration
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:407: StopIteration
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('<TMPDIR>/pytest-of-<USER>/pytest-760/test_a_python_of_another_graft0')
+
+    @pytest.fixture
+    def installation(tmp_path: Path) -> Path:
+        """A venv with graftling in its site-packages, as ``uv tool install`` leaves one; returns its prefix.
+    
+        Beside it: ``stub/`` (DSH's packages) and ``bin/`` (the plugin's PATH, empty). The venv lies
+        under a non-ASCII directory name, as an installation in a user's profile can (638).
+        """
+        if not shutil.which('node'):
+            pytest.skip('Node is required')
+        prefix = tmp_path / 'tools-\u6d4b\u8bd5-\u00fc' / 'graftling'
+        subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(prefix)], check=True)
+        package = site_packages(prefix) / 'graftling'
+        shutil.copytree(SOURCE, package, ignore=shutil.ignore_patterns('__pycache__'))
+        for name in ('PyYAML', 'websockets'):    # graftling's dependencies, offline
+>           distribution = importlib.metadata.distribution(name)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_dsh_plugin_install_python.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:960: in distribution
+    return Distribution.from_name(distribution_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+            return next(iter(cls.discover(name=name)))
+        except StopIteration:
+>           raise PackageNotFoundError(name)
+E           importlib.metadata.PackageNotFoundError: No package metadata was found for websockets
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:409: PackageNotFoundError
+_ ERROR at setup of test_explicit_graftling_python_wins_and_is_used_unchanged __
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+>           return next(iter(cls.discover(name=name)))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           StopIteration
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:407: StopIteration
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('<TMPDIR>/pytest-of-<USER>/pytest-760/test_explicit_graftling_python0')
+
+    @pytest.fixture
+    def installation(tmp_path: Path) -> Path:
+        """A venv with graftling in its site-packages, as ``uv tool install`` leaves one; returns its prefix.
+    
+        Beside it: ``stub/`` (DSH's packages) and ``bin/`` (the plugin's PATH, empty). The venv lies
+        under a non-ASCII directory name, as an installation in a user's profile can (638).
+        """
+        if not shutil.which('node'):
+            pytest.skip('Node is required')
+        prefix = tmp_path / 'tools-\u6d4b\u8bd5-\u00fc' / 'graftling'
+        subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(prefix)], check=True)
+        package = site_packages(prefix) / 'graftling'
+        shutil.copytree(SOURCE, package, ignore=shutil.ignore_patterns('__pycache__'))
+        for name in ('PyYAML', 'websockets'):    # graftling's dependencies, offline
+>           distribution = importlib.metadata.distribution(name)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_dsh_plugin_install_python.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:960: in distribution
+    return Distribution.from_name(distribution_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'importlib.metadata.Distribution'>, name = 'websockets'
+
+    @classmethod
+    def from_name(cls, name: str) -> Distribution:
+        """Return the Distribution for the given package name.
+    
+        :param name: The name of the distribution package to search for.
+        :return: The Distribution instance (or subclass thereof) for the named
+            package, if found.
+        :raises PackageNotFoundError: When the named package's distribution
+            metadata cannot be found.
+        :raises ValueError: When an invalid value is supplied for name.
+        """
+        if not name:
+            raise ValueError("A distribution name is required.")
+        try:
+            return next(iter(cls.discover(name=name)))
+        except StopIteration:
+>           raise PackageNotFoundError(name)
+E           importlib.metadata.PackageNotFoundError: No package metadata was found for websockets
+
+<HOME>/miniconda3/lib/python3.13/importlib/metadata/__init__.py:409: PackageNotFoundError
+=========================== short test summary info ============================
+ERROR tests/test_dsh_plugin_install_python.py::test_the_linked_plugin_runs_the_python_of_its_installation
+ERROR tests/test_dsh_plugin_install_python.py::test_the_pi_extension_finds_the_python_of_its_installation
+ERROR tests/test_dsh_plugin_install_python.py::test_a_python_of_another_graftling_is_refused_with_the_uv_command
+ERROR tests/test_dsh_plugin_install_python.py::test_explicit_graftling_python_wins_and_is_used_unchanged
+SKIPPED [1] tests/test_channel_windows_636.py:181: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:291: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:303: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:344: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:425: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:469: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:495: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:519: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:530: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:547: Windows-only: the named-pipe owner connection (636)
+SKIPPED [1] tests/test_channel_windows_636.py:560: Windows-only: the named-pipe owner connection (636)
+SKIPPED [12] tests/test_claude_jsonl.py:988: Explicit pinned official SDK comparison
+SKIPPED [1] tests/test_claude_windows_647.py:59: Windows only: the native refusal
+SKIPPED [2] tests/test_dsh_mcp.py:60: Installed DSH does not provide @deepseek-ai/dsh-client-ui-slots.
+SKIPPED [1] tests/test_dsh_official.py:15: Requires assigned official host slot.
+SKIPPED [1] tests/test_dsh_official.py:60: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:81: Requires final assigned host slot.
+SKIPPED [1] tests/test_dsh_official.py:162: Requires retained interrupted official Session.
+SKIPPED [1] tests/test_dsh_official.py:195: Requires one explicitly retained native trace.
+SKIPPED [1] tests/test_dsh_official.py:211: Requires fixed Pi combination and final host slot.
+SKIPPED [1] tests/test_dsh_startup.py:37: Requires assigned native startup diagnosis.
+SKIPPED [3] tests/test_dsh_windows_649.py:206: Windows only: the npm .cmd shim and the DSH service's Job Object (649)
+SKIPPED [1] tests/test_locks_durable_634.py:162: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:190: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_locks_durable_634.py:216: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [2] tests/test_locks_durable_634.py:233: Windows-only: checks the Win32 lock, rename and volume paths
+SKIPPED [1] tests/test_pi_windows_648.py:289: Windows only: a venv launcher and a .cmd shim
+SKIPPED [2] tests/test_process_tree_635.py:364: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:380: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:400: Windows only: Job Objects
+SKIPPED [1] tests/test_process_tree_635.py:415: Windows only: Job Objects
+SKIPPED [1] tests/test_process_windows_633.py:141: Windows only: calls Win32 directly
+SKIPPED [1] tests/test_process_windows_633.py:149: Windows only: calls Win32 directly
+1008 passed, 49 skipped, 4 errors in 264.71s (0:04:24)
+EXIT 1

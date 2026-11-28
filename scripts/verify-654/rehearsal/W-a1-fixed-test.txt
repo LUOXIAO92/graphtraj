@@ -1,0 +1,8 @@
+  FAILED tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it | AssertionError: assert ['token-1', '...a957d1a03289'] == ['d21ad984d57...a957d1a03289']
+  
+  At index 0 diff: 'token-1' != 'd21ad984d574448fa2d5a957d1a03289'
+  Left contains one more item: 'd21ad984d574448fa2d5a957d1a03289'
+  
+  Full diff:
+
+FIXED FAIL tests/test_pi_dsh_notice_holding.py::test_a_request_notice_returns_promptly_while_pi_holds_it failed in windows-tests' JUnit

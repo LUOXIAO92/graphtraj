@@ -1,0 +1,29 @@
+commit 0dad0db948f5a7ec5f069b4910a8d19282634a1e
+Author: LUOXIAO92 <89069722+LUOXIAO92@users.noreply.github.com>
+Date:   Sat Nov 28 16:26:06 2026 +0900
+
+    test: wait for the Pi host's settle thread before reading held notices (654)
+    
+    PiNotices.acknowledge settles a shown, awaited notice on its own daemon
+    thread. test_a_request_notice_returns_promptly_while_pi_holds_it read
+    held_notices right after acknowledge, so a slow runner could still see the
+    acknowledged request held (Windows run 46114515028, attempt 1). The test now
+    waits (wait_until, its default bound) until the acknowledged request is no
+    longer held, then asserts unchanged that exactly the second request is held.
+    Test only; no product change.
+
+diff --git a/tests/test_pi_dsh_notice_holding.py b/tests/test_pi_dsh_notice_holding.py
+index df903c2..fe456d8 100644
+--- a/tests/test_pi_dsh_notice_holding.py
++++ b/tests/test_pi_dsh_notice_holding.py
+@@ -600,6 +600,10 @@ def test_a_request_notice_returns_promptly_while_pi_holds_it(pi_host_process: Ca
+     assert len(process.pipe.lines) == 2 and len(process.notices.awaiting) == 2
+     assert len(process.flush()) == 2  # still awaiting: not pushed again
+     process.notices.acknowledge(process.pipe.lines[0]['id'], True)
++    # acknowledge settles a shown notice on its own thread: wait for it, not for the thread scheduler (654).
++    acknowledged = process.pipe.lines[0]['id'].rsplit(':', 1)[1]
++    wait_until(lambda: acknowledged not in [
++        notice['request'] for notice in process.control.held_notices(process.caller)])
+     assert [notice['request'] for notice in process.control.held_notices(process.caller)] == [
+         process.pipe.lines[1]['id'].rsplit(':', 1)[1]]
+ 
